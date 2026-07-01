@@ -1,0 +1,3 @@
+{
+  "change": "Improved notch chat scrolling so streaming responses follow the bottom only until the user scrolls away"
+}

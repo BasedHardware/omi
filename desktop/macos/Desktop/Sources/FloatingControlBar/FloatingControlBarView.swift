@@ -27,6 +27,7 @@ struct FloatingControlBarView: View {
 
     @State private var isHovering = false
     @State private var notchLogoHovering = false
+    @State private var notchSettingsHovering = false
     @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
     /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
     /// continuously-animated value so the same dots morph both ways (and reverse exactly).
@@ -304,25 +305,16 @@ struct FloatingControlBarView: View {
                 ZStack(alignment: .trailing) {
                     NotchAgentPillsRowView(manager: agentPills, barWindow: window)
                         // Compact mode lets the morph field own the ring while agents unfurl.
-                        // Chat mode hides that field, so the lobe owns the logo/settings slot.
-                        .opacity((agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu) && !notchLogoHovering ? 1 : 0)
-                        .scaleEffect(notchLogoHovering ? 0.72 : 1.0)
-                        .rotationEffect(.degrees(notchLogoHovering ? -28 : 0))
-
-                    Image(systemName: "gearshape.fill")
-                        .scaledFont(size: 15, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.88))
-                        .frame(width: NotchAgentStackMetrics.logoFrameSize, height: NotchAgentStackMetrics.logoFrameSize)
-                        .opacity(notchLogoHovering ? 1 : 0)
-                        .scaleEffect(notchLogoHovering ? 1 : 0.5)
-                        .rotationEffect(.degrees(notchLogoHovering ? 0 : 42))
+                        // Chat mode hides that field, so the lobe owns the logo slot.
+                        .opacity(agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu ? 1 : 0)
+                        .scaleEffect(notchLogoHovering ? 1.06 : 1.0)
                 }
                 .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
                 .padding(.trailing, 2)
                 .contentShape(Rectangle())
                 .onHover { setNotchLogoHovering($0) }
                 .onTapGesture {
-                    openFloatingBarSettings()
+                    openAgentChatsFromNotchLogo()
                 }
             }
         }
@@ -343,10 +335,10 @@ struct FloatingControlBarView: View {
                 .position(x: logoCenterX, y: notchChromeHeight / 2)
                 .onHover { setNotchLogoHovering($0) }
                 .onTapGesture {
-                    openFloatingBarSettings()
+                    openAgentChatsFromNotchLogo()
                 }
-                .accessibilityLabel("Floating Bar Settings")
-                .accessibilityHint("Open settings")
+                .accessibilityLabel("Agent chats")
+                .accessibilityHint("Open agent chats")
         }
     }
 
@@ -358,20 +350,42 @@ struct FloatingControlBarView: View {
         // the conversation/PTT entry point by clicking the notch. (Codex P1.)
         // It is intentionally subtle (transparent) to preserve the minimal
         // notch aesthetic.
-        Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture {
+        ZStack(alignment: .leading) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onAskAI()
+                }
+
+            if notchSettingsHovering {
+                Button {
+                    openFloatingBarSettings()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.86))
+                        .frame(width: 26, height: 24)
+                        .background(Color.white.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Floating Bar Settings")
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(.leading, 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(notchSettingsHovering ? "Floating Bar Settings" : "Ask Omi")
+        .accessibilityHint(notchSettingsHovering ? "Open settings" : "Open the conversation")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            if notchSettingsHovering {
+                openFloatingBarSettings()
+            } else {
                 onAskAI()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding(.leading, 5)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Ask Omi")
-            .accessibilityHint("Open the conversation")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction {
-                onAskAI()
-            }
+        }
     }
 
     private var notchOmiChatRow: some View {
@@ -673,8 +687,25 @@ struct FloatingControlBarView: View {
         setAgentSwitcherHovering(hovering)
     }
 
+    private func openAgentChatsFromNotchLogo() {
+        guard !agentPills.pills.isEmpty else {
+            onAskAI()
+            return
+        }
+        if state.showingAIConversation {
+            showAgentListFromConversation()
+            return
+        }
+        toggleAgentSwitcherPinned()
+        (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+    }
+
     private func openAgentInChat(_ pill: AgentPill) {
-        guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
+        openAgentInChat(agentID: pill.id)
+    }
+
+    private func openAgentInChat(agentID: UUID) {
+        guard let pill = agentPills.pills.first(where: { $0.id == agentID }) else { return }
         if state.conversationSurface == .agent(pill.id) {
             showAgentListFromConversation()
             return
@@ -708,8 +739,9 @@ struct FloatingControlBarView: View {
             (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovering = state.isNotchHoverMenuVisible
+                notchSettingsHovering = hovering
             }
-            if !state.isNotchHoverMenuVisible {
+            if !hovering || !state.isNotchHoverMenuVisible {
                 notchLogoHovering = false
             }
             return
@@ -1139,7 +1171,10 @@ struct FloatingControlBarView: View {
                 onSendQuery(message)
             },
             onRate: onRate,
-            onShareLink: onShareLink
+            onShareLink: onShareLink,
+            onOpenAgent: { agentID in
+                openAgentInChat(agentID: agentID)
+            }
         )
         .transition(
             .asymmetric(
@@ -1351,45 +1386,42 @@ private struct AgentMainChatView: View {
         pill.latestActivity.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var scrollContentToken: AnyHashable {
+        AnyHashable(
+            [
+                String(pill.contentRevision),
+                pill.latestActivity,
+                displayedMessages.map { message in
+                    [
+                        message.id,
+                        message.text,
+                        String(message.contentBlocks.count),
+                        String(message.isStreaming),
+                    ].joined(separator: "\u{1F}")
+                }.joined(separator: "\u{1E}"),
+                String(isRecording),
+            ].joined(separator: "\u{1D}")
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        conversationContent
-                            .id(pill.contentRevision)
+            ChatScrollContainer(
+                bottomAnchorId: "agentBottom",
+                contentChangeToken: scrollContentToken,
+                scrollPaddingTrailing: 30,
+                onContentHeightChange: { height in
+                    state.reportContentHeight(height, for: .agent(pill.id))
+                }
+            ) {
+                conversationContent
+                    .id(pill.contentRevision)
 
-                        if isRecording {
-                            voiceFollowUpView
-                                .id("agentVoiceFollowUp")
-                        }
-
-                        Color.clear.frame(height: 1).id("agentBottom")
-                    }
-                    .padding(.trailing, 30)
-                    .background(
-                        GeometryReader { geometry -> Color in
-                            let height = geometry.size.height
-                            DispatchQueue.main.async {
-                                state.reportContentHeight(height, for: .agent(pill.id))
-                            }
-                            return Color.clear
-                        }
-                    )
-                }
-                .onChange(of: pill.latestActivity) {
-                    scrollToBottom(proxy)
-                }
-                .onChange(of: pill.conversationMessages.map(\.text).joined(separator: "\n")) {
-                    scrollToBottom(proxy)
-                }
-                .onChange(of: pill.contentRevision) {
-                    scrollToBottom(proxy)
-                }
-                .onChange(of: isRecording) {
-                    scrollToBottom(proxy)
+                if isRecording {
+                    voiceFollowUpView
+                        .id("agentVoiceFollowUp")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1659,11 +1691,6 @@ private struct AgentMainChatView: View {
         manager.continueAgent(from: pill, text: trimmed)
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.15)) {
-            proxy.scrollTo("agentBottom", anchor: .bottom)
-        }
-    }
 }
 
 private struct NotchAgentPillsRowView: View {
