@@ -24,7 +24,11 @@ ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
 LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 
 # R0 lane taxonomy — see .aidlc/spec.md and PLAN.md §R0.
-# 16 lanes total: 1 existing (chat-structured) + 15 new.
+# 16 lanes in lanes.yaml total: 1 existing (chat-structured) + 15 new.
+# Of those, 13 are in SUPPORTED_AUTO_LANE_IDS (chat-completion surface).
+# The 3 audio/embedding placeholders (stt-realtime, transcription,
+# screenshot-embedding) are R3 placeholders — they exist in lanes.yaml +
+# route_artifacts.yaml but are NOT in the chat-completion allowlist.
 _R0_NEW_LANE_IDS = frozenset(
     {
         'omi:auto:chat-extraction',
@@ -44,7 +48,25 @@ _R0_NEW_LANE_IDS = frozenset(
         'omi:auto:notification-classifier',
     }
 )
+# 13 chat-completion lanes resolvable via this gateway.
+_R0_CHAT_COMPLETION_LANE_IDS = frozenset(
+    {
+        'omi:auto:chat-extraction',
+        'omi:auto:daily-summary',
+        'omi:auto:memories-extraction',
+        'omi:auto:memory-graph',
+        'omi:auto:conv-action-items',
+        'omi:auto:conv-structure',
+        'omi:auto:general-assistant',
+        'omi:auto:reasoning',
+        'omi:auto:screenshot-understanding',
+        'omi:auto:realtime-ptt',
+        'omi:auto:persona-chat',
+        'omi:auto:notification-classifier',
+    }
+)
 _ALL_LANE_IDS = frozenset({LANE_ID} | _R0_NEW_LANE_IDS)
+_SUPPORTED_LANE_IDS = frozenset({LANE_ID} | _R0_CHAT_COMPLETION_LANE_IDS)
 
 
 def test_is_auto_lane_id_only_matches_omi_auto_namespace():
@@ -53,22 +75,43 @@ def test_is_auto_lane_id_only_matches_omi_auto_namespace():
     assert not is_auto_lane_id('openai:gpt-4o-mini')
 
 
-def test_supported_auto_lane_ids_contains_all_sixteen_r0_lanes():
-    """R0: every declared lane id must be in SUPPORTED_AUTO_LANE_IDS.
+def test_supported_auto_lane_ids_contains_thirteen_r0_chat_completion_lanes():
+    """R0: SUPPORTED_AUTO_LANE_IDS contains exactly the 13 chat-completion
+    lanes (1 existing + 12 R0 new). The 3 R0 audio/embedding placeholders
+    (stt-realtime, transcription, screenshot-embedding) belong on different
+    surfaces and are explicitly NOT in this set — R3 will introduce those
+    surfaces and add them.
 
-    Otherwise downstream R3 product call-sites can't reference the lane and
-    is_auto_lane_id() returns False, blocking the resolver from accepting the
-    request. The frozenset is the only gate between product code and the lane.
+    Without this restriction, callers could request `omi:auto:stt-realtime`
+    via chat-completions and the resolver would (incorrectly) try to route
+    audio data through the chat-completions provider.
     """
-    assert SUPPORTED_AUTO_LANE_IDS == _ALL_LANE_IDS
+    assert SUPPORTED_AUTO_LANE_IDS == _SUPPORTED_LANE_IDS
+    assert len(SUPPORTED_AUTO_LANE_IDS) == 13
+    # The 3 audio/embedding placeholders are NOT in the set
+    assert 'omi:auto:stt-realtime' not in SUPPORTED_AUTO_LANE_IDS
+    assert 'omi:auto:transcription' not in SUPPORTED_AUTO_LANE_IDS
+    assert 'omi:auto:screenshot-embedding' not in SUPPORTED_AUTO_LANE_IDS
 
 
-@pytest.mark.parametrize('lane_id', sorted(_ALL_LANE_IDS))
-def test_is_auto_lane_id_accepts_all_sixteen_r0_lanes(lane_id):
+@pytest.mark.parametrize('lane_id', sorted(_SUPPORTED_LANE_IDS))
+def test_is_auto_lane_id_accepts_supported_chat_completion_lanes(lane_id):
     assert is_auto_lane_id(lane_id)
 
 
-@pytest.mark.parametrize('lane_id', sorted(_R0_NEW_LANE_IDS))
+@pytest.mark.parametrize(
+    'lane_id',
+    sorted(_R0_NEW_LANE_IDS - _R0_CHAT_COMPLETION_LANE_IDS),
+)
+def test_is_auto_lane_id_accepts_but_resolver_rejects_audio_embedding_placeholders(lane_id):
+    """R0 placeholders (audio/embedding) pass is_auto_lane_id (the prefix
+    check) but the resolver rejects them via the SUPPORTED_AUTO_LANE_IDS
+    allowlist. R3 will add them when those surfaces are introduced."""
+    assert is_auto_lane_id(lane_id)
+    assert lane_id not in SUPPORTED_AUTO_LANE_IDS
+
+
+@pytest.mark.parametrize('lane_id', sorted(_R0_CHAT_COMPLETION_LANE_IDS))
 def test_resolve_chat_completion_route_zero_drift_for_each_lane(lane_id):
     """Day-one invariant: every lane's active_route == last_known_good.
 
