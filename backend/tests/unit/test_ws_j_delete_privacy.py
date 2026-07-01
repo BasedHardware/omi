@@ -72,6 +72,7 @@ from utils.memory.canonical_memory_adapter import (
     neutral_vector_id_for_memory,
     purge_canonical_derived_user_data,
     retract_conversation_sourced_memories,
+    update_canonical_memory_content,
     update_canonical_memory_visibility,
     write_canonical_extraction_memory,
 )
@@ -164,6 +165,9 @@ class _DocRef:
         return _Snapshot(self._db.docs[self.path], exists=True)
 
     def set(self, data, merge=False):
+        if merge and isinstance(self._db.docs.get(self.path), dict):
+            self._db.docs[self.path].update(data)
+            return
         self._db.docs[self.path] = data
 
 
@@ -497,6 +501,26 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
 
 
+def test_update_canonical_visibility_validates_before_persisting(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-invalid-visibility", content="Visibility invariant")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    before = dict(canonical_db.docs[item_path])
+
+    with pytest.raises(ValueError, match="visibility"):
+        update_canonical_memory_visibility(uid, memory_id, "friends", db_client=canonical_db)
+
+    assert canonical_db.docs[item_path] == before
+
+
 def test_update_canonical_visibility_resyncs_keyword_and_vector_side_effects(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     conversation_id = "conv-visibility"
@@ -527,6 +551,77 @@ def test_update_canonical_visibility_resyncs_keyword_and_vector_side_effects(mon
     assert canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]["visibility"] == "public"
     assert keyword_syncs == [(memory_id, "public")]
     assert vector_syncs == [(memory_id, "public")]
+
+
+def test_update_canonical_content_fails_on_document_memory_id_mismatch(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-id-mismatch", content="Original fact")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    canonical_db.docs[item_path] = {**canonical_db.docs[item_path], "memory_id": "different-memory-id"}
+
+    with pytest.raises(ValueError, match="memory id mismatch"):
+        update_canonical_memory_content(uid, memory_id, "Updated fact", db_client=canonical_db)
+
+    assert canonical_db.docs[item_path]["content"] == "Original fact"
+
+
+def test_update_canonical_content_kg_invalidation_uses_merge_update(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-kg-merge", content="Original KG fact")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.resolve_memory_system", lambda *_, **__: MemorySystem.CANONICAL
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction", lambda *_, **__: None
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_kg_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: SimpleNamespace(success=False),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    canonical_db.docs[item_path].update(
+        {
+            "tier": "long_term",
+            "processing_state": "processed",
+            "expires_at": None,
+            "ledger_commit_id": "commit1",
+            "ledger_sequence": 1,
+            "kg_extracted": True,
+            "promotion": {"reviewed": False},
+        }
+    )
+
+    original_set = _DocRef.set
+
+    def concurrent_visibility_change_on_kg_merge(ref, data, merge=False):
+        if ref.path == item_path and merge and set(data) == {"kg_extracted", "updated_at"}:
+            canonical_db.docs[item_path]["visibility"] = "shared"
+        return original_set(ref, data, merge=merge)
+
+    monkeypatch.setattr(_DocRef, "set", concurrent_visibility_change_on_kg_merge)
+
+    updated = update_canonical_memory_content(uid, memory_id, "Updated KG fact", db_client=canonical_db)
+
+    assert updated.kg_extracted is False
+    assert canonical_db.docs[item_path]["content"] == "Updated KG fact"
+    assert canonical_db.docs[item_path]["kg_extracted"] is False
+    assert canonical_db.docs[item_path]["visibility"] == "shared"
 
 
 def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, canonical_db):
