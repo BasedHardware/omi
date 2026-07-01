@@ -176,16 +176,20 @@ async function loadManagedRuntime(
     await mkdir(selection.modelCacheDir, { recursive: true })
 
     const transformers = await loadTransformersModule(deps)
-    transformers.env.cacheDir = selection.modelCacheDir
-    transformers.env.allowRemoteModels = true
-    transformers.env.allowLocalModels = true
-    transformers.env.useFSCache = true
-
-    const kokoro = await loadKokoroModule(deps)
-    const runtime = await kokoro.KokoroTTS.from_pretrained(selection.model, {
-      dtype: selection.dtype,
-      device: 'cpu'
-    })
+    const restoreTransformersEnv = configureTransformersEnv(
+      transformers.env,
+      selection.modelCacheDir
+    )
+    let runtime: KokoroTtsLike
+    try {
+      const kokoro = await loadKokoroModule(deps)
+      runtime = await kokoro.KokoroTTS.from_pretrained(selection.model, {
+        dtype: selection.dtype,
+        device: 'cpu'
+      })
+    } finally {
+      restoreTransformersEnv()
+    }
     kokoroTts = runtime
     installState = 'installed'
     return runtime
@@ -346,7 +350,6 @@ async function hasModelCache(modelCacheDir: string): Promise<boolean> {
 async function cleanupOldAudio(audioDir: string, now: () => number): Promise<void> {
   const current = now()
   if (current - lastCleanupAt < 60 * 60 * 1000) return
-  lastCleanupAt = current
   const entries = await readdir(audioDir, { withFileTypes: true }).catch(() => [])
   await Promise.all(
     entries
@@ -360,6 +363,29 @@ async function cleanupOldAudio(audioDir: string, now: () => number): Promise<voi
         }
       })
   )
+  lastCleanupAt = current
+}
+
+function configureTransformersEnv(
+  env: TransformersModuleLike['env'],
+  modelCacheDir: string
+): () => void {
+  const previous = {
+    cacheDir: env.cacheDir,
+    allowRemoteModels: env.allowRemoteModels,
+    allowLocalModels: env.allowLocalModels,
+    useFSCache: env.useFSCache
+  }
+  env.cacheDir = modelCacheDir
+  env.allowRemoteModels = true
+  env.allowLocalModels = true
+  env.useFSCache = true
+  return () => {
+    env.cacheDir = previous.cacheDir
+    env.allowRemoteModels = previous.allowRemoteModels
+    env.allowLocalModels = previous.allowLocalModels
+    env.useFSCache = previous.useFSCache
+  }
 }
 
 async function exists(path: string): Promise<boolean> {
