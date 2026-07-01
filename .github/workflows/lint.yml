@@ -24,7 +24,10 @@ jobs:
           else
             DIFF_BASE="HEAD~1"
           fi
-          FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
+          FILES=$(git diff --name-status --diff-filter=ACMRD "$DIFF_BASE"...HEAD | awk '
+            $1 ~ /^[RC]/ { print $2; print $3; next }
+            { print $2 }
+          ')
           echo "$FILES"
           echo "$FILES" > /tmp/changed-files.txt
           echo "diff_base=$DIFF_BASE" >> $GITHUB_OUTPUT
@@ -37,7 +40,7 @@ jobs:
           echo "has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/validate-backend-runtime-env\.py$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_public_client_secret_boundary=$(echo "$FILES" | grep -qE '^app/lib/env/|^app/config/client_env_policy\.yaml$|^app/\.client\.env\.example$|^app/\.env\.template$|^app/test/security/|^codemagic\.yaml$|^scripts/(create-public-client-env\.sh|check-public-client-secrets\.py|scan-public-artifact-secrets\.py)$|^scripts/pre-(commit|push)$|^\.github/workflows/.*\.ya?ml$|^plugins/apps-js/Dockerfile|^web/.*/Dockerfile$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_public_client_secret_boundary=$(echo "$FILES" | grep -qE '^app/lib/|^app/ios/|^app/android/|^app/macos/|^app/setup|^app/setup\.sh$|^app/initialsetup\.bash$|^app/config/client_env_policy\.yaml$|^app/\.client\.env\.example$|^app/\.env\.template$|^app/test/security/|^codemagic\.yaml$|^scripts/(create-public-client-env\.sh|check-public-client-secrets\.py|scan-public-artifact-secrets\.py)$|^scripts/pre-(commit|push)$|^\.github/workflows/.*\.ya?ml$|^plugins/apps-js/|^web/frontend/|^web/personas-open-source/|^desktop/macos/' && echo true || echo false)" >> $GITHUB_OUTPUT
           # Also run the Rust check when this workflow changes so CI PRs dogfood
           # the new guard instead of only validating YAML syntax.
           echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
@@ -217,7 +220,7 @@ jobs:
         if: steps.changed.outputs.has_frontend == 'true' || steps.changed.outputs.has_personas == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
             web/frontend/package-lock.json

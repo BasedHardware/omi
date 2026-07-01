@@ -82,16 +82,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Set up Google Service Info
@@ -336,16 +336,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Get Flutter packages
@@ -427,6 +427,7 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
+          shopt -s globstar nullglob
           ../scripts/scan-public-artifact-secrets.py build/**/outputs/**/*.aab
 
     artifacts:
@@ -530,16 +531,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Set up Google Service Info
@@ -709,16 +710,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Get Flutter packages
@@ -773,6 +774,11 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
+
+      - name: Scan macOS app artifact
+        script: |
+          APP_NAME=$(find $(pwd) -name "Omi.app" -type d | head -1)
+          ../scripts/scan-public-artifact-secrets.py "$APP_NAME"
 
       - name: Package application for App Store
         script: |
@@ -947,16 +953,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Get Flutter packages
@@ -979,6 +985,7 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
+          shopt -s globstar nullglob
           ../scripts/scan-public-artifact-secrets.py build/**/outputs/**/*.aab
 
 
@@ -1088,16 +1095,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Set up Google Service Info
@@ -1127,6 +1134,7 @@ workflows:
           shorebird patch ios \
             --flavor prod -- \
             --export-options-plist=$HOME/export_options.plist
+          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1142,6 +1150,8 @@ workflows:
         notify:
           success: true
           failure: false
+  macos-prod-legacy-disabled:
+    name: Legacy macOS Flutter Release (disabled)
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1200,16 +1210,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Extract version (from tag or auto-increment)
@@ -1411,6 +1421,7 @@ workflows:
           ../scripts/check-public-client-secrets.py --env-file .client.env
           cp .client.env "$APP_PATH/Contents/Resources/.env"
           echo "Bundled public client env into $APP_PATH/Contents/Resources/.env"
+          ../scripts/scan-public-artifact-secrets.py "$APP_PATH"
 
       - name: Sign app for notarization
         script: |
@@ -1867,16 +1878,16 @@ workflows:
 
       - name: Generate public client config
         script: |
-          PUBLIC_API_BASE_URL="$API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="$STAGING_API_URL" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$INTERCOM_ANDROID_API_KEY" \
+          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
+          PUBLIC_STAGING_API_URL="$PUBLIC_STAGING_API_URL" \
+          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
+          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
+          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
+          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
+          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
+          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
+          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
+          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
           ../scripts/create-public-client-env.sh .client.env
 
       - name: Get Flutter packages
@@ -1894,6 +1905,8 @@ workflows:
           # Should use bump version automatically by CI
           shorebird patch android \
             --flavor prod
+          shopt -s globstar nullglob
+          ../scripts/scan-public-artifact-secrets.py build/**/outputs/**/*.aab
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt

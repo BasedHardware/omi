@@ -27,7 +27,9 @@ represented in generated code; users can still extract values from shipped apps.
 1. Add the variable to `app/config/client_env_policy.yaml`.
 2. Add a placeholder to `app/.client.env.example`.
 3. Add it to `scripts/create-public-client-env.sh`.
-4. Add the value to the Codemagic public client config group.
+4. Add the value to the Codemagic environment group consumed by the app release
+   workflows (currently `app_env`, unless the workflows import a dedicated
+   public config group).
 5. Run:
 
 ```bash
@@ -64,3 +66,8 @@ public client -> Omi backend with user auth -> internal provider gateway -> vend
 BYOK flows require backend-owned secret storage. The app may collect a user key
 only for one-time authenticated submission, then local state should contain only
 a backend secret reference or configuration id.
+
+Legacy mobile custom-STT BYOK files are listed explicitly in
+`legacy_direct_provider_domain_exceptions` inside
+`app/config/client_env_policy.yaml`. Do not add to that list for new work. New
+provider integrations must use backend-owned BYOK storage and a provider proxy.

@@ -402,22 +402,21 @@ class SttProviderConfig {
 
   /// Available request config templates for custom STT configuration
   static Map<String, Map<String, dynamic>> get requestTemplates => {
-        'OpenAI':
-            get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
-        'Deepgram': get(
-          SttProvider.deepgramLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
-        'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
-        'Google Gemini': get(
-          SttProvider.geminiLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
-        'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
-      };
+    'OpenAI': get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
+    'Deepgram': get(
+      SttProvider.deepgramLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
+    'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
+    'Google Gemini': get(
+      SttProvider.geminiLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
+    'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
+  };
 
   Map<String, dynamic> getFullTemplateJson() => {
-        'request_type': requestType,
-        'response_schema': responseSchema.toJson(),
-      };
+    'request_type': requestType,
+    'response_schema': responseSchema.toJson(),
+  };
 
   /// Build complete request config with API key, language, and model
   /// Returns unified structure: url, request_type, headers, params, audio_field_name
@@ -430,7 +429,8 @@ class SttProviderConfig {
 
     switch (provider) {
       case SttProvider.openai:
-        config['url'] = 'https://api.openai.com/v1/audio/transcriptions';
+        config['url'] =
+            'https://api.openai.com/v1/audio/transcriptions'; // public-client-secret-boundary: legacy-direct-provider
         config['audio_field_name'] = 'file';
         config['headers'] = {'Authorization': 'Bearer ${apiKey ?? ''}'};
         config['params'] = {
@@ -442,7 +442,8 @@ class SttProviderConfig {
         break;
 
       case SttProvider.openaiDiarize:
-        config['url'] = 'https://api.openai.com/v1/audio/transcriptions';
+        config['url'] =
+            'https://api.openai.com/v1/audio/transcriptions'; // public-client-secret-boundary: legacy-direct-provider
         config['audio_field_name'] = 'file';
         config['headers'] = {'Authorization': 'Bearer ${apiKey ?? ''}'};
         config['params'] = {
@@ -454,7 +455,7 @@ class SttProviderConfig {
         break;
 
       case SttProvider.deepgram:
-        config['url'] = 'https://api.deepgram.com/v1/listen';
+        config['url'] = 'https://api.deepgram.com/v1/listen'; // public-client-secret-boundary: legacy-direct-provider
         config['headers'] = {'Authorization': 'Token ${apiKey ?? ''}', 'Content-Type': 'audio/wav'};
         config['params'] = {
           'model': mdl.isNotEmpty ? mdl : 'nova-3',
@@ -465,7 +466,7 @@ class SttProviderConfig {
         break;
 
       case SttProvider.deepgramLive:
-        config['url'] = 'wss://api.deepgram.com/v1/listen';
+        config['url'] = 'wss://api.deepgram.com/v1/listen'; // public-client-secret-boundary: legacy-direct-provider
         config['headers'] = {'Authorization': 'Token ${apiKey ?? ''}'};
         config['params'] = {
           'model': mdl.isNotEmpty ? mdl : 'nova-3',
@@ -491,14 +492,14 @@ class SttProviderConfig {
       case SttProvider.gemini:
         final modelName = mdl.isNotEmpty ? mdl : 'gemini-2.0-flash';
         config['url'] =
-            'https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=${apiKey ?? ''}';
+            'https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=${apiKey ?? ''}'; // public-client-secret-boundary: legacy-direct-provider
         config['headers'] = {'Content-Type': 'application/json'};
         config['params'] = {'language': lang};
         break;
 
       case SttProvider.geminiLive:
         config['url'] =
-            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}';
+            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}'; // public-client-secret-boundary: legacy-direct-provider
         config['params'] = {
           'model': mdl.isNotEmpty ? mdl : 'gemini-2.5-flash-native-audio-preview-12-2025',
           'language': lang,

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 final _repoRoot = Directory.current.parent;
+final _envLikeToken = RegExp(r'\b[A-Z][A-Z0-9_]{2,}\b');
 
 String _read(String relativePath) => File('${_repoRoot.path}/$relativePath').readAsStringSync();
 
@@ -21,6 +22,11 @@ Iterable<File> _trackedFilesUnder(String relativePath, {Set<String>? extensions}
 void main() {
   final policy = jsonDecode(_read('app/config/client_env_policy.yaml')) as Map<String, dynamic>;
   final denied = Set<String>.from((policy['server_secret_env'] as Map<String, dynamic>)['denied_exact'] as List);
+  final deniedPatterns = ((policy['server_secret_env'] as Map<String, dynamic>)['denied_name_patterns'] as List)
+      .map((pattern) => RegExp(pattern as String))
+      .toList();
+
+  bool isDeniedName(String name) => denied.contains(name) || deniedPatterns.any((pattern) => pattern.hasMatch(name));
 
   test('mobile env source cannot expose server-only variables', () {
     final files = [
@@ -36,6 +42,10 @@ void main() {
       for (final name in denied) {
         expect(text, isNot(contains(name)), reason: '$relativePath must not expose $name to public client builds');
       }
+      for (final match in _envLikeToken.allMatches(text)) {
+        final token = match.group(0)!;
+        expect(isDeniedName(token), isFalse, reason: '$relativePath must not expose $token to public client builds');
+      }
     }
   });
 
@@ -47,7 +57,9 @@ void main() {
       expect(allowed, contains(entry.key));
       final metadata = entry.value as Map<String, dynamic>;
       for (final field in ['owner', 'purpose', 'restriction', 'revocation']) {
-        expect((metadata[field] as String?)?.trim(), isNot(isEmpty), reason: '${entry.key} is missing $field');
+        final value = metadata[field];
+        expect(value, isA<String>(), reason: '${entry.key} is missing $field');
+        expect((value as String).trim(), isNotEmpty, reason: '${entry.key} is missing $field');
       }
     }
   });
@@ -66,6 +78,10 @@ void main() {
       final text = file.readAsStringSync();
       for (final name in denied) {
         expect(text, isNot(contains(name)), reason: '${file.path} must not expose $name');
+      }
+      for (final match in _envLikeToken.allMatches(text)) {
+        final token = match.group(0)!;
+        expect(isDeniedName(token), isFalse, reason: '${file.path} must not expose $token');
       }
     }
   });

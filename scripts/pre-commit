@@ -1,7 +1,10 @@
 #!/bin/sh
 
 # Universal source hygiene: fail fast on unresolved merge conflict markers.
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+STAGED_FILES=$(git diff --cached --name-status --diff-filter=ACMRD | awk '
+  $1 ~ /^[RC]/ { print $2; print $3; next }
+  { print $2 }
+')
 
 if [ -n "$STAGED_FILES" ]; then
   conflict_found=0
@@ -19,9 +22,9 @@ if [ "$conflict_found" -eq 1 ]; then
     exit 1
   fi
 
-  if echo "$STAGED_FILES" | grep -Eq '^(app/lib/env/|app/config/client_env_policy\.yaml|app/\.client\.env\.example|app/\.env\.template|codemagic\.yaml|scripts/(create-public-client-env|check-public-client-secrets|scan-public-artifact-secrets)\.py|scripts/create-public-client-env\.sh|\.github/workflows/|plugins/apps-js/Dockerfile|web/.*/Dockerfile)'; then
+  if echo "$STAGED_FILES" | grep -Eq '^(app/lib/|app/ios/|app/android/|app/macos/|app/setup|app/setup\.sh|app/initialsetup\.bash|app/config/client_env_policy\.yaml|app/\.client\.env\.example|app/\.env\.template|codemagic\.yaml|scripts/(create-public-client-env|check-public-client-secrets|scan-public-artifact-secrets)\.py|scripts/create-public-client-env\.sh|\.github/workflows/|plugins/apps-js/|web/frontend/|web/personas-open-source/|desktop/macos/)'; then
     echo "Checking public client secret boundary..."
-    python3 scripts/check-public-client-secrets.py
+    python3 scripts/check-public-client-secrets.py || exit 1
   fi
 fi
 

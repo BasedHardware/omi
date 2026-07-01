@@ -49,12 +49,18 @@ if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
     fi
     while IFS= read -r file; do
       [ -n "$file" ] && CHANGED_FILES+=("$file")
-    done < <(git diff --name-only --diff-filter=ACM "$DIFF_BASE" "$local_oid")
+    done < <(git diff --name-status --diff-filter=ACMRD "$DIFF_BASE" "$local_oid" | awk '
+      $1 ~ /^[RC]/ { print $2; print $3; next }
+      { print $2 }
+    ')
   done
 else
   while IFS= read -r file; do
     [ -n "$file" ] && CHANGED_FILES+=("$file")
-  done < <(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
+  done < <(git diff --name-status --diff-filter=ACMRD "$BASE_REF" HEAD | awk '
+    $1 ~ /^[RC]/ { print $2; print $3; next }
+    { print $2 }
+  ')
 fi
 
 if [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
@@ -226,13 +232,31 @@ check_backend_runtime_env_if_needed() {
 
 check_public_client_secret_boundary_if_needed() {
   if ! changed_matches \
-    'app/lib/env/*' \
-    'app/lib/env/**/*' \
+    'app/lib/*' \
+    'app/lib/**/*' \
+    'app/ios/*' \
+    'app/ios/**/*' \
+    'app/android/*' \
+    'app/android/**/*' \
+    'app/macos/*' \
+    'app/macos/**/*' \
+    'app/setup/*' \
+    'app/setup/**/*' \
+    'app/setup.sh' \
+    'app/initialsetup.bash' \
     'app/config/client_env_policy.yaml' \
     'app/.client.env.example' \
     'app/.env.template' \
     'app/test/security/*' \
     'app/test/security/**/*' \
+    'web/frontend/*' \
+    'web/frontend/**/*' \
+    'web/personas-open-source/*' \
+    'web/personas-open-source/**/*' \
+    'plugins/apps-js/*' \
+    'plugins/apps-js/**/*' \
+    'desktop/macos/*' \
+    'desktop/macos/**/*' \
     'codemagic.yaml' \
     'scripts/create-public-client-env.sh' \
     'scripts/check-public-client-secrets.py' \
@@ -242,6 +266,7 @@ check_public_client_secret_boundary_if_needed() {
     'plugins/apps-js/Dockerfile' \
     'plugins/apps-js/Dockerfile.datadog' \
     'web/*/Dockerfile' \
+    'web/*/Dockerfile.*' \
     '.github/workflows/lint.yml' \
     'scripts/pre-commit' \
     'scripts/pre-push'

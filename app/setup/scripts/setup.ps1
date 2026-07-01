@@ -59,36 +59,6 @@ function SetupFirebase {
 }
 
 
-function SetupFirebaseWithServiceAccount {
-    dart pub global activate flutterfire_cli
-    
-    # Dev configuration
-    flutterfire config `
-        --platforms="android,ios,web" `
-        --out="lib/firebase_options_dev.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12.development" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/dev/" `
-        --ios-out="ios/Config/Dev/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
-        --ios-target="Runner" `
-        --yes
-
-    # Prod configuration
-    flutterfire config `
-        --platforms="android,ios,web" `
-        --out="lib/firebase_options_prod.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/prod/" `
-        --ios-out="ios/Config/Prod/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
-        --ios-target="Runner" `
-        --yes
-}
-
 function SetupProvisioningProfile {
     # Check if fastlane exists
     if (!(Get-Command "fastlane" -ErrorAction SilentlyContinue)) {
@@ -105,9 +75,15 @@ function SetupProvisioningProfile {
 
 function SetupAppEnv {
     $API_BASE_URL = "https://api.omiapi.com/"
-    # Using Set-Content with UTF8 encoding
-    $content = "API_BASE_URL=$API_BASE_URL"
-    [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)
+    $content = @(
+        "PUBLIC_API_BASE_URL=$API_BASE_URL",
+        "PUBLIC_USE_WEB_AUTH=true",
+        "PUBLIC_USE_AUTH_CUSTOM_TOKEN=true",
+        "PUBLIC_STAGING_API_URL="
+    ) -join [Environment]::NewLine
+    [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".client.dev.env"), $content, [System.Text.Encoding]::UTF8)
+    Copy-Item -Path ".client.dev.env" -Destination ".client.env" -Force
+    python3 ../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
 }
 
 function SetupKeystoreAndroid {

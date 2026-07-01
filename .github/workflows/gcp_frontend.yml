@@ -7,14 +7,14 @@ on:
       - 'web/frontend/**'
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
       environment:
         description: 'Environment to deploy to'
         required: false
         default: 'prod'
+        type: choice
+        options:
+          - development
+          - prod
       release_version:
         description: 'Release version (optional)'
         required: false
@@ -26,7 +26,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -44,6 +44,7 @@ jobs:
       - run: gcloud auth configure-docker
       - name: Build and Push Docker image
         run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
           docker build \
             --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }} \
             --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }} \
@@ -53,16 +54,17 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }} \
             --build-arg API_URL=${{ secrets.API_URL }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f web/frontend/Dockerfile .
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA -f web/frontend/Dockerfile .
             
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA
+          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA" >> "$GITHUB_ENV"
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: ${{ env.IMAGE }}
           secrets: |
             OPENAI_API_KEY=OPENAI_API_KEY:latest
 

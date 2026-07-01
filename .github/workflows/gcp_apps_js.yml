@@ -11,10 +11,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
+        type: choice
+        options:
+          - development
+          - prod
 
 env:
   SERVICE: apps-js
@@ -22,7 +22,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -42,9 +42,11 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
           docker build \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/apps-js/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA -f plugins/apps-js/Dockerfile .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA
+          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
         id: deploy
@@ -52,7 +54,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: ${{ env.IMAGE }}
           secrets: |
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest
