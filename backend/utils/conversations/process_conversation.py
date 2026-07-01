@@ -314,6 +314,9 @@ def _get_conversation_obj(
         conversation.structured = structured
         conversation.discarded = discarded
 
+    # Maintain an unencrypted person_ids index for "conversations with person X" queries.
+    conversation.person_ids = conversation.get_person_ids()
+
     return conversation
 
 

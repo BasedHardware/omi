@@ -191,6 +191,24 @@ def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_by_person_id(uid: str, person_id: str, limit: int = 20):
+    """Recent, non-discarded conversations that involve a given person.
+
+    Uses the unencrypted `person_ids` index (array_contains, no other filter so no
+    composite index is needed); discarded filtering + recency sort are done in Python.
+    """
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+    conversations_ref = conversations_ref.where(filter=FieldFilter('person_ids', 'array_contains', person_id)).limit(
+        max(limit * 3, limit)
+    )
+    convos = [doc.to_dict() for doc in conversations_ref.stream()]
+    convos = [c for c in convos if not c.get('discarded')]
+    convos.sort(key=lambda c: (c.get('created_at').timestamp() if c.get('created_at') else 0), reverse=True)
+    return convos[:limit]
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)

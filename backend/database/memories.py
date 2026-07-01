@@ -188,6 +188,23 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0, *, fir
 
 
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
+def get_memories_by_subject_entity(uid: str, subject_entity_id: str, limit: int = 50, *, firestore_client=None):
+    """Active facts attributed to a specific subject entity (e.g. a person).
+
+    No order_by so we avoid requiring a composite index; freshness/validity are
+    filtered in Python (old docs lack invalid_at, which a Firestore == None filter
+    would wrongly drop).
+    """
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    memories_ref = memories_ref.where(filter=FieldFilter('subject_entity_id', '==', subject_entity_id)).limit(limit)
+    memories = [doc.to_dict() for doc in memories_ref.stream()]
+    return [
+        memory for memory in memories if memory.get('user_review') is not False and memory.get('invalid_at') is None
+    ]
+
+
+@prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0, *, firestore_client=None):
     logger.info(f'get_non_filtered_memories {uid} {limit} {offset}')
     database = _get_db(firestore_client)

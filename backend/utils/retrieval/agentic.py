@@ -46,6 +46,7 @@ from utils.retrieval.tools import (
     save_user_preference_tool,
     fetch_url_tool,
     traverse_knowledge_graph_tool,
+    get_person_context_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
@@ -101,6 +102,8 @@ CORE_TOOLS = [
     save_user_preference_tool,
     fetch_url_tool,
     traverse_knowledge_graph_tool,
+    # Appended at the END to preserve the prompt-cached tool prefix.
+    get_person_context_tool,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -140,6 +143,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'search_screen_activity_tool': 'Searching screen activity',
         'save_user_preference_tool': 'Saving preference',
         'fetch_url_tool': 'Reading page',
+        'get_person_context_tool': 'Looking up person',
     }
 
     if tool_name in tool_display_map:

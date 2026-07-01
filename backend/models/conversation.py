@@ -93,6 +93,9 @@ class Conversation(BaseModel):
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
+    # Unencrypted index of person_ids present in transcript_segments so we can query
+    # "conversations involving person X" (segments themselves are encrypted at rest).
+    person_ids: List[str] = []
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
     audio_files: List[AudioFile] = []
