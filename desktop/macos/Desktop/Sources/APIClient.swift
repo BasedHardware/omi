@@ -1509,8 +1509,10 @@ struct ServerMemory: Decodable, Identifiable {
     let memoryIdValue = try container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
     case let (.some(id), .some(memoryId)) where id != memoryId:
-      throw ServerMemoryAliasDecodeError.conflict(
-        "id", id, "memory_id", memoryId, codingPath: container.codingPath)
+      // Legacy docs stored memory_id = conversation_id; a mismatched alias must
+      // not reject the row — one bad row used to blank the whole memories list.
+      // Silent by design: long-time accounts have thousands of these per sync.
+      self.id = id
     case let (.some(id), _):
       self.id = id
     case let (_, .some(memoryId)):
