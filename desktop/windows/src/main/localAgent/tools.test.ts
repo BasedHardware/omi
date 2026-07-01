@@ -184,10 +184,11 @@ describe('local agent tool registry', () => {
     expect(screenshot).toMatchObject({
       ok: true,
       name: 'get_screenshot',
-      content_type: 'image/jpeg',
+      content_type: 'application/json',
       result: {
         screenshot_id: id,
         image_base64: imageBytes.toString('base64'),
+        image_mime_type: 'image/jpeg',
         metadata: {
           screenshot_id: id,
           app: 'Code.exe',
