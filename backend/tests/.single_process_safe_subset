@@ -65,3 +65,8 @@ tests/unit/test_conversation_events_bounds.py
 tests/unit/test_conversations_date_range_validation.py
 tests/unit/test_delete_account_purge_storage.py
 tests/unit/test_screen_activity_tool_result_bound.py
+tests/unit/test_ws_auth_handshake.py
+tests/unit/test_process_conversation_usage_context.py
+tests/unit/test_batch_upload_storage.py
+tests/unit/test_memory_tools.py
+tests/unit/test_memorydb_memory_id_alias.py
