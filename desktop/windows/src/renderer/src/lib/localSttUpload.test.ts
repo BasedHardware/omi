@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildUploadSegments } from './localSttUpload'
+import { buildUploadSegments, LocalSttUploadLimitError } from './localSttUpload'
 
 vi.mock('./apiClient', () => ({
   omiApi: { post: vi.fn() }
@@ -77,6 +77,6 @@ describe('local STT upload mapping', () => {
           end: index * 2 + 1
         }))
       )
-    ).toThrow('Save was stopped to avoid truncating transcript content')
+    ).toThrow(LocalSttUploadLimitError)
   })
 })
