@@ -66,16 +66,19 @@ class ScannerFixture(unittest.TestCase):
         subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
         self.old_checker_root = CHECKER.ROOT
         self.old_checker_policy = CHECKER.POLICY_PATH
+        self.old_checker_app_lib = CHECKER.APP_LIB
         self.old_artifact_root = ARTIFACT_SCANNER.ROOT
         self.old_artifact_policy = ARTIFACT_SCANNER.POLICY_PATH
         CHECKER.ROOT = self.root
         CHECKER.POLICY_PATH = self.root / "app" / "config" / "client_env_policy.yaml"
+        CHECKER.APP_LIB = self.root / "app" / "lib"
         ARTIFACT_SCANNER.ROOT = self.root
         ARTIFACT_SCANNER.POLICY_PATH = self.root / "app" / "config" / "client_env_policy.yaml"
 
     def tearDown(self) -> None:
         CHECKER.ROOT = self.old_checker_root
         CHECKER.POLICY_PATH = self.old_checker_policy
+        CHECKER.APP_LIB = self.old_checker_app_lib
         ARTIFACT_SCANNER.ROOT = self.old_artifact_root
         ARTIFACT_SCANNER.POLICY_PATH = self.old_artifact_policy
         self.tmp.cleanup()
@@ -113,6 +116,42 @@ jobs:
         errors = CHECKER.check_release_log_secret_hygiene(CHECKER.load_policy())
 
         self.assertEqual(errors, [])
+
+    def test_release_hygiene_allows_multiline_stdin_secret_sink(self) -> None:
+        self.track(
+            "mcp/release.sh",
+            """
+echo "$GOOGLE_CLIENT_SECRET" | \\
+  "$SPARKLE_BIN/sign_update" "$SPARKLE_ZIP_PATH" --ed-key-file - 2>/dev/null | \\
+  grep "sparkle:edSignature"
+""",
+        )
+
+        errors = CHECKER.check_release_log_secret_hygiene(CHECKER.load_policy())
+
+        self.assertEqual(errors, [])
+
+    def test_release_hygiene_flags_piped_secret_echo_to_log(self) -> None:
+        self.track("mcp/release.sh", 'echo "$OPENAI_API_KEY" | cat\nprintf "$GOOGLE_CLIENT_SECRET" | tee /dev/stderr\n')
+
+        errors = CHECKER.check_release_log_secret_hygiene(CHECKER.load_policy())
+
+        joined = "\n".join(errors)
+        self.assertIn("shell output command references server-only OPENAI_API_KEY", joined)
+        self.assertIn("shell output command references server-only GOOGLE_CLIENT_SECRET", joined)
+
+    def test_release_hygiene_flags_trace_option_variants(self) -> None:
+        self.track(
+            "mcp/release.sh",
+            """
+set -euxo pipefail
+export OPENAI_API_KEY="$OPENAI_API_KEY"
+""",
+        )
+
+        errors = CHECKER.check_release_log_secret_hygiene(CHECKER.load_policy())
+
+        self.assertIn("set -x traces nearby server-only refs OPENAI_API_KEY", "\n".join(errors))
 
     def test_public_dockerfiles_reject_server_only_build_args(self) -> None:
         self.track("web/app/Dockerfile", "FROM node:20\nARG OPENAI_API_KEY\nENV OPENAI_API_KEY=$OPENAI_API_KEY\n")

@@ -322,8 +322,12 @@ PUBLIC_ENV_TARGET_RE = re.compile(
     r"(?:^|[\s/\"'])(?:\.client(?:\.dev)?\.env|\.env|\.env\.production|\.env\.local)(?:[\"']|\s|$)"
 )
 SENSITIVE_ECHO_RE = re.compile(r"\b(?:echo|printf)\b")
-SHELL_TRACE_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+-x(\s|$)")
+SHELL_TRACE_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+-[A-Za-z]*x[A-Za-z]*(\s|$|[;&|])")
 SHELL_TRACE_OFF_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+\+x(\s|$)")
+SAFE_STDIN_SECRET_SINK_RE = re.compile(
+    r"\|\s*(?:\"[^\"]*sign_update\"|\S*sign_update)\b[^|]*--ed-key-file\s+-"
+    r"|\|\s*docker\s+login\b[^|]*--password-stdin"
+)
 
 
 def check_codemagic(policy: dict) -> list[str]:
@@ -457,6 +461,16 @@ def release_hygiene_files() -> list[Path]:
     return files
 
 
+def logical_shell_line(lines: list[str], line_index: int) -> str:
+    command_parts = [lines[line_index]]
+    for next_line in lines[line_index + 1 : line_index + 8]:
+        if not command_parts[-1].rstrip().endswith("\\"):
+            break
+        command_parts[-1] = command_parts[-1].rstrip()[:-1]
+        command_parts.append(next_line)
+    return " ".join(part.strip() for part in command_parts)
+
+
 def check_release_log_secret_hygiene(policy: dict) -> list[str]:
     errors: list[str] = []
     exact = denied_names(policy)
@@ -467,18 +481,20 @@ def check_release_log_secret_hygiene(policy: dict) -> list[str]:
     for path in release_hygiene_files():
         rel = path.relative_to(ROOT)
         lines = read_text(path).splitlines()
-        for lineno, line in enumerate(lines, start=1):
+        for line_index, line in enumerate(lines):
+            lineno = line_index + 1
             denied_refs = denied_refs_in_line(line, exact, patterns, allowed_public, allowed_secret_sources)
             if PUBLIC_ENV_TARGET_RE.search(line) and denied_refs:
                 errors.append(
                     f"{rel}:{lineno}: public env file write references server-only {', '.join(sorted(denied_refs))}"
                 )
-            writes_to_stdout = ">" not in line and "|" not in line
+            writes_to_stdout = ">" not in line and not SAFE_STDIN_SECRET_SINK_RE.search(
+                logical_shell_line(lines, line_index)
+            )
             if (
                 SENSITIVE_ECHO_RE.search(line)
                 and denied_refs
                 and writes_to_stdout
-                and "--password-stdin" not in line
                 and "::add-mask::" not in line
             ):
                 errors.append(

@@ -253,8 +253,10 @@ check_public_client_secret_boundary_if_needed() {
     'web/frontend/**/*' \
     'web/personas-open-source/*' \
     'web/personas-open-source/**/*' \
-    'plugins/apps-js/*' \
-    'plugins/apps-js/**/*' \
+    'plugins/*' \
+    'plugins/**/*' \
+    'mcp/*' \
+    'mcp/**/*' \
     'desktop/macos/*' \
     'desktop/macos/**/*' \
     'codemagic.yaml' \
