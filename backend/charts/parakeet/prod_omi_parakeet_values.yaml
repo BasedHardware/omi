@@ -123,6 +123,8 @@ env:
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
 
+terminationGracePeriodSeconds: 150
+
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
