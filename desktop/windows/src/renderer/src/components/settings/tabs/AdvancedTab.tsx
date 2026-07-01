@@ -38,13 +38,19 @@ export function AdvancedTab(): React.JSX.Element {
   // --- Local agent API ---
   const [localAgent, setLocalAgent] = useState<LocalAgentStatus | null>(null)
   const [localAgentPort, setLocalAgentPort] = useState('')
+  const [localAgentPortDirty, setLocalAgentPortDirty] = useState(false)
   const [localAgentBusy, setLocalAgentBusy] = useState<
     '' | 'enable' | 'port' | 'copy-token' | 'rotate-token' | 'test' | 'refresh' | 'copy-url'
   >('')
 
-  const applyLocalAgentStatus = (status: LocalAgentStatus): void => {
+  const applyLocalAgentStatus = (
+    status: LocalAgentStatus,
+    options: { syncPort?: boolean } = {}
+  ): void => {
     setLocalAgent(status)
-    setLocalAgentPort(String(status.configuredPort))
+    if (options.syncPort || !localAgentPortDirty) {
+      setLocalAgentPort(String(status.configuredPort))
+    }
   }
 
   const refreshLocalAgent = async (): Promise<void> => {
@@ -105,7 +111,8 @@ export function AdvancedTab(): React.JSX.Element {
     setLocalAgentBusy('port')
     try {
       const status = await window.omi.localAgentSetPort(port)
-      applyLocalAgentStatus(status)
+      setLocalAgentPortDirty(false)
+      applyLocalAgentStatus(status, { syncPort: true })
       toast('Local agent port saved', {
         tone: 'success',
         body: status.running ? `Listening on ${status.localUrl}` : undefined
@@ -541,7 +548,11 @@ export function AdvancedTab(): React.JSX.Element {
                 min={1024}
                 max={65535}
                 value={localAgentPort}
-                onChange={(e) => setLocalAgentPort(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setLocalAgentPort(next)
+                  setLocalAgentPortDirty(next !== String(localAgent?.configuredPort ?? ''))
+                }}
                 disabled={!localAgent || localAgentBusy !== ''}
                 className="input-field"
               />
