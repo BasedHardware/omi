@@ -1,0 +1,3 @@
+{
+    "change": "Fixed repeated macOS keychain permission prompts and device identity churn when a keychain prompt is denied"
+}
