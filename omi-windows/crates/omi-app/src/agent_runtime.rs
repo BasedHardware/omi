@@ -177,19 +177,23 @@ impl AgentRuntime {
             None
         };
 
-        // ── Knowledge base: semantic search for knowledge-related queries ────────
-        let knowledge_context = if cfg.mcp_enabled && crate::knowledge::is_knowledge_query(user_query) {
-            tracing::info!("[AGENT] Detected knowledge query — searching RAG");
+        // ── Knowledge base: always query when MCP is enabled (cheap localhost call) ──
+        let knowledge_context = if cfg.mcp_enabled {
+            tracing::info!("[AGENT] Searching knowledge base for context");
             match crate::knowledge::search_knowledge(user_query, cfg).await {
                 Ok(results) if !results.is_empty() => {
-                    let mut kb = String::from("## Knowledge Base Results\n");
+                    let mut kb = String::from("## Relevant Knowledge Base Documents\n");
                     for r in &results {
                         let src = r.source.as_deref().unwrap_or("unknown");
                         kb.push_str(&format!("- [from {src}] {}\n", r.content));
                     }
                     Some(kb)
                 }
-                _ => None,
+                Ok(_) => None,
+                Err(e) => {
+                    tracing::debug!("[AGENT] KB search unavailable: {e}");
+                    None
+                }
             }
         } else {
             None
