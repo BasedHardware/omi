@@ -89,6 +89,11 @@ jobs:
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
           python3 backend/scripts/validate-backend-runtime-env.py --env prod
 
+      - name: Check secret consumer registry
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify-secret-consumer-registry.py
+
       - name: Check public client secret boundary
         if: steps.changed.outputs.has_public_client_secret_boundary == 'true'
         run: python3 scripts/check-public-client-secrets.py
