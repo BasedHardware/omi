@@ -18,18 +18,18 @@ Set-Location -Path ".."
 # TODO Install Android dependencies?
 # ...
 
-# Create public client env files from template
-Write-Host "Creating public client env files..."
-Copy-Item -Path ".client.env.example" -Destination ".client.dev.env"
-Copy-Item -Path ".client.env.example" -Destination ".client.env"
+# Create .env file from template
+Write-Host "Creating .env file..."
+Copy-Item -Path ".env.template" -Destination ".dev.env"
+Copy-Item -Path ".env.template" -Destination ".prod.env"
 
-# Prompt user to review public client config
-Write-Host "Review app/.client.dev.env and app/.client.env. Do not add private API keys or server-only secrets."
-Write-Host "Press Enter to continue after reviewing the public client config..."
+# Prompt user to add API keys to .env file
+Write-Host "Please add your API keys to the .env file."
+Write-Host "Press Enter to continue after adding the keys..."
 $null = Read-Host
 
 # Run Build Runner
 Write-Host "Running Build Runner..."
 dart run build_runner build
 
-Write-Host "Setup complete. You can now run the app."
+Write-Host "Setup complete. You can now run the app." 

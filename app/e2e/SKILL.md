@@ -259,12 +259,12 @@ auth_ready ─── launch app → sign in with Google/Apple → complete onboa
 ```bash
 # Android: setup + build + launch
 cd app && bash setup.sh android
-# → completes: keystore, Firebase config, .client.dev.env, flutter run --flavor dev
+# → completes: keystore, Firebase config, .dev.env, flutter run --flavor dev
 # → sign in with Google when app launches, complete onboarding
 
 # iOS: setup + build + launch
 cd app && bash setup.sh ios
-# → completes: Firebase config, .client.dev.env, flutter run --flavor dev
+# → completes: Firebase config, .dev.env, flutter run --flavor dev
 # → sign in with Google/Apple when app launches, complete onboarding
 ```
 
@@ -434,11 +434,11 @@ After making changes, verify them in the live app:
 
 **iOS simulator auth** (dev Firebase tokens rejected by prod API — needs local backend):
 ```bash
-# .client.dev.env must point to a local/dev backend
-PUBLIC_API_BASE_URL=http://<your-backend-host>:<port>/
-PUBLIC_USE_WEB_AUTH=false
-PUBLIC_USE_AUTH_CUSTOM_TOKEN=true
-# Regenerate envied after .client.dev.env change, rebuild app
+# .dev.env must point to a local/dev backend
+API_BASE_URL=http://<your-backend-host>:<port>/
+USE_WEB_AUTH=false
+USE_AUTH_CUSTOM_TOKEN=true
+# Regenerate envied after .dev.env change, rebuild app
 ```
 
 ## Guard Conditions
