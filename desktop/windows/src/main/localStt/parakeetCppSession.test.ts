@@ -3,7 +3,12 @@ import { mkdtemp, readFile, rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { BackendSegment } from '../../shared/types'
-import { parseParakeetCliOutput, ParakeetCppSession, writePcm16Wav } from './parakeetCppSession'
+import {
+  parseParakeetCliOutput,
+  ParakeetCppSession,
+  safeSessionFilePrefix,
+  writePcm16Wav
+} from './parakeetCppSession'
 import { resetManagedParakeetRuntimeStateForTests } from './parakeetCppRuntime'
 
 let root = ''
@@ -54,6 +59,10 @@ describe('parakeet.cpp CLI session', () => {
     ])
 
     expect(parseParakeetCliOutput('plain transcript')).toEqual([{ text: 'plain transcript' }])
+  })
+
+  it('sanitizes renderer-provided session ids before using them in filenames', () => {
+    expect(safeSessionFilePrefix('../escape.session\\id')).toBe('___escape_session_id')
   })
 
   it('flushes buffered PCM through the CLI and emits backend segments', async () => {
