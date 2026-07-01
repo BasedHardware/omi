@@ -64,9 +64,8 @@ Work top to bottom. Don't skip the probe or the fixture test.
 
 ---
 
-**Known follow-up:** `GmailReaderService.swift` duplicates the exact
-browser-cookie + Python-decrypt + last-writer-wins pattern this checklist fixes
-for calendar. It has the same class of bug and is the next candidate. A shared
+**Known follow-up:** Calendar and Gmail now both classify browser-cookie
+attempts instead of using last-writer-wins diagnostics. A shared
 `BrowserGoogleSession` helper (cookie discovery + decrypt + classify) would let
-both connectors share the hardened path — worth doing once a second consumer
-justifies the extraction.
+both connectors share the hardened path — worth doing once the duplicated shape
+stabilizes.
