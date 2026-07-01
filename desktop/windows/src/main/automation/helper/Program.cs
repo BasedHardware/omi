@@ -26,6 +26,9 @@ internal static class Program
     private const int ProtocolVersion = 1;
     private const int MaxNodes = 400;
     private const int MaxDepth = 12;
+    // A frame length beyond this means the stdin stream has desynced; (int)len
+    // would go negative or demand a multi-GB allocation, so reject it.
+    private const int MaxFrameBytes = 64 * 1024 * 1024;
 
     private static readonly JsonSerializerOptions JsonOpts =
         new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -44,6 +47,11 @@ internal static class Program
             if (header is null) return 0;
             var len = BitConverter.ToUInt32(header, 0);
             if (len == 0) continue;
+            if (len > MaxFrameBytes)
+            {
+                Console.Error.WriteLine($"[win-automation-helper] frame too large: {len} bytes — exiting to resync.");
+                return 1;
+            }
             var body = await ReadExactly(stdin, (int)len);
             if (body is null) return 0;
 
@@ -451,7 +459,11 @@ internal static class Program
 
     private static string SafeProcName(int pid)
     {
-        try { return System.Diagnostics.Process.GetProcessById(pid).ProcessName; }
+        try
+        {
+            using var proc = System.Diagnostics.Process.GetProcessById(pid);
+            return proc.ProcessName;
+        }
         catch { return ""; }
     }
 
