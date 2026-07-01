@@ -155,6 +155,25 @@ describe('local agent server', () => {
     })
   })
 
+  it('rejects oversized local tool request bodies', async () => {
+    const info = await startLocalAgentServer({ preferredPort: 47825, token: 'test-token' })
+
+    const response = await fetch(`${info.localUrl}/v1/local/tool`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test-token',
+        'content-type': 'application/json'
+      },
+      body: 'x'.repeat(1_048_577)
+    })
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'request_body_too_large', max_bytes: 1_048_576 }
+    })
+  })
+
   it('falls back from the default port without binding to all interfaces', async () => {
     const occupied = createServer((_req, res) => res.end('occupied'))
     await listen(occupied, LOCAL_AGENT_DEFAULT_PORT)
