@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/custom_connection.dart';
+import 'package:omi/services/devices/connectors/custom_connection.dart';
 import 'package:omi/services/devices/models.dart';
 
 const int beeCmdGetFirmwareVersion = 0xC005;
