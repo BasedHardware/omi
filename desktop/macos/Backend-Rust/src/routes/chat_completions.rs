@@ -1091,11 +1091,35 @@ async fn log_usage(state: &AppState, user: &AuthUser, usage: &AnthropicUsage, co
     }
 }
 
+async fn record_desktop_chat_quota_question(
+    State(state): State<AppState>,
+    user: PaywalledAuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let user: AuthUser = user.into();
+    state
+        .firestore
+        .record_desktop_chat_quota_question(&user.uid)
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                "desktop_chat_quota: quota question log failed for {}: {}",
+                user.uid,
+                e
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(json!({"status": "ok"})))
+}
+
 // ── Route registration ──────────────────────────────────────────────────────
 
 pub fn chat_completions_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/chat/completions", post(chat_completions))
+        .route(
+            "/v2/desktop-chat/quota-question",
+            post(record_desktop_chat_quota_question),
+        )
         .layer(DefaultBodyLimit::max(CHAT_COMPLETIONS_MAX_BODY_SIZE))
 }
 
@@ -1104,6 +1128,29 @@ pub fn chat_completions_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages,
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        }
+    }
+
+    fn user_message(text: &str) -> ChatMessage {
+        ChatMessage {
+            role: "user".to_string(),
+            content: Some(json!(text)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
 
     #[test]
     fn transient_statuses_retry() {

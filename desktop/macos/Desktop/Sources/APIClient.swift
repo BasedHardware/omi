@@ -253,7 +253,7 @@ actor APIClient {
   }
 
   /// Report a managed realtime turn's token usage so the backend can price it and record
-  /// it into the llm_usage ledger (counts toward quota). Fire-and-forget; failures are
+  /// it into the llm_usage cost ledger. Fire-and-forget; failures are
   /// logged and dropped (the backend reconciler is the eventual safety net). Only called
   /// for managed (ephemeral) sessions — BYOK users pay the provider directly.
   func reportRealtimeUsage(
@@ -289,6 +289,33 @@ actor APIClient {
       _ = try await session.data(for: request)
     } catch {
       log("APIClient: realtime usage report failed: \(error.localizedDescription)")
+    }
+  }
+
+  /// Record one accepted user-visible desktop chat question. This is the
+  /// product-boundary quota counter; token/cost telemetry stays with individual
+  /// LLM calls.
+  func recordDesktopChatQuotaQuestion(source: String) async {
+    let base = rustBackendURL
+    guard !base.isEmpty else { return }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    guard let url = URL(string: normalized + "v2/desktop-chat/quota-question") else { return }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 10
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    do {
+      let headers = try await buildHeaders(requireAuth: true, includeBYOK: false)
+      for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+      request.httpBody = try JSONSerialization.data(withJSONObject: ["source": source])
+      let (_, response) = try await session.data(for: request)
+      guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+        log("APIClient: desktop chat quota question record failed HTTP \(code)")
+        return
+      }
+    } catch {
+      log("APIClient: desktop chat quota question record failed: \(error.localizedDescription)")
     }
   }
 

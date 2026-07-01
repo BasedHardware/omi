@@ -2915,7 +2915,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
                 return nil
             }
-            usageLimiter.recordQuery()
         }
 
         // QueryTracer: picked up from the TaskLocal context established by the
@@ -3001,6 +3000,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let attachmentMetadataJSON = attachmentsForMessage.isEmpty
             ? nil
             : encodeAttachmentsMetadata(attachmentsForMessage)
+
+        if isUsingOmiAccountProvider {
+            usageLimiter.recordQuery()
+            let quotaSource = surfaceRef?.surfaceKind ?? (sessionKey == "floating" ? "floating_bar" : "main_chat")
+            Task.detached(priority: .background) {
+                await APIClient.shared.recordDesktopChatQuotaQuestion(source: quotaSource)
+            }
+        }
 
         // Save user message to backend and add to UI.
         // (skip for follow-ups — sendFollowUp already did both)
@@ -3532,15 +3539,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageLength: responseLength
             )
 
-            // Skip client-side usage recording for piMono (the backend already
-            // logs usage server-side via POST /v2/chat/completions, so recording
-            // here would double-count) and for local harnesses (Hermes/OpenClaw).
-            // The backend's record_llm_usage_bucket always increments the
-            // grand-total desktop_chat bucket regardless of the account
-            // parameter, and /usage-quota sums that bucket regardless of account,
-            // so any POST — even with account="local" — still depletes the user's
-            // Omi/pi-mono quota. The client-side quota gates already skip local
-            // providers, so skip the POST here too. Use the actual harness, not
+            // Skip client-side cost telemetry for piMono because /v2/chat/completions
+            // already logs Omi-account token/cost usage server-side. The question
+            // quota is recorded separately at send acceptance above, so model calls
+            // and helper calls cannot double-count messages. Local harnesses
+            // (Hermes/OpenClaw) skip telemetry entirely; use the actual harness, not
             // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
             // override the harness without changing the user's global preference.
             let effectiveHarness = activeBridgeHarness

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Free chat quota counting so internal desktop AI tool loops no longer consume multiple questions"
+}

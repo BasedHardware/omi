@@ -3,9 +3,9 @@
 Regression coverage for the nested-vs-flat bug: the Rust desktop-backend commits
 desktop_chat usage via dotted Firestore fieldPaths, which Firestore materializes as a
 NESTED map ({desktop_chat: {call_count, ...}}), whereas the Python backend writes flat
-dotted keys ("chat.<model>.call_count"). The reader must count both, count the
-grand-total `desktop_chat` map only (not its `desktop_chat_*` per-account/realtime
-breakdowns, which would double-count), and exclude company-driven keys (conv_*, memories.*).
+dotted keys ("chat.<model>.call_count"). The reader must count desktop
+`quota_questions` rather than internal generation `call_count`, count backend chat,
+and exclude company-driven keys (conv_*, memories.*).
 """
 
 import os
@@ -22,6 +22,13 @@ mock_db = MagicMock()
 _mock_client_module = MagicMock()
 _mock_client_module.db = mock_db
 sys.modules["database._client"] = _mock_client_module
+_mock_google_cloud_module = MagicMock()
+_mock_google_cloud_module.firestore = MagicMock()
+_mock_firestore_v1_module = MagicMock()
+_mock_firestore_v1_module.FieldFilter = MagicMock()
+sys.modules["google.cloud"] = _mock_google_cloud_module
+sys.modules["google.cloud.firestore"] = _mock_google_cloud_module.firestore
+sys.modules["google.cloud.firestore_v1"] = _mock_firestore_v1_module
 sys.modules["stripe"] = MagicMock()
 
 from database import user_usage  # noqa: E402
@@ -55,30 +62,86 @@ def _setup_docs(docs):
 NOW = datetime(2026, 6, 23, tzinfo=timezone.utc)
 
 
-def test_counts_nested_desktop_chat_plus_flat_backend_chat():
+def test_counts_nested_desktop_quota_questions_plus_flat_backend_chat():
     _setup_docs(
         {
             "2026-06-23": {
-                "desktop_chat": {"call_count": 5, "cost_usd": 1.5},  # nested (Rust) — counted
-                "desktop_chat_omi": {"call_count": 3},  # breakdown — must NOT double-count
-                "desktop_chat_realtime": {"call_count": 2},  # PTT breakdown — must NOT double-count
+                "desktop_chat": {
+                    "call_count": 5,  # internal generations — must NOT count as questions
+                    "quota_questions": 2,  # visible user turns — counted
+                    "cost_usd": 1.5,
+                },
+                "desktop_chat_omi": {"call_count": 3},
+                "desktop_chat_realtime": {"call_count": 2},
                 "chat.gpt-4.call_count": 4,  # flat backend chat — counted
                 "conv_apps.gpt-5.call_count": 100,  # proactive/processing — excluded
                 "memories.gpt-4.call_count": 50,  # excluded
                 "date": "2026-06-23",
             },
-            "2026-05-30": {"desktop_chat": {"call_count": 999}},  # other month — excluded
+            "2026-05-30": {"desktop_chat": {"quota_questions": 999}},  # other month — excluded
         }
     )
     r = user_usage.get_monthly_chat_usage("uid", now=NOW)
-    # 5 (grand-total desktop_chat) + 4 (flat chat.*); breakdowns + proactive excluded; other month excluded
-    assert r["questions"] == 9, r
+    # 2 (desktop quota questions) + 2 (legacy realtime turns) + 4 (flat chat.*);
+    # internal generations + proactive excluded.
+    assert r["questions"] == 8, r
     assert r["cost_usd"] == 1.5, r
 
 
-def test_realtime_ptt_included_via_grand_total():
-    # A pure-PTT month: only realtime turns. record_llm_usage always bumps the grand-total
-    # desktop_chat too, so it must be counted even with zero typed chat.
+def test_backend_quota_questions_supersede_legacy_chat_call_count():
+    _setup_docs(
+        {
+            "2026-06-23": {
+                "backend_chat": {"quota_questions": 3},
+                "chat.gpt-4.call_count": 9,  # legacy LLM telemetry — ignored when explicit counter exists
+                "date": "2026-06-23",
+            },
+            "2026-06-24": {
+                "backend_chat.quota_questions": 2,
+                "chat.gpt-4.call_count": 8,
+                "date": "2026-06-24",
+            },
+        }
+    )
+    r = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    assert r["questions"] == 5, r
+
+
+def test_realtime_usage_cost_does_not_count_internal_generations_as_questions():
+    _setup_docs(
+        {
+            "2026-06-10": {
+                "desktop_chat": {"call_count": 7, "quota_questions": 0, "cost_usd": 0.4},
+                "desktop_chat_realtime": {"call_count": 7, "quota_questions": 0},
+            }
+        }
+    )
+    r = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    assert r["questions"] == 0
+    assert r["cost_usd"] == 0.4
+
+
+def test_realtime_quota_breakdown_prevents_legacy_call_count_double_count():
+    _setup_docs(
+        {
+            "2026-06-10": {
+                "desktop_chat": {"call_count": 10, "quota_questions": 4, "cost_usd": 0.4},
+                "desktop_chat_realtime": {"call_count": 3, "quota_questions": 3},
+            },
+            "2026-06-11": {
+                "desktop_chat.quota_questions": 2,
+                "desktop_chat_realtime.call_count": 5,
+                "desktop_chat_realtime.quota_questions": 5,
+                "desktop_chat.cost_usd": 0.2,
+            },
+        }
+    )
+    r = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    assert r["questions"] == 6
+    assert r["cost_usd"] == 0.6
+
+
+def test_falls_back_to_old_desktop_call_count_when_quota_questions_missing():
     _setup_docs(
         {
             "2026-06-10": {
@@ -87,7 +150,24 @@ def test_realtime_ptt_included_via_grand_total():
             }
         }
     )
-    assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 7
+    r = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    assert r["questions"] == 7
+    assert r["cost_usd"] == 0.4
+
+
+def test_flat_old_desktop_call_count_fallback_uses_only_grand_total():
+    _setup_docs(
+        {
+            "2026-06-10": {
+                "desktop_chat.call_count": 7,
+                "desktop_chat_realtime.call_count": 7,
+                "desktop_chat.cost_usd": 0.4,
+            }
+        }
+    )
+    r = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    assert r["questions"] == 7
+    assert r["cost_usd"] == 0.4
 
 
 def test_only_proactive_counts_zero():
