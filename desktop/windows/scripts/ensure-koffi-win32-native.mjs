@@ -5,19 +5,18 @@ import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const requireFromRoot = createRequire(join(projectRoot, 'package.json'))
-const koffiEntry = requireFromRoot.resolve('koffi')
-const koffiRoot = dirname(koffiEntry)
-const koffiRequire = createRequire(koffiEntry)
+const koffiPackageJson = requireFromRoot.resolve('koffi/package.json')
+const koffiRoot = dirname(koffiPackageJson)
+const koffiRequire = createRequire(koffiPackageJson)
 
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'))
-const koffiPackage = readJson(join(koffiRoot, 'package.json'))
+const koffiPackage = readJson(koffiPackageJson)
 
 let nativePackageJson
 let source
 try {
-  const nativeEntry = koffiRequire.resolve('@koromix/koffi-win32-x64')
-  nativePackageJson = join(dirname(nativeEntry), 'package.json')
-  source = join(dirname(nativeEntry), 'win32_x64', 'koffi.node')
+  nativePackageJson = koffiRequire.resolve('@koromix/koffi-win32-x64/package.json')
+  source = join(dirname(nativePackageJson), 'win32_x64', 'koffi.node')
 } catch (error) {
   throw new Error(
     [
