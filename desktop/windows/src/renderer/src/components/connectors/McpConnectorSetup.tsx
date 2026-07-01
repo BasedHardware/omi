@@ -148,12 +148,20 @@ export function McpConnectorSetup({
   const setup = useMemo(() => selectedDestination.setup(MCP_KEY_PLACEHOLDER), [selectedDestination])
 
   const copy = async (value: string, label: string): Promise<void> => {
-    if (value === MCP_KEY_PLACEHOLDER) {
-      await window.omi.mcpKeyCopy({ kind: 'key' })
-    } else if (value.includes(MCP_KEY_PLACEHOLDER)) {
-      await window.omi.mcpKeyCopy({ kind: 'text', text: value })
-    } else {
-      await navigator.clipboard.writeText(value)
+    try {
+      setKeyError(null)
+      if (value === MCP_KEY_PLACEHOLDER) {
+        const result = await window.omi.mcpKeyCopy({ kind: 'key' })
+        if (!result.copied) return
+      } else if (value.includes(MCP_KEY_PLACEHOLDER)) {
+        const result = await window.omi.mcpKeyCopy({ kind: 'text', text: value })
+        if (!result.copied) return
+      } else {
+        await navigator.clipboard.writeText(value)
+      }
+    } catch (error) {
+      setKeyError(`Could not copy ${label}: ${(error as Error).message}`)
+      return
     }
     setCopyState({ target: value, label })
     window.setTimeout(() => {
