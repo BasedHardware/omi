@@ -11,6 +11,18 @@ import { clearMcpKey, loadMcpKey, saveMcpKey } from '../integrations/mcpKeyStore
 const MCP_KEY_PLACEHOLDER = 'YOUR_OMI_MCP_KEY'
 const DEFAULT_OMI_API_BASE = 'https://api.omi.me'
 const HOSTED_MCP_TIMEOUT_MS = 15_000
+const MCP_KEY_CLIPBOARD_CLEAR_MS = 60_000
+
+let clipboardClearTimer: NodeJS.Timeout | null = null
+
+function scheduleClipboardClear(copiedText: string): void {
+  if (clipboardClearTimer) clearTimeout(clipboardClearTimer)
+  clipboardClearTimer = setTimeout(() => {
+    clipboardClearTimer = null
+    if (clipboard.readText() === copiedText) clipboard.clear()
+  }, MCP_KEY_CLIPBOARD_CLEAR_MS)
+  clipboardClearTimer.unref?.()
+}
 
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
   const url = event.senderFrame?.url ?? ''
@@ -66,7 +78,7 @@ async function confirmMcpKeyCopy(
     title: 'Copy MCP key?',
     message: `Copy ${label} to the clipboard?`,
     detail:
-      'Anything on your clipboard may be readable by other apps. Only copy this when you are ready to paste it into a trusted destination.'
+      'Anything on your clipboard may be readable by other apps. The clipboard is cleared automatically after 60 seconds. Only copy this when you are ready to paste it into a trusted destination.'
   }
   const choice = parent
     ? await dialog.showMessageBox(parent, options)
@@ -161,6 +173,7 @@ export function registerMcpKeyHandlers(): void {
     const text =
       request.kind === 'key' ? record.key : request.text.replaceAll(MCP_KEY_PLACEHOLDER, record.key)
     clipboard.writeText(text)
+    scheduleClipboardClear(text)
     return { copied: true }
   })
 
