@@ -271,7 +271,7 @@ class MemoryItem extends StatelessWidget {
   // PopupMenuItem<MemoryVisibility> _buildVisibilityItem(
   //   BuildContext context,
   //   MemoryVisibility visibility,
-  //   IconData icon,
+  //   dynamic icon,
   //   String description,
   // ) {
   //   final isSelected = memory.visibility == visibility;
