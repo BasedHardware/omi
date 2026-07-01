@@ -99,9 +99,14 @@ def _developer_read_auth(auth_or_uid) -> ApiKeyAuth:
 
 
 def _developer_request_ip(request: Optional[Request]) -> Optional[str]:
-    if not request or not request.client:
+    client = getattr(request, 'client', None)
+    if not client:
         return None
-    return request.client.host
+    return client.host
+
+
+def _get_request(request: Request) -> Request:
+    return request
 
 
 def _audit_developer_read(
@@ -116,7 +121,7 @@ def _audit_developer_read(
     returned_count: Optional[int] = None,
     resource_id: Optional[str] = None,
 ):
-    if request is None:
+    if request is None or not hasattr(request, 'url') or not hasattr(request, 'headers'):
         return
     logger.info(
         "developer_api_read operation=%s path=%s status=%s uid=%s app_id=%s key_id=%s remote_ip=%s "
@@ -1341,7 +1346,6 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     operation_id="listConversations",
 )
 def get_conversations(
-    request: Request = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[str] = None,
@@ -1351,6 +1355,7 @@ def get_conversations(
     folder_id: Optional[str] = Query(default=None, min_length=1),
     starred: Optional[bool] = None,
     uid=Depends(get_auth_with_conversations_read),
+    request=Depends(_get_request),
 ):
     """
     Get conversations with optional transcript inclusion.
@@ -1519,9 +1524,9 @@ def create_conversation(
 )
 def get_conversation_endpoint(
     conversation_id: str,
-    request: Request = None,
     include_transcript: bool = False,
     uid=Depends(get_auth_with_conversation_detail_read),
+    request=Depends(_get_request),
 ):
     """
     Get a single conversation by ID.

@@ -480,6 +480,9 @@ class TestRouterWiring(unittest.TestCase):
         ]:
             self.assertIn(policy, source)
 
+    def test_developer_conversation_detail_limit_matches_list_limit(self):
+        self.assertEqual(RATE_POLICIES["dev:conversation_detail_read"], RATE_POLICIES["dev:conversations_read"])
+
     def test_developer_conversation_reads_split_detail_and_transcript_policies(self):
         dependencies_source = open("dependencies.py", encoding='utf-8').read()
         developer_source = open("routers/developer.py", encoding='utf-8').read()
