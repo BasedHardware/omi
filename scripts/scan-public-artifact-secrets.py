@@ -37,6 +37,56 @@ ZIP_SUFFIXES = {".zip", ".ipa", ".apk", ".aab", ".jar", ".aar", ".asar"}
 TAR_SUFFIXES = {".tar", ".tgz", ".gz", ".bz2", ".xz"}
 FAIL_CLOSED_SUFFIXES = {".7z", ".rar", ".pkg", ".dmg"}
 FRAMEWORK_DIR_SUFFIXES = (".framework", ".xcframework")
+HEURISTIC_SCAN_EXTENSIONS = {
+    ".env",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".properties",
+    ".txt",
+    ".log",
+    ".csv",
+    ".sh",
+    ".bash",
+    ".py",
+    ".js",
+    ".ts",
+    ".swift",
+    ".kt",
+    ".java",
+    ".dart",
+    ".rb",
+    ".go",
+    ".rs",
+    ".c",
+    ".h",
+    ".cpp",
+    ".m",
+    ".mm",
+    ".html",
+    ".css",
+    ".sql",
+    ".graphql",
+    ".proto",
+}
+
+
+def _is_text_scannable(file_path: Path, rel: Path) -> bool:
+    """Return True if the file should get heuristic name/pattern scans.
+
+    Compiled binaries, Mach-O executables, framework contents, app extension
+    bundles, and plist files produce massive false positives from the regex
+    token scanner (BoringSSL constants, enum names, config keys).  Only scan
+    files whose extension indicates human-readable source/config.
+    """
+    if any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts):
+        return False
+    return file_path.suffix.lower() in HEURISTIC_SCAN_EXTENSIONS
 
 
 def load_policy() -> dict:
@@ -235,8 +285,8 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
             data = read_bytes(file_path, errors, path, rel)
             if not data:
                 continue
-            in_framework = any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts)
-            if not in_framework:
+            text_scannable = _is_text_scannable(file_path, rel)
+            if text_scannable:
                 for marker in PRIVATE_KEY_MARKERS:
                     if marker in data:
                         errors.append(f"{path}: private key material appears in {rel}")
@@ -250,7 +300,7 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
                         errors.append(f"{path}: non-allowlisted variable name {name} appears in {rel}:{lineno}")
                     if name not in allowed and name_is_denied(name, denied, patterns):
                         errors.append(f"{path}: server-only variable name {name} appears in {rel}:{lineno}")
-            if not in_framework:
+            if text_scannable:
                 for name in denied:
                     if name not in allowed and name.encode() in data:
                         errors.append(f"{path}: server-only variable name {name} appears in {rel}")

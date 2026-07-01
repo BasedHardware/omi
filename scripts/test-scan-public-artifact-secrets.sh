@@ -124,21 +124,47 @@ run_expect_pass "exact-denied-in-framework-skipped" \
   python3 "$SCANNER" "$WORK/exact-denied.ipa"
 
 echo ""
-echo "=== Security: private key markers OUTSIDE framework still caught ==="
-mkdir -p "$WORK/pk-outside/Payload/Runner.app"
+echo "=== Security: private key in text file OUTSIDE framework still caught ==="
+mkdir -p "$WORK/pk-text/Payload/Runner.app"
 printf -- '-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----' \
-  > "$WORK/pk-outside/Payload/Runner.app/leaked"
-make_zip "$WORK/pk-outside" "$WORK/privkey-outside.ipa"
-run_expect_fail "private-key-outside-framework-caught" "private key material" \
-  python3 "$SCANNER" "$WORK/privkey-outside.ipa"
+  > "$WORK/pk-text/Payload/Runner.app/leaked.txt"
+make_zip "$WORK/pk-text" "$WORK/privkey-text.ipa"
+run_expect_fail "private-key-in-text-caught" "private key material" \
+  python3 "$SCANNER" "$WORK/privkey-text.ipa"
 
 echo ""
-echo "=== Security: exact denied name OUTSIDE framework still caught ==="
-mkdir -p "$WORK/exact-outside/Payload/Runner.app"
-printf 'OPENAI_API_KEY' > "$WORK/exact-outside/Payload/Runner.app/config"
-make_zip "$WORK/exact-outside" "$WORK/exact-outside.ipa"
-run_expect_fail "exact-denied-outside-framework-caught" "OPENAI_API_KEY" \
-  python3 "$SCANNER" "$WORK/exact-outside.ipa"
+echo "=== Security: private key in binary OUTSIDE framework skipped ==="
+mkdir -p "$WORK/pk-bin/Payload/Runner.app"
+printf -- '-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----' \
+  > "$WORK/pk-bin/Payload/Runner.app/Runner"
+make_zip "$WORK/pk-bin" "$WORK/privkey-bin.ipa"
+run_expect_pass "private-key-in-binary-skipped" \
+  python3 "$SCANNER" "$WORK/privkey-bin.ipa"
+
+echo ""
+echo "=== Security: exact denied name in text file OUTSIDE framework caught ==="
+mkdir -p "$WORK/exact-text/Payload/Runner.app"
+printf 'OPENAI_API_KEY' > "$WORK/exact-text/Payload/Runner.app/config.json"
+make_zip "$WORK/exact-text" "$WORK/exact-text.ipa"
+run_expect_fail "exact-denied-in-text-caught" "OPENAI_API_KEY" \
+  python3 "$SCANNER" "$WORK/exact-text.ipa"
+
+echo ""
+echo "=== Compiled binary with denied patterns skipped (Runner, appex) ==="
+mkdir -p "$WORK/bin-ok/Payload/Runner.app/BatteryWidget.appex"
+printf 'CREDENTIAL_MISMATCH\nAPI_KEY\nPROJECT_TOKEN' > "$WORK/bin-ok/Payload/Runner.app/Runner"
+printf 'API_KEY\nSECRET_KEY' > "$WORK/bin-ok/Payload/Runner.app/BatteryWidget.appex/BatteryWidget"
+make_zip "$WORK/bin-ok" "$WORK/binary-ok.ipa"
+run_expect_pass "compiled-binary-patterns-skipped" \
+  python3 "$SCANNER" "$WORK/binary-ok.ipa"
+
+echo ""
+echo "=== GoogleService-Info.plist with config keys skipped ==="
+mkdir -p "$WORK/plist-ok/Payload/Runner.app"
+printf 'API_KEY\nGCM_SENDER_ID\nPROJECT_ID\nBUNDLE_ID' > "$WORK/plist-ok/Payload/Runner.app/GoogleService-Info.plist"
+make_zip "$WORK/plist-ok" "$WORK/plist-ok.ipa"
+run_expect_pass "plist-config-keys-skipped" \
+  python3 "$SCANNER" "$WORK/plist-ok.ipa"
 
 echo ""
 echo "=== Security: CI secret values inside framework still caught ==="
