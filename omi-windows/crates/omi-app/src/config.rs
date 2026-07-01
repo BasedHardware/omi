@@ -220,6 +220,22 @@ pub struct AppConfig {
     /// Whether active window / app usage tracking is enabled.
     #[serde(default = "default_true")]
     pub app_usage_tracking_enabled: bool,
+
+    /// Which monitors to capture: "primary" (default), "all", or a monitor index like "1".
+    #[serde(default = "default_primary")]
+    pub capture_monitor_mode: String,
+
+    /// Whether to encode captured frames into H.264 video chunks.
+    #[serde(default)]
+    pub video_chunk_encoding_enabled: bool,
+
+    /// Override path to ffmpeg (empty = auto-detect from PATH).
+    #[serde(default)]
+    pub ffmpeg_path: String,
+
+    /// Saved floating bar position as [x, y] pixels. None = default bottom-center.
+    #[serde(default)]
+    pub floating_bar_position: Option<(i32, i32)>,
 }
 
 fn default_backend_url() -> String {
@@ -268,6 +284,10 @@ fn default_context_watcher_interval() -> u64 {
 
 fn default_recap_hour() -> u64 {
     21
+}
+
+fn default_primary() -> String {
+    "primary".to_string()
 }
 
 impl Default for AppConfig {
@@ -322,6 +342,10 @@ impl Default for AppConfig {
             file_index_paths: Vec::new(),
             daily_recap_hour: default_recap_hour(),
             app_usage_tracking_enabled: true,
+            capture_monitor_mode: default_primary(),
+            video_chunk_encoding_enabled: false,
+            ffmpeg_path: String::new(),
+            floating_bar_position: None,
         }
     }
 }
