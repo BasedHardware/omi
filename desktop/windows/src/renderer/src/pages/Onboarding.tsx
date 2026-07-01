@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getPreferences, setPreferences, completeOnboarding, setPendingRoute } from '../lib/preferences'
 import { syncLanguage, setDisplayName } from '../lib/userProfile'
+import { auth } from '../lib/firebase'
 import { resolveLanguageCode, languageLabel } from '../lib/languages'
 import { trackHowDidYouHear } from '../lib/analytics'
 import { toast } from '../lib/toast'
@@ -106,7 +107,7 @@ export function Onboarding(): React.JSX.Element {
         <NameStep
           stepIndex={0}
           totalSteps={TOTAL_STEPS}
-          initialValue={prefs.displayName ?? ''}
+          initialValue={prefs.displayName || auth.currentUser?.displayName || ''}
           onContinue={handleName}
         />
       )
