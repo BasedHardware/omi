@@ -47,6 +47,18 @@ class DeviceUtils {
     }
   }
 
+  /// Whether an Omi-type device is a DevKit board rather than the consumer
+  /// pendant. Match on `DEVKIT`, not a loose `DEV` — the consumer's default
+  /// model fallback is `'Omi Device'`.
+  static bool isOmiDevKit({String? modelNumber, String? deviceName}) {
+    bool matches(String? value) {
+      if (value == null || value.isEmpty) return false;
+      return value.toUpperCase().contains('DEVKIT');
+    }
+
+    return matches(modelNumber) || matches(deviceName);
+  }
+
   /// Get device image path by device type and model number (most accurate)
   /// Falls back to device name if type/model not available
   static String getDeviceImagePath({DeviceType? deviceType, String? modelNumber, String? deviceName}) {
