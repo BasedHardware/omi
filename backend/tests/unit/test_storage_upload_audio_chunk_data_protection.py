@@ -5,33 +5,10 @@ the per-chunk Firestore read (users_db.get_data_protection_level) is skipped.
 When not provided, falls back to the DB read for backward compatibility.
 """
 
-import os
-import sys
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-
-# Mock heavy dependencies at sys.modules level before importing storage
-sys.modules.setdefault("database._client", MagicMock())
-_firebase_admin = MagicMock()
-_firebase_admin.auth = MagicMock()
-sys.modules.setdefault("firebase_admin", _firebase_admin)
-sys.modules.setdefault("firebase_admin.auth", _firebase_admin.auth)
-
-# We need the real storage module but with mocked GCS client
-_mock_gcs_storage = MagicMock()
-_mock_gcs_client_instance = MagicMock()
-_mock_gcs_storage.Client.return_value = _mock_gcs_client_instance
-sys.modules.setdefault("google.cloud.storage", _mock_gcs_storage)
-sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
-sys.modules.setdefault("google.cloud.exceptions", MagicMock())
-sys.modules.setdefault("google.oauth2", MagicMock())
-sys.modules.setdefault("google.oauth2.service_account", MagicMock())
-sys.modules.setdefault("google.oauth2.id_token", MagicMock())
-
-# Now import the module under test
 from utils.other import storage as storage_mod
 
 
@@ -39,8 +16,9 @@ class TestUploadAudioChunkDataProtectionCache:
     """Tests for the data_protection_level caching in upload_audio_chunk."""
 
     @pytest.fixture(autouse=True)
-    def _stub_opus_encoding(self, monkeypatch):
+    def _stub_storage_seams(self, monkeypatch):
         monkeypatch.setattr(storage_mod, "encode_pcm_to_opus", lambda chunk_data: chunk_data)
+        monkeypatch.setattr(storage_mod, "storage_client", MagicMock())
 
     def _setup_mock_bucket(self):
         """Set up mock bucket and blob for upload tests."""

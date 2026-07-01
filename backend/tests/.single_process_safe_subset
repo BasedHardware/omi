@@ -38,3 +38,10 @@ tests/unit/test_subscription_restructure.py
 tests/unit/test_daily_summary_zero_coordinate_locations.py
 tests/unit/test_storage_opus_encoding.py
 tests/unit/test_webhook_auto_disable.py
+tests/unit/test_storage_upload_audio_chunk_data_protection.py
+tests/unit/test_speaker_sample.py
+tests/unit/test_speaker_sample_migration.py
+tests/unit/test_user_speaker_embedding.py
+tests/unit/test_speech_profile_existence.py
+tests/unit/test_llm_usage_db.py
+tests/unit/test_llm_usage_tracker.py

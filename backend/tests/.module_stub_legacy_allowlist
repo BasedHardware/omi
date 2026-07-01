@@ -1,13 +1,13 @@
-# Deprecated legacy allowlist for module-scope sys.modules mutation in backend tests.
 #
-# This list exists ONLY as a transitional bridge while the migration in
+#
+#
 # .coordination/test-isolation/PLAN.md proceeds. Its only permitted change is to
+# Deprecated legacy allowlist for module-scope sys.modules mutation in backend tests.
 # SHRINK (entries removed as files are migrated to monkeypatch/Depends). Growing
-# it is blocked by the pre-push hook and CI (see DECISIONS.md D4).
-#
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
-#
-# Total: 72 entries.
+# This list exists ONLY as a transitional bridge while the migration in
+# Total: 65 entries.
+# it is blocked by the pre-push hook and CI (see DECISIONS.md D4).
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
@@ -33,8 +33,6 @@ backend/tests/unit/test_kg_edge_id_sanitization.py
 backend/tests/unit/test_kg_user_type_mismatch.py
 backend/tests/unit/test_l2_promotion_agent_v2.py
 backend/tests/unit/test_llm_gateway_chat_extraction_pilot.py
-backend/tests/unit/test_llm_usage_db.py
-backend/tests/unit/test_llm_usage_tracker.py
 backend/tests/unit/test_mcp_api_key_auth_context.py
 backend/tests/unit/test_mcp_api_key_full_access.py
 backend/tests/unit/test_mcp_oauth.py
@@ -64,15 +62,10 @@ backend/tests/unit/test_review_queue_non_active_routes.py
 backend/tests/unit/test_short_audio_embedding.py
 backend/tests/unit/test_short_term_memory.py
 backend/tests/unit/test_skip_classifier_restrict.py
-backend/tests/unit/test_speaker_sample.py
-backend/tests/unit/test_speaker_sample_migration.py
-backend/tests/unit/test_speech_profile_existence.py
-backend/tests/unit/test_storage_upload_audio_chunk_data_protection.py
 backend/tests/unit/test_streaming_deepgram_backoff.py
 backend/tests/unit/test_sync_fair_use_gate.py
 backend/tests/unit/test_sync_playback_service.py
 backend/tests/unit/test_sync_transcription_prefs.py
-backend/tests/unit/test_user_speaker_embedding.py
 backend/tests/unit/test_v3_account_generation_source.py
 backend/tests/unit/test_vad_gate.py
 backend/tests/unit/test_vad_onnx.py
