@@ -437,8 +437,17 @@ function truncateForToolResult(text: string): string {
   return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n\n[truncated ${text.length - MAX_TOOL_RESULT_CHARS} chars]`
 }
 
-function resultToToolContent(value: unknown): string {
-  const text = typeof value === 'string' ? value : JSON.stringify(value)
+export function resultToToolContent(value: unknown): string {
+  let text: string
+  if (typeof value === 'string') {
+    text = value
+  } else {
+    try {
+      text = JSON.stringify(value) ?? 'null'
+    } catch {
+      text = String(value)
+    }
+  }
   return truncateForToolResult(text)
 }
 
