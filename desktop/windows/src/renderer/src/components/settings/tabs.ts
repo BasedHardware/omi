@@ -1,5 +1,6 @@
 import {
   Settings as SettingsIcon,
+  BotMessageSquare,
   History,
   ShieldCheck,
   CircleUserRound,
@@ -8,9 +9,17 @@ import {
   type LucideIcon
 } from 'lucide-react'
 
-export type SettingsTabId = 'general' | 'memories' | 'rewind' | 'privacy' | 'account' | 'advanced'
+export type SettingsTabId =
+  | 'ai-chat'
+  | 'general'
+  | 'memories'
+  | 'rewind'
+  | 'privacy'
+  | 'account'
+  | 'advanced'
 
 export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon }[] = [
+  { id: 'ai-chat', label: 'AI Chat', Icon: BotMessageSquare },
   { id: 'general', label: 'General', Icon: SettingsIcon },
   { id: 'memories', label: 'Memories', Icon: Brain },
   { id: 'rewind', label: 'Rewind', Icon: History },
