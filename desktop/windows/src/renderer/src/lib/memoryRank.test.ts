@@ -56,4 +56,18 @@ describe('rankMemories', () => {
     expect(rankMemories(mems, '', 5)).toEqual([])
     expect(rankMemories(mems, 'what are the projects you have', 5)).toEqual([])
   })
+
+  it('does not crash when a memory has null content', () => {
+    const mems = [
+      m('1', 'omi windows port'),
+      {
+        id: '2',
+        uid: 'u',
+        content: null as unknown as string,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z'
+      }
+    ]
+    expect(rankMemories(mems, 'omi', 5)).toEqual(['omi windows port'])
+  })
 })

@@ -10,12 +10,33 @@ import {
 } from './retentionRules'
 import { SCREEN_TAG } from './screenTag'
 
-const mem = (id: string, content: string, tags?: string[]): { id: string; uid: string; content: string; created_at: string; updated_at: string; tags?: string[] } => ({ id, uid: '', content, created_at: '', updated_at: '', tags })
+const mem = (
+  id: string,
+  content: string,
+  tags?: string[]
+): {
+  id: string
+  uid: string
+  content: string
+  created_at: string
+  updated_at: string
+  tags?: string[]
+} => ({ id, uid: '', content, created_at: '', updated_at: '', tags })
 
 it('transcriptWordCount ignores speaker/section scaffolding', () => {
   expect(transcriptWordCount('Microphone:\nYou: hello there friend')).toBe(3)
   expect(transcriptWordCount('')).toBe(0)
   expect(transcriptWordCount('System audio:\n')).toBe(0)
+})
+
+it('transcriptWordCount strips numbered speaker labels so a diarized-but-empty recording counts as empty', () => {
+  expect(transcriptWordCount('Speaker 1:\nSpeaker 2:\nSpeaker 3:')).toBe(0)
+  expect(isEmptyConversation('Speaker 1:\nSpeaker 2:\nSpeaker 3:')).toBe(true)
+})
+
+it('transcriptWordCount does not strip a non-speaker numbered prefix as a label', () => {
+  // "Step 1:" is real content, not a You:/Speaker N: label, so its words count
+  expect(transcriptWordCount('Step 1: build the thing carefully now')).toBe(7)
 })
 
 it('isEmptyConversation is true under 5 real words', () => {
@@ -24,7 +45,9 @@ it('isEmptyConversation is true under 5 real words', () => {
 })
 
 it('isMetaJunkMemory matches the store phrasing but NOT substantive "memories of/from"', () => {
-  expect(isMetaJunkMemory('The user has 547 memories stored within the Omi application.')).toBe(true)
+  expect(isMetaJunkMemory('The user has 547 memories stored within the Omi application.')).toBe(
+    true
+  )
   expect(isMetaJunkMemory('The user has 12 memories saved.')).toBe(true)
   expect(isMetaJunkMemory('The user has 8 memories in Omi.')).toBe(true)
   expect(isMetaJunkMemory('The user has 3 cats.')).toBe(false)
@@ -50,7 +73,12 @@ it('junkMemoryIds unions app-index, meta-junk, and exact duplicates', () => {
 it('planRetention selects empty convos (local non-chat, cloud) + junk memories', () => {
   const convos: SweepConvo[] = [
     { id: 'l1', source: 'local', kind: 'recording', text: 'You: hi bye' }, // empty → drop
-    { id: 'l2', source: 'local', kind: 'recording', text: 'You: this is clearly a real conversation' }, // keep
+    {
+      id: 'l2',
+      source: 'local',
+      kind: 'recording',
+      text: 'You: this is clearly a real conversation'
+    }, // keep
     { id: 'l3', source: 'local', kind: 'chat', text: 'hi' }, // chat → never touch
     { id: 'c1', source: 'cloud', text: '' } // empty cloud → drop
   ]
