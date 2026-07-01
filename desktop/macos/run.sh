@@ -749,6 +749,14 @@ if [ -n "$SIGN_IDENTITY" ]; then
     if [ "$USE_FALLBACK_ENTITLEMENTS" = true ]; then
         cp Desktop/Omi.entitlements /tmp/omi-local-dev.entitlements
         /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" /tmp/omi-local-dev.entitlements 2>/dev/null || true
+        # Self-signed/local identities have no team, so hardened-runtime library
+        # validation rejects the differently-signed embedded frameworks (Sparkle,
+        # Sentry, …) and the app crashes at launch with "Library not loaded".
+        # Disable library validation for LOCAL DEV ONLY — production keeps the
+        # untouched Desktop/Omi.entitlements (validation stays on; frameworks are
+        # properly Developer-ID signed + notarized there).
+        /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" /tmp/omi-local-dev.entitlements 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation true" /tmp/omi-local-dev.entitlements 2>/dev/null || true
         rm -f "$PROFILE_PATH"
         EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
     fi
