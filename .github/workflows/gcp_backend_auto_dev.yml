@@ -124,6 +124,7 @@ jobs:
           else
             gsa_name="${{ vars.ENV }}-omi-backend-eso-gsa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
           fi
+          python3 -m pip install -q pyyaml
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
             ${{ vars.ENV }}-omi-backend-secrets \
             ./backend/charts/backend-secrets \
@@ -135,7 +136,12 @@ jobs:
           kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
             ${{ vars.ENV }}-omi-backend-external-secret \
             force-sync="$(date +%s)" --overwrite
-          sleep 10
+          kubectl -n ${{ vars.ENV }}-omi-backend wait \
+            externalsecret/${{ vars.ENV }}-omi-backend-external-secret \
+            --for=condition=Ready --timeout=120s
+          kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o json \
+            | python3 backend/scripts/verify_k8s_secret_keys.py \
+                ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
 
       - name: Deploy ${{ env.SERVICE }}-listen to GKE
         run: |
@@ -147,7 +153,11 @@ jobs:
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set image.tag=${{ steps.image-tag.outputs.short_sha }}
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
@@ -182,9 +192,20 @@ jobs:
 
       - name: Shift Cloud Run traffic to validated revisions
         run: |
-          gcloud run services update-traffic backend --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
-          gcloud run services update-traffic backend-sync --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
-          gcloud run services update-traffic backend-integration --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+          python3 backend/scripts/deploy_status_report.py \
+            --env dev \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service backend \
+            --cloud-run-service backend-sync \
+            --cloud-run-service backend-integration \
+            --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
+            --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Show Output
         run: echo "Backend deployed to development environment"

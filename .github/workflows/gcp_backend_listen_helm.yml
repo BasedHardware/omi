@@ -105,6 +105,7 @@ jobs:
           else
             gsa_name="${{ vars.ENV }}-omi-backend-eso-gsa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
           fi
+          python3 -m pip install -q pyyaml
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
             ./backend/charts/backend-secrets \
             -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml \
@@ -117,7 +118,12 @@ jobs:
           kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
             ${{ vars.ENV }}-omi-backend-external-secret \
             force-sync="$(date +%s)" --overwrite
-          sleep 10
+          kubectl -n ${{ vars.ENV }}-omi-backend wait \
+            externalsecret/${{ vars.ENV }}-omi-backend-external-secret \
+            --for=condition=Ready --timeout=120s
+          kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o json \
+            | python3 backend/scripts/verify_k8s_secret_keys.py \
+                ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
 
       - name: Upgrade backend-listen Helm chart
         run: |
@@ -131,7 +137,11 @@ jobs:
 
       - name: Verify rollout
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
       - name: Show pod status
         if: always()

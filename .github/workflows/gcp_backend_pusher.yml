@@ -131,7 +131,8 @@ jobs:
       - name: Deploy Pusher to GKE cluster using Helm
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
-            python backend/scripts/validate-llm-gateway-env.py \
+            python3 -m pip install -q pyyaml
+            python3 backend/scripts/validate-llm-gateway-env.py \
               backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
               backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
             helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
@@ -140,12 +141,18 @@ jobs:
             kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
               ${{ vars.ENV }}-omi-backend-external-secret \
               force-sync="$(date +%s)" --overwrite
-            sleep 10
+            kubectl -n ${{ vars.ENV }}-omi-backend wait \
+              externalsecret/${{ vars.ENV }}-omi-backend-external-secret \
+              --for=condition=Ready --timeout=120s
+            kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o json \
+              | python3 backend/scripts/verify_k8s_secret_keys.py \
+                  ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
             helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-llm-gateway \
               ./backend/charts/llm-gateway \
               -f ./backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml \
               --set "image.tag=${GITHUB_SHA::7}"
             if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-llm-gateway --timeout=300s; then
+              python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway || true
               echo "=== llm-gateway deployment ==="
               kubectl -n ${{ vars.ENV }}-omi-backend describe deploy/${{ vars.ENV }}-omi-llm-gateway || true
               echo "=== llm-gateway pods ==="
@@ -162,9 +169,14 @@ jobs:
               kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data}' | python -c 'import json,sys; print("\\n".join(sorted(json.load(sys.stdin).keys())))' || true
               exit 1
             fi
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
             helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
-            kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=300s
+            if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=300s; then
+              python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
+              exit 1
+            fi
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
           fi
 
       - name: Smoke LLM Gateway
