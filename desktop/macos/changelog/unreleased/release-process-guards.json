@@ -1,0 +1,3 @@
+{
+  "change": "Improved desktop release checks so agent runtime packaging issues are caught before release"
+}
