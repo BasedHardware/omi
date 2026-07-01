@@ -1314,6 +1314,8 @@ private struct AgentMainChatView: View {
     let onSpawnSibling: (UUID) -> Void
 
     @State private var followUpText = ""
+    @State private var scrollSettleWorkItems: [DispatchWorkItem] = []
+    @State private var lastScrollViewportSize: CGSize = .zero
     @FocusState private var isFollowUpFocused: Bool
 
     private var isRecording: Bool {
@@ -1380,17 +1382,21 @@ private struct AgentMainChatView: View {
                     )
                 }
                 .onChange(of: pill.latestActivity) {
-                    scrollToBottom(proxy)
+                    scrollToBottomSettled(proxy)
                 }
                 .onChange(of: pill.conversationMessages.map(\.text).joined(separator: "\n")) {
-                    scrollToBottom(proxy)
+                    scrollToBottomSettled(proxy)
                 }
                 .onChange(of: pill.contentRevision) {
-                    scrollToBottom(proxy)
+                    scrollToBottomSettled(proxy)
                 }
                 .onChange(of: isRecording) {
-                    scrollToBottom(proxy)
+                    scrollToBottomSettled(proxy)
                 }
+                .onAppear {
+                    scrollToBottomSettled(proxy)
+                }
+                .background(agentChatViewportResizeDetector(proxy: proxy))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -1403,6 +1409,9 @@ private struct AgentMainChatView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                 isFollowUpFocused = true
             }
+        }
+        .onDisappear {
+            cancelScrollSettling()
         }
         .onExitCommand {
             onEscape()
@@ -1662,6 +1671,52 @@ private struct AgentMainChatView: View {
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         withAnimation(.easeOut(duration: 0.15)) {
             proxy.scrollTo("agentBottom", anchor: .bottom)
+        }
+    }
+
+    private func scrollToBottomSettled(_ proxy: ScrollViewProxy) {
+        scrollToBottom(proxy)
+        scheduleScrollToBottom(proxy, delay: 0.08)
+        scheduleScrollToBottom(proxy, delay: 0.22)
+    }
+
+    private func scheduleScrollToBottom(_ proxy: ScrollViewProxy, delay: TimeInterval) {
+        var workItem: DispatchWorkItem?
+        workItem = DispatchWorkItem {
+            scrollToBottom(proxy)
+            if let workItem {
+                scrollSettleWorkItems.removeAll { $0 === workItem }
+            }
+        }
+        if let workItem {
+            scrollSettleWorkItems.append(workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        }
+    }
+
+    private func cancelScrollSettling() {
+        for item in scrollSettleWorkItems {
+            item.cancel()
+        }
+        scrollSettleWorkItems.removeAll()
+    }
+
+    private func handleAgentChatViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy) {
+        guard size.width > 0, size.height > 0 else { return }
+        guard size != lastScrollViewportSize else { return }
+        lastScrollViewportSize = size
+        scrollToBottomSettled(proxy)
+    }
+
+    private func agentChatViewportResizeDetector(proxy: ScrollViewProxy) -> some View {
+        GeometryReader { geometry in
+            Color.clear
+                .onAppear {
+                    handleAgentChatViewportSizeChange(geometry.size, proxy: proxy)
+                }
+                .onChange(of: geometry.size) { _, newSize in
+                    handleAgentChatViewportSizeChange(newSize, proxy: proxy)
+                }
         }
     }
 }

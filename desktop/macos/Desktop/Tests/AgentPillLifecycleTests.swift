@@ -368,6 +368,33 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(viewSource.contains("state.reportContentHeight(height, for: .agent(pill.id))"))
   }
 
+  func testSharedChatMessagesOpenAndSendFollowLatest() throws {
+    let source = try chatMessagesViewSource()
+
+    XCTAssertTrue(source.contains("On the first load of a saved conversation, follow the latest message."))
+    XCTAssertTrue(source.contains("scrollToBottom(proxy: proxy)\n        scheduleInitialScroll(proxy: proxy, delay: 0.05)"))
+    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
+    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
+    XCTAssertTrue(source.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
+    XCTAssertTrue(source.contains(".background(viewportResizeDetector(proxy: proxy))"))
+    XCTAssertTrue(source.contains("scrollMode = .followingBottom\n        hasActivityBelow = false\n        userIsScrolling = false"))
+    XCTAssertFalse(source.contains("Find the last user message"))
+  }
+
+  func testFloatingSubagentChatSettlesToLatestOnOpenContentAndResize() throws {
+    let source = try floatingControlBarViewSource()
+
+    XCTAssertTrue(source.contains("@State private var scrollSettleWorkItems: [DispatchWorkItem] = []"))
+    XCTAssertTrue(source.contains("@State private var lastScrollViewportSize: CGSize = .zero"))
+    XCTAssertTrue(source.contains(".onAppear {\n                    scrollToBottomSettled(proxy)\n                }"))
+    XCTAssertTrue(source.contains(".background(agentChatViewportResizeDetector(proxy: proxy))"))
+    XCTAssertTrue(source.contains("private func scrollToBottomSettled(_ proxy: ScrollViewProxy)"))
+    XCTAssertTrue(source.contains("scheduleScrollToBottom(proxy, delay: 0.08)"))
+    XCTAssertTrue(source.contains("scheduleScrollToBottom(proxy, delay: 0.22)"))
+    XCTAssertTrue(source.contains("private func handleAgentChatViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
+    XCTAssertTrue(source.contains(".onChange(of: geometry.size) { _, newSize in"))
+  }
+
   func testActiveSubagentChatDoesNotDependOnMainChatHeight() throws {
     let viewSource = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
@@ -1003,6 +1030,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func chatMessagesViewSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Components/ChatMessagesView.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
