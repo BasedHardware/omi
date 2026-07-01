@@ -1322,6 +1322,7 @@ async def _run_full_pipeline_background_async(
                         segment_errors.append('Segment timed out after 300s')
                         logger.error(f'sync_v2 bg: segment timed out job={job_id}')
                     elif isinstance(r, Exception):
+                        segment_errors.append(f'Segment failed: {sanitize(str(r))}')
                         logger.error(f'sync_v2 bg: segment error: {r}')
                 try:
                     await run_blocking(

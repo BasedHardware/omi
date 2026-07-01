@@ -141,7 +141,7 @@ else:
     gateway_mod = sys.modules["utils.llm.gateway_client"]
 gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
-gateway_mod.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
+gateway_mod.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 
 if "utils.llm.gateway_observability" not in sys.modules:
     gateway_observability_mod = _stub_module("utils.llm.gateway_observability")

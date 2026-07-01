@@ -783,7 +783,7 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
         retracted_ids.append(item.memory_id)
 
     bumped_control = _bump_source_generation(uid, db_client=client)
-    invalidate_kg_for_memory_retraction(uid, retracted_ids)
+    invalidate_kg_for_memory_retraction(uid, retracted_ids, db_client=client)
 
     return {
         "retracted_memory_ids": retracted_ids,
