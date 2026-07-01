@@ -20,6 +20,13 @@ type UploadResponse = {
 const MAX_UPLOAD_SEGMENTS = 500
 const MAX_RELATIVE_TRANSCRIPT_SECONDS = 24 * 60 * 60
 
+export class LocalSttUploadLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'LocalSttUploadLimitError'
+  }
+}
+
 function parseSpeakerId(speaker: string | undefined): number | undefined {
   if (!speaker) return undefined
   const match = speaker.match(/(\d+)/)
@@ -88,7 +95,7 @@ export function buildUploadSegments(lines: TranscriptLine[]): UploadSegment[] {
   }
 
   if (merged.length > MAX_UPLOAD_SEGMENTS) {
-    throw new Error(
+    throw new LocalSttUploadLimitError(
       `Transcript has ${merged.length} upload segments; max is ${MAX_UPLOAD_SEGMENTS}. Save was stopped to avoid truncating transcript content.`
     )
   }
