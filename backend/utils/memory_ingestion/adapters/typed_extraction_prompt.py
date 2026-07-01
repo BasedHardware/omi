@@ -109,9 +109,7 @@ def render_source_guidance(source_type: str) -> str:
     return "\n".join(parts)
 
 
-typed_extract_memories_prompt = ChatPromptTemplate.from_messages(
-    [
-        '''
+typed_extract_memories_prompt = ChatPromptTemplate.from_messages(['''
 You are an expert memory curator extracting durable, memory-worthy facts about {user_name} from a conversation, as TYPED propositions.
 
 CRITICAL CONTEXT:
@@ -638,8 +636,4 @@ LANGUAGE INSTRUCTION:
 {conversation}
 ```
 {format_instructions}
-'''.replace(
-            ' ', ''
-        ).strip()
-    ]
-)
+'''.replace(' ', '').strip()])

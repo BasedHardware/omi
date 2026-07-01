@@ -57,8 +57,7 @@ class ReadEvidenceTransport(Protocol):
         timeout_seconds: int,
         max_attempts: int,
         max_items: int,
-    ) -> Sequence[Mapping[str, Any]]:
-        ...
+    ) -> Sequence[Mapping[str, Any]]: ...
 
 
 class ReadOnlyEvidenceClient:

@@ -52,8 +52,7 @@ class AuditQuery:
 
 
 class AuditLogClient(Protocol):
-    def list_entries(self, query: AuditQuery) -> Sequence[AuditLogEvent]:
-        ...
+    def list_entries(self, query: AuditQuery) -> Sequence[AuditLogEvent]: ...
 
 
 @dataclass(frozen=True)

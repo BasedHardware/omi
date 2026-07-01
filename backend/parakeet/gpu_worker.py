@@ -422,9 +422,7 @@ class GPUWorker:
                                 ek: (
                                     round(ev, 4)
                                     if isinstance(ev, float)
-                                    else str(ev)
-                                    if not isinstance(ev, (int, str))
-                                    else ev
+                                    else str(ev) if not isinstance(ev, (int, str)) else ev
                                 )
                                 for ek, ev in e.items()
                             }

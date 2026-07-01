@@ -3,6 +3,7 @@ import sys
 import types
 from pathlib import Path
 from unittest.mock import MagicMock
+from datetime import datetime
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -43,4 +44,8 @@ def test_reserve_current_month_slot_is_atomic_and_rolls_back_over_limit():
     assert used_before == 4
     assert rejected is False
     assert rejected_used_before == 5
-    redis_client.decr.assert_called_once_with("phone_call_usage:uid1:2026-06", 1)
+
+    # Get the current month in YYYY-MM format
+    current_month = datetime.now().strftime("%Y-%m")
+    expected_key = f"phone_call_usage:uid1:{current_month}"
+    redis_client.decr.assert_called_once_with(expected_key, 1)

@@ -79,9 +79,7 @@ def get_message_structure(
     Message Content: ```{text}```
     Message Source: {text_source_spec}
 
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+    {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | get_llm('external_structure') | parser
@@ -123,9 +121,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       For Calendar Events, include any events or meetings mentioned in the content.
 
       Text: ```{text}```
-      '''.replace(
-        '    ', ''
-    ).strip()
+      '''.replace('    ', '').strip()
 
     response = _coerce_structured(
         get_llm('external_structure').with_structured_output(StructuredExtraction).invoke(prompt)
@@ -173,9 +169,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     ```
     ${conversation_history}
     ```
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
     # print(prompt)
     with track_usage(uid, Features.DAILY_SUMMARY):
         return get_llm('daily_summary_simple').invoke(prompt).content

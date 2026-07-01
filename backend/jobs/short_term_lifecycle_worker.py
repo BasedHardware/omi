@@ -44,8 +44,7 @@ class ShortTermLifecyclePersistResult:
 class ShortTermLifecycleTransitionStore(Protocol):
     def persist_short_term_lifecycle_transition(
         self, record: ShortTermLifecycleTransitionRecord
-    ) -> ShortTermLifecyclePersistResult:
-        ...
+    ) -> ShortTermLifecyclePersistResult: ...
 
 
 @dataclass

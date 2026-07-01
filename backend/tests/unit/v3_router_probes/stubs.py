@@ -71,8 +71,7 @@ def legacy_pin_stub_source() -> str:
 
 def legacy_memory_doc_factory_source(*, stubbed_uid: str = "stubbed-test-uid") -> str:
     """Return subprocess-safe legacy_item factory used by router probe scripts."""
-    return textwrap.dedent(
-        f'''
+    return textwrap.dedent(f'''
         def legacy_item(memory_id, content, *, category="system", tags=None, uid=None):
             return {{
                 "id": memory_id,
@@ -95,8 +94,7 @@ def legacy_memory_doc_factory_source(*, stubbed_uid: str = "stubbed-test-uid") -
                 "qualifiers": {{}},
                 "uncertainty_reasons": [],
             }}
-        '''
-    ).strip()
+        ''').strip()
 
 
 def _fail(name: str) -> Callable[..., Any]:

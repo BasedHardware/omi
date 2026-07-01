@@ -476,9 +476,9 @@ class TemporalScope(StrictBaseModel):
 
 
 class Modality(StrictBaseModel):
-    kind: Literal[
-        "asserted", "desired", "planned", "considered", "hypothetical", "negated", "past", "uncertain"
-    ] = "asserted"
+    kind: Literal["asserted", "desired", "planned", "considered", "hypothetical", "negated", "past", "uncertain"] = (
+        "asserted"
+    )
     text: str | None = None
 
 

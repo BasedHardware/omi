@@ -12,8 +12,9 @@ from jobs.l2_promotion_selector import (
 
 
 class L1PromotionCandidateStore(Protocol):
-    def list_l1_promotion_candidates(self, uid: str, *, mode: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        ...
+    def list_l1_promotion_candidates(
+        self, uid: str, *, mode: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]: ...
 
 
 @dataclass(frozen=True)
