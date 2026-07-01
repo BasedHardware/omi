@@ -6,6 +6,7 @@ type PlaybackResult = 'skipped' | 'played' | 'failed'
 type PlaybackDeps = {
   getPrefs?: () => Preferences
   playAudio?: (audioUrl: string) => Promise<void>
+  isError?: boolean
 }
 
 let activeAudio: HTMLAudioElement | null = null
@@ -16,7 +17,7 @@ export async function speakAssistantText(
 ): Promise<PlaybackResult> {
   const cleanText = text.trim()
   const preferences = deps.getPrefs?.() ?? getPreferences()
-  if (!cleanText || cleanText.startsWith('Error:')) return 'skipped'
+  if (!cleanText || deps.isError) return 'skipped'
   if (!preferences.realtimeVoiceEnabled || preferences.realtimeVoiceProvider !== 'local-kokoro') {
     return 'skipped'
   }
