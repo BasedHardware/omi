@@ -1,3 +1,0 @@
-{
-  "change": "Fixed duplicate tool-call rows in chat so completed tools no longer leave a second spinner behind"
-}
