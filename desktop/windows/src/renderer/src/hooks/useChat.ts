@@ -243,6 +243,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     let lastPersist = Date.now()
 
     let assistantText = ''
+    let assistantIsError = false
     try {
       const token = await auth.currentUser?.getIdToken()
       // Hybrid pre-step: gather context to PREPEND to the text we send (not what we
@@ -331,6 +332,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         })
       }
     } catch (e) {
+      assistantIsError = true
       assistantText = `Error: ${(e as Error).message}`
       setHistory((h) => {
         const next = [...h]
@@ -341,7 +343,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       sendingRef.current = false
       setSending(false)
       await persistChat(buildThread(assistantText))
-      void speakAssistantText(assistantText)
+      void speakAssistantText(assistantText, { isError: assistantIsError })
     }
   }
 
