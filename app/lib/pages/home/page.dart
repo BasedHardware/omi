@@ -480,6 +480,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _checkDeviceOnboarding(BtDevice device) async {
     if (device.type != DeviceType.omi) return;
+    if (!mounted) return;
 
     // Onboarding targets the consumer pendant; DevKit boards also enumerate as
     // DeviceType.omi, so skip them. pairedDevice has the GATT model by now.
