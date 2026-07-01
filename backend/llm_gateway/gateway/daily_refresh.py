@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+# Private sentinel used to distinguish "no value cached" from "value is None".
+# Using `None` as the empty-cache signal made it impossible to cache legitimate
+# None payloads (loader was re-invoked on every call, stale fallback never
+# triggered). Fix from cubic-dev-ai review.
+_MISSING = object()
+
 
 class DailyRefreshCache(Generic[T]):
     """A TTL-bounded cache for an async loader.
@@ -56,7 +62,9 @@ class DailyRefreshCache(Generic[T]):
             raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
         self._ttl = ttl_seconds
         self._clock = clock
-        self._value: Optional[T] = None
+        # `_value` uses a sentinel (not `None`) so legitimate `None` payloads
+        # can be cached. See `_MISSING` above.
+        self._value: T | object = _MISSING
         self._last_loaded_at: Optional[float] = None
         self._lock = asyncio.Lock()
         # Counter for tests to verify how many times loader was actually invoked.
@@ -73,9 +81,10 @@ class DailyRefreshCache(Generic[T]):
     def last_loaded_at(self) -> Optional[float]:
         """Monotonic timestamp of the last successful load, or None if never loaded.
 
-        Combine with the clock function to convert to wall-clock time:
-            wall_time = last_loaded_at + (monotonic_now() - last_loaded_at)
-        For most use cases, prefer `last_loaded_wall_time()` which does this for you.
+        The monotonic clock has no wall-clock meaning, so this value cannot be
+        directly converted to wall-clock time. Use `last_loaded_wall_time()`
+        for an approximation (best-effort, ±a few seconds), or have the loader
+        itself record `time.time()` and store it if exact wall-clock is needed.
         """
         return self._last_loaded_at
 
@@ -99,11 +108,11 @@ class DailyRefreshCache(Generic[T]):
     @property
     def has_value(self) -> bool:
         """True if a value is currently cached (even if stale)."""
-        return self._value is not None
+        return self._value is not _MISSING
 
     def _is_fresh(self) -> bool:
         """True if cache is non-empty AND within TTL window."""
-        if self._value is None or self._last_loaded_at is None:
+        if self._value is _MISSING or self._last_loaded_at is None:
             return False
         return (self._clock() - self._last_loaded_at) < self._ttl
 
@@ -120,13 +129,13 @@ class DailyRefreshCache(Generic[T]):
         """
         # Fast path: cache is fresh, no lock needed.
         if self._is_fresh():
-            assert self._value is not None  # guaranteed by _is_fresh()
+            assert self._value is not _MISSING  # guaranteed by _is_fresh()
             return self._value
 
         async with self._lock:
             # Double-check inside the lock: another caller may have just refreshed.
             if self._is_fresh():
-                assert self._value is not None
+                assert self._value is not _MISSING
                 return self._value
 
             # Cache is stale or empty — invoke the loader.
@@ -136,7 +145,7 @@ class DailyRefreshCache(Generic[T]):
                 self._last_loaded_at = self._clock()
                 return self._value
             except Exception as e:
-                if self._value is not None:
+                if self._value is not _MISSING:
                     age_str = f"{self.age_seconds:.1f}s" if self.age_seconds is not None else "unknown"
                     logger.warning(
                         f"DailyRefreshCache: loader raised ({type(e).__name__}: {e}), "

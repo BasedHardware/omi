@@ -1,15 +1,21 @@
 """Parity tests for the cherry-picked daily_refresh.py (R5b).
 
-The DailyRefreshCache[T] primitive is byte-equivalent to v3's
-`backend/utils/auto_router/daily_refresh.py` (sha256 verified). These
-tests pin the critical behaviors so any drift between v3 and this copy
-(e.g. from a future re-cherry-pick) is caught by CI.
+The DailyRefreshCache[T] primitive is sourced from v3's
+`backend/utils/auto_router/daily_refresh.py` and modified to apply the
+cubic-dev-ai fix (private `_MISSING` sentinel for cache-empty, fixed
+docstring math on `last_loaded_at`). The cherry-pick is now sourced
+from v3 commit `84e690464` (sha256 `f9fed285e7d446224c19b9393f137f40591381726642e8eb084f164c204c06c1`).
+A previous verbatim copy of v3 (sha256 `6e6897f5f0490417dd06924b32a79b0b6d2cd44b14079a20fdb37c75baf84d74`)
+predates this fix.
+
+These tests pin the critical behaviors so any drift between v3 and this
+copy (e.g. from a future re-cherry-pick) is caught by CI.
 
 This is a focused subset of v3's 341-line test suite — we cover the
 behaviors that R5b's config_reload.py depends on (TTL, lock contention,
-stale fallback, invalidate). Less critical behaviors (age tracking,
-last_loaded_wall_time, custom TTL validation) are inherited via the
-byte-equivalence invariant.
+stale fallback, invalidate, None-payload caching). Less critical behaviors
+(age tracking, last_loaded_wall_time, custom TTL validation) are inherited
+via the byte-equivalence invariant.
 """
 
 from __future__ import annotations
@@ -184,6 +190,66 @@ class TestTTLValidation:
             DailyRefreshCache(ttl_seconds=0)
         with pytest.raises(ValueError, match="ttl_seconds must be > 0"):
             DailyRefreshCache(ttl_seconds=-1)
+
+
+# ---------------------------------------------------------------------------
+# Regression: legitimate None payloads can be cached
+# (cubic-dev-ai fix on v3, propagated to this cherry-pick)
+# ---------------------------------------------------------------------------
+
+
+class TestNonePayloadCaching:
+    """Regression: a loader that returns None must be cacheable. The previous
+    implementation used `None` as the empty-cache sentinel, which made
+    legitimate `None` payloads uncacheable. Now uses a private _MISSING sentinel."""
+
+    async def test_none_payload_can_be_cached(self):
+        cache: DailyRefreshCache[object] = DailyRefreshCache(ttl_seconds=60)
+
+        async def none_loader() -> None:
+            return None
+
+        result = await cache.get_or_refresh(none_loader)
+        assert result is None
+        # has_value is True (we DID cache the None)
+        assert cache.has_value is True
+        # Subsequent call within TTL: loader NOT re-invoked
+        assert cache.loader_call_count == 1
+        result2 = await cache.get_or_refresh(none_loader)
+        assert result2 is None
+        assert cache.loader_call_count == 1
+
+    async def test_none_payload_stale_fallback(self):
+        cache: DailyRefreshCache[object] = DailyRefreshCache(ttl_seconds=60)
+        call_count = 0
+
+        async def flaky_none_loader() -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return None  # success on first call
+            raise RuntimeError("upstream is down")  # fail on subsequent
+
+        # First call: None cached.
+        first = await cache.get_or_refresh(flaky_none_loader)
+        assert first is None
+        assert cache.has_value is True
+
+        # Force refresh (invalidate keeps value for fallback).
+        cache.invalidate()
+
+        # Second call: loader raises, stale None returned.
+        second = await cache.get_or_refresh(flaky_none_loader)
+        assert second is None  # stale fallback
+
+    async def test_empty_cache_with_none_payload_does_not_match_existing_none(self):
+        """A cache that has never loaded anything must have has_value=False
+        even if the eventual payload would be None. The sentinel prevents
+        confusing 'value is None' with 'no value cached'."""
+        cache: DailyRefreshCache[object] = DailyRefreshCache(ttl_seconds=60)
+        assert cache.has_value is False
+        # _is_fresh is False (never loaded)
+        assert cache._is_fresh() is False
 
 
 # ---------------------------------------------------------------------------
