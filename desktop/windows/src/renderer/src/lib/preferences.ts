@@ -74,7 +74,19 @@ export function getPreferences(): Preferences {
 }
 
 export function setPreferences(patch: Partial<Preferences>): void {
-  current = { ...current, ...patch }
+  const next = { ...current, ...patch }
+  if (Object.prototype.hasOwnProperty.call(patch, 'defaultModelByPurpose')) {
+    const merged = { ...(current.defaultModelByPurpose ?? {}) }
+    for (const [purpose, modelId] of Object.entries(patch.defaultModelByPurpose ?? {})) {
+      if (typeof modelId === 'string' && modelId.trim()) {
+        merged[purpose as ModelPurpose] = modelId.trim()
+      } else {
+        delete merged[purpose as ModelPurpose]
+      }
+    }
+    next.defaultModelByPurpose = Object.keys(merged).length ? merged : undefined
+  }
+  current = next
   try {
     localStorage.setItem(KEY, JSON.stringify(current))
   } catch {
