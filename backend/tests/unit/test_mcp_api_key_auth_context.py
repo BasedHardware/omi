@@ -34,17 +34,26 @@ except ImportError:
     sys.modules.setdefault('fastapi', _fake_fastapi)
     sys.modules.setdefault('fastapi.security', _fake_fastapi_security)
 _fake_firebase_admin = ModuleType('firebase_admin')
-setattr(_fake_firebase_admin, 'auth', SimpleNamespace(verify_id_token=lambda _token: {'uid': 'unused'}))
+_fake_firebase_auth = ModuleType('firebase_admin.auth')
+setattr(_fake_firebase_auth, 'verify_id_token', lambda _token: {'uid': 'unused'})
+setattr(_fake_firebase_auth, 'CertificateFetchError', type('CertificateFetchError', (Exception,), {}))
+setattr(_fake_firebase_auth, 'ExpiredIdTokenError', type('ExpiredIdTokenError', (Exception,), {}))
+setattr(_fake_firebase_auth, 'InvalidIdTokenError', type('InvalidIdTokenError', (Exception,), {}))
+setattr(_fake_firebase_auth, 'RevokedIdTokenError', type('RevokedIdTokenError', (Exception,), {}))
+setattr(_fake_firebase_admin, 'auth', _fake_firebase_auth)
 sys.modules.setdefault('firebase_admin', _fake_firebase_admin)
+sys.modules.setdefault('firebase_admin.auth', _fake_firebase_auth)
 
 from fastapi import HTTPException
 
 _fake_client = ModuleType('database._client')
 setattr(_fake_client, 'db', SimpleNamespace())
+setattr(_fake_client, 'document_id_from_seed', lambda seed: 'id-' + str(abs(hash(seed)) % (10**12)))
 setattr(_fake_client, 'get_firestore_client', lambda: SimpleNamespace())
 sys.modules['database._client'] = _fake_client
 
 import database.mcp_api_key as mcp_api_key_db
+import dependencies as dependencies_module
 from dependencies import get_mcp_api_key_auth, get_mcp_memory_default_memory_read_context
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.memory.product_authorization import authorize_memory_external_default_memory_read
@@ -246,6 +255,7 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
 
 
 def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
+    monkeypatch.setattr(dependencies_module, 'check_api_key_rate_limit', lambda **_kwargs: None)
     monkeypatch.setattr(
         mcp_api_key_db,
         'get_user_and_scopes_by_api_key',

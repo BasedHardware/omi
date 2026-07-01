@@ -203,7 +203,7 @@ def _stored_item(item: MemoryItem) -> dict:
 
 
 def _fresh_short_term_item(*, uid: str, memory_id: str, conversation_id: str, content: str) -> MemoryItem:
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     evidence = MemoryEvidence(
         evidence_id="ev1",
         source_type="conversation",
