@@ -9,7 +9,11 @@ from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
 
 @lru_cache(maxsize=1)
 def get_gateway_config() -> GatewayConfig:
-    return load_gateway_config(prod_mode=True)
+    # Respect OMI_LLM_GATEWAY_PROD env var. In dev/staging (env unset) we accept
+    # dev_only placeholders; in prod (env set) we reject them. Hard-coding True
+    # here would break /ready and the openai_compatible request path in dev,
+    # where R0's day-one placeholders are intentional.
+    return load_gateway_config(prod_mode=None)
 
 
 @lru_cache(maxsize=1)
