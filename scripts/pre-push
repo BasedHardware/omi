@@ -49,7 +49,7 @@ if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
     fi
     while IFS= read -r file; do
       [ -n "$file" ] && CHANGED_FILES+=("$file")
-    done < <(git diff --name-status --diff-filter=ACMRD "$DIFF_BASE" "$local_oid" | awk '
+    done < <(git diff --name-status --diff-filter=ACMRD "$DIFF_BASE" "$local_oid" | awk -F '\t' '
       $1 ~ /^[RC]/ { print $2; print $3; next }
       { print $2 }
     ')
@@ -57,7 +57,7 @@ if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
 else
   while IFS= read -r file; do
     [ -n "$file" ] && CHANGED_FILES+=("$file")
-  done < <(git diff --name-status --diff-filter=ACMRD "$BASE_REF" HEAD | awk '
+  done < <(git diff --name-status --diff-filter=ACMRD "$BASE_REF" HEAD | awk -F '\t' '
     $1 ~ /^[RC]/ { print $2; print $3; next }
     { print $2 }
   ')
