@@ -14,9 +14,9 @@ def get_health():
 
 
 @router.get('/ready')
-def get_ready(caller: ServiceAuthDependency):
+async def get_ready(caller: ServiceAuthDependency):
     try:
-        config = get_gateway_config()
+        config = await get_gateway_config()
     except (ConfigValidationError, ValidationError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
