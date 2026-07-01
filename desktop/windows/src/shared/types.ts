@@ -70,6 +70,7 @@ export type McpKeyCopyRequest =
       kind: 'text'
       text: string
     }
+export type McpKeyCopyResult = { copied: boolean; canceled?: boolean }
 
 export type McpKeyTestResult = {
   memoryCount: number
@@ -254,7 +255,7 @@ export type OmiBridgeApi = {
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   mcpKeyCreate: (key: McpKeyRecord) => Promise<void>
   mcpKeyRead: () => Promise<McpKeyMetadata | null>
-  mcpKeyCopy: (request: McpKeyCopyRequest) => Promise<void>
+  mcpKeyCopy: (request: McpKeyCopyRequest) => Promise<McpKeyCopyResult>
   mcpKeyTest: () => Promise<McpKeyTestResult>
   mcpKeyDelete: () => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
@@ -362,13 +363,7 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  | 'document'
-  | 'code'
-  | 'image'
-  | 'media'
-  | 'archive'
-  | 'application'
-  | 'other'
+  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -462,14 +457,7 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  | 'project'
-  | 'app'
-  | 'technology'
-  | 'person'
-  | 'org'
-  | 'interest'
-  | 'file_group'
-  | 'card' // background-synthesized natural-language overview served to the chat floor
+  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
