@@ -1,5 +1,5 @@
 import { app, ipcMain } from 'electron'
-import type { PiChatRequest, PiChatResponse } from '../../shared/types'
+import type { PiChatRequest, PiChatResponse, PiChatStatus } from '../../shared/types'
 import type { LocalAgentRuntimeContext } from '../localAgent/tools'
 import { isPiChatEnabled, sendPiChat } from '../pi/chatBridge'
 
@@ -33,6 +33,10 @@ function normalizeRequest(value: unknown): PiChatRequest {
 }
 
 export function registerPiChatHandlers(): void {
+  ipcMain.handle('piChat:status', async (): Promise<PiChatStatus> => {
+    return { enabled: isPiChatEnabled() }
+  })
+
   ipcMain.handle('piChat:send', async (_event, rawRequest: unknown): Promise<PiChatResponse> => {
     if (!isPiChatEnabled()) {
       throw new Error('Pi/Omi chat is not enabled')
