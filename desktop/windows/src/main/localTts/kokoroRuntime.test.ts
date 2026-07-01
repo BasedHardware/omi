@@ -31,8 +31,12 @@ describe('managed Kokoro runtime', () => {
       useFSCache: false
     }
     let cacheDirDuringLoad = ''
+    let allowRemoteModelsDuringLoad = false
+    let useFSCacheDuringLoad = false
     const fromPretrained = vi.fn(async () => {
       cacheDirDuringLoad = transformersEnv.cacheDir
+      allowRemoteModelsDuringLoad = transformersEnv.allowRemoteModels
+      useFSCacheDuringLoad = transformersEnv.useFSCache
       return {
         generate: vi.fn(async (text: string, options?: { voice?: string; speed?: number }) => ({
           save: async (filePath: string): Promise<void> => {
@@ -60,6 +64,8 @@ describe('managed Kokoro runtime', () => {
 
     expect(initialStatus.runtime.installState).toBe('not_installed')
     expect(cacheDirDuringLoad).toBe(join(root, 'models'))
+    expect(allowRemoteModelsDuringLoad).toBe(true)
+    expect(useFSCacheDuringLoad).toBe(true)
     expect(transformersEnv.cacheDir).toBe('')
     expect(transformersEnv.allowRemoteModels).toBe(false)
     expect(transformersEnv.useFSCache).toBe(false)
