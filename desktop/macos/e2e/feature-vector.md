@@ -36,7 +36,7 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 | 3 | Sidebar navigation — all 7 sections | retrieval-action (3) | 9 | 3 | ✅ flow: navigation.yaml |
 | 4 | Conversation list & browse (dashboard embedded) | capture (5) | 15 | 2 | ✅ flow: dashboard.yaml |
 | 5 | Screen capture (Rewind) | capture (5) | 15 | 2 | ✅ flow: screen-recording-permission.yaml (7 steps) |
-| 6 | Audio recording (desktop mic) | capture (5) | 15 | 1 | ✅ flow: audio-recording.yaml (7 steps) |
+| 6 | Audio recording (desktop mic) | capture (5) | 15 | 1 | ✅ flow: audio-recording.yaml (7 steps); added recording-finalization.yaml (7 steps) |
 | 7 | Memory list & browse | memory (4) | 12 | 2 | ✅ flow: memories.yaml (6 steps) |
 | 8 | Memory search | memory (4) | 12 | 2 | ✅ flow: memories.yaml |
 | 9 | Tasks — categories, filters, create, toggle | retrieval-action (3) | 9 | 2 | ✅ flow: tasks.yaml (5 steps) |
