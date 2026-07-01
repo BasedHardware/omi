@@ -3,8 +3,12 @@ import { addObservabilityBreadcrumb, captureMainException } from './observabilit
 
 const CHECK_DELAY_MS = 15000
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+export const DEFAULT_WINDOWS_UPDATE_FEED_URL =
+  'https://github.com/BasedHardware/omi/releases/latest/download'
 
 type AutoUpdater = (typeof import('electron-updater'))['autoUpdater']
+
+let updaterStarted = false
 
 function updatesEnabled(): boolean {
   return app.isPackaged || process.env.OMI_UPDATES_ENABLED === '1'
@@ -12,10 +16,11 @@ function updatesEnabled(): boolean {
 
 function feedUrl(): string | null {
   const value = process.env.OMI_WINDOWS_UPDATE_FEED_URL?.trim()
-  return value || null
+  return value || DEFAULT_WINDOWS_UPDATE_FEED_URL
 }
 
 export function startWindowsUpdater(): void {
+  if (updaterStarted) return
   if (!updatesEnabled()) {
     addObservabilityBreadcrumb('updater.skipped', { reason: 'disabled' }, { category: 'updater' })
     return
@@ -45,6 +50,8 @@ async function loadAutoUpdater(): Promise<AutoUpdater | null> {
 }
 
 async function startWindowsUpdaterWithFeed(url: string): Promise<void> {
+  if (updaterStarted) return
+  updaterStarted = true
   const autoUpdater = await loadAutoUpdater()
   if (!autoUpdater) return
 
@@ -94,4 +101,8 @@ async function startWindowsUpdaterWithFeed(url: string): Promise<void> {
   }
   setTimeout(check, CHECK_DELAY_MS)
   setInterval(check, CHECK_INTERVAL_MS)
+}
+
+export function resetWindowsUpdaterForTests(): void {
+  updaterStarted = false
 }
