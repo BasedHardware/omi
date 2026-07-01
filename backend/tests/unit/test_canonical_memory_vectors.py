@@ -537,7 +537,7 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
         "utils.memory.legacy_backfill.sync_atom_keyword_index_for_item",
         return_value=True,
     ):
-        _, written, skip_reason, vector_sync_failed, keyword_sync_succeeded = _apply_one_legacy_row(
+        row_result = _apply_one_legacy_row(
             uid=uid,
             legacy_row={"id": legacy_id, "content": content},
             index=0,
@@ -546,10 +546,10 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
             db_client=_BackfillDb(),
         )
 
-    assert written is False
-    assert skip_reason == "idempotent_skip"
-    assert vector_sync_failed is False
-    assert keyword_sync_succeeded is True
+    assert row_result.written is False
+    assert row_result.skip_reason == "idempotent_skip"
+    assert row_result.vector_sync_failed is False
+    assert row_result.keyword_sync_succeeded is True
     assert len(fake_index.upserts) == 1
     assert fake_index.upserts[0]["vectors"][0]["id"] == canonical_memory_id
     assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
