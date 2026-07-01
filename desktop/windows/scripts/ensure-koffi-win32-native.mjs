@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url'
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const requireFromRoot = createRequire(join(projectRoot, 'package.json'))
 const koffiPackageJson = requireFromRoot.resolve('koffi/package.json')
-const koffiRoot = dirname(koffiPackageJson)
 const koffiRequire = createRequire(koffiPackageJson)
 
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'))
