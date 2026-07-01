@@ -110,6 +110,13 @@ function textFromOpenAiCompatible(raw: JsonRecord): string {
   return typeof message?.content === 'string' ? message.content : ''
 }
 
+function responseFromOpenAiCompatible(raw: JsonRecord): Pick<ByokChatResponse, 'text' | 'usage'> {
+  return {
+    text: textFromOpenAiCompatible(raw),
+    usage: usageFromOpenAi(raw.usage as JsonRecord | undefined)
+  }
+}
+
 export function buildByokChatRequest(
   provider: ByokChatProvider,
   key: string,
@@ -202,31 +209,30 @@ export function buildByokChatRequest(
   }
 }
 
-function responseText(provider: ByokChatProvider, raw: JsonRecord): string {
+function parseByokResponse(
+  provider: ByokChatProvider,
+  raw: JsonRecord
+): Pick<ByokChatResponse, 'text' | 'usage'> {
   switch (provider) {
     case 'openai':
     case 'openrouter':
-      return textFromOpenAiCompatible(raw)
+      return responseFromOpenAiCompatible(raw)
     case 'anthropic':
-      return textFromContentParts(raw.content)
+      return {
+        text: textFromContentParts(raw.content),
+        usage: usageFromAnthropic(raw.usage as JsonRecord | undefined)
+      }
     case 'gemini': {
       const candidates = raw.candidates
-      if (!Array.isArray(candidates)) return ''
+      if (!Array.isArray(candidates)) {
+        return { text: '', usage: usageFromGemini(raw.usageMetadata as JsonRecord | undefined) }
+      }
       const content = (candidates[0] as { content?: { parts?: unknown } } | undefined)?.content
-      return textFromContentParts(content?.parts)
+      return {
+        text: textFromContentParts(content?.parts),
+        usage: usageFromGemini(raw.usageMetadata as JsonRecord | undefined)
+      }
     }
-  }
-}
-
-function responseUsage(provider: ByokChatProvider, raw: JsonRecord): PiChatUsage {
-  switch (provider) {
-    case 'openai':
-    case 'openrouter':
-      return usageFromOpenAi(raw.usage as JsonRecord | undefined)
-    case 'anthropic':
-      return usageFromAnthropic(raw.usage as JsonRecord | undefined)
-    case 'gemini':
-      return usageFromGemini(raw.usageMetadata as JsonRecord | undefined)
   }
 }
 
@@ -249,8 +255,13 @@ export async function sendByokChat(
     Math.max(1, options.timeoutMs ?? DEFAULT_CHAT_TIMEOUT_MS)
   )
   let response: Response
+  let raw: JsonRecord
   try {
     response = await fetchImpl(request.url, { ...request.init, signal: controller.signal })
+    if (!response.ok) {
+      throw new Error(`BYOK chat request failed with HTTP ${response.status}`)
+    }
+    raw = (await response.json()) as JsonRecord
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('BYOK chat request timed out')
@@ -259,14 +270,11 @@ export async function sendByokChat(
   } finally {
     clearTimeout(timeout)
   }
-  if (!response.ok) {
-    throw new Error(`BYOK chat request failed with HTTP ${response.status}`)
-  }
 
-  const raw = (await response.json()) as JsonRecord
+  const parsed = parseByokResponse(provider, raw)
   return {
     provider,
-    text: responseText(provider, raw),
-    usage: responseUsage(provider, raw) || emptyUsage()
+    text: parsed.text,
+    usage: parsed.usage || emptyUsage()
   }
 }
