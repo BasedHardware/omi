@@ -76,7 +76,7 @@ const omi: OmiBridgeApi = {
   kgQueryNodes: (q, limit?) => ipcRenderer.invoke('kg:queryNodes', q, limit),
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
-  piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT === '1' || process.env.OMI_PI_CHAT === '1',
+  piChatStatus: () => ipcRenderer.invoke('piChat:status'),
   piChatSend: (request: PiChatRequest) => ipcRenderer.invoke('piChat:send', request),
   claudeAcpStatus: () => ipcRenderer.invoke('claudeAcp:status'),
   claudeAcpChatSend: (request: ClaudeAcpChatRequest) =>
