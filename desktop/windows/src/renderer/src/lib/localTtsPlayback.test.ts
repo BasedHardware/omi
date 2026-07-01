@@ -78,6 +78,42 @@ describe('speakAssistantText', () => {
     )
   })
 
+  it('does not infer error state from assistant text content', async () => {
+    const playAudio = vi.fn(async () => undefined)
+    const localTtsStatus = vi.fn(async () => readyStatus)
+    const localTtsSynthesize = vi.fn(async () => ({
+      audioPath: 'C:\\reply.wav',
+      audioUrl: 'file:///C:/reply.wav',
+      mimeType: 'audio/wav' as const
+    }))
+    ;(globalThis as { window?: unknown }).window = {
+      omi: { localTtsStatus, localTtsSynthesize }
+    }
+
+    await expect(
+      speakAssistantText('Error: this is a legitimate explanation', {
+        getPrefs: () => enabledPrefs,
+        playAudio
+      })
+    ).resolves.toBe('played')
+  })
+
+  it('skips playback when the caller marks the message as an error', async () => {
+    const localTtsStatus = vi.fn(async () => readyStatus)
+    const localTtsSynthesize = vi.fn()
+    ;(globalThis as { window?: unknown }).window = {
+      omi: { localTtsStatus, localTtsSynthesize }
+    }
+
+    await expect(
+      speakAssistantText('assistant failure', {
+        getPrefs: () => enabledPrefs,
+        isError: true
+      })
+    ).resolves.toBe('skipped')
+    expect(localTtsSynthesize).not.toHaveBeenCalled()
+  })
+
   it('falls back to text-only when local Kokoro is unavailable', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const localTtsSynthesize = vi.fn()
