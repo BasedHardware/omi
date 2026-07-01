@@ -172,23 +172,61 @@ class TestPrivateNamespaceIsolation:
     """Runtime isolation contract: scoring happens at artifact-emission time,
     never on the request path. The _private/ namespace must not leak into
     llm_gateway.routers.* — that's what makes scoring a private dep.
+
+    Two layers of check:
+
+    1. AST scan of router source files: catches `from llm_gateway.gateway._private
+       import ...` or `import llm_gateway.gateway._private` at parse time, even
+       if the import is inside a function and never executes at module load.
+
+    2. Module attribute scan: after force-importing each router module,
+       checks that no attribute whose name contains '_private' is exposed
+       (catches e.g. `from llm_gateway.gateway._private.scoring import score
+       as _private_scoring`).
     """
 
-    def test_private_scoring_not_exposed_via_routers_openai_compatible(self):
-        # Force-import the routers package to trigger any __init__.py side effects
-        importlib.import_module("llm_gateway.routers.openai_compatible")
-        with pytest.raises((ImportError, AttributeError)):
-            from llm_gateway.routers.openai_compatible import _private_scoring  # noqa: F401
+    @staticmethod
+    def _router_source_files():
+        """Return all .py files under backend/llm_gateway/routers/."""
+        from pathlib import Path
 
-    def test_private_scoring_not_exposed_via_routers_health(self):
-        importlib.import_module("llm_gateway.routers.health")
-        with pytest.raises((ImportError, AttributeError)):
-            from llm_gateway.routers.health import _private_scoring  # noqa: F401
+        # File layout: .../backend/tests/unit/llm_gateway/_private/test_scoring.py
+        # parents[4] = backend/, parents[5] = repo root.
+        routers_dir = Path(__file__).resolve().parents[4] / "llm_gateway" / "routers"
+        return sorted(p for p in routers_dir.glob("*.py") if p.name != "__init__.py")
 
-    def test_private_scoring_not_exposed_via_routers_metrics(self):
-        importlib.import_module("llm_gateway.routers.metrics")
-        with pytest.raises((ImportError, AttributeError)):
-            from llm_gateway.routers.metrics import _private_scoring  # noqa: F401
+    def test_no_router_source_file_imports_from_private_namespace(self):
+        """AST scan: no router module source file may `import` anything from
+        llm_gateway.gateway._private. Catches static references that the
+        runtime attribute scan below might miss (e.g., lazy imports in
+        functions, type-annotation imports).
+        """
+        import ast
+
+        offenders = []
+        for path in self._router_source_files():
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    if node.module and "_private" in node.module:
+                        offenders.append(f"{path.name}:{node.lineno}: from {node.module!r} import ...")
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if "_private" in alias.name:
+                            offenders.append(f"{path.name}:{node.lineno}: import {alias.name!r}")
+        assert not offenders, "router modules import from _private/: " + "\n".join(offenders)
+
+    def test_no_router_module_exposes_private_named_attribute(self):
+        """Force-import each router module and assert no attribute whose name
+        contains '_private' is exposed in its public dict. Catches e.g.
+        `from llm_gateway.gateway._private.scoring import score as _private_score`.
+        """
+        for path in self._router_source_files():
+            module_name = f"llm_gateway.routers.{path.stem}"
+            mod = importlib.import_module(module_name)
+            leaked = [name for name in vars(mod) if "_private" in name.lower()]
+            assert not leaked, f"{module_name} exposes private-named attribute(s): {leaked}"
 
 
 # ---------------------------------------------------------------------------

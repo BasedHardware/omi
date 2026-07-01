@@ -751,6 +751,14 @@ route_artifacts:
       - capability_mismatch
       - invalid_config
     artifact_digest: sha256:9c98b53d1fa0bcc9a3d0a7d4276c7fb7e6a8a783b3de7fd6980b9a536ef736bd
+  # TODO(R3): this artifact's primary uses provider=anthropic, but the
+  # gateway's ProviderRegistry currently only registers openai-compatible
+  # providers (see llm_gateway/routers/dependencies.py). This is safe in
+  # R0 because the lane is shadow-only (rollout.percent=0) and R0 day-one
+  # invariant keeps the LKG == active (no traffic shift). R3 (the product
+  # cutover) must register an AnthropicCompatibleChatCompletionProvider
+  # before this lane can be promoted from shadow. Until then, this artifact
+  # exercises the resolver + executor path but never a real provider call.
   - route_artifact_id: route.realtime_ptt.2026_07_01.001
     lane_id: omi:auto:realtime-ptt
     surface: openai.chat_completions

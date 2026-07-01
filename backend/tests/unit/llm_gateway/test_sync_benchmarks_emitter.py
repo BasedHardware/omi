@@ -107,6 +107,98 @@ def test_modelspec_from_dict_handles_missing_scores():
 
 
 # ---------------------------------------------------------------------------
+# _modelspec_from_dict defensive validation (cubic review P1 #1 + P2 #9)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'bad_score_field,bad_value',
+    [
+        ('quality_score', True),
+        ('quality_score', False),
+        ('latency_score', True),
+        ('cost_score', True),
+    ],
+)
+def test_modelspec_from_dict_rejects_bool_scores(bad_score_field, bad_value):
+    """P1: bool quality_score would silently become 1.0/0.0 because
+    isinstance(True, int) is True. Reject it explicitly."""
+    candidate = {"id": "x", "provider": "openai", bad_score_field: bad_value}
+    with pytest.raises(ValueError, match=f"has bool {bad_score_field}"):
+        _modelspec_from_dict(candidate)
+
+
+@pytest.mark.parametrize(
+    'bad_score_field,bad_value',
+    [
+        ('quality_score', '0.8'),
+        ('latency_score', [0.5]),
+        ('cost_score', {'value': 0.3}),
+    ],
+)
+def test_modelspec_from_dict_rejects_non_numeric_scores(bad_score_field, bad_value):
+    """P2 #9: candidates with non-numeric scores must be rejected before
+    ProviderRef construction (would otherwise fail at runtime)."""
+    candidate = {"id": "x", "provider": "openai", bad_score_field: bad_value}
+    with pytest.raises(ValueError, match=f"non-numeric {bad_score_field}"):
+        _modelspec_from_dict(candidate)
+
+
+@pytest.mark.parametrize(
+    'bad_candidate',
+    [
+        {},
+        {'id': ''},
+        {'id': 'x'},  # missing provider
+        {'id': 'x', 'provider': ''},  # empty provider
+        {'provider': 'openai'},  # missing id
+    ],
+)
+def test_modelspec_from_dict_rejects_missing_or_invalid_required_fields(bad_candidate):
+    """P2 #9: schema validation — missing or empty 'id' or 'provider' would
+    fail at ProviderRef construction."""
+    with pytest.raises(ValueError, match="missing|non-empty"):
+        _modelspec_from_dict(bad_candidate)
+
+
+def test_emit_for_lane_rejects_bool_score_in_candidate():
+    """End-to-end: emit_for_lane must reject candidates with bool scores."""
+    cfg = load_gateway_config()
+    lane = cfg.lanes["omi:auto:realtime-ptt"]
+    bad_candidates = [
+        {"id": "test", "provider": "openai", "quality_score": True, "latency_score": 0.5, "cost_score": 0.5}
+    ]
+    with pytest.raises(ValueError, match="has bool quality_score"):
+        emit_for_lane(
+            lane,
+            bad_candidates,
+            today=date(2026, 7, 1),
+            benchmark_snapshot="sha256:abc",
+            eval_report_id="eval.ptt_response.v1",
+        )
+
+
+def test_write_proposed_yaml_safety_guard_survives_optimization():
+    """P1: the safety guard must hold under `python -O` (where `assert` is
+    stripped). We re-implement the guard as if/raise — confirm it raises even
+    when `__debug__` is False.
+
+    This test runs the actual write_proposed_yaml function. If anyone
+    regresses to `assert path.name != ...`, this test still passes (the assert
+    check itself raises AssertionError before -O matters). The point is to
+    lock in the ValueError-based contract; -O is checked indirectly by the
+    type of the exception (ValueError, not AssertionError).
+    """
+    from unittest.mock import MagicMock
+
+    artifacts = []  # empty list is fine — the guard fires before iteration
+    fake_path = MagicMock()
+    fake_path.name = "route_artifacts.yaml"
+    with pytest.raises(ValueError, match="must not edit route_artifacts.yaml"):
+        write_proposed_yaml(artifacts, fake_path)
+
+
+# ---------------------------------------------------------------------------
 # emit_for_lane
 # ---------------------------------------------------------------------------
 
@@ -277,11 +369,15 @@ def test_write_proposed_yaml_writes_valid_yaml_with_artifact_digests(tmp_path):
 
 
 def test_write_proposed_yaml_refuses_route_artifacts_yaml(tmp_path):
-    """Safety: emitter must NOT be able to overwrite route_artifacts.yaml directly."""
+    """Safety: emitter must NOT be able to overwrite route_artifacts.yaml directly.
+
+    Uses `if/raise ValueError` (NOT `assert`) so the safety guard holds even
+    under Python's -O optimization flag (which strips `assert`).
+    """
     benchmarks = load_benchmarks(FIXTURE)
     artifacts, _ = emit_all(benchmarks, today=date(2026, 7, 1))
     bad = tmp_path / "route_artifacts.yaml"
-    with pytest.raises(AssertionError, match="must not edit route_artifacts.yaml"):
+    with pytest.raises(ValueError, match="must not edit route_artifacts.yaml"):
         write_proposed_yaml(artifacts, bad)
 
 
@@ -327,85 +423,104 @@ def test_write_proposed_yaml_loads_via_config_loader_with_proposed_renamed(tmp_p
 # ---------------------------------------------------------------------------
 
 
-def test_cli_dry_run_prints_json_summary_and_does_not_write(tmp_path, monkeypatch, capsys):
-    """--dry-run prints the summary to stdout and never touches the filesystem."""
-    monkeypatch.chdir(tmp_path)
-    rc = main(["--dry-run", "--benchmarks", str(FIXTURE)])
+def test_cli_dry_run_prints_json_summary_and_does_not_write(tmp_path, capsys):
+    """--dry-run prints the summary to stdout and never touches the filesystem.
+
+    The emitter's default output path is package-relative (NOT CWD-relative),
+    so this test does NOT chdir to tmp_path. We pass --out explicitly to a
+    tmp_path location to verify the safety guard independently.
+    """
+    out_path = tmp_path / "proposed.yaml"
+    rc = main(["--dry-run", "--benchmarks", str(FIXTURE), "--out", str(out_path)])
     assert rc == 0
     captured = capsys.readouterr()
     summary = json.loads(captured.out)
     assert summary["count"] == 5
     assert set(summary["emitted"]) == set(LANE_TO_V3_TASK.keys())
     assert len(summary["skipped"]) == 11
-    # No proposed YAML was written
-    assert not (tmp_path / "backend" / "llm_gateway" / "config" / "route_artifacts.proposed.yaml").exists()
+    # No proposed YAML was written (--dry-run)
+    assert not out_path.exists()
 
 
-def test_cli_lane_filter_writes_only_that_lane(tmp_path, monkeypatch):
+def test_cli_lane_filter_writes_only_that_lane(tmp_path):
     """--lane filters to one lane; the proposed YAML contains exactly that lane."""
-    monkeypatch.chdir(tmp_path)
-    rc = main(["--lane", "omi:auto:realtime-ptt", "--benchmarks", str(FIXTURE)])
+    out_path = tmp_path / "proposed.yaml"
+    rc = main(["--lane", "omi:auto:realtime-ptt", "--benchmarks", str(FIXTURE), "--out", str(out_path)])
     assert rc == 0
-    proposed = tmp_path / "backend" / "llm_gateway" / "config" / "route_artifacts.proposed.yaml"
-    assert proposed.exists()
-    parsed = yaml.safe_load(proposed.read_text())
+    assert out_path.exists()
+    parsed = yaml.safe_load(out_path.read_text())
     assert len(parsed["route_artifacts"]) == 1
     assert parsed["route_artifacts"][0]["lane_id"] == "omi:auto:realtime-ptt"
 
 
-def test_cli_lane_filter_unknown_lane_returns_error_code_2(tmp_path, monkeypatch, capsys):
-    monkeypatch.chdir(tmp_path)
-    rc = main(["--lane", "omi:auto:does-not-exist", "--benchmarks", str(FIXTURE)])
+def test_cli_lane_filter_unknown_lane_returns_error_code_2(tmp_path, capsys):
+    out_path = tmp_path / "proposed.yaml"
+    rc = main(["--lane", "omi:auto:does-not-exist", "--benchmarks", str(FIXTURE), "--out", str(out_path)])
     assert rc == 2
     captured = capsys.readouterr()
     assert "unknown lane" in captured.err
 
 
-def test_cli_missing_benchmarks_file_returns_error_code_2(tmp_path, monkeypatch, capsys):
-    monkeypatch.chdir(tmp_path)
-    rc = main(["--dry-run", "--benchmarks", str(tmp_path / "no-such-file.json")])
+def test_cli_missing_benchmarks_file_returns_error_code_2(tmp_path, capsys):
+    out_path = tmp_path / "proposed.yaml"
+    rc = main(["--dry-run", "--benchmarks", str(tmp_path / "no-such-file.json"), "--out", str(out_path)])
     assert rc == 2
     captured = capsys.readouterr()
     assert "not found" in captured.err
 
 
-def test_cli_emitter_never_edits_route_artifacts_yaml(tmp_path, monkeypatch):
-    """Pre-create route_artifacts.yaml with a sentinel; emitter must leave it alone."""
-    monkeypatch.chdir(tmp_path)
-    # Sentinel: write route_artifacts.yaml in the cwd's backend/llm_gateway/config/
-    config_dir = tmp_path / "backend" / "llm_gateway" / "config"
-    config_dir.mkdir(parents=True)
+def test_cli_emitter_never_edits_route_artifacts_yaml(tmp_path):
+    """Pre-create route_artifacts.yaml in the OUT directory with a sentinel;
+    emitter must leave it alone. We also pass the same dir as --out to ensure
+    the emitter cannot accidentally clobber it via path resolution."""
+    config_dir = tmp_path
     sentinel = config_dir / "route_artifacts.yaml"
     sentinel.write_text("# sentinel — must NOT be touched by emitter\nroute_artifacts: []\n")
     sentinel_mtime_before = sentinel.stat().st_mtime
 
-    rc = main(["--benchmarks", str(FIXTURE)])
+    # The proposed YAML will be written to a DIFFERENT file (proposed.yaml)
+    # so the safety guard inside write_proposed_yaml never triggers here.
+    # We verify the sentinel is untouched.
+    rc = main(["--benchmarks", str(FIXTURE), "--out", str(config_dir / "proposed.yaml")])
     assert rc == 0
     # mtime unchanged AND content unchanged
     assert sentinel.stat().st_mtime == sentinel_mtime_before
     assert sentinel.read_text().startswith("# sentinel")
-    # Proposed YAML was written next to it
-    proposed = config_dir / "route_artifacts.proposed.yaml"
-    assert proposed.exists()
+    # Proposed YAML was written alongside
+    assert (config_dir / "proposed.yaml").exists()
 
 
-def test_cli_is_idempotent(tmp_path, monkeypatch):
+def test_cli_emitter_refuses_to_write_route_artifacts_yaml_via_out_flag(tmp_path, capsys):
+    """If --out is explicitly set to `route_artifacts.yaml`, the emitter's
+    safety guard refuses the write. (This is the actual safety contract:
+    the guard rejects the path regardless of where it came from.)"""
+    bad_out = tmp_path / "route_artifacts.yaml"
+    rc = main(["--benchmarks", str(FIXTURE), "--out", str(bad_out)])
+    assert rc == 2  # safety guard violation → exit 2
+    captured = capsys.readouterr()
+    assert "must not edit route_artifacts.yaml" in captured.err
+    # The file should NOT exist
+    assert not bad_out.exists()
+
+
+def test_cli_is_idempotent(tmp_path):
     """Same input twice -> byte-identical proposed YAML (modulo date suffix)."""
-    monkeypatch.chdir(tmp_path)
-    rc1 = main(["--benchmarks", str(FIXTURE)])
+    out_path = tmp_path / "proposed.yaml"
+    rc1 = main(["--benchmarks", str(FIXTURE), "--out", str(out_path)])
     assert rc1 == 0
-    first = (tmp_path / "backend" / "llm_gateway" / "config" / "route_artifacts.proposed.yaml").read_text()
-    rc2 = main(["--benchmarks", str(FIXTURE)])
+    first = out_path.read_text()
+    rc2 = main(["--benchmarks", str(FIXTURE), "--out", str(out_path)])
     assert rc2 == 0
-    second = (tmp_path / "backend" / "llm_gateway" / "config" / "route_artifacts.proposed.yaml").read_text()
+    second = out_path.read_text()
     assert first == second
 
 
-def test_cli_writes_to_known_relative_path(tmp_path, monkeypatch):
-    """The emitter writes to backend/llm_gateway/config/route_artifacts.proposed.yaml
-    relative to the current working directory."""
+def test_cli_out_path_independent_of_cwd(tmp_path, monkeypatch):
+    """The emitter's --out path is honored regardless of CWD. Default paths
+    are package-relative (NOT CWD-relative), so chdir has no effect on them.
+    """
     monkeypatch.chdir(tmp_path)
-    rc = main(["--benchmarks", str(FIXTURE)])
+    out_path = tmp_path / "explicit_proposed.yaml"
+    rc = main(["--benchmarks", str(FIXTURE), "--out", str(out_path)])
     assert rc == 0
-    expected = tmp_path / "backend" / "llm_gateway" / "config" / "route_artifacts.proposed.yaml"
-    assert expected.exists()
+    assert out_path.exists()

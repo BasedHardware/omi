@@ -76,7 +76,34 @@ def _objective_to_taskspec(objective, task_name: str) -> TaskSpec:
 
 
 def _modelspec_from_dict(d: dict) -> ModelSpec:
-    """Build a ModelSpec from a v3-format candidate dict."""
+    """Build a ModelSpec from a v3-format candidate dict.
+
+    Defensive validation per the sibling scoring module's posture (v3's
+    TaskSpec rejects bool weights with TypeError). Without this guard,
+    isinstance(True, int) is True and a bool quality_score would silently
+    become 1.0 / 0.0, distorting the score. We also reject non-numeric
+    scores (strings, lists, None already handled by ModelSpec's Optional).
+
+    Raises:
+        ValueError: if the candidate is missing required fields, has a bool
+            score, or has a non-numeric score.
+    """
+    if "id" not in d or not isinstance(d["id"], str) or not d["id"]:
+        raise ValueError(f"benchmark candidate missing non-empty 'id': {d!r}")
+    if "provider" not in d or not isinstance(d["provider"], str) or not d["provider"]:
+        raise ValueError(f"benchmark candidate {d.get('id')!r} missing non-empty 'provider': {d!r}")
+
+    model_id = d["id"]
+    for key in ("quality_score", "latency_score", "cost_score"):
+        v = d.get(key)
+        if v is None:
+            continue
+        # bool check MUST come first (bool is a subclass of int in Python)
+        if isinstance(v, bool):
+            raise ValueError(f"benchmark candidate {model_id!r} has bool {key}={v}; expected float")
+        if not isinstance(v, (int, float)):
+            raise ValueError(f"benchmark candidate {model_id!r} has non-numeric {key}={v!r}; expected float")
+
     return ModelSpec(
         id=d["id"],
         quality_score=d.get("quality_score"),
@@ -84,6 +111,58 @@ def _modelspec_from_dict(d: dict) -> ModelSpec:
         cost_score=d.get("cost_score"),
         provider=d.get("provider", ""),
     )
+
+
+def _fetch_via_cherry_picked_benchmarks_fetcher(
+    example_path: Path | None = None,
+) -> dict:
+    """Defensive wrapper around the cherry-picked BenchmarksFetcher.
+
+    The cherry-picked `llm_gateway.gateway._private.benchmarks_fetcher` is a
+    verbatim copy of v3's `backend.utils.auto_router.benchmarks_fetcher`. Per
+    PLAN.md §R5a we keep it byte-equivalent with v3 — so we don't patch known
+    issues inside it. Instead, we wrap the call here at our boundary to
+    handle two v3 limitations surfaced by cubic review:
+
+    1. The AA 2xx success path can return empty LLM candidate lists when no
+       AA models parse (the 24h cache then stores the empty result and
+       returns it on subsequent calls instead of falling back to example
+       data). Our wrapper detects "AA returned 0 LLM candidates" and
+       falls back to the local example file.
+
+    2. The `_benchmarks_fetcher_lock` in the cherry-picked module is declared
+       but unused. We don't use the cherry-picked singleton at all — we
+       instantiate BenchmarksFetcher fresh per call (the emitter is a
+       one-shot CLI script; the singleton + lock pattern is for v3's hot
+       async endpoint, not our flow).
+
+    Returns the benchmark dict (tasks + models) suitable for `emit_all()`.
+    Raises ValueError if both AA + fallback fail.
+    """
+    from llm_gateway.gateway._private.benchmarks_fetcher import BenchmarksFetcher
+
+    fetcher = BenchmarksFetcher(example_path=example_path) if example_path else BenchmarksFetcher()
+
+    try:
+        result = fetcher.fetch()
+    except Exception as e:  # network / parse / 4xx / 5xx — v3 logs and falls back internally
+        # BenchmarksFetcher already falls back to the example file on most
+        # failure modes; if it still raised, propagate.
+        raise RuntimeError(f"benchmarks fetch failed: {e}") from e
+
+    # Defensive: detect AA-returned-empty-LLM-list. v3's fetch() returns
+    # `{"tasks": ..., "models": {task_name: []}}` when AA gives 2xx with no
+    # parseable models. We re-load from the example file in that case.
+    models = result.get("models", {})
+    llm_tasks_have_candidates = any(models.get(name) for name in models)
+    if not llm_tasks_have_candidates and example_path and example_path.exists():
+        logger.warning(
+            "AA returned empty LLM candidate list; falling back to example file %s",
+            example_path,
+        )
+        return json.loads(example_path.read_text(encoding="utf-8"))
+
+    return result
 
 
 def _route_id_for(lane_id: str, today: date) -> str:
@@ -221,15 +300,17 @@ def emit_all(
 def write_proposed_yaml(artifacts: list[RouteArtifact], path: Path) -> None:
     """Write the proposed YAML. NEVER writes to `route_artifacts.yaml`.
 
-    The path is asserted to NOT equal `route_artifacts.yaml` -- that's the
-    emitter's safety contract (the PR is the decision, per PLAN.md §R4 gate).
+    The path is rejected via if/raise (NOT assert) because `assert` is stripped
+    under Python's -O optimization flag. The emitter's safety contract (the PR
+    is the decision, per PLAN.md §R4 gate) must hold regardless of optimization.
 
     Each artifact is dumped with its computed `content_digest` baked into the
     `artifact_digest` field (matches the R0 hand-curated format). The loader
     validates that `artifact_digest` matches the sha256 of the body on load,
     so this is required for the proposed YAML to be loadable as-is.
     """
-    assert path.name != "route_artifacts.yaml", f"emitter must not edit route_artifacts.yaml directly (got {path})"
+    if path.name == "route_artifacts.yaml":
+        raise ValueError(f"emitter must not edit route_artifacts.yaml directly (got {path})")
     payload = {"route_artifacts": []}
     for a in artifacts:
         body = a.model_dump(mode="json", exclude={"content_digest", "artifact_digest"})
@@ -274,6 +355,24 @@ def _emit_for_lane_id(
     )
 
 
+# ---------------------------------------------------------------------------
+# Path resolution — package-relative, NOT CWD-relative
+# ---------------------------------------------------------------------------
+#
+# Default paths are computed relative to the package location (this file's
+# directory), NOT the current working directory. The previous design hardcoded
+# `backend/llm_gateway/config/...` which broke when run as
+# `cd backend && python -m llm_gateway.scripts.sync_benchmarks_to_route_artifacts`
+# (CWD = backend/, the prefix would double).
+#
+# The CLI accepts --benchmarks and --out to override. Defaults resolve to
+# the gateway config dir under the repo root regardless of CWD.
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_DEFAULT_GATEWAY_CONFIG_DIR = (_PACKAGE_DIR.parent / "config").resolve()
+_DEFAULT_BENCHMARKS_PATH = _DEFAULT_GATEWAY_CONFIG_DIR / "benchmarks.json"
+_DEFAULT_PROPOSED_PATH = _DEFAULT_GATEWAY_CONFIG_DIR / "route_artifacts.proposed.yaml"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Sync benchmarks.json -> route_artifacts.proposed.yaml (R1 emitter).",
@@ -290,8 +389,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--benchmarks",
         type=Path,
-        default=Path("backend/llm_gateway/config/benchmarks.json"),
-        help="Path to benchmarks.json (default: backend/llm_gateway/config/benchmarks.json).",
+        default=_DEFAULT_BENCHMARKS_PATH,
+        help=(
+            "Path to benchmarks.json. "
+            f"Default: {_DEFAULT_BENCHMARKS_PATH} (resolved relative to the package, not CWD)."
+        ),
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=_DEFAULT_PROPOSED_PATH,
+        help=(
+            "Path to the proposed YAML output. "
+            f"Default: {_DEFAULT_PROPOSED_PATH} (resolved relative to the package, not CWD). "
+            "Must NOT equal `route_artifacts.yaml`."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -330,9 +442,13 @@ def main(argv: list[str] | None = None) -> int:
     if not artifacts:
         return 1
 
-    out_path = Path("backend/llm_gateway/config/route_artifacts.proposed.yaml")
+    out_path = args.out
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    write_proposed_yaml(artifacts, out_path)
+    try:
+        write_proposed_yaml(artifacts, out_path)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
     print(f"wrote {out_path}", file=sys.stderr)
     return 0
 
