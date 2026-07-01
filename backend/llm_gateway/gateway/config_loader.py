@@ -54,7 +54,10 @@ def _load_config_list(path: Path, top_level_key: str) -> list[dict[str, Any]]:
         raise ConfigValidationError(f'missing gateway config file: {path}')
 
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.safe_load(handle)
+        try:
+            loaded = yaml.safe_load(handle)
+        except yaml.YAMLError as e:
+            raise ConfigValidationError(f'malformed YAML in {path}: {e}') from e
 
     if loaded is None:
         return []
