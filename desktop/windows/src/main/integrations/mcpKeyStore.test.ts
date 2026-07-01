@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -70,5 +70,11 @@ describe('mcpKeyStore', () => {
     expect(() =>
       saveMcpKey({ id: 'key_123', name: 'Omi Windows', key: 'omi_live_secret' })
     ).toThrow('Secure storage is unavailable on this system')
+  })
+
+  it('surfaces invalid stored key files', () => {
+    writeFileSync(join(electronState.userData, 'mcp-key.json'), '{"id":"key_123"}', 'utf8')
+
+    expect(() => loadMcpKey()).toThrow('Stored MCP key is invalid')
   })
 })
