@@ -46,13 +46,16 @@ def _item(memory_id: str, **overrides) -> MemoryItem:
     return MemoryItem(**base)
 
 
-def test_memory_item_rejects_unknown_visibility():
-    try:
-        _item('bad-visibility', visibility='friends')
-    except ValueError as exc:
-        assert 'visibility' in str(exc)
-    else:
-        raise AssertionError('expected unknown visibility to be rejected')
+def test_default_product_memory_reads_exclude_unknown_visibility():
+    unknown_visibility = _item('unknown-visibility', visibility='friends')
+
+    report = filter_default_product_memory_items(
+        [unknown_visibility], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW
+    )
+
+    assert report.visible_items == []
+    assert report.decisions['unknown-visibility'].allowed is False
+    assert report.decisions['unknown-visibility'].reason == 'unknown_visibility'
 
 
 def test_default_product_memory_reads_include_fresh_short_term_and_exclude_stale_with_lifecycle_audit():

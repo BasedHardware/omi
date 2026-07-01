@@ -64,6 +64,50 @@ impl FirestoreService {
         Ok(())
     }
 
+    /// Increment the total desktop question counter and, when provided, an
+    /// account-specific quota counter for rollout-safe breakdown fallback.
+    pub async fn record_desktop_chat_quota_question_with_account(
+        &self,
+        uid: &str,
+        account: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let date_key = Utc::now().format("%Y-%m-%d").to_string();
+        let doc_path = format!(
+            "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
+            self.project_id, USERS_COLLECTION, uid, LLM_USAGE_SUBCOLLECTION, date_key
+        );
+        let commit_url = format!(
+            "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            self.project_id
+        );
+        let mut field_transforms = vec![
+            json!({ "fieldPath": "desktop_chat.quota_questions", "increment": { "integerValue": "1" } }),
+        ];
+        if let Some(account) = account {
+            field_transforms.push(
+                json!({ "fieldPath": format!("desktop_chat_{}.quota_questions", account), "increment": { "integerValue": "1" } }),
+            );
+        }
+        let body = json!({
+            "writes": [{
+                "transform": {
+                    "document": doc_path,
+                    "fieldTransforms": field_transforms
+                }
+            }]
+        });
+        let resp = self
+            .build_request(reqwest::Method::POST, &commit_url)
+            .await?
+            .json(&body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(resp.text().await?.into());
+        }
+        Ok(())
+    }
+
     /// Sum all daily desktop_chat.cost_usd values for a user across all llm_usage documents.
     pub async fn get_total_llm_cost(
         &self,

@@ -253,7 +253,7 @@ actor APIClient {
   }
 
   /// Report a managed realtime turn's token usage so the backend can price it and record
-  /// it into the llm_usage ledger (counts toward quota). Fire-and-forget; failures are
+  /// it into the llm_usage cost ledger. Fire-and-forget; failures are
   /// logged and dropped (the backend reconciler is the eventual safety net). Only called
   /// for managed (ephemeral) sessions — BYOK users pay the provider directly.
   func reportRealtimeUsage(
@@ -4619,7 +4619,9 @@ extension APIClient {
     sender: String,
     appId: String? = nil,
     sessionId: String? = nil,
-    metadata: String? = nil
+    metadata: String? = nil,
+    clientMessageId: String? = nil,
+    messageSource: String = "desktop_chat"
   ) async throws -> SaveMessageResponse {
     struct SaveRequest: Encodable {
       let text: String
@@ -4627,9 +4629,18 @@ extension APIClient {
       let app_id: String?
       let session_id: String?
       let metadata: String?
+      let client_message_id: String?
+      let message_source: String
     }
     let body = SaveRequest(
-      text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
+      text: text,
+      sender: sender,
+      app_id: appId,
+      session_id: sessionId,
+      metadata: metadata,
+      client_message_id: clientMessageId,
+      message_source: messageSource
+    )
     return try await post("v2/desktop/messages", body: body)
   }
 
@@ -4921,10 +4932,14 @@ struct InitialMessageResponse: Codable {
 struct SaveMessageResponse: Codable {
   let id: String
   let createdAt: Date
+  let sessionId: String?
+  let created: Bool?
 
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
+    case sessionId = "session_id"
+    case created
   }
 }
 

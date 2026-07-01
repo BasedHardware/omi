@@ -43,7 +43,7 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
-from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
+from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 
@@ -51,6 +51,8 @@ logger = logging.getLogger(__name__)
 
 # Q5: canonical Pinecone ids are neutral ``mem_…`` memory ids (not ``memvec:`` or ``{uid}-{id}``).
 # Canonical writes upsert neutral-metadata vectors directly; purge paths use neutral ids only.
+
+_ALLOWED_MEMORY_VISIBILITIES = {"private", "public", "shared"}
 
 
 def neutral_vector_id_for_memory(memory_id: str) -> str:
@@ -435,8 +437,15 @@ def _apply_product_metadata(item: MemoryItem, metadata: Dict[str, Any]) -> Memor
     return item.model_copy(update={"promotion": promotion})
 
 
-def _persist_memory_item(uid: str, item: MemoryItem, *, db_client) -> None:
+def _validate_memory_item_for_write(item: MemoryItem) -> MemoryItem:
     item = MemoryItem.model_validate(item.model_dump(mode="python"))
+    if item.visibility not in _ALLOWED_MEMORY_VISIBILITIES:
+        raise ValueError("visibility must be private, public, or shared")
+    return item
+
+
+def _persist_memory_item(uid: str, item: MemoryItem, *, db_client) -> None:
+    item = _validate_memory_item_for_write(item)
     path = f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}"
     db_client.document(path).set(item.model_dump(mode="json"))
 
@@ -444,7 +453,7 @@ def _persist_memory_item(uid: str, item: MemoryItem, *, db_client) -> None:
 def _validated_memory_item_copy(item: MemoryItem, updates: Dict[str, Any]) -> MemoryItem:
     payload = item.model_dump(mode="python")
     payload.update(updates)
-    return MemoryItem.model_validate(payload)
+    return _validate_memory_item_for_write(MemoryItem.model_validate(payload))
 
 
 def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
@@ -486,6 +495,8 @@ def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client) -> Optio
     item = MemoryItem(**(snapshot.to_dict() or {}))
     if item.status != MemoryItemStatus.active:
         return None
+    if item.memory_id != memory_id:
+        raise ValueError(f"canonical memory id mismatch: requested {memory_id}, found {item.memory_id}")
     return item
 
 
@@ -632,7 +643,10 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
     ):
         invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
         updated = _validated_memory_item_copy(updated, {"kg_extracted": False, "updated_at": now})
-        _persist_memory_item(uid, updated, db_client=client)
+        client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(
+            {"kg_extracted": False, "updated_at": now},
+            merge=True,
+        )
         from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 
         kg_result = extract_kg_for_promoted_memory(uid, updated, db_client=client)
@@ -651,6 +665,8 @@ def update_canonical_memory_visibility(uid: str, memory_id: str, visibility: str
     now = datetime.now(timezone.utc)
     updated = _validated_memory_item_copy(item, {"visibility": visibility, "updated_at": now})
     _persist_memory_item(uid, updated, db_client=client)
+    sync_atom_keyword_index_for_item(updated, db_client=client)
+    sync_canonical_memory_vector(updated)
     return updated
 
 
@@ -747,6 +763,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
     for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
         db_client.document(record["outbox_path"]).set(record)
 
+    delete_canonical_memory_vector(uid, item.memory_id)
     delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
     purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason, db_client=db_client)
 

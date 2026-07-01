@@ -135,13 +135,6 @@ class MemoryItem(BaseModel):
             raise ValueError("required fields must not be blank")
         return value
 
-    @field_validator("visibility")
-    @classmethod
-    def validate_visibility(cls, value: str) -> str:
-        if value not in {"private", "public", "shared"}:
-            raise ValueError("visibility must be private, public, or shared")
-        return value
-
     @field_validator("version")
     @classmethod
     def validate_version(cls, value: int) -> int:
