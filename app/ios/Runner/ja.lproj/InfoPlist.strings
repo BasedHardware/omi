@@ -1,0 +1,27 @@
+/* Localized versions of Info.plist keys (Japanese) */
+
+"NSBluetoothAlwaysUsageDescription" = "Omi デバイスと接続するために Bluetooth の利用許可が必要です。";
+"NSBluetoothPeripheralUsageDescription" = "Omi デバイスと接続するために Bluetooth の利用許可が必要です。";
+
+"NSCalendarsUsageDescription" = "予定の閲覧と編集など、カレンダー機能の大部分にアクセスします。";
+"NSCalendarsFullAccessUsageDescription" = "予定の閲覧と編集など、カレンダー機能の大部分にアクセスします。";
+
+"NSContactsUsageDescription" = "予定の出席者の編集や、会話のサマリーを SMS で共有するために連絡先にアクセスします。";
+
+"NSLocationWhenInUseUsageDescription" = "記憶を作成する際に、どこで作成されたかを判定するために位置情報を使用します。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "記憶を作成する際に、どこで作成されたかを判定するために位置情報を使用します。";
+"NSLocationUsageDescription" = "記憶を作成する際に、どこで作成されたかを判定するために位置情報を使用します。";
+
+"NSMicrophoneUsageDescription" = "発見した不具合の音声説明の共有や、音声コマンドの利用のためにマイクへのアクセスが必要です。";
+
+"NSSpeechRecognitionUsageDescription" = "音声をテキストに変換する処理をデバイス上で行うため、音声認識を使用します。";
+
+"NSRemindersUsageDescription" = "Omi の会話からアクションアイテムを書き出すためにリマインダーへのアクセスが必要です。";
+"NSRemindersFullAccessUsageDescription" = "Omi の会話からアクションアイテムを書き出すためにリマインダーへのアクセスが必要です。";
+
+"NSHealthShareUsageDescription" = "Omi は Apple ヘルスケアから歩数、ウォーキング・ランニングの距離、アクティブエネルギー、心拍数、睡眠、ワークアウトを読み取り、フィットネス・睡眠・アクティビティについて Omi チャットで質問できるようにします。Omi が Apple ヘルスケアにデータを書き込むことはありません。";
+"NSHealthUpdateUsageDescription" = "Omi は Apple ヘルスケアにデータを一切書き込みません。この説明文は HealthKit フレームワークをリンクしている関係で iOS が必須としているため記載しています。";
+
+"NSPhotoLibraryUsageDescription" = "Instabug を通じて写真をアップロード・共有できるように、写真ライブラリへのアクセスが必要です。";
+
+"NSCameraUsageDescription" = "不具合を報告するためにカメラへのアクセスが必要です。";
