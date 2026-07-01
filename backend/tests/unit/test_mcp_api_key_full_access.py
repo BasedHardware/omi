@@ -1,25 +1,6 @@
 from datetime import datetime
-from types import ModuleType
-import sys
 
-google_cloud = ModuleType("google.cloud")
-firestore_module = ModuleType("google.cloud.firestore")
-firestore_module.Query = type("Query", (), {"DESCENDING": "DESCENDING"})
-firestore_module.DELETE_FIELD = object()
-google_cloud.firestore = firestore_module
-sys.modules["google.cloud"] = google_cloud
-sys.modules["google.cloud.firestore"] = firestore_module
-
-database_client = ModuleType("database._client")
-database_client.db = None
-database_client.get_firestore_client = lambda: None
-sys.modules["database._client"] = database_client
-redis_stub = ModuleType("database.redis_db")
-redis_stub.get_cached_mcp_api_key_auth_context = lambda _hashed_key: None
-redis_stub.cache_mcp_api_key_auth_context = lambda *_args, **_kwargs: None
-redis_stub.delete_cached_mcp_api_key = lambda _hashed_key: None
-sys.modules["database.redis_db"] = redis_stub
-sys.modules.pop("database.mcp_api_key", None)
+from google.cloud import firestore
 
 import database.mcp_api_key as mcp_api_key_db
 import scripts.backfill_mcp_key_full_access as backfill_mcp_keys
@@ -72,11 +53,11 @@ class _DocReference:
                 target = doc
                 for part in parts[:-1]:
                     target = target.setdefault(part, {})
-                if value is firestore_module.DELETE_FIELD:
+                if value is firestore.DELETE_FIELD:
                     target.pop(parts[-1], None)
                 else:
                     target[parts[-1]] = value
-            elif value is firestore_module.DELETE_FIELD:
+            elif value is firestore.DELETE_FIELD:
                 doc.pop(key, None)
             else:
                 doc[key] = value

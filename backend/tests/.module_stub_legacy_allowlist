@@ -6,12 +6,11 @@
 # SHRINK (entries removed as files are migrated to monkeypatch/Depends). Growing
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 # This list exists ONLY as a transitional bridge while the migration in
-# Total: 65 entries.
 # it is blocked by the pre-push hook and CI (see DECISIONS.md D4).
+# Total: 59 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
-backend/tests/unit/test_async_webhooks.py
 backend/tests/unit/test_batch_upload_storage.py
 backend/tests/unit/test_billable_transcription_seconds.py
 backend/tests/unit/test_byok_security.py
@@ -33,9 +32,6 @@ backend/tests/unit/test_kg_edge_id_sanitization.py
 backend/tests/unit/test_kg_user_type_mismatch.py
 backend/tests/unit/test_l2_promotion_agent_v2.py
 backend/tests/unit/test_llm_gateway_chat_extraction_pilot.py
-backend/tests/unit/test_mcp_api_key_auth_context.py
-backend/tests/unit/test_mcp_api_key_full_access.py
-backend/tests/unit/test_mcp_oauth.py
 backend/tests/unit/test_memory_apply_store.py
 backend/tests/unit/test_memory_entities.py
 backend/tests/unit/test_memory_evidence_persistence.py
@@ -55,7 +51,6 @@ backend/tests/unit/test_parakeet_nim.py
 backend/tests/unit/test_parakeet_prerecorded.py
 backend/tests/unit/test_parakeet_stream_session.py
 backend/tests/unit/test_patch_adapter.py
-backend/tests/unit/test_people_conversations_500s.py
 backend/tests/unit/test_process_conversation_usage_context.py
 backend/tests/unit/test_prompt_caching.py
 backend/tests/unit/test_review_queue_non_active_routes.py
@@ -66,7 +61,6 @@ backend/tests/unit/test_streaming_deepgram_backoff.py
 backend/tests/unit/test_sync_fair_use_gate.py
 backend/tests/unit/test_sync_playback_service.py
 backend/tests/unit/test_sync_transcription_prefs.py
-backend/tests/unit/test_v3_account_generation_source.py
 backend/tests/unit/test_vad_gate.py
 backend/tests/unit/test_vad_onnx.py
 backend/tests/unit/test_voice_message_language.py
