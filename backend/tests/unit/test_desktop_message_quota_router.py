@@ -108,6 +108,7 @@ def test_desktop_human_message_records_quota_once_after_persistence_acceptance()
             session_id=None,
             metadata=None,
             client_message_id='client-msg-1',
+            message_source='desktop_chat',
         )
         module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
             'test-uid',
@@ -134,6 +135,16 @@ def test_desktop_duplicate_human_message_retries_idempotent_quota_record():
             json={'text': 'hello', 'sender': 'human', 'client_message_id': 'client-msg-1'},
         )
         assert duplicate.status_code == 200
+        module.chat_db.save_message.assert_called_once_with(
+            'test-uid',
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata=None,
+            client_message_id='client-msg-1',
+            message_source='desktop_chat',
+        )
         module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
             'test-uid',
             idempotency_key='desktop_messages:client-msg-1',
@@ -159,6 +170,39 @@ def test_desktop_ai_message_does_not_record_quota():
             json={'text': 'hello back', 'sender': 'ai', 'client_message_id': 'ai-msg-1'},
         )
         assert ai.status_code == 200
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_realtime_voice_human_message_does_not_record_desktop_message_quota():
+    client, module, saved = _make_client()
+    try:
+        module.chat_db.save_message.return_value = {
+            'id': 'voice-msg-1',
+            'created_at': '2026-07-02T00:00:00+00:00',
+            'created': True,
+        }
+        response = client.post(
+            '/v2/desktop/messages',
+            json={
+                'text': 'voice transcript',
+                'sender': 'human',
+                'client_message_id': 'voice-msg-1',
+                'message_source': 'realtime_voice',
+            },
+        )
+        assert response.status_code == 200
+        module.chat_db.save_message.assert_called_once_with(
+            'test-uid',
+            text='voice transcript',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata=None,
+            client_message_id='voice-msg-1',
+            message_source='realtime_voice',
+        )
         module.llm_usage_db.record_chat_quota_question.assert_not_called()
     finally:
         _cleanup(saved)

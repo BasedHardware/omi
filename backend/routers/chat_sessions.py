@@ -48,6 +48,7 @@ class SaveMessageRequest(BaseModel):
     session_id: str | None = Field(None, max_length=200)
     metadata: str | None = None
     client_message_id: str | None = Field(None, pattern=r'^[A-Za-z0-9_-]{1,128}$')
+    message_source: str = Field('desktop_chat', pattern=r'^(desktop_chat|realtime_voice)$')
 
 
 class RateMessageRequest(BaseModel):
@@ -147,8 +148,9 @@ def save_message(
         session_id=request.session_id,
         metadata=request.metadata,
         client_message_id=request.client_message_id,
+        message_source=request.message_source,
     )
-    if request.sender == 'human':
+    if request.sender == 'human' and request.message_source == 'desktop_chat':
         try:
             llm_usage_db.record_chat_quota_question(
                 uid,

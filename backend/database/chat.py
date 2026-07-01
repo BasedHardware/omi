@@ -683,6 +683,7 @@ def save_message(
     session_id: str = None,
     metadata: str = None,
     client_message_id: str = None,
+    message_source: str = 'desktop_chat',
 ) -> dict:
     """Save a chat message for the desktop app.
 
@@ -726,6 +727,7 @@ def save_message(
         'reported': False,
         'memories_id': [],
         'metadata': metadata,
+        'message_source': message_source,
     }
     created = True
     if client_message_id:

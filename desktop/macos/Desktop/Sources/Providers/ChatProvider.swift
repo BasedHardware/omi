@@ -2744,7 +2744,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     ) async {
         do {
             let response = try await APIClient.shared.saveMessage(
-                text: text, sender: sender, appId: appId, sessionId: sessionId, clientMessageId: message.id)
+                text: text,
+                sender: sender,
+                appId: appId,
+                sessionId: sessionId,
+                clientMessageId: message.id,
+                messageSource: "realtime_voice"
+            )
             await MainActor.run {
                 if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
                     self.messages[index].id = response.id
