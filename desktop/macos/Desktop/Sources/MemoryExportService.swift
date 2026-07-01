@@ -443,6 +443,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   fileprivate var lastExportedAtKey: String { "memoryExportLastExportedAt.\(rawValue)" }
   fileprivate var detailKey: String { "memoryExportDetail.\(rawValue)" }
   fileprivate var lastExportPathKey: String { "memoryExportLastExportPath.\(rawValue)" }
+  fileprivate var connectedAtKey: String { "memoryExportConnectedAt.\(rawValue)" }
 }
 
 struct MemoryExportStatus: Sendable {
@@ -450,6 +451,7 @@ struct MemoryExportStatus: Sendable {
   let lastExportedAt: Date?
   let detailText: String?
   let isConfigured: Bool
+  let hasConnection: Bool
 }
 
 /// Rendered MCP connection instructions for a single client.
@@ -521,6 +523,7 @@ actor MemoryExportService {
     }
 
     let detailText = defaults.string(forKey: destination.detailKey)
+    let hasConnection = exportedCount > 0 || defaults.double(forKey: destination.connectedAtKey) > 0
     let isConfigured: Bool
     switch destination {
     case .obsidian:
@@ -537,7 +540,8 @@ actor MemoryExportService {
       exportedCount: exportedCount,
       lastExportedAt: lastExportedAt,
       detailText: detailText,
-      isConfigured: isConfigured
+      isConfigured: isConfigured,
+      hasConnection: hasConnection
     )
   }
 
@@ -590,10 +594,16 @@ actor MemoryExportService {
   func testAgentConnections(hostedKey: String, localToken: String) async throws -> AgentConnectionTestResult {
     async let hostedCount = testHostedMCPMemoryCount(key: hostedKey)
     async let localCount = testLocalAgentToolCount(token: localToken)
-    return try await AgentConnectionTestResult(
+    let result = try await AgentConnectionTestResult(
       hostedMemoryCount: hostedCount,
       localToolCount: localCount
     )
+    markConnected(.agents)
+    return result
+  }
+
+  func markConnected(_ destination: MemoryExportDestination) {
+    defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
   }
 
   private func testHostedMCPMemoryCount(key: String) async throws -> Int {

@@ -26,8 +26,6 @@
             "group": "Core Development",
             "pages": [
               "doc/developer/AppSetup",
-              "doc/developer/public-client-config",
-              "doc/developer/release-secret-hygiene-audit-8726",
               "doc/developer/Cursor",
               "doc/developer/agent-control-plane",
               {

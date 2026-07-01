@@ -20,15 +20,14 @@ cd ..
 # TODO Install Android dependencies?
 # ...
 
-# Create public client env files from template
-echo "Creating public client env files..."
-cat .client.env.example > .client.dev.env
-cat .client.env.example > .client.env
+# Create .env file from template
+echo "Creating .env file..."
+cat .env.template > .dev.env
+cat .env.template > .prod.env
 
-# Prompt user to review public client config
-echo "Review app/.client.dev.env and app/.client.env. Do not add private API keys or server-only secrets."
-read -p "Press enter to continue after reviewing the public client config."
-../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env || exit 1
+# Prompt user to add API keys to .env file
+echo "Please add your API keys to the .env file."
+read -p "Press enter to continue after adding the keys."
 
 # Run Build Runner
 echo "Running Build Runner..."

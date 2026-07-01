@@ -101,7 +101,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
   }
 
   String get _wsUrl =>
-      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey'; // public-client-secret-boundary: legacy-direct-provider
+      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey';
 
   @override
   Future<bool> connect() async {

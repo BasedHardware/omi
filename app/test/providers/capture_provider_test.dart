@@ -85,6 +85,8 @@ BtDevice _device({required String id, required DeviceType type, String name = 'T
 /// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
 class _TestEnvFields implements EnvFields {
   @override
+  String? get openAIAPIKey => null;
+  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
@@ -98,6 +100,8 @@ class _TestEnvFields implements EnvFields {
   String? get intercomAndroidApiKey => null;
   @override
   String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
   @override
   bool? get useWebAuth => false;
   @override
