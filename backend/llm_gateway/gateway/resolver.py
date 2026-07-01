@@ -15,7 +15,46 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest, validate_chat_completion_request
 
-SUPPORTED_AUTO_LANE_IDS = frozenset({'omi:auto:chat-structured'})
+# R0 lane taxonomy (see .aidlc/spec.md and PLAN.md §R0):
+#   - 1 existing lane: chat-structured (the gateway's pilot lane)
+#   - 12 new chat-completion lanes: shadow-mode; resolvable via this gateway
+#   - 3 non-chat lanes (stt-realtime, transcription, screenshot-embedding):
+#     exist in lanes.yaml + route_artifacts.yaml as R3 placeholders but are NOT
+#     in SUPPORTED_AUTO_LANE_IDS because they belong on different surfaces
+#     (audio / embedding), not openai.chat_completions. R3 will introduce
+#     those surfaces and add them here.
+#
+# The frozenset is the only gate between product code and lane resolution.
+# Lanes here MUST exist in lanes.yaml AND have at least one valid
+# RouteArtifact in route_artifacts.yaml — load_gateway_config enforces both
+# (it validates active_route + last_known_good resolve to real artifacts).
+# Adding a lane here that is missing from config is a hard error at config
+# load.
+SUPPORTED_AUTO_LANE_IDS = frozenset(
+    {
+        'omi:auto:chat-structured',  # existing — pilot lane
+        # R0 new chat-completion lanes (12):
+        'omi:auto:chat-extraction',
+        'omi:auto:daily-summary',
+        'omi:auto:memories-extraction',
+        'omi:auto:memory-graph',
+        'omi:auto:conv-action-items',
+        'omi:auto:conv-structure',
+        'omi:auto:general-assistant',
+        'omi:auto:reasoning',
+        'omi:auto:screenshot-understanding',
+        'omi:auto:realtime-ptt',
+        'omi:auto:persona-chat',
+        'omi:auto:notification-classifier',
+        # R3 placeholders (3): audio + embedding — NOT in this set. They
+        # belong on surfaces the gateway doesn't support yet (STT,
+        # embedding endpoints). R3 wires those surfaces and adds them here.
+        # See R0 spec: ".aidlc/spec.md" lane table note.
+        # 'omi:auto:stt-realtime',
+        # 'omi:auto:transcription',
+        # 'omi:auto:screenshot-embedding',
+    }
+)
 AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
     {

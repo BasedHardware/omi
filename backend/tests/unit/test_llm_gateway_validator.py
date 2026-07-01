@@ -10,7 +10,7 @@ LANE_ID = 'omi:auto:chat-structured'
 
 
 def test_accepts_non_streaming_text_messages_with_json_schema_output():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
 
     validated = validate_chat_completion_request(valid_request(), lane)
 
@@ -20,7 +20,7 @@ def test_accepts_non_streaming_text_messages_with_json_schema_output():
 
 
 def test_rejects_streaming():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request(stream=True)
 
     with pytest.raises(GatewayCapabilityMismatchError, match='streaming'):
@@ -28,7 +28,7 @@ def test_rejects_streaming():
 
 
 def test_rejects_tools():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request(tools=[{'type': 'function'}])
 
     with pytest.raises(GatewayCapabilityMismatchError, match='tools'):
@@ -36,7 +36,7 @@ def test_rejects_tools():
 
 
 def test_rejects_missing_messages():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request()
     request.pop('messages')
 
@@ -45,7 +45,7 @@ def test_rejects_missing_messages():
 
 
 def test_rejects_invalid_messages():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request(messages=[])
 
     with pytest.raises(GatewayInvalidRequestError, match='messages'):
@@ -53,7 +53,7 @@ def test_rejects_invalid_messages():
 
 
 def test_rejects_non_text_message_content():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request(
         messages=[
             {'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'https://example.com/image.png'}}]}
@@ -65,7 +65,7 @@ def test_rejects_non_text_message_content():
 
 
 def test_rejects_structured_output_modes_other_than_json_schema():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request(response_format={'type': 'json_object'})
 
     with pytest.raises(GatewayCapabilityMismatchError, match='json_schema'):
@@ -73,7 +73,7 @@ def test_rejects_structured_output_modes_other_than_json_schema():
 
 
 def test_rejects_missing_json_schema_body():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request(response_format={'type': 'json_schema'})
 
     with pytest.raises(GatewayInvalidRequestError, match='response_format.json_schema'):
@@ -81,7 +81,7 @@ def test_rejects_missing_json_schema_body():
 
 
 def test_rejects_missing_json_schema_name():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=False).lanes[LANE_ID]
     request = valid_request(
         response_format={
             'type': 'json_schema',

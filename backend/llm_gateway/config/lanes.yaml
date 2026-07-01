@@ -27,3 +27,446 @@ lanes:
         - invalid_config
     active_route: route.chat_structured.2026_06_27.001
     last_known_good: route.chat_structured.2026_06_20.001
+
+  # R0: 15 new LaneConfig entries (shadow-mode, percent=0, last_known_good == active_route).
+  # Day-one invariant: each new lane's active_route == last_known_good, sourced from
+  # backend/utils/llm/model_config.py MODEL_QOS_PROFILES["premium"] (or the documented
+  # placeholder for STT/transcription/embedding lanes — those land in R3).
+  #
+  # Naming: route.<capability>.<YYYY_MM_DD>.001 — the date suffix is the R0 emission
+  # date. R1's emitter will use the same pattern with a rolling date.
+
+  - lane_id: omi:auto:chat-extraction
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.55
+      latency: 0.20
+      cost: 0.25
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.chat_extraction.2026_07_01.001
+    last_known_good: route.chat_extraction.2026_07_01.001
+
+  - lane_id: omi:auto:daily-summary
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.50
+      latency: 0.25
+      cost: 0.25
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.daily_summary.2026_07_01.001
+    last_known_good: route.daily_summary.2026_07_01.001
+
+  - lane_id: omi:auto:memories-extraction
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.55
+      latency: 0.20
+      cost: 0.25
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.memories_extraction.2026_07_01.001
+    last_known_good: route.memories_extraction.2026_07_01.001
+
+  - lane_id: omi:auto:memory-graph
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.60
+      latency: 0.20
+      cost: 0.20
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.memory_graph.2026_07_01.001
+    last_known_good: route.memory_graph.2026_07_01.001
+
+  - lane_id: omi:auto:conv-action-items
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.55
+      latency: 0.20
+      cost: 0.25
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.conv_action_items.2026_07_01.001
+    last_known_good: route.conv_action_items.2026_07_01.001
+
+  - lane_id: omi:auto:conv-structure
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.55
+      latency: 0.20
+      cost: 0.25
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.conv_structure.2026_07_01.001
+    last_known_good: route.conv_structure.2026_07_01.001
+
+  - lane_id: omi:auto:general-assistant
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: true
+      structured_output: json_object
+      tools: true
+    objective:
+      quality: 0.50
+      latency: 0.30
+      cost: 0.20
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.general_assistant.2026_07_01.001
+    last_known_good: route.general_assistant.2026_07_01.001
+
+  - lane_id: omi:auto:reasoning
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.70
+      latency: 0.20
+      cost: 0.10
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.reasoning.2026_07_01.001
+    last_known_good: route.reasoning.2026_07_01.001
+
+  - lane_id: omi:auto:stt-realtime
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    objective:
+      quality: 0.40
+      latency: 0.50
+      cost: 0.10
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.stt_realtime.2026_07_01.001
+    last_known_good: route.stt_realtime.2026_07_01.001
+
+  - lane_id: omi:auto:transcription
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    objective:
+      quality: 0.40
+      latency: 0.50
+      cost: 0.10
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.transcription.2026_07_01.001
+    last_known_good: route.transcription.2026_07_01.001
+
+  - lane_id: omi:auto:screenshot-understanding
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_object
+      tools: false
+    objective:
+      quality: 0.55
+      latency: 0.25
+      cost: 0.20
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.screenshot_understanding.2026_07_01.001
+    last_known_good: route.screenshot_understanding.2026_07_01.001
+
+  - lane_id: omi:auto:screenshot-embedding
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    objective:
+      quality: 0.40
+      latency: 0.30
+      cost: 0.30
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.screenshot_embedding.2026_07_01.001
+    last_known_good: route.screenshot_embedding.2026_07_01.001
+
+  - lane_id: omi:auto:realtime-ptt
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: true
+      structured_output: json_object
+      tools: true
+    objective:
+      quality: 0.65
+      latency: 0.25
+      cost: 0.10
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.realtime_ptt.2026_07_01.001
+    last_known_good: route.realtime_ptt.2026_07_01.001
+
+  - lane_id: omi:auto:persona-chat
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: true
+      structured_output: json_object
+      tools: false
+    objective:
+      quality: 0.45
+      latency: 0.35
+      cost: 0.20
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.persona_chat.2026_07_01.001
+    last_known_good: route.persona_chat.2026_07_01.001
+
+  - lane_id: omi:auto:notification-classifier
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.40
+      latency: 0.30
+      cost: 0.30
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.notification_classifier.2026_07_01.001
+    last_known_good: route.notification_classifier.2026_07_01.001

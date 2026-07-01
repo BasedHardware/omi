@@ -1,0 +1,39 @@
+{
+  "_comment": "Synthetic benchmarks fixture for the R1 emitter (backend/tests/unit/llm_gateway/test_sync_benchmarks_emitter.py). Mirrors v3's benchmarks.example.json schema: {tasks: [...], models: {task_name: [{id, provider, q/l/c scores}]}}. All scores are normalized to [0,1]. NOT real benchmark data — synthetic for testing emitter logic.",
+  "tasks": [
+    {"name": "ptt_response", "quality_weight": 0.4, "latency_weight": 0.5, "cost_weight": 0.1},
+    {"name": "screenshot_understanding", "quality_weight": 0.6, "latency_weight": 0.2, "cost_weight": 0.2},
+    {"name": "screenshot_embedding", "quality_weight": 0.2, "latency_weight": 0.3, "cost_weight": 0.5},
+    {"name": "general_assistant", "quality_weight": 0.5, "latency_weight": 0.3, "cost_weight": 0.2},
+    {"name": "transcription", "quality_weight": 0.3, "latency_weight": 0.6, "cost_weight": 0.1}
+  ],
+  "models": {
+    "ptt_response": [
+      {"id": "claude-sonnet-4-6", "provider": "anthropic", "quality_score": 0.90, "latency_score": 0.70, "cost_score": 0.50},
+      {"id": "gpt-5.4-mini",      "provider": "openai",     "quality_score": 0.70, "latency_score": 0.90, "cost_score": 0.80},
+      {"id": "gemini-3-flash",    "provider": "gemini",     "quality_score": 0.60, "latency_score": 0.95, "cost_score": 0.90},
+      {"id": "gpt-4.1-nano",      "provider": "openai",     "quality_score": 0.40, "latency_score": 0.85, "cost_score": 0.95}
+    ],
+    "screenshot_understanding": [
+      {"id": "gpt-5.4",       "provider": "openai", "quality_score": 0.95, "latency_score": 0.50, "cost_score": 0.30},
+      {"id": "claude-sonnet-4-6", "provider": "anthropic", "quality_score": 0.90, "latency_score": 0.60, "cost_score": 0.40},
+      {"id": "gpt-4.1-mini", "provider": "openai", "quality_score": 0.70, "latency_score": 0.75, "cost_score": 0.60}
+    ],
+    "screenshot_embedding": [
+      {"id": "text-embedding-3-small", "provider": "openai", "quality_score": 0.70, "latency_score": 0.85, "cost_score": 0.95},
+      {"id": "voyage-3",                "provider": "voyage", "quality_score": 0.85, "latency_score": 0.70, "cost_score": 0.70},
+      {"id": "gemini-embedding-001",    "provider": "gemini", "quality_score": 0.60, "latency_score": 0.80, "cost_score": 0.90}
+    ],
+    "general_assistant": [
+      {"id": "gpt-5.4",           "provider": "openai", "quality_score": 0.95, "latency_score": 0.60, "cost_score": 0.30},
+      {"id": "claude-sonnet-4-6", "provider": "anthropic", "quality_score": 0.92, "latency_score": 0.65, "cost_score": 0.35},
+      {"id": "gpt-5.4-mini",      "provider": "openai", "quality_score": 0.78, "latency_score": 0.85, "cost_score": 0.70},
+      {"id": "gemini-3-flash",    "provider": "gemini", "quality_score": 0.70, "latency_score": 0.92, "cost_score": 0.88}
+    ],
+    "transcription": [
+      {"id": "whisper-large-v3", "provider": "openai", "quality_score": 0.92, "latency_score": 0.55, "cost_score": 0.50},
+      {"id": "gemini-2.5-flash", "provider": "gemini", "quality_score": 0.85, "latency_score": 0.80, "cost_score": 0.75},
+      {"id": "deepgram-nova-2",  "provider": "deepgram", "quality_score": 0.88, "latency_score": 0.75, "cost_score": 0.70}
+    ]
+  }
+}
