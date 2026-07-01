@@ -1,5 +1,5 @@
-import { ipcMain, BrowserWindow } from 'electron'
-import { readFile, rm } from 'fs/promises'
+import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { rm } from 'fs/promises'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import {
   deleteAllRewindFrames,
@@ -15,7 +15,7 @@ import {
   updateRewindSettings,
   ingestRewindFrame
 } from '../rewind/captureService'
-import { readRewindFrameImage, resolveFrameImagePath } from '../rewind/frameImage'
+import { readRewindFrameImage, readRewindFrameImageDataUrl } from '../rewind/frameImage'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
 import type { RewindFrameImageResult, RewindSettings } from '../../shared/types'
@@ -32,12 +32,9 @@ export function registerRewindHandlers(): void {
     return groupFrames(searchRewindFrames(q), q)
   })
   ipcMain.handle('rewind:frameImage', async (_e, imagePath: string) => {
-    const full = resolveFrameImagePath(rewindRoot(), imagePath)
-    if (!full) {
-      throw new Error('invalid frame path')
-    }
-    const buf = await readFile(full)
-    return `data:image/jpeg;base64,${buf.toString('base64')}`
+    const dataUrl = await readRewindFrameImageDataUrl(imagePath, rewindRoot())
+    if (!dataUrl) throw new Error('Frame image not found')
+    return dataUrl
   })
   ipcMain.handle('rewind:frameById', async (_e, id: number): Promise<RewindFrameImageResult> => {
     const frame = Number.isSafeInteger(id) && id > 0 ? getRewindFrame(id) : null
@@ -56,14 +53,35 @@ export function registerRewindHandlers(): void {
   })
   ipcMain.handle('rewind:status', async () => rewindStatusStats())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
-  ipcMain.handle('rewind:deleteAll', async () => {
+  ipcMain.handle('rewind:deleteAll', async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const choice = parent
+      ? await dialog.showMessageBox(parent, {
+          type: 'warning',
+          buttons: ['Delete Rewind history', 'Cancel'],
+          defaultId: 1,
+          cancelId: 1,
+          title: 'Delete Rewind history?',
+          message: 'Delete all Rewind screenshots and screen text stored on this PC?',
+          detail: 'This cannot be undone.'
+        })
+      : await dialog.showMessageBox({
+          type: 'warning',
+          buttons: ['Delete Rewind history', 'Cancel'],
+          defaultId: 1,
+          cancelId: 1,
+          title: 'Delete Rewind history?',
+          message: 'Delete all Rewind screenshots and screen text stored on this PC?',
+          detail: 'This cannot be undone.'
+        })
+    if (choice.response !== 0) return { deleted: 0, canceled: true }
     const deleted = deleteAllRewindFrames()
     await rm(rewindRoot(), { recursive: true, force: true })
     clearCurrentScreen()
     for (const w of BrowserWindow.getAllWindows()) {
       w.webContents.send('rewind:cleared')
     }
-    return deleted
+    return { deleted }
   })
   // Cached primary-screen id. The underlying desktopCapturer.getSources() can
   // take several seconds on some machines, so it's prewarmed at startup; this
