@@ -231,3 +231,12 @@ def test_conversation_search_dates_are_utc_and_ordered():
 
     assert resp.status_code == 422
     mock_search.assert_not_called()
+
+    with patch.object(vector_db, 'find_similar_conversations') as mock_search:
+        resp = _build().get(
+            '/v1/dev/user/conversations/search'
+            '?query=roadmap&start_date=2026-01-01T00:00:00.900Z&end_date=2026-01-01T00:00:00.100Z'
+        )
+
+    assert resp.status_code == 422
+    mock_search.assert_not_called()
