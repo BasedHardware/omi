@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { auth } from '../lib/firebase'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { gatherLocalContext } from '../lib/localAgent'
-import { byokProviderFromModelId } from '../lib/modelSelection'
+import { resolveByokChatSelection } from '../lib/modelSelection'
 import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
@@ -161,9 +161,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   // Snapshots the last non-Omi foreground window so we plan against the app the
   // user was actually using, not Omi itself.
   type PlanVerdict =
-    | { kind: 'planned'; plan: AutomationPlan }
-    | { kind: 'error' }
-    | { kind: 'chat' }
+    { kind: 'planned'; plan: AutomationPlan } | { kind: 'error' } | { kind: 'chat' }
   const tryPlan = async (text: string): Promise<PlanVerdict> => {
     // Desktop automation requires BOTH the OMI_AUTOMATION env kill-switch (on
     // unless OMI_AUTOMATION=0) and the user's onboarding opt-in. Until the user
@@ -262,19 +260,11 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const prefs = getPreferences()
       const byokStatus = await window.omi.byokStatus().catch(() => null)
       const chatModelId = prefs.defaultModelByPurpose?.chat
-      const selectedProvider = byokProviderFromModelId(chatModelId)
-      const activeProvider = byokStatus?.activeChatProvider ?? null
-      const selectedProviderConfigured = selectedProvider
-        ? byokStatus?.providers[selectedProvider]?.configured === true
-        : false
-      const activeProviderConfigured = activeProvider
-        ? byokStatus?.providers[activeProvider]?.configured === true
-        : false
-      const shouldUseByok = selectedProviderConfigured || activeProviderConfigured
-      if (shouldUseByok) {
+      const byokSelection = resolveByokChatSelection(chatModelId, byokStatus)
+      if (byokSelection.useByok) {
         const result = await window.omi.byokChatSend({
           messages: [...baseHistory, { ...userMsg, content: textToSend }],
-          modelId: selectedProviderConfigured ? chatModelId : undefined
+          modelId: byokSelection.modelId
         })
         assistantText = result.text
         setHistory((h) => {
