@@ -169,7 +169,7 @@ describe('local agent controls', () => {
 
     expect(status.hasToken).toBe(false)
     expect(status.tokenError).toBe(
-      'Local agent token is unavailable. Rotate the token to repair local access.'
+      'Local agent token is unavailable. Check secure storage and rotate the token if needed.'
     )
     expect(status.tokenError).not.toContain(electronState.userData)
   })
