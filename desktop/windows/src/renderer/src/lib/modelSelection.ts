@@ -4,6 +4,7 @@ import { getPreferences } from './preferences'
 type PurposeCompletionArgs = {
   messages: ChatMessage[]
   systemPrompt?: string
+  timeoutMs?: number
 }
 
 export function byokProviderFromModelId(modelId: string | undefined): ByokChatProvider | null {
@@ -37,10 +38,15 @@ export async function tryByokCompletion(
   const status = await window.omi.byokStatus().catch(() => null)
   if (!status?.providers[provider]?.configured) return null
 
-  const result = await window.omi.byokChatSend({
-    messages: args.messages,
-    modelId,
-    systemPrompt: args.systemPrompt
-  })
-  return result.text
+  try {
+    const result = await window.omi.byokChatSend({
+      messages: args.messages,
+      modelId,
+      systemPrompt: args.systemPrompt,
+      timeoutMs: args.timeoutMs
+    })
+    return result.text
+  } catch {
+    return null
+  }
 }
