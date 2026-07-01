@@ -7,6 +7,7 @@ type JsonRecord = Record<string, unknown>
 export type ByokModelsOptions = {
   fetchImpl?: FetchLike
   now?: () => number
+  timeoutMs?: number
 }
 
 type ProviderModel = {
@@ -53,6 +54,8 @@ const HOSTED_MODEL: AvailableModel = {
   source: 'hosted'
 }
 
+const MODEL_FETCH_TIMEOUT_MS = 10_000
+
 function available(provider: ByokChatProvider, model: ProviderModel): AvailableModel {
   return {
     id: `${provider}:${model.model}`,
@@ -78,10 +81,34 @@ function labelFrom(item: JsonRecord, fallback: string): string {
   return typeof name === 'string' && name.trim() ? name.trim() : fallback
 }
 
-async function fetchOpenAiModels(fetchImpl: FetchLike, key: string): Promise<ProviderModel[]> {
-  const response = await fetchImpl('https://api.openai.com/v1/models', {
-    headers: { authorization: `Bearer ${key}` }
-  })
+async function fetchWithTimeout(
+  fetchImpl: FetchLike,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, timeoutMs))
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function fetchOpenAiModels(
+  fetchImpl: FetchLike,
+  key: string,
+  timeoutMs: number
+): Promise<ProviderModel[]> {
+  const response = await fetchWithTimeout(
+    fetchImpl,
+    'https://api.openai.com/v1/models',
+    {
+      headers: { authorization: `Bearer ${key}` }
+    },
+    timeoutMs
+  )
   if (!response.ok) throw new Error(`OpenAI models failed with HTTP ${response.status}`)
   const items = parseDataArray(await response.json())
   return items
@@ -91,10 +118,19 @@ async function fetchOpenAiModels(fetchImpl: FetchLike, key: string): Promise<Pro
     .map((model) => ({ model, label: model }))
 }
 
-async function fetchAnthropicModels(fetchImpl: FetchLike, key: string): Promise<ProviderModel[]> {
-  const response = await fetchImpl('https://api.anthropic.com/v1/models', {
-    headers: { 'anthropic-version': '2023-06-01', 'x-api-key': key }
-  })
+async function fetchAnthropicModels(
+  fetchImpl: FetchLike,
+  key: string,
+  timeoutMs: number
+): Promise<ProviderModel[]> {
+  const response = await fetchWithTimeout(
+    fetchImpl,
+    'https://api.anthropic.com/v1/models',
+    {
+      headers: { 'anthropic-version': '2023-06-01', 'x-api-key': key }
+    },
+    timeoutMs
+  )
   if (!response.ok) throw new Error(`Anthropic models failed with HTTP ${response.status}`)
   const items = parseDataArray(await response.json())
   return items
@@ -105,10 +141,19 @@ async function fetchAnthropicModels(fetchImpl: FetchLike, key: string): Promise<
     .filter((item): item is ProviderModel => !!item)
 }
 
-async function fetchGeminiModels(fetchImpl: FetchLike, key: string): Promise<ProviderModel[]> {
-  const response = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models', {
-    headers: { 'x-goog-api-key': key }
-  })
+async function fetchGeminiModels(
+  fetchImpl: FetchLike,
+  key: string,
+  timeoutMs: number
+): Promise<ProviderModel[]> {
+  const response = await fetchWithTimeout(
+    fetchImpl,
+    'https://generativelanguage.googleapis.com/v1beta/models',
+    {
+      headers: { 'x-goog-api-key': key }
+    },
+    timeoutMs
+  )
   if (!response.ok) throw new Error(`Gemini models failed with HTTP ${response.status}`)
   const raw = (await response.json()) as { models?: unknown }
   const models = Array.isArray(raw.models) ? raw.models : []
@@ -125,10 +170,16 @@ async function fetchGeminiModels(fetchImpl: FetchLike, key: string): Promise<Pro
     .filter((item): item is ProviderModel => !!item)
 }
 
-async function fetchOpenRouterModels(fetchImpl: FetchLike, key: string): Promise<ProviderModel[]> {
-  const response = await fetchImpl(
+async function fetchOpenRouterModels(
+  fetchImpl: FetchLike,
+  key: string,
+  timeoutMs: number
+): Promise<ProviderModel[]> {
+  const response = await fetchWithTimeout(
+    fetchImpl,
     'https://openrouter.ai/api/v1/models?output_modalities=text&sort=most-popular',
-    { headers: { authorization: `Bearer ${key}` } }
+    { headers: { authorization: `Bearer ${key}` } },
+    timeoutMs
   )
   if (!response.ok) throw new Error(`OpenRouter models failed with HTTP ${response.status}`)
   const items = parseDataArray(await response.json())
@@ -144,17 +195,18 @@ async function fetchOpenRouterModels(fetchImpl: FetchLike, key: string): Promise
 async function fetchProviderModels(
   provider: ByokChatProvider,
   fetchImpl: FetchLike,
-  key: string
+  key: string,
+  timeoutMs: number
 ): Promise<ProviderModel[]> {
   switch (provider) {
     case 'openai':
-      return fetchOpenAiModels(fetchImpl, key)
+      return fetchOpenAiModels(fetchImpl, key, timeoutMs)
     case 'anthropic':
-      return fetchAnthropicModels(fetchImpl, key)
+      return fetchAnthropicModels(fetchImpl, key, timeoutMs)
     case 'gemini':
-      return fetchGeminiModels(fetchImpl, key)
+      return fetchGeminiModels(fetchImpl, key, timeoutMs)
     case 'openrouter':
-      return fetchOpenRouterModels(fetchImpl, key)
+      return fetchOpenRouterModels(fetchImpl, key, timeoutMs)
   }
 }
 
@@ -173,20 +225,24 @@ export async function listAvailableByokModels(
   options: ByokModelsOptions = {}
 ): Promise<ModelListResult> {
   const fetchImpl = options.fetchImpl ?? fetch
+  const timeoutMs = options.timeoutMs ?? MODEL_FETCH_TIMEOUT_MS
   const models: AvailableModel[] = [HOSTED_MODEL]
 
-  for (const provider of BYOK_CHAT_PROVIDERS) {
-    const key = loadByokKey(provider)
-    if (!key) continue
-    let providerModels = STATIC_MODELS[provider]
-    try {
-      const fetched = await fetchProviderModels(provider, fetchImpl, key)
-      if (fetched.length > 0) providerModels = fetched
-    } catch {
-      providerModels = STATIC_MODELS[provider]
-    }
-    models.push(...dedupe(providerModels).map((model) => available(provider, model)))
-  }
+  const fetchedModels = await Promise.all(
+    BYOK_CHAT_PROVIDERS.map(async (provider) => {
+      const key = loadByokKey(provider)
+      if (!key) return [] as AvailableModel[]
+      let providerModels = STATIC_MODELS[provider]
+      try {
+        const fetched = await fetchProviderModels(provider, fetchImpl, key, timeoutMs)
+        if (fetched.length > 0) providerModels = fetched
+      } catch {
+        providerModels = STATIC_MODELS[provider]
+      }
+      return dedupe(providerModels).map((model) => available(provider, model))
+    })
+  )
+  models.push(...fetchedModels.flat())
 
   return {
     models,
