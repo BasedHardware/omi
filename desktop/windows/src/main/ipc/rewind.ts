@@ -1,5 +1,7 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { rm } from 'fs/promises'
+import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import {
   deleteAllRewindFrames,
@@ -20,18 +22,20 @@ import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
 import type { RewindFrameImageResult, RewindSettings } from '../../shared/types'
 import { clearCurrentScreen } from '../rewind/currentScreen'
+import { rendererBaseUrl } from '../rendererServer'
 
 function trustedRendererUrl(url: string | undefined): boolean {
   if (!url) return false
   try {
     const parsed = new URL(url)
-    if (parsed.protocol === 'file:' || parsed.protocol === 'app:') return true
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
-    return (
-      parsed.hostname === 'localhost' ||
-      parsed.hostname === '127.0.0.1' ||
-      parsed.hostname === '[::1]'
-    )
+    const devUrl = process.env.ELECTRON_RENDERER_URL
+    if (devUrl && parsed.origin === new URL(devUrl).origin) return true
+
+    const packagedUrl = rendererBaseUrl()
+    if (packagedUrl && parsed.origin === new URL(packagedUrl).origin) return true
+
+    const fallbackRendererFile = pathToFileURL(join(__dirname, '../renderer/index.html')).href
+    return parsed.protocol === 'file:' && parsed.href.startsWith(fallbackRendererFile)
   } catch {
     return false
   }
