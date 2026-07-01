@@ -9,6 +9,7 @@ echo "=== Desktop Launcher Script Tests ==="
 cd "$SCRIPT_DIR"
 bash tests/test-app-config.sh
 bash tests/test-settings-seed.sh
+bash tests/test-cleanup-omi-tcc.sh
 echo ""
 
 echo "=== Rust Backend Tests ==="

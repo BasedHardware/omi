@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Added a safe helper for reviewing and resetting stale macOS privacy permissions from temporary Omi test builds"
+  ]
+}
