@@ -14,9 +14,14 @@ if [ -n "$STAGED_FILES" ]; then
 $STAGED_FILES
 EOF
 
-  if [ "$conflict_found" -eq 1 ]; then
+if [ "$conflict_found" -eq 1 ]; then
     echo "Unresolved merge conflict markers found in staged files" >&2
     exit 1
+  fi
+
+  if echo "$STAGED_FILES" | grep -Eq '^(app/lib/env/|app/config/client_env_policy\.yaml|app/\.client\.env\.example|app/\.env\.template|codemagic\.yaml|scripts/(create-public-client-env|check-public-client-secrets|scan-public-artifact-secrets)\.py|scripts/create-public-client-env\.sh|\.github/workflows/|plugins/apps-js/Dockerfile|web/.*/Dockerfile)'; then
+    echo "Checking public client secret boundary..."
+    python3 scripts/check-public-client-secrets.py
   fi
 fi
 
