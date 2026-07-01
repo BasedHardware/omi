@@ -38,6 +38,7 @@ type LocalAgentServerOptions = {
 let runningServer: Server | null = null
 let runningInfo: LocalAgentServerInfo | null = null
 let startupPromise: Promise<LocalAgentServerInfo> | null = null
+let stoppingPromise: Promise<void> | null = null
 
 class RequestBodyTooLargeError extends Error {
   readonly code = 'request_body_too_large'
@@ -221,6 +222,7 @@ function route(
                 max_bytes: MAX_REQUEST_BODY_BYTES
               }
             })
+            req.destroy()
             return
           }
           json(res, 400, {
@@ -263,6 +265,9 @@ function closeServer(server: Server): Promise<void> {
 export async function startLocalAgentServer(
   options: LocalAgentServerOptions = {}
 ): Promise<LocalAgentServerInfo> {
+  if (stoppingPromise) {
+    await stoppingPromise
+  }
   if (runningInfo) return runningInfo
   if (startupPromise) return startupPromise
 
@@ -319,6 +324,14 @@ export function getLocalAgentServerInfo(): LocalAgentServerInfo | null {
 }
 
 export async function stopLocalAgentServer(): Promise<void> {
+  if (stoppingPromise) return stoppingPromise
+  stoppingPromise = stopLocalAgentServerInner().finally(() => {
+    stoppingPromise = null
+  })
+  return stoppingPromise
+}
+
+async function stopLocalAgentServerInner(): Promise<void> {
   if (startupPromise) {
     await startupPromise.catch(() => undefined)
   }
