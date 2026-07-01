@@ -125,7 +125,8 @@ async function runAgentLoop(userText: string): Promise<ContextSection[]> {
   for (let i = 0; i < MAX_ITERS; i++) {
     const byok = await tryByokCompletion('agent', {
       systemPrompt: SYSTEM_PROMPT,
-      messages: messages.filter((message) => message.role !== 'system') as ChatMessage[]
+      messages: messages.filter((message) => message.role !== 'system') as ChatMessage[],
+      timeoutMs: AGENT_CALL_TIMEOUT_MS
     })
     let content = byok ?? ''
     if (byok === null) {
