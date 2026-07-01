@@ -51,6 +51,19 @@ describe('BYOK chat', () => {
     })
   })
 
+  it('accepts bare model picker overrides for the selected provider', () => {
+    const request = buildByokChatRequest(
+      'openai',
+      'sk-openai-secret',
+      [{ role: 'user', content: 'hello' }],
+      'gpt-4o'
+    )
+
+    expect(JSON.parse(String(request.init.body))).toMatchObject({
+      model: 'gpt-4o'
+    })
+  })
+
   it('uses custom system prompts for non-chat BYOK completions', () => {
     const request = buildByokChatRequest(
       'openai',
@@ -110,7 +123,8 @@ describe('BYOK chat', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://api.openai.com/v1/chat/completions',
       expect.objectContaining({
-        headers: expect.objectContaining({ authorization: 'Bearer sk-openai-secret' })
+        headers: expect.objectContaining({ authorization: 'Bearer sk-openai-secret' }),
+        signal: expect.any(AbortSignal)
       })
     )
     expect(result).toEqual({
