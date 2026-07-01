@@ -242,7 +242,8 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     let assistantText = ''
     try {
       const token = await auth.currentUser?.getIdToken()
-      if (window.omi.piChatEnabled) {
+      const piStatus = await window.omi.piChatStatus()
+      if (piStatus.enabled) {
         const result = await window.omi.piChatSend({
           token: token ?? '',
           messages: [...baseHistory, userMsg],
