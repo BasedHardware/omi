@@ -105,7 +105,9 @@ export function RewindTab(): React.JSX.Element {
     if (!ok) return
     setDeletingRewind(true)
     try {
-      const deleted = await window.omi.rewindDeleteAll()
+      const result = await window.omi.rewindDeleteAll()
+      if (result.canceled) return
+      const deleted = result.deleted
       toast(`Deleted ${deleted.toLocaleString()} Rewind frame${deleted === 1 ? '' : 's'}`, {
         tone: 'success'
       })
