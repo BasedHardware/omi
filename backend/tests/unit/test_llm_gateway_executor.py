@@ -252,7 +252,7 @@ async def test_byok_missing_key_and_unsupported_provider_fail_without_fallback_o
         }
     )
     lkg_route = (
-        load_gateway_config(prod_mode=True)
+        load_gateway_config(prod_mode=False)
         .route_artifacts[LKG_ROUTE]
         .model_copy(update={'credential_policy': byok_policy()})
     )
@@ -285,7 +285,7 @@ async def test_raw_byok_key_is_not_in_provider_error_repr_or_dump():
     raw_key = 'sk-test-secret-should-not-appear'
     active_route = active_route_with_fallbacks([]).model_copy(update={'credential_policy': byok_policy()})
     lkg_route = (
-        load_gateway_config(prod_mode=True)
+        load_gateway_config(prod_mode=False)
         .route_artifacts[LKG_ROUTE]
         .model_copy(update={'credential_policy': byok_policy()})
     )
@@ -480,7 +480,7 @@ def omi_credentials():
 
 
 def active_route_with_fallbacks(fallbacks: list[ProviderRef]):
-    active_route = load_gateway_config(prod_mode=True).route_artifacts[ACTIVE_ROUTE]
+    active_route = load_gateway_config(prod_mode=False).route_artifacts[ACTIVE_ROUTE]
     return active_route.model_copy(update={'fallbacks': fallbacks, **_active_rollout_kwargs(active_route)})
 
 
@@ -490,12 +490,12 @@ def _active_rollout_kwargs(active_route):
 
 
 def config_with_active_route(active_route):
-    base = load_gateway_config(prod_mode=True)
+    base = load_gateway_config(prod_mode=False)
     return config_with_routes(active_route, base.route_artifacts[LKG_ROUTE])
 
 
 def config_with_routes(active_route, lkg_route):
-    base = load_gateway_config(prod_mode=True)
+    base = load_gateway_config(prod_mode=False)
     route_artifacts = dict(base.route_artifacts)
     route_artifacts[ACTIVE_ROUTE] = active_route
     route_artifacts[LKG_ROUTE] = lkg_route
@@ -510,7 +510,7 @@ def config_with_routes(active_route, lkg_route):
 
 def byok_policy():
     return (
-        load_gateway_config(prod_mode=True)
+        load_gateway_config(prod_mode=False)
         .lanes[LANE_ID]
         .credential_policy.model_copy(update={'mode': CredentialMode.BYOK})
     )
