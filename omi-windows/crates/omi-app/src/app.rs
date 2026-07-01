@@ -158,6 +158,8 @@ pub fn App() -> Element {
     use_context_provider(|| suggestions);
     use_context_provider(|| suggestion_prompt);
     use_context_provider(|| continuous_voice_mode);
+    use_context_provider(|| ptt_active);
+    use_context_provider(|| voice_history);
 
     // ── Hotkey + tray listeners (use_hook = called once on mount) ───────────────
     {
