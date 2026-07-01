@@ -5,11 +5,12 @@ from typing import Optional, List, Tuple, Union
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 
 import database.apps as apps_db
 import database.conversations as conversations_db
 import utils.apps as apps_utils
-from utils.apps import verify_api_key, app_can_read_tasks
+from utils.apps import verify_api_key, verify_api_key_for_uid, app_can_read_tasks
 import database.redis_db as redis_db
 import database.memories as memory_db
 from database._client import db as firestore_db
@@ -21,6 +22,7 @@ import database.notifications as notification_db
 import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
+from models.chat import Message, MessageSender, MessageType
 from models.conversation import SearchRequest
 from models.app import App
 from utils.app_integrations import send_app_notification, trigger_external_integrations
@@ -31,6 +33,7 @@ from utils.conversations.process_conversation import process_conversation
 from utils.conversations.search import search_conversations
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import run_blocking, db_executor, postprocess_executor, critical_executor
+from utils.retrieval.graph import execute_chat_stream
 import logging
 
 logger = logging.getLogger(__name__)
@@ -718,3 +721,92 @@ def get_tasks_via_integration(
 
     response = integration_models.TasksResponse(tasks=task_items)
     return response.dict(exclude_none=True)
+
+
+# ---------------------------------------------------------------------------
+# Persona chat (T-001): single-turn persona chat driven by a 3rd-party
+# integration (e.g. the AI clone plugins — Telegram/WhatsApp/iMessage).
+# Auth is by app API key (`omi_dev_...`), NOT Firebase JWT — the bridge
+# plugin stores the key on the user's machine during setup.
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    '/v2/integrations/{app_id}/user/persona-chat',
+    tags=['integration', 'persona'],
+)
+async def persona_chat_via_integration(
+    request: Request,
+    app_id: str,
+    body: integration_models.PersonaChatRequest,
+    uid: str,
+    authorization: Optional[str] = Header(None),
+):
+    # Auth — app API key in Authorization: Bearer header.
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    # Persona chat impersonates the user — verify the API key was issued by
+    # this exact uid, not just by anyone who holds the app-level key.
+    # Otherwise a developer holding a valid app key could impersonate any
+    # enabled user.
+    if not await run_blocking(critical_executor, verify_api_key_for_uid, app_id, uid, api_key):
+        raise HTTPException(status_code=403, detail="Invalid integration API key for this user")
+
+    # Rate limit — same per-(app, user) ceiling as conversations endpoint.
+    await run_blocking(critical_executor, check_rate_limit_inline, f"{app_id}:{uid}:persona", "integration:persona")
+
+    # App lookup + enabled-for-user check.
+    # get_app_by_id_db returns a Firestore dict; we coerce to the App Pydantic
+    # model so execute_chat_stream can call app.is_a_persona() (which lives on
+    # the model class, not the dict).
+    app_dict = await run_blocking(db_executor, apps_db.get_app_by_id_db, app_id)
+    if not app_dict:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Capability gate uses the dict (it only reads external_integration.actions).
+    if not apps_utils.app_can_persona_chat(app_dict):
+        raise HTTPException(status_code=403, detail="App does not have persona_chat capability")
+
+    enabled_plugins = await run_blocking(db_executor, redis_db.get_enabled_apps, uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Convert to Pydantic App for the chat stream path. Wrap in try/except so a
+    # malformed Firestore doc returns 502 rather than crashing with a stack trace.
+    # The exception detail (Pydantic validation messages) is logged server-side
+    # only — returning it in the response would leak internal model field names
+    # and data shape to anyone hitting the endpoint.
+    if isinstance(app_dict, App):
+        app = app_dict
+    else:
+        try:
+            app = App(**app_dict)
+        except Exception as e:
+            logger.error(f"Failed to parse app {app_id} into App model: {e}")
+            raise HTTPException(status_code=502, detail="App data is malformed")
+
+    # Build a single HumanMessage and stream the persona reply via the
+    # existing execute_chat_stream (which dispatches to the persona handler
+    # when app.is_a_persona()). The same generator the chat UI uses.
+    import secrets
+
+    messages = [
+        Message(
+            id=f"integration-persona-chat:{secrets.token_urlsafe(8)}",
+            created_at=datetime.now(timezone.utc),
+            sender=MessageSender.human,
+            text=body.text,
+            type=MessageType.text,
+            app_id=app_id,
+        )
+    ]
+
+    async def _stream():
+        async for chunk in execute_chat_stream(uid, messages, app=app):
+            if chunk is None:
+                continue
+            yield chunk
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
