@@ -11,7 +11,10 @@ type JsonRecord = Record<string, unknown>
 export type ByokChatOptions = {
   fetchImpl?: FetchLike
   systemPrompt?: string
+  timeoutMs?: number
 }
+
+const DEFAULT_CHAT_TIMEOUT_MS = 30_000
 
 const BYOK_SYSTEM_PROMPT = [
   'You are Omi on Windows.',
@@ -30,6 +33,10 @@ function normalizeModelOverride(provider: ByokChatProvider, modelId?: string): s
   if (!modelId) return null
   const prefix = `${provider}:`
   if (modelId.startsWith(prefix)) return modelId.slice(prefix.length)
+  if (!modelId.includes(':')) return modelId
+  console.warn(
+    `[byok] ignoring ${provider} model override with mismatched provider prefix: ${modelId}`
+  )
   return null
 }
 
@@ -94,6 +101,13 @@ function textFromContentParts(parts: unknown): string {
       return typeof text === 'string' ? text : ''
     })
     .join('')
+}
+
+function textFromOpenAiCompatible(raw: JsonRecord): string {
+  const choices = raw.choices
+  if (!Array.isArray(choices)) return ''
+  const message = (choices[0] as { message?: { content?: unknown } } | undefined)?.message
+  return typeof message?.content === 'string' ? message.content : ''
 }
 
 export function buildByokChatRequest(
@@ -190,18 +204,9 @@ export function buildByokChatRequest(
 
 function responseText(provider: ByokChatProvider, raw: JsonRecord): string {
   switch (provider) {
-    case 'openai': {
-      const choices = raw.choices
-      if (!Array.isArray(choices)) return ''
-      const message = (choices[0] as { message?: { content?: unknown } } | undefined)?.message
-      return typeof message?.content === 'string' ? message.content : ''
-    }
-    case 'openrouter': {
-      const choices = raw.choices
-      if (!Array.isArray(choices)) return ''
-      const message = (choices[0] as { message?: { content?: unknown } } | undefined)?.message
-      return typeof message?.content === 'string' ? message.content : ''
-    }
+    case 'openai':
+    case 'openrouter':
+      return textFromOpenAiCompatible(raw)
     case 'anthropic':
       return textFromContentParts(raw.content)
     case 'gemini': {
@@ -216,7 +221,6 @@ function responseText(provider: ByokChatProvider, raw: JsonRecord): string {
 function responseUsage(provider: ByokChatProvider, raw: JsonRecord): PiChatUsage {
   switch (provider) {
     case 'openai':
-      return usageFromOpenAi(raw.usage as JsonRecord | undefined)
     case 'openrouter':
       return usageFromOpenAi(raw.usage as JsonRecord | undefined)
     case 'anthropic':
@@ -239,7 +243,22 @@ export async function sendByokChat(
 
   const fetchImpl = options.fetchImpl ?? fetch
   const request = buildByokChatRequest(provider, trimmed, messages, modelId, options.systemPrompt)
-  const response = await fetchImpl(request.url, request.init)
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    Math.max(1, options.timeoutMs ?? DEFAULT_CHAT_TIMEOUT_MS)
+  )
+  let response: Response
+  try {
+    response = await fetchImpl(request.url, { ...request.init, signal: controller.signal })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('BYOK chat request timed out')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
   if (!response.ok) {
     throw new Error(`BYOK chat request failed with HTTP ${response.status}`)
   }
