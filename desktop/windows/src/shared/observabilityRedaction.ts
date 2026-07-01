@@ -172,7 +172,7 @@ export function sanitizeObservabilityValue(
   if (typeof value === 'number' || typeof value === 'boolean') return value
   if (typeof value === 'bigint') return value.toString()
   if (typeof value === 'symbol' || typeof value === 'function') return `[${typeof value}]`
-  if (value instanceof Error) return errorToObservabilityPayload(value, depth, seen)
+  if (value instanceof Error) return errorToObservabilityPayload(value, depth)
   if (depth >= MAX_DEPTH) return '[MaxDepth]'
 
   if (typeof value === 'object') {
