@@ -72,6 +72,7 @@ from utils.memory.canonical_memory_adapter import (
     neutral_vector_id_for_memory,
     purge_canonical_derived_user_data,
     retract_conversation_sourced_memories,
+    update_canonical_memory_visibility,
     write_canonical_extraction_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
@@ -421,6 +422,29 @@ def test_conversation_delete_cascade_tombstones_canonical_and_emits_vector_purge
     assert purge_record["vector_id"] == neutral_vector_id_for_memory(memory_id)
 
 
+def test_conversation_delete_cascade_deletes_canonical_vector_immediately(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-cascade-vector"
+    content = "Fact sourced from conversation with vector"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    deleted_vectors = []
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
+        lambda u, mid: deleted_vectors.append((u, mid)),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
+
+    assert deleted_vectors == [(uid, memory_id)]
+
+
 def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     conversation_id = "conv-kg"
@@ -454,17 +478,55 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
         lambda **_: _trusted_account_generation(),
     )
     kg_calls = []
+    deleted_vectors = []
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
         lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
+        lambda u, mid: deleted_vectors.append((u, mid)),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
     delete_canonical_memory(uid, memory_id, db_client=canonical_db)
 
     assert kg_calls == [(uid, [memory_id])]
+    assert deleted_vectors == [(uid, memory_id)]
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
+
+
+def test_update_canonical_visibility_resyncs_keyword_and_vector_side_effects(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-visibility"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content="Visibility side effect")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+
+    keyword_syncs = []
+    vector_syncs = []
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
+        lambda item, **kwargs: keyword_syncs.append((item.memory_id, item.visibility)) or True,
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.sync_canonical_memory_vector",
+        lambda item, **kwargs: vector_syncs.append((item.memory_id, item.visibility)) or True,
+    )
+
+    updated = update_canonical_memory_visibility(uid, memory_id, "public", db_client=canonical_db)
+
+    assert updated.visibility == "public"
+    assert canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]["visibility"] == "public"
+    assert keyword_syncs == [(memory_id, "public")]
+    assert vector_syncs == [(memory_id, "public")]
 
 
 def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, canonical_db):

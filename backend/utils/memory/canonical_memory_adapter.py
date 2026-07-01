@@ -43,7 +43,7 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
-from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
+from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 
@@ -645,6 +645,8 @@ def update_canonical_memory_visibility(uid: str, memory_id: str, visibility: str
     now = datetime.now(timezone.utc)
     updated = item.model_copy(update={"visibility": visibility, "updated_at": now})
     client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    sync_atom_keyword_index_for_item(updated, db_client=client)
+    sync_canonical_memory_vector(updated)
     return updated
 
 
@@ -740,6 +742,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
     for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
         db_client.document(record["outbox_path"]).set(record)
 
+    delete_canonical_memory_vector(uid, item.memory_id)
     delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
     purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason, db_client=db_client)
 
