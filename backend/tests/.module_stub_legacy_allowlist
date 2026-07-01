@@ -7,13 +7,11 @@
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 # This list exists ONLY as a transitional bridge while the migration in
 # it is blocked by the pre-push hook and CI (see DECISIONS.md D4).
-# Total: 39 entries.
+# Total: 36 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
-backend/tests/unit/test_billable_transcription_seconds.py
 backend/tests/unit/test_desktop_transcribe.py
-backend/tests/unit/test_dg_start_guard.py
 backend/tests/unit/test_fair_use_async.py
 backend/tests/unit/test_fair_use_classifier.py
 backend/tests/unit/test_fair_use_engine.py
@@ -38,7 +36,6 @@ backend/tests/unit/test_parakeet_stream_session.py
 backend/tests/unit/test_patch_adapter.py
 backend/tests/unit/test_prompt_caching.py
 backend/tests/unit/test_short_audio_embedding.py
-backend/tests/unit/test_skip_classifier_restrict.py
 backend/tests/unit/test_streaming_deepgram_backoff.py
 backend/tests/unit/test_sync_fair_use_gate.py
 backend/tests/unit/test_sync_playback_service.py
