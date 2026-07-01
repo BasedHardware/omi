@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 use crate::app::Db;
 use crate::config::AppConfig;
 use crate::google_calendar::sync_google_calendar;
+use crate::knowledge::KnowledgeResource;
 
 #[derive(Clone, Debug, PartialEq)]
 enum SyncStatus {
@@ -22,6 +23,18 @@ enum KbStatus {
     Error(String),
 }
 
+fn file_type_icon(ft: Option<&str>) -> &'static str {
+    match ft {
+        Some("pdf") => "📄",
+        Some("txt") | Some("text") => "📝",
+        Some("md") | Some("markdown") => "📋",
+        Some("csv") => "📊",
+        Some("json") => "{ }",
+        Some("docx") | Some("doc") => "📃",
+        _ => "📎",
+    }
+}
+
 #[component]
 pub fn AppsPage() -> Element {
     let config = use_context::<Signal<AppConfig>>();
@@ -29,10 +42,12 @@ pub fn AppsPage() -> Element {
     let mut sync_status = use_signal(|| SyncStatus::Idle);
     let mut kb_status = use_signal(|| KbStatus::Idle);
     let mut kb_query = use_signal(String::new);
-    let mut kb_resources = use_signal(Vec::<crate::knowledge::KnowledgeResource>::new);
+    let mut kb_resources = use_signal(Vec::<KnowledgeResource>::new);
     let mut upload_path = use_signal(String::new);
+    let mut drop_active = use_signal(|| false);
+    let mut selected_doc = use_signal(|| Option::<KnowledgeResource>::None);
+    let mut doc_chunks = use_signal(Vec::<String>::new);
 
-    // Load knowledge base resources on mount
     use_effect(move || {
         let cfg = config.read().clone();
         if cfg.mcp_enabled {
@@ -56,37 +71,61 @@ pub fn AppsPage() -> Element {
                     "Upload documents (PDF, TXT, MD) and ask questions about them. Powered by RAG semantic search."
                 }
 
-                // Upload
-                div { class: "kb-upload-row",
-                    input {
-                        class: "search-input",
-                        r#type: "text",
-                        placeholder: "Paste file path to upload (e.g. C:\\docs\\proposal.pdf)",
-                        value: "{upload_path}",
-                        oninput: move |e| upload_path.set(e.value()),
-                    }
-                    button {
-                        class: "btn btn-primary",
-                        disabled: upload_path.read().trim().is_empty() || matches!(*kb_status.read(), KbStatus::Uploading),
-                        onclick: move |_| {
-                            let path = upload_path.read().trim().to_string();
-                            if path.is_empty() { return; }
-                            let cfg = config.read().clone();
-                            kb_status.set(KbStatus::Uploading);
-                            spawn(async move {
-                                match crate::knowledge::upload_document(&path, &cfg).await {
-                                    Ok(name) => {
-                                        kb_status.set(KbStatus::UploadDone(name));
-                                        upload_path.set(String::new());
-                                        if let Ok(res) = crate::knowledge::list_resources(&cfg).await {
-                                            kb_resources.set(res);
+                // Drop zone + Upload
+                div {
+                    class: if *drop_active.read() { "kb-dropzone kb-dropzone-active" } else { "kb-dropzone" },
+                    ondragover: move |e| {
+                        e.prevent_default();
+                        drop_active.set(true);
+                    },
+                    ondragleave: move |_| {
+                        drop_active.set(false);
+                    },
+                    // Note: Dioxus webview ondrop with file data requires platform support.
+                    // Fallback to manual path input.
+
+                    if *drop_active.read() {
+                        p { class: "kb-drop-text", "Drop files here to upload" }
+                    } else {
+                        div { class: "kb-upload-row",
+                            input {
+                                class: "search-input",
+                                r#type: "text",
+                                placeholder: "Paste file path to upload (e.g. C:\\docs\\proposal.pdf)",
+                                value: "{upload_path}",
+                                oninput: move |e| upload_path.set(e.value()),
+                            }
+                            button {
+                                class: "btn btn-primary",
+                                disabled: upload_path.read().trim().is_empty() || matches!(*kb_status.read(), KbStatus::Uploading),
+                                onclick: move |_| {
+                                    let path = upload_path.read().trim().to_string();
+                                    if path.is_empty() { return; }
+                                    let cfg = config.read().clone();
+                                    kb_status.set(KbStatus::Uploading);
+                                    spawn(async move {
+                                        match crate::knowledge::upload_document(&path, &cfg).await {
+                                            Ok(name) => {
+                                                kb_status.set(KbStatus::UploadDone(name));
+                                                upload_path.set(String::new());
+                                                if let Ok(res) = crate::knowledge::list_resources(&cfg).await {
+                                                    kb_resources.set(res);
+                                                }
+                                            }
+                                            Err(e) => kb_status.set(KbStatus::Error(format!("{e:#}"))),
                                         }
-                                    }
-                                    Err(e) => kb_status.set(KbStatus::Error(format!("{e:#}"))),
-                                }
-                            });
-                        },
-                        if matches!(*kb_status.read(), KbStatus::Uploading) { "Uploading..." } else { "Upload" }
+                                    });
+                                },
+                                if matches!(*kb_status.read(), KbStatus::Uploading) { "Uploading..." } else { "Upload" }
+                            }
+                        }
+                    }
+                }
+
+                // Upload progress bar
+                if matches!(*kb_status.read(), KbStatus::Uploading) {
+                    div { class: "kb-progress-bar-container",
+                        div { class: "kb-progress-bar" }
                     }
                 }
 
@@ -147,7 +186,7 @@ pub fn AppsPage() -> Element {
                 // Status / results
                 match &*kb_status.read() {
                     KbStatus::Idle => rsx! {},
-                    KbStatus::Uploading => rsx! { p { class: "text-muted", "Uploading document..." } },
+                    KbStatus::Uploading => rsx! {},
                     KbStatus::Searching => rsx! { p { class: "text-muted", "Searching..." } },
                     KbStatus::UploadDone(name) => rsx! {
                         p { class: "text-success", "Uploaded: {name}" }
@@ -170,15 +209,60 @@ pub fn AppsPage() -> Element {
                     },
                 }
 
-                // Indexed documents
+                // Indexed documents list
                 if !kb_resources.read().is_empty() {
                     div { class: "kb-resources",
                         h3 { "Indexed Documents" }
                         for res in kb_resources.read().iter() {
-                            div { class: "kb-resource-row",
-                                span { class: "kb-resource-name", "{res.name}" }
-                                span { class: "text-muted kb-resource-type",
-                                    "{res.file_type.as_deref().unwrap_or(\"?\")}"
+                            {
+                                let icon = file_type_icon(res.file_type.as_deref());
+                                let res_clone = res.clone();
+                                rsx! {
+                                    div {
+                                        class: "kb-resource-row",
+                                        onclick: move |_| {
+                                            let r = res_clone.clone();
+                                            let cfg = config.read().clone();
+                                            selected_doc.set(Some(r.clone()));
+                                            doc_chunks.set(Vec::new());
+                                            spawn(async move {
+                                                if let Ok(chunks) = crate::knowledge::get_document_chunks(&r.id, &cfg).await {
+                                                    doc_chunks.set(chunks);
+                                                }
+                                            });
+                                        },
+                                        span { class: "kb-file-icon", "{icon}" }
+                                        span { class: "kb-resource-name", "{res.name}" }
+                                        span { class: "text-muted kb-resource-type",
+                                            "{res.file_type.as_deref().unwrap_or(\"?\")}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Document preview panel
+                if let Some(doc) = selected_doc.read().as_ref() {
+                    div { class: "kb-preview",
+                        div { class: "kb-preview-header",
+                            h3 { "{doc.name}" }
+                            button {
+                                class: "btn btn-secondary btn-sm",
+                                onclick: move |_| selected_doc.set(None),
+                                "Close"
+                            }
+                        }
+                        if doc_chunks.read().is_empty() {
+                            p { class: "text-muted", "Loading chunks..." }
+                        } else {
+                            div { class: "kb-chunks",
+                                for (i, chunk) in doc_chunks.read().iter().enumerate() {
+                                    div { class: "kb-chunk-card",
+                                        span { class: "kb-chunk-idx text-muted", "Chunk {i+1}" }
+                                        p { "{chunk}" }
+                                    }
                                 }
                             }
                         }
@@ -190,7 +274,6 @@ pub fn AppsPage() -> Element {
             div { class: "section",
                 h2 { class: "section-title", "Integrations" }
                 div { class: "card-grid",
-                    // Google Calendar
                     div { class: "card",
                         style: "display: flex; flex-direction: column; justify-content: space-between; min-height: 180px;",
                         div {
@@ -235,7 +318,6 @@ pub fn AppsPage() -> Element {
                         }
                     }
 
-                    // MCP Tools
                     div { class: "card",
                         h3 { "Google MCP Tools" }
                         p { class: "text-muted", "Gmail, Calendar, Drive access via MCP bridge." }
@@ -244,21 +326,18 @@ pub fn AppsPage() -> Element {
                         }
                     }
 
-                    // Slack
                     div { class: "card",
                         h3 { "Slack" }
                         p { class: "text-muted", "Send conversation summaries to Slack channels." }
                         span { class: "text-muted", style: "font-size: 11px;", "Coming soon" }
                     }
 
-                    // GitHub
                     div { class: "card",
                         h3 { "GitHub" }
                         p { class: "text-muted", "Create issues from action items." }
                         span { class: "text-muted", style: "font-size: 11px;", "Coming soon" }
                     }
 
-                    // Notion
                     div { class: "card",
                         h3 { "Notion" }
                         p { class: "text-muted", "Export memories and notes to Notion." }
