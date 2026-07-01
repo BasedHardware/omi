@@ -101,11 +101,14 @@ export function TranscriptionTab(): React.JSX.Element {
     setPreferences({ sttMode: next })
   }
 
-  const voiceReadiness = realtimeVoiceReadiness({
-    ...getPreferences(),
-    realtimeVoiceEnabled,
-    realtimeVoiceProvider
-  })
+  const voiceReadiness = realtimeVoiceReadiness(
+    {
+      ...getPreferences(),
+      realtimeVoiceEnabled,
+      realtimeVoiceProvider
+    },
+    localTtsStatus
+  )
 
   useEffect(() => {
     let canceled = false
