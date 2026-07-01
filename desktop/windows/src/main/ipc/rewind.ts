@@ -21,6 +21,22 @@ import { rewindRoot } from '../rewind/paths'
 import type { RewindFrameImageResult, RewindSettings } from '../../shared/types'
 import { clearCurrentScreen } from '../rewind/currentScreen'
 
+function trustedRendererUrl(url: string | undefined): boolean {
+  if (!url) return false
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'file:' || parsed.protocol === 'app:') return true
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    return (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '[::1]'
+    )
+  } catch {
+    return false
+  }
+}
+
 export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
@@ -54,6 +70,9 @@ export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:status', async () => rewindStatusStats())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
   ipcMain.handle('rewind:deleteAll', async (event) => {
+    if (!trustedRendererUrl(event.senderFrame?.url) && !trustedRendererUrl(event.sender.getURL())) {
+      return { deleted: 0, canceled: true }
+    }
     const parent = BrowserWindow.fromWebContents(event.sender)
     const choice = parent
       ? await dialog.showMessageBox(parent, {
