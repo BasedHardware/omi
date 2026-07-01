@@ -121,6 +121,9 @@ describe('local agent tool registry', () => {
         unavailable: true
       }
     })
+    expect(
+      definitions.find((tool) => tool.name === 'get_screenshot')?.inputSchema.required
+    ).toBeUndefined()
   })
 
   it('runs read-only SQL through the guard and rejects mutations', async () => {
@@ -176,11 +179,7 @@ describe('local agent tool registry', () => {
     expect(searchResult.result_count).toBe(1)
     expect(searchResult.results[0].representative.screenshot_id).toBe(id)
 
-    const screenshot = await tools.runLocalAgentTool(
-      'get_screenshot',
-      { screenshot_id: id },
-      context
-    )
+    const screenshot = await tools.runLocalAgentTool('get_screenshot', { id }, context)
     expect(screenshot).toMatchObject({
       ok: true,
       name: 'get_screenshot',
