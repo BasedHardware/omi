@@ -30,14 +30,18 @@ describe('managed Kokoro runtime', () => {
       allowLocalModels: false,
       useFSCache: false
     }
-    const fromPretrained = vi.fn(async () => ({
-      generate: vi.fn(async (text: string, options?: { voice?: string; speed?: number }) => ({
-        save: async (filePath: string): Promise<void> => {
-          await mkdir(dirname(filePath), { recursive: true })
-          await writeFile(filePath, `RIFF:${text}:${options?.voice}:${options?.speed}`)
-        }
-      }))
-    }))
+    let cacheDirDuringLoad = ''
+    const fromPretrained = vi.fn(async () => {
+      cacheDirDuringLoad = transformersEnv.cacheDir
+      return {
+        generate: vi.fn(async (text: string, options?: { voice?: string; speed?: number }) => ({
+          save: async (filePath: string): Promise<void> => {
+            await mkdir(dirname(filePath), { recursive: true })
+            await writeFile(filePath, `RIFF:${text}:${options?.voice}:${options?.speed}`)
+          }
+        }))
+      }
+    })
     const deps = {
       env: { OMI_LOCAL_TTS_ALLOW_NON_WINDOWS: '1' },
       platform: 'linux',
@@ -55,9 +59,10 @@ describe('managed Kokoro runtime', () => {
     const readyStatus = await getManagedKokoroStatus(deps)
 
     expect(initialStatus.runtime.installState).toBe('not_installed')
-    expect(transformersEnv.cacheDir).toBe(join(root, 'models'))
-    expect(transformersEnv.allowRemoteModels).toBe(true)
-    expect(transformersEnv.useFSCache).toBe(true)
+    expect(cacheDirDuringLoad).toBe(join(root, 'models'))
+    expect(transformersEnv.cacheDir).toBe('')
+    expect(transformersEnv.allowRemoteModels).toBe(false)
+    expect(transformersEnv.useFSCache).toBe(false)
     expect(fromPretrained).toHaveBeenCalledWith('onnx-community/Kokoro-82M-v1.0-ONNX', {
       dtype: 'q8',
       device: 'cpu'
