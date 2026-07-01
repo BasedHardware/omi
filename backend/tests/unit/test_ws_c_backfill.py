@@ -805,12 +805,32 @@ def test_pagination_regression_would_miss_page_two_with_old_post_filtered_paging
     old_rows = _old_broken_post_filtered_pagination()
     new_rows = _fetch_active_legacy_memories(
         LEGACY_UID,
+        db_client=MagicMock(),
         get_non_filtered_memories_fn=_make_paginated_non_filtered_store(page_size=page_size, pages=[page1, page2]),
         scan_page_size=page_size,
     )
 
     assert len(old_rows) == 1
     assert len(new_rows) == 3
+
+
+def test_fetch_active_legacy_memories_passes_explicit_firestore_client():
+    db_client = MagicMock(name="explicit-db-client")
+    calls = []
+
+    def _source(uid, *, limit, offset, firestore_client):
+        calls.append((uid, limit, offset, firestore_client))
+        return [_legacy_row(legacy_id="active-explicit", content="Active row")] if offset == 0 else []
+
+    rows = _fetch_active_legacy_memories(
+        LEGACY_UID,
+        db_client=db_client,
+        get_non_filtered_memories_fn=_source,
+        scan_page_size=1,
+    )
+
+    assert [row["id"] for row in rows] == ["active-explicit"]
+    assert calls[0][3] is db_client
 
 
 def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, monkeypatch):

@@ -266,6 +266,8 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: TYPESENSE_API_KEY
+  - name: MEMORY_TYPESENSE_COLLECTION
+    value: "canonical_memory_atoms"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: DEEPGRAM_SELF_HOSTED_URL

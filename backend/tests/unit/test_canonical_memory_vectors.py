@@ -52,6 +52,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_search_gateway import SearchDecision, SearchMode
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 
 
 def _item(
@@ -464,9 +465,9 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
         return_value=canonical_memory_id,
     ), patch(
         "utils.memory.legacy_backfill.sync_atom_keyword_index_for_item",
-        return_value=None,
+        return_value=True,
     ):
-        _, written, skip_reason, vector_sync_failed = _apply_one_legacy_row(
+        _, written, skip_reason, vector_sync_failed, keyword_sync_succeeded = _apply_one_legacy_row(
             uid=uid,
             legacy_row={"id": legacy_id, "content": content},
             index=0,
@@ -478,6 +479,7 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
     assert written is False
     assert skip_reason == "idempotent_skip"
     assert vector_sync_failed is False
+    assert keyword_sync_succeeded is True
     assert len(fake_index.upserts) == 1
     assert fake_index.upserts[0]["vectors"][0]["id"] == canonical_memory_id
     assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
@@ -518,12 +520,12 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
         return_value=SimpleNamespace(operation_id="op-promo"),
     ), patch(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        return_value=None,
+        return_value=True,
     ), patch(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        return_value=None,
+        return_value=CanonicalKgPromotionResult(attempted=True, success=True),
     ):
-        promoted, _ = promote_short_term_item_via_apply(
+        promoted, _, _, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             short_item,
             control=control,
@@ -532,6 +534,7 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
             now=now,
             db_client=_PromotionDb(),
         )
+    assert keyword_sync_succeeded is True
 
     idempotent_apply = SimpleNamespace(
         status=ApplyStatus.idempotent_skip,
@@ -558,12 +561,12 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
         return_value=SimpleNamespace(operation_id="op-promo-2"),
     ), patch(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        return_value=None,
+        return_value=True,
     ), patch(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        return_value=None,
+        return_value=CanonicalKgPromotionResult(attempted=True, success=True),
     ):
-        promoted, _ = promote_short_term_item_via_apply(
+        promoted, _, _, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             short_item,
             control=control,
@@ -572,6 +575,7 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
             now=now,
             db_client=_PromotionDbWithItem(),
         )
+    assert keyword_sync_succeeded is True
 
     vector_ids = [upsert["vectors"][0]["id"] for upsert in fake_index.upserts]
     assert vector_ids == [memory_id, memory_id, memory_id]
@@ -603,15 +607,15 @@ def test_promotion_vector_sync_failure_increments_report(monkeypatch):
     _set_canonical_cohort(monkeypatch, uid)
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: CanonicalKgPromotionResult(attempted=True, success=True),
     )
     db = _canonical_db_with_control(uid)
     threshold = 25
