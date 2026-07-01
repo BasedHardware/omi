@@ -36,6 +36,7 @@ PRIVATE_KEY_MARKERS = (
 ZIP_SUFFIXES = {".zip", ".ipa", ".apk", ".aab", ".jar", ".aar", ".asar"}
 TAR_SUFFIXES = {".tar", ".tgz", ".gz", ".bz2", ".xz"}
 FAIL_CLOSED_SUFFIXES = {".7z", ".rar", ".pkg", ".dmg"}
+FRAMEWORK_DIR_SUFFIXES = (".framework", ".xcframework")
 
 
 def load_policy() -> dict:
@@ -48,7 +49,9 @@ def denied_patterns(policy: dict) -> list[re.Pattern[str]]:
 
 
 def allowed_names(policy: dict) -> set[str]:
-    return set(policy["public_client_env"]["allowed"]) | set(policy.get("legacy_public_client_env", {}).get("allowed", []))
+    return set(policy["public_client_env"]["allowed"]) | set(
+        policy.get("legacy_public_client_env", {}).get("allowed", [])
+    )
 
 
 def name_is_denied(name: str, exact: set[str], patterns: list[re.Pattern[str]]) -> bool:
@@ -248,10 +251,12 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
             for name in denied:
                 if name not in allowed and name.encode() in data:
                     errors.append(f"{path}: server-only variable name {name} appears in {rel}")
-            text = data.decode("utf-8", errors="ignore")
-            for token in set(re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", text)):
-                if token not in allowed and name_is_denied(token, denied, patterns):
-                    errors.append(f"{path}: server-only variable-like token {token} appears in {rel}")
+            in_framework = any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts)
+            if not in_framework:
+                text = data.decode("utf-8", errors="ignore")
+                for token in set(re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", text)):
+                    if token not in allowed and name_is_denied(token, denied, patterns):
+                        errors.append(f"{path}: server-only variable-like token {token} appears in {rel}")
             for name, value in secret_values.items():
                 if value and value in data:
                     errors.append(f"{path}: current CI value for {name} appears in {rel}")
@@ -261,8 +266,12 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("artifacts", nargs="+", type=Path, help="IPA/AAB/APK/app/zip/directory artifacts to scan")
+    parser.add_argument("artifacts", nargs="*", type=Path, help="IPA/AAB/APK/app/zip/directory artifacts to scan")
     args = parser.parse_args()
+
+    if not args.artifacts:
+        print("No artifacts to scan (glob matched nothing).", file=sys.stderr)
+        return 1
 
     policy = load_policy()
     errors: list[str] = []
