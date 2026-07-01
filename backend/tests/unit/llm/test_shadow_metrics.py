@@ -297,3 +297,13 @@ class TestMaxRecordsPerLane:
             metrics.record(_record(clock=clock, divergence=0.0))
         bucket = metrics._records["omi:auto:chat-extraction"]
         assert len(bucket) == 5  # capped
+
+    def test_max_records_per_lane_must_be_positive(self):
+        """P1 (cubic follow-up): negative or zero max_records_per_lane would
+        cause IndexError (negative lets popleft on empty bucket) or silently
+        disable alerts (zero empties the bucket before aggregation).
+        """
+        with pytest.raises(ValueError, match="max_records_per_lane must be > 0"):
+            ShadowMetrics(max_records_per_lane=0)
+        with pytest.raises(ValueError, match="max_records_per_lane must be > 0"):
+            ShadowMetrics(max_records_per_lane=-1)

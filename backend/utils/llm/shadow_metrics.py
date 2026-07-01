@@ -93,6 +93,12 @@ class ShadowMetrics:
       aggregate; fires an alert (via AlertSink) if aggregate > threshold.
     - The rolling window is `window_seconds` (default 86400 = 24h).
     - Records older than `window_seconds` are dropped from the aggregate.
+    - **Memory cap**: as a safety net, each lane is also capped at
+      `max_records_per_lane` records (default 10,000). For high-volume
+      lanes, this becomes the effective limit — the rolling window is
+      truncated to the most recent N records per lane. The cap prevents
+      unbounded memory growth if the clock is stuck or the time-based
+      window eviction doesn't trigger for any reason.
     - The clock is injectable for testability (default `time.time`).
 
     The default AlertSink and MetricsSink are no-ops (record but don't
@@ -115,6 +121,12 @@ class ShadowMetrics:
         threshold: float = DEFAULT_THRESHOLD,
         max_records_per_lane: int = DEFAULT_MAX_RECORDS_PER_LANE,
     ) -> None:
+        # P1 (cubic follow-up): validate the cap. Negative or zero would
+        # cause IndexError on the evict loop (negative lets popleft on an
+        # empty bucket; zero immediately empties the bucket so aggregation
+        # is always 0 and alerts never fire). Reject loudly at construction.
+        if max_records_per_lane <= 0:
+            raise ValueError(f"max_records_per_lane must be > 0, got {max_records_per_lane}")
         self._alert_sink = alert_sink
         self._metrics_sink = metrics_sink
         self._clock = clock
