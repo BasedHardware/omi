@@ -339,6 +339,9 @@ check_backend_unit_tests_if_needed() {
       add_fast_backend_test_if_selected "tests/unit/test_conversation_structure_timezone.py"
       add_fast_backend_test_if_selected "tests/unit/test_llm_gateway_chat_extraction_pilot.py"
     fi
+    if changed_matches 'backend/database/llm_usage.py'; then
+      add_fast_backend_test_if_selected "tests/unit/test_llm_usage_tracker.py"
+    fi
     if [ -s "$FAST_BACKEND_TESTS" ]; then
       sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
       selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
