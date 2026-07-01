@@ -470,6 +470,14 @@ function getReadonly(): Database.Database {
   return roDb
 }
 
+export function closeDatabase(): void {
+  roDb?.close()
+  roDb = null
+  db?.close()
+  db = null
+  rewindFtsAvailable = null
+}
+
 // Run a single SELECT (caller MUST pass sqlGuard-validated SQL) and return
 // columns + row objects. Throws on a non-SELECT or SQL error; callers treat that
 // as "no context". The readonly connection makes writes impossible at the driver.
