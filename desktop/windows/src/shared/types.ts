@@ -44,7 +44,9 @@ export type TranscriptLine = {
   speakerId?: number
   isUser?: boolean
   personId?: string
+  /** Seconds relative to the recording/session start, not epoch milliseconds. */
   start?: number
+  /** Seconds relative to the recording/session start, not epoch milliseconds. */
   end?: number
 }
 
