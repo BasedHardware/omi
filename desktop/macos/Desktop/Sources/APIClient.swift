@@ -1511,7 +1511,7 @@ struct ServerMemory: Decodable, Identifiable {
     case let (.some(id), .some(memoryId)) where id != memoryId:
       // Legacy docs stored memory_id = conversation_id; a mismatched alias must
       // not reject the row — one bad row used to blank the whole memories list.
-      log("ServerMemory alias conflict: id=\(id) memory_id=\(memoryId) — using id")
+      // Silent by design: long-time accounts have thousands of these per sync.
       self.id = id
     case let (.some(id), _):
       self.id = id
