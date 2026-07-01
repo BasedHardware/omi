@@ -26,6 +26,8 @@ def write_yaml(path: Path, payload: dict) -> None:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_MODE", "value": "write"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},

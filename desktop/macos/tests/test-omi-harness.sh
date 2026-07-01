@@ -16,6 +16,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+if ! python3 - <<'PY' >/dev/null 2>&1
+import yaml
+PY
+then
+  echo "omi-harness schema tests skipped: PyYAML is not installed"
+  exit 0
+fi
+
 write_flow() {
   local path="$1" version="$2"
   cat >"$path" <<YAML
