@@ -1,6 +1,7 @@
-import { clipboard, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, clipboard, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import type {
   McpKeyCopyRequest,
+  McpKeyCopyResult,
   McpKeyMetadata,
   McpKeyRecord,
   McpKeyTestResult
@@ -49,6 +50,28 @@ function normalizeCopyRequest(value: unknown): McpKeyCopyRequest {
     return { kind: 'text', text: request.text }
   }
   throw new Error('Invalid MCP key copy request')
+}
+
+async function confirmMcpKeyCopy(
+  event: IpcMainInvokeEvent,
+  request: McpKeyCopyRequest
+): Promise<boolean> {
+  const parent = BrowserWindow.fromWebContents(event.sender)
+  const label = request.kind === 'key' ? 'raw MCP key' : 'setup text containing your MCP key'
+  const options = {
+    type: 'warning' as const,
+    buttons: ['Copy', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Copy MCP key?',
+    message: `Copy ${label} to the clipboard?`,
+    detail:
+      'Anything on your clipboard may be readable by other apps. Only copy this when you are ready to paste it into a trusted destination.'
+  }
+  const choice = parent
+    ? await dialog.showMessageBox(parent, options)
+    : await dialog.showMessageBox(options)
+  return choice.response === 0
 }
 
 function mcpBaseURL(): string {
@@ -130,13 +153,15 @@ export function registerMcpKeyHandlers(): void {
     return record ? metadataFor(record) : null
   })
 
-  ipcMain.handle('mcpKey:copy', async (event, rawRequest: unknown): Promise<void> => {
+  ipcMain.handle('mcpKey:copy', async (event, rawRequest: unknown): Promise<McpKeyCopyResult> => {
     assertTrustedSender(event)
     const record = loadRequiredMcpKey()
     const request = normalizeCopyRequest(rawRequest)
+    if (!(await confirmMcpKeyCopy(event, request))) return { copied: false, canceled: true }
     const text =
       request.kind === 'key' ? record.key : request.text.replaceAll(MCP_KEY_PLACEHOLDER, record.key)
     clipboard.writeText(text)
+    return { copied: true }
   })
 
   ipcMain.handle('mcpKey:test', async (event): Promise<McpKeyTestResult> => {
