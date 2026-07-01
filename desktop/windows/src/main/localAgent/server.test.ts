@@ -118,6 +118,20 @@ describe('local agent server', () => {
     await expect(fetch(`${first.localUrl}/health`)).rejects.toThrow()
   })
 
+  it('starts a fresh listener when start races with stop', async () => {
+    const firstStart = startLocalAgentServer({ preferredPort: 47827, token: 'test-token' })
+    const stopping = stopLocalAgentServer()
+    const secondStart = startLocalAgentServer({ preferredPort: 47827, token: 'test-token' })
+
+    await stopping
+    const second = await secondStart
+
+    await expect(fetch(`${second.localUrl}/health`)).resolves.toMatchObject({ status: 200 })
+    await expect(firstStart).resolves.toMatchObject({
+      host: '127.0.0.1'
+    })
+  })
+
   it('requires bearer auth for local tool discovery and invocation', async () => {
     const info = await startLocalAgentServer({ preferredPort: 47822, token: 'test-token' })
 
