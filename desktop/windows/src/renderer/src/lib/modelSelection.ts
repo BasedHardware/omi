@@ -1,4 +1,4 @@
-import type { ByokChatProvider, ChatMessage, ModelPurpose } from '../../../shared/types'
+import type { ByokChatProvider, ByokStatus, ChatMessage, ModelPurpose } from '../../../shared/types'
 import { getPreferences } from './preferences'
 
 type PurposeCompletionArgs = {
@@ -27,6 +27,27 @@ export function hostedModelForPurpose(purpose: ModelPurpose, fallback: string): 
   return modelId?.startsWith('omi:') ? modelId.slice('omi:'.length) || fallback : fallback
 }
 
+export function resolveByokChatSelection(
+  chatModelId: string | undefined,
+  status: ByokStatus | null | undefined
+): { useByok: boolean; modelId?: string } {
+  const selectedProvider = byokProviderFromModelId(chatModelId)
+  const activeProvider = status?.activeChatProvider ?? null
+  const selectedProviderConfigured = selectedProvider
+    ? status?.providers[selectedProvider]?.configured === true
+    : false
+  const activeProviderConfigured = activeProvider
+    ? status?.providers[activeProvider]?.configured === true
+    : false
+  const explicitModelSelected = typeof chatModelId === 'string' && chatModelId.trim().length > 0
+
+  if (selectedProvider) {
+    return selectedProviderConfigured ? { useByok: true, modelId: chatModelId } : { useByok: false }
+  }
+  if (explicitModelSelected) return { useByok: false }
+  return activeProviderConfigured ? { useByok: true } : { useByok: false }
+}
+
 export async function tryByokCompletion(
   purpose: ModelPurpose,
   args: PurposeCompletionArgs
@@ -36,7 +57,7 @@ export async function tryByokCompletion(
   if (!provider || !modelId) return null
 
   const status = await window.omi.byokStatus().catch(() => null)
-  if (!status?.providers[provider]?.configured) return null
+  if (!resolveByokChatSelection(modelId, status).useByok) return null
 
   try {
     const result = await window.omi.byokChatSend({
