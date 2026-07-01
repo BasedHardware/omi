@@ -190,17 +190,44 @@ def test_conversation_search_hydrates_scores_and_skips_locked():
         {'conversation_id': 'c1', 'score': 0.91},
         {'conversation_id': 'locked', 'score': 0.87},
         {'conversation_id': 'c2', 'score': 0.74},
+        {'conversation_id': 'c3', 'score': 0.66},
     ]
     with patch.object(vector_db, 'find_similar_conversations', return_value=matches) as mock_search, patch.object(
-        conversations_db, 'get_conversations_by_id', return_value=[_valid('c2'), locked, _valid('c1')]
+        conversations_db, 'get_conversations_by_id', return_value=[_valid('c2'), locked, _valid('c3'), _valid('c1')]
     ) as mock_get, patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None), patch.object(
         developer_module, 'populate_speaker_names', lambda *a, **k: None
     ):
-        resp = _build().get('/v1/dev/user/conversations/search?query=roadmap&limit=3')
+        resp = _build().get('/v1/dev/user/conversations/search?query=roadmap&limit=2')
 
     assert resp.status_code == 200
     payload = resp.json()
     assert [(item['conversation']['id'], item['score']) for item in payload] == [('c1', 0.91), ('c2', 0.74)]
     assert payload[0]['conversation']['transcript_segments'] is None
-    mock_search.assert_called_once_with(uid='uid1', query='roadmap', starts_at=None, ends_at=None, limit=3)
-    mock_get.assert_called_once_with('uid1', ['c1', 'locked', 'c2'])
+    mock_search.assert_called_once_with(uid='uid1', query='roadmap', starts_at=None, ends_at=None, limit=6)
+    mock_get.assert_called_once_with('uid1', ['c1', 'locked', 'c2', 'c3'])
+
+
+def test_conversation_search_dates_are_utc_and_ordered():
+    with patch.object(vector_db, 'find_similar_conversations', return_value=[]) as mock_search:
+        resp = _build().get(
+            '/v1/dev/user/conversations/search'
+            '?query=roadmap&start_date=2026-01-01T00:00:00&end_date=2026-01-01T00:01:00'
+        )
+
+    assert resp.status_code == 200
+    mock_search.assert_called_once_with(
+        uid='uid1',
+        query='roadmap',
+        starts_at=int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp()),
+        ends_at=int(datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc).timestamp()),
+        limit=30,
+    )
+
+    with patch.object(vector_db, 'find_similar_conversations') as mock_search:
+        resp = _build().get(
+            '/v1/dev/user/conversations/search'
+            '?query=roadmap&start_date=2026-01-02T00:00:00&end_date=2026-01-01T00:00:00'
+        )
+
+    assert resp.status_code == 422
+    mock_search.assert_not_called()
