@@ -47,15 +47,9 @@ class DeviceUtils {
     }
   }
 
-  /// Whether an Omi-type device is a DevKit / dev board rather than the
-  /// consumer pendant. DevKit boards enumerate as [DeviceType.omi] just like the
-  /// consumer device, so callers that only want the consumer pendant (e.g. the
-  /// interactive device onboarding, which teaches button press / power cycle /
-  /// double-tap) must distinguish by model number or advertised name.
-  ///
-  /// Match specifically on `DEVKIT` — NOT a loose `DEV` — because the consumer
-  /// firmware's default model number fallback is literally `'Omi Device'`, whose
-  /// uppercase form contains `DEV`.
+  /// Whether an Omi-type device is a DevKit board rather than the consumer
+  /// pendant. Match on `DEVKIT`, not a loose `DEV` — the consumer's default
+  /// model fallback is `'Omi Device'`.
   static bool isOmiDevKit({String? modelNumber, String? deviceName}) {
     bool matches(String? value) {
       if (value == null || value.isEmpty) return false;

@@ -3,8 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/device.dart';
 
 void main() {
-  // DevKit boards enumerate as DeviceType.omi like the consumer pendant, so the
-  // device-onboarding gate distinguishes them via model number / advertised name.
   group('DeviceUtils.isOmiDevKit', () {
     test('detects DevKit 2 by model number', () {
       expect(DeviceUtils.isOmiDevKit(modelNumber: 'OMI DEVKIT 2'), isTrue);
