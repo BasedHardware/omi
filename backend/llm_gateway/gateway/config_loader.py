@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Optional
 
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from llm_gateway.gateway.lane_catalog import (
+    LaneCatalog,
+    load_catalog,
+    validate_serving_config,
+)
 from llm_gateway.gateway.schemas import FeatureBundle, LaneConfig, RouteArtifact
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
@@ -25,7 +30,27 @@ class GatewayConfig(BaseModel):
     feature_bundles: dict[str, FeatureBundle]
 
 
-def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool | None = None) -> GatewayConfig:
+def load_gateway_config(
+    config_dir: str | Path | None = None,
+    *,
+    prod_mode: bool | None = None,
+    required_lane_ids: Optional[Iterable[str]] = None,
+    catalog: Optional[LaneCatalog] = None,
+) -> GatewayConfig:
+    """Load the gateway config from `config_dir`.
+
+    Parameters:
+        config_dir: Directory containing lanes.yaml, route_artifacts.yaml,
+            feature_bundles.yaml. Defaults to the gateway's package config dir.
+        prod_mode: If True, reject dev-only artifacts (production readiness check).
+            If None, defer to the OMI_LLM_GATEWAY_PROD env var.
+        required_lane_ids: Optional iterable of lane ids that MUST exist in
+            lanes.yaml after load. Missing ids raise ConfigValidationError.
+        catalog: Optional pre-loaded LaneCatalog. If None, the loader reads
+            lanes_catalog.yaml from the config_dir and cross-validates the
+            serving config against the catalog (R0.5). Pass an explicit
+            catalog for tests or to skip the cross-check.
+    """
     resolved_config_dir = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
     resolved_prod_mode = _resolve_prod_mode(prod_mode)
 
@@ -39,6 +64,24 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
 
     _validate_lane_routes(lanes, route_artifacts)
     _validate_feature_bundles(feature_bundles, lanes)
+    if required_lane_ids is not None:
+        _validate_required_lane_ids(required_lane_ids, lanes)
+    if catalog is not None:
+        validate_serving_config(
+            catalog,
+            set(lanes.keys()),
+            set(route_artifacts.keys()),
+        )
+    elif (resolved_config_dir / "lanes_catalog.yaml").exists():
+        # R0.5: cross-check the serving config against the catalog if
+        # the catalog file is present. A missing catalog file is
+        # tolerated (pre-R0.5 deployments).
+        _catalog = load_catalog(resolved_config_dir / "lanes_catalog.yaml")
+        validate_serving_config(
+            _catalog,
+            set(lanes.keys()),
+            set(route_artifacts.keys()),
+        )
 
     return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
 
@@ -148,3 +191,23 @@ def _validate_feature_bundles(feature_bundles: dict[str, FeatureBundle], lanes: 
     for bundle in feature_bundles.values():
         if bundle.lane_id not in lanes:
             raise ConfigValidationError(f'feature bundle {bundle.feature} references unknown lane: {bundle.lane_id}')
+
+
+def _validate_required_lane_ids(
+    required_lane_ids: Iterable[str],
+    lanes: dict[str, LaneConfig],
+) -> None:
+    """Cross-check that every required lane id has a corresponding lanes.yaml entry.
+
+    Per PLAN.md §R5b + cubic-dev-ai review on PR #8744: if a lane is in
+    SUPPORTED_AUTO_LANE_IDS but missing from lanes.yaml, the config loads
+    successfully and the failure is deferred to runtime. Cross-validate
+    here so the failure surfaces at startup (or at the next reload).
+    """
+    required = set(required_lane_ids)
+    missing = sorted(required - set(lanes.keys()))
+    if missing:
+        raise ConfigValidationError(
+            f'lanes.yaml is missing required lane ids: {missing}. '
+            f'Add them to lanes.yaml or remove them from the supported allowlist.'
+        )
