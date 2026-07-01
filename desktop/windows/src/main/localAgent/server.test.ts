@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'http'
 import { mkdtempSync, rmSync } from 'fs'
+import { connect } from 'net'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -47,6 +48,20 @@ function close(server: Server): Promise<void> {
   })
 }
 
+function rawRequest(port: number, request: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, '127.0.0.1')
+    let response = ''
+    socket.setEncoding('utf8')
+    socket.once('connect', () => socket.write(request))
+    socket.on('data', (chunk) => {
+      response += chunk
+    })
+    socket.once('end', () => resolve(response))
+    socket.once('error', reject)
+  })
+}
+
 describe('local agent server', () => {
   beforeEach(() => {
     electronState.userData = mkdtempSync(join(tmpdir(), 'omi-local-agent-'))
@@ -89,6 +104,18 @@ describe('local agent server', () => {
       localUrl: info.localUrl,
       toolEndpoint: `${info.localUrl}/v1/local/tool`
     })
+  })
+
+  it('shares one startup attempt across concurrent callers', async () => {
+    const [first, second] = await Promise.all([
+      startLocalAgentServer({ preferredPort: 47824, token: 'test-token' }),
+      startLocalAgentServer({ preferredPort: 47824, token: 'other-token' })
+    ])
+
+    expect(second).toEqual(first)
+
+    await stopLocalAgentServer()
+    await expect(fetch(`${first.localUrl}/health`)).rejects.toThrow()
   })
 
   it('requires bearer auth for local tool discovery and invocation', async () => {
@@ -153,6 +180,37 @@ describe('local agent server', () => {
       ok: false,
       error: { code: 'unknown_tool' }
     })
+  })
+
+  it('rejects oversized local tool request bodies', async () => {
+    const info = await startLocalAgentServer({ preferredPort: 47825, token: 'test-token' })
+
+    const response = await fetch(`${info.localUrl}/v1/local/tool`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test-token',
+        'content-type': 'application/json'
+      },
+      body: 'x'.repeat(1_048_577)
+    })
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'request_body_too_large', max_bytes: 1_048_576 }
+    })
+  })
+
+  it('returns 400 for malformed request targets instead of throwing', async () => {
+    const info = await startLocalAgentServer({ preferredPort: 47826, token: 'test-token' })
+
+    const response = await rawRequest(
+      info.port,
+      'GET http://[::1/path HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'
+    )
+
+    expect(response).toContain('400')
+    expect(response).toContain('invalid_request_target')
   })
 
   it('falls back from the default port without binding to all interfaces', async () => {
