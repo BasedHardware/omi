@@ -238,7 +238,7 @@ export type OmiBridgeApi = {
   rewindSetSettings: (next: RewindSettings) => Promise<RewindSettings>
   rewindStatus: () => Promise<RewindStatus>
   rewindPruneNow: () => Promise<number>
-  rewindDeleteAll: () => Promise<number>
+  rewindDeleteAll: () => Promise<{ deleted: number; canceled?: boolean }>
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
