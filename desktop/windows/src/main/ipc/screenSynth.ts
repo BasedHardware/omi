@@ -1,12 +1,13 @@
 // src/main/ipc/screenSynth.ts
 import { ipcMain } from 'electron'
-import { listRewindFrames } from './db'
+import { listRewindFramesWithOcrLayout } from './db'
 import {
   getScreenSynthState,
   updateScreenSynthState,
   advanceWatermark,
   recordRun
 } from '../screenSynth/state'
+import { buildOcrContextText } from '../rewind/ocrLayout'
 import type { ScreenFrameLite, ScreenSynthState, ScreenSynthRun } from '../../shared/types'
 
 export function registerScreenSynthHandlers(): void {
@@ -14,13 +15,17 @@ export function registerScreenSynthHandlers(): void {
   ipcMain.handle('screenSynth:framesSince', async (): Promise<ScreenFrameLite[]> => {
     const { watermarkTs } = getScreenSynthState()
     // +1 so we never re-emit the exact watermark frame.
-    const frames = listRewindFrames(watermarkTs + 1, Date.now())
+    const frames = listRewindFramesWithOcrLayout(watermarkTs + 1, Date.now())
     return frames.map((f) => ({
       ts: f.ts,
       app: f.app,
       windowTitle: f.windowTitle,
       processName: f.processName,
-      ocrText: f.ocrText
+      ocrText: f.ocrText,
+      ocrContext: buildOcrContextText(f.ocrText, f.ocrLinesJson, {
+        width: f.width,
+        height: f.height
+      })
     }))
   })
   ipcMain.handle('screenSynth:getState', async () => getScreenSynthState())

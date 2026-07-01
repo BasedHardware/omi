@@ -19,9 +19,13 @@ import type {
   OnboardingGraphNode,
   OnboardingGraphEdge,
   RewindFrame,
+  OcrLine,
   UsageCategory
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
+import { serializeOcrLinesForStorage } from '../rewind/ocrLayout'
+
+export type RewindFrameWithOcrLayout = RewindFrame & { ocrLinesJson: string | null }
 
 // Time a synchronous DB helper and emit a perf mark with its duration in ms.
 // Always-on (perfMark is a no-op unless OMI_PERF_LOG is set), so the bench can
@@ -164,6 +168,7 @@ function get(): Database.Database {
       window_title TEXT NOT NULL DEFAULT '',
       process_name TEXT NOT NULL DEFAULT '',
       ocr_text TEXT NOT NULL DEFAULT '',
+      ocr_lines_json TEXT,
       image_path TEXT NOT NULL,
       width INTEGER NOT NULL DEFAULT 0,
       height INTEGER NOT NULL DEFAULT 0,
@@ -194,6 +199,9 @@ function get(): Database.Database {
   ensureColumn(db, 'local_kg_nodes', 'source_refs', 'TEXT')
   // Resolved .lnk target exe, for joining indexed apps to app_usage (additive).
   ensureColumn(db, 'indexed_files', 'target_path', 'TEXT')
+  // Optional OCR layout rows captured by the Windows helper. Kept separate from
+  // ocr_text so Rewind UI/search stay plain-text compatible.
+  ensureColumn(db, 'rewind_frames', 'ocr_lines_json', 'TEXT')
   return db
 }
 
@@ -716,6 +724,8 @@ export function clearLocalGraph(): void {
 
 const REWIND_COLUMNS =
   'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, image_path AS imagePath, width, height, indexed'
+const REWIND_INTERNAL_COLUMNS =
+  'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, ocr_lines_json AS ocrLinesJson, image_path AS imagePath, width, height, indexed'
 
 export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
   const r = get()
@@ -728,10 +738,27 @@ export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
 }
 
 export function listRewindFrames(from: number, to: number): RewindFrame[] {
-  return timed('listRewindFrames', () =>
-    get()
-      .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
-      .all(from, to) as RewindFrame[]
+  return timed(
+    'listRewindFrames',
+    () =>
+      get()
+        .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
+        .all(from, to) as RewindFrame[]
+  )
+}
+
+export function listRewindFramesWithOcrLayout(
+  from: number,
+  to: number
+): RewindFrameWithOcrLayout[] {
+  return timed(
+    'listRewindFramesWithOcrLayout',
+    () =>
+      get()
+        .prepare(
+          `SELECT ${REWIND_INTERNAL_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`
+        )
+        .all(from, to) as RewindFrameWithOcrLayout[]
   )
 }
 
@@ -770,8 +797,10 @@ export function unindexedRewindFrames(limit = 20): RewindFrame[] {
     .all(limit) as RewindFrame[]
 }
 
-export function setRewindFrameOcr(id: number, ocrText: string): void {
-  get().prepare('UPDATE rewind_frames SET ocr_text = ?, indexed = 1 WHERE id = ?').run(ocrText, id)
+export function setRewindFrameOcr(id: number, ocrText: string, ocrLines?: OcrLine[]): void {
+  get()
+    .prepare('UPDATE rewind_frames SET ocr_text = ?, ocr_lines_json = ?, indexed = 1 WHERE id = ?')
+    .run(ocrText, serializeOcrLinesForStorage(ocrLines), id)
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
