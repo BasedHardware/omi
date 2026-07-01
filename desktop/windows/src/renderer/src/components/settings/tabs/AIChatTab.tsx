@@ -1,11 +1,9 @@
 import { Cpu, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
-import type { ClaudeAcpStatus } from '../../../../../shared/types'
-import { getPreferences, setPreferences } from '../../../lib/preferences'
+import { useEffect, useState } from 'react'
+import type { ClaudeAcpStatus, PiChatStatus } from '../../../../../shared/types'
+import { getPreferences, setPreferences, type ChatRuntimeMode } from '../../../lib/preferences'
 import { toast } from '../../../lib/toast'
 import { SettingRow } from '../SettingRow'
-
-type ChatRuntimeMode = 'auto' | 'omi-hosted' | 'pi' | 'claude-acp'
 
 function claudeStatusText(status: ClaudeAcpStatus | null): string {
   if (!status) return 'Not checked'
@@ -26,8 +24,24 @@ export function AIChatTab(): React.JSX.Element {
   const [chatRuntimeMode, setChatRuntimeMode] = useState<ChatRuntimeMode>(
     () => getPreferences().chatRuntimeMode
   )
+  const [piStatus, setPiStatus] = useState<PiChatStatus | null>(null)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeAcpStatus | null>(null)
   const [claudeBusy, setClaudeBusy] = useState(false)
+
+  useEffect(() => {
+    let canceled = false
+    window.omi
+      .piChatStatus()
+      .then((status) => {
+        if (!canceled) setPiStatus(status)
+      })
+      .catch(() => {
+        if (!canceled) setPiStatus({ enabled: false })
+      })
+    return () => {
+      canceled = true
+    }
+  }, [])
 
   const refreshClaudeStatus = async (): Promise<void> => {
     setClaudeBusy(true)
@@ -92,8 +106,8 @@ export function AIChatTab(): React.JSX.Element {
         </button>
       </div>
       <div className="mt-3 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-text-tertiary">
-        Pi/Omi routing is {window.omi.piChatEnabled ? 'enabled' : 'disabled'} in this build. Claude
-        routing uses the local Claude command configured on this Windows account.
+        Pi/Omi routing is {piStatus?.enabled ? 'enabled' : piStatus ? 'disabled' : 'checking'} in
+        this build. Claude routing uses the local Claude command configured on this Windows account.
       </div>
     </SettingRow>
   )
