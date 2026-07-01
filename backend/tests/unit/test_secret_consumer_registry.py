@@ -107,6 +107,96 @@ def test_registered_chart_secret_reports_consumer_and_refresh_method(tmp_path):
     assert consumers[0]['refresh_after_rotation'] == 'restart deployment'
 
 
+def test_registered_lowercase_chart_secret_reports_text_consumer(tmp_path):
+    verifier = _load_verifier()
+    registry = _base_registry()
+    registry['secrets']['password'] = {
+        'description': 'Loki canary basic-auth password key',
+        'category': 'datastore_credential',
+        'owner': 'observability',
+        'rotation_verification': 'run smoke',
+    }
+    registry_path = tmp_path / 'backend/deploy/secret_consumer_registry.yaml'
+    _write_yaml(registry_path, registry)
+
+    chart = tmp_path / 'backend/charts/monitoring/loki/prod_omi_loki_values.yaml'
+    chart.parent.mkdir(parents=True)
+    chart.write_text(
+        '\n'.join(
+            [
+                'lokiCanary:',
+                '  extraEnv:',
+                '    - name: LOKI_PASS',
+                '      valueFrom:',
+                '        secretKeyRef:',
+                '          name: canary-basic-auth',
+                '          key: password',
+            ]
+        ),
+        encoding='utf-8',
+    )
+
+    report = verifier.build_report(root=tmp_path, registry_path=registry_path)
+    consumers = [entry for entry in report['consumers'] if entry['secret'] == 'password']
+
+    assert report['status'] == 'PASS'
+    assert consumers
+    assert consumers[0]['runtime'] == 'gke'
+    assert consumers[0]['service'] == 'monitoring'
+    assert consumers[0]['env_name'] == 'password'
+
+
+def test_non_mapping_secrets_returns_schema_failure(tmp_path):
+    verifier = _load_verifier()
+    registry = _base_registry()
+    registry['secrets'] = ['OPENAI_API_KEY']
+    registry_path = tmp_path / 'backend/deploy/secret_consumer_registry.yaml'
+    _write_yaml(registry_path, registry)
+
+    report = verifier.build_report(root=tmp_path, registry_path=registry_path)
+
+    assert report['status'] == 'FAIL'
+    assert any(issue['secret'] == 'secrets' and 'mapping' in issue['message'] for issue in report['issues'])
+
+
+def test_invalid_high_risk_pattern_returns_schema_failure(tmp_path):
+    verifier = _load_verifier()
+    registry = _base_registry()
+    registry['high_risk_name_patterns'] = ['[']
+    registry_path = tmp_path / 'backend/deploy/secret_consumer_registry.yaml'
+    _write_yaml(registry_path, registry)
+
+    report = verifier.build_report(root=tmp_path, registry_path=registry_path)
+
+    assert report['status'] == 'FAIL'
+    assert any(
+        issue['secret'] == '[' and 'invalid high-risk regex pattern' in issue['message'] for issue in report['issues']
+    )
+
+
+def test_malformed_cloud_run_section_is_ignored(tmp_path):
+    verifier = _load_verifier()
+    registry = _base_registry()
+    registry_path = tmp_path / 'backend/deploy/secret_consumer_registry.yaml'
+    _write_yaml(registry_path, registry)
+    runtime_env = tmp_path / 'backend/deploy/runtime_env.yaml'
+    _write_yaml(
+        runtime_env,
+        {
+            'environments': {
+                'prod': {
+                    'cloud_run': ['malformed'],
+                }
+            }
+        },
+    )
+
+    report = verifier.build_report(root=tmp_path, registry_path=registry_path)
+
+    assert report['status'] == 'PASS'
+    assert report['issues'] == []
+
+
 def test_secret_context_name_without_high_risk_pattern_still_fails(tmp_path):
     verifier = _load_verifier()
     registry = _base_registry()

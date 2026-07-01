@@ -22,7 +22,7 @@ GITHUB_SECRET_RE = re.compile(r'\bsecrets\.([A-Z][A-Z0-9_]*)\b')
 GITHUB_DYNAMIC_SECRET_RE = re.compile(r'\bsecrets\s*\[')
 GITHUB_INHERIT_RE = re.compile(r'(?m)^\s*secrets:\s*inherit\s*$')
 CHART_SECRET_KEY_RE = re.compile(
-    r'secretKeyRef:\s*(?:\n\s+[A-Za-z]+:\s*[^\n]+){0,4}\n\s+key:\s*["\']?([A-Z][A-Z0-9_]*)'
+    r'secretKeyRef:\s*(?:\n\s+[A-Za-z]+:\s*[^\n]+){0,4}\n\s+key:\s*["\']?([A-Za-z][A-Za-z0-9_]*)'
 )
 SOURCE_ENV_RE = re.compile(r'''(?x)
     (?:
@@ -88,10 +88,10 @@ def build_report(*, root: Path, registry_path: Path) -> dict[str, Any]:
     registry_dir = registry_path.parent
     secret_entries = registry.get('secrets', {})
     if not isinstance(secret_entries, dict):
-        raise ValueError('registry secrets must be a mapping')
+        secret_entries = {}
     registered = set(secret_entries)
     ignored = set(_string_list(registry.get('ignored_secret_names', [])))
-    high_risk_patterns = [re.compile(pattern) for pattern in _string_list(registry.get('high_risk_name_patterns', []))]
+    high_risk_patterns = _compile_valid_patterns(registry.get('high_risk_name_patterns', []))
     refresh_methods = registry.get('runtime_refresh_methods', {})
     if not isinstance(refresh_methods, dict):
         refresh_methods = {}
@@ -209,7 +209,8 @@ def _discover_runtime_manifest_consumers(root: Path) -> list[Consumer]:
                                 source=_relative(root, path),
                             )
                         )
-        cloud_run = env_config.get('cloud_run', {}).get('services', {})
+        cloud_run_config = env_config.get('cloud_run', {})
+        cloud_run = cloud_run_config.get('services', {}) if isinstance(cloud_run_config, dict) else {}
         if isinstance(cloud_run, dict):
             for service, service_config in cloud_run.items():
                 if not isinstance(service_config, dict):
@@ -373,10 +374,11 @@ def _discover_unscannable_secret_references(root: Path) -> list[RegistryIssue]:
 
 
 def _discover_registered_code_references(root: Path, registry_names: set[str]) -> list[Consumer]:
-    if not registry_names:
+    registry_env_names = {name for name in registry_names if re.fullmatch(r'[A-Z][A-Z0-9_]*', name)}
+    if not registry_env_names:
         return []
     consumers: list[Consumer] = []
-    patterns = {name: re.compile(rf'["\']{re.escape(name)}["\']') for name in registry_names}
+    patterns = {name: re.compile(rf'["\']{re.escape(name)}["\']') for name in registry_env_names}
     search_roots = [root / 'backend', root / 'scripts']
     for search_root in search_roots:
         if not search_root.exists():
@@ -583,6 +585,16 @@ def _mapping_items(value: Any) -> list[tuple[str, dict[str, Any]]]:
 
 def _is_high_risk_name(name: str, patterns: list[re.Pattern[str]]) -> bool:
     return any(pattern.search(name) for pattern in patterns)
+
+
+def _compile_valid_patterns(value: Any) -> list[re.Pattern[str]]:
+    patterns: list[re.Pattern[str]] = []
+    for pattern in _string_list(value):
+        try:
+            patterns.append(re.compile(pattern))
+        except re.error:
+            continue
+    return patterns
 
 
 def _string_list(value: Any) -> list[str]:
