@@ -151,7 +151,13 @@ def should_process_on_disconnect(
         return False
     if conversation.get('status') != in_progress_status:
         return False
+    if getattr(conversation.get('source'), 'value', conversation.get('source')) != 'desktop':
+        return False
     return bool(conversation.get('transcript_segments') or conversation.get('photos'))
+
+
+def should_remove_in_progress_pointer(*, current_in_progress_id: Optional[str], conversation_id: Optional[str]) -> bool:
+    return bool(conversation_id) and current_in_progress_id == conversation_id
 
 
 def person_id_for_client(person_id: Optional[str], speaker_auto_assign_enabled: bool) -> str:

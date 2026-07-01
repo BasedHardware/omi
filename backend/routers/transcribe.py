@@ -143,6 +143,7 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     should_load_speech_profile,
     should_queue_speaker_embedding,
     should_process_on_disconnect,
+    should_remove_in_progress_pointer,
     should_skip_speaker_detection,
     should_spawn_speaker_match,
     stt_buffer_flush_size as calculate_stt_buffer_flush_size,
@@ -2473,7 +2474,12 @@ async def _stream_handler(
                     _flush_speaker_assignments(session.current_conversation_id)
                     processed = await _process_conversation(session.current_conversation_id)
                     if processed:
-                        redis_db.remove_in_progress_conversation_id(uid)
+                        current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+                        if should_remove_in_progress_pointer(
+                            current_in_progress_id=current_in_progress_id,
+                            conversation_id=session.current_conversation_id,
+                        ):
+                            redis_db.remove_in_progress_conversation_id(uid)
                         logger.info(
                             f"Single-channel conversation {session.current_conversation_id} submitted for processing on disconnect {uid} {session_id}"
                         )
