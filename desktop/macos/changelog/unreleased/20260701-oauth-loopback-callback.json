@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Desktop sign-in now receives browser OAuth callbacks through a local loopback listener before falling back to custom URL schemes."
+  ]
+}
