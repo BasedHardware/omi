@@ -34,8 +34,10 @@ function trustedRendererUrl(url: string | undefined): boolean {
     const packagedUrl = rendererBaseUrl()
     if (packagedUrl && parsed.origin === new URL(packagedUrl).origin) return true
 
-    const fallbackRendererFile = pathToFileURL(join(__dirname, '../renderer/index.html')).href
-    return parsed.protocol === 'file:' && parsed.href.startsWith(fallbackRendererFile)
+    // Exact pathname match: allows hash/query routing on the renderer file
+    // while rejecting sibling files like index.html.evil.
+    const fallbackRendererFile = pathToFileURL(join(__dirname, '../renderer/index.html'))
+    return parsed.protocol === 'file:' && parsed.pathname === fallbackRendererFile.pathname
   } catch {
     return false
   }
