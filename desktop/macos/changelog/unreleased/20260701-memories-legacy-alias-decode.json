@@ -1,0 +1,3 @@
+{
+    "change": "Fixed Memories failing to load (\"data couldn't be read\") for long-time users with legacy memory records"
+}
