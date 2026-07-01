@@ -32,7 +32,6 @@ SOURCE_ENV_RE = re.compile(r'''(?x)
         | process\.env\[\s*["']([A-Z][A-Z0-9_]*)["']\s*\]
     )
     ''')
-GENERATED_SOURCE_DIR_NAMES = {'.openapi-venv', '.venv', '__pycache__', 'build', 'dist', 'node_modules'}
 
 
 @dataclass(frozen=True)
@@ -385,7 +384,7 @@ def _discover_registered_code_references(root: Path, registry_names: set[str]) -
         if not search_root.exists():
             continue
         for path in sorted(search_root.rglob('*.py')):
-            if _is_generated_source_path(path):
+            if _is_ignored_source_path(path):
                 continue
             text = _read_text(path)
             for name, pattern in patterns.items():
@@ -413,7 +412,7 @@ def _discover_source_env_references(root: Path) -> list[Consumer]:
         for path in sorted(search_root.rglob('*')):
             if path.suffix not in suffixes:
                 continue
-            if _is_generated_source_path(path):
+            if _is_ignored_source_path(path):
                 continue
             text = _read_text(path)
             for match in SOURCE_ENV_RE.findall(text):
@@ -541,6 +540,11 @@ def _consumer_sort_key(consumer: Consumer) -> tuple[str, str, str, str, str]:
     return (consumer.secret, consumer.runtime, consumer.environment, consumer.service, consumer.env_name)
 
 
+def _is_ignored_source_path(path: Path) -> bool:
+    ignored_parts = {'__pycache__', 'node_modules', 'build', 'dist'}
+    return any(part in ignored_parts or part.endswith('venv') for part in path.parts)
+
+
 def _dedupe_consumers(consumers: list[Consumer]) -> list[Consumer]:
     seen: set[Consumer] = set()
     result: list[Consumer] = []
@@ -586,10 +590,6 @@ def _mapping_items(value: Any) -> list[tuple[str, dict[str, Any]]]:
 
 def _is_high_risk_name(name: str, patterns: list[re.Pattern[str]]) -> bool:
     return any(pattern.search(name) for pattern in patterns)
-
-
-def _is_generated_source_path(path: Path) -> bool:
-    return any(part in GENERATED_SOURCE_DIR_NAMES for part in path.parts)
 
 
 def _compile_valid_patterns(value: Any) -> list[re.Pattern[str]]:

@@ -495,12 +495,7 @@ def check_release_log_secret_hygiene(policy: dict) -> list[str]:
                 )
             logical_line = logical_shell_line(lines, line_index)
             writes_to_stdout = not redirects_stdout(logical_line) and not SAFE_STDIN_SECRET_SINK_RE.search(logical_line)
-            if (
-                SENSITIVE_ECHO_RE.search(line)
-                and denied_refs
-                and writes_to_stdout
-                and "::add-mask::" not in line
-            ):
+            if SENSITIVE_ECHO_RE.search(line) and denied_refs and writes_to_stdout and "::add-mask::" not in line:
                 errors.append(
                     f"{rel}:{lineno}: shell output command references server-only {', '.join(sorted(denied_refs))}"
                 )
