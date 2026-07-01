@@ -226,7 +226,10 @@ export async function startTranscription(
           return
         }
         const next = await activate(fallback)
-        if (stopped) return
+        if (stopped) {
+          void next?.stop().catch(() => undefined)
+          return
+        }
         if (next) {
           active = next
           return
