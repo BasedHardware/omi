@@ -284,6 +284,9 @@ check_backend_unit_tests_if_needed() {
       add_fast_backend_test_if_selected "tests/unit/test_conversation_structure_timezone.py"
       add_fast_backend_test_if_selected "tests/unit/test_llm_gateway_chat_extraction_pilot.py"
     fi
+    if changed_matches 'backend/database/llm_usage.py'; then
+      add_fast_backend_test_if_selected "tests/unit/test_llm_usage_tracker.py"
+    fi
     if [ -s "$FAST_BACKEND_TESTS" ]; then
       sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
       selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
@@ -299,8 +302,12 @@ check_backend_unit_tests_if_needed() {
   echo "Selected $selected_count backend unit test file(s): $reason"
   (
     cd backend
-    bash test-preflight.sh
-    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" BACKEND_PYTEST_XDIST=auto BACKEND_PYTEST_WORKERS=auto bash test.sh
+    backend_python="${PYTHON:-}"
+    if [ -z "$backend_python" ] && [ -x ".venv/bin/python" ]; then
+      backend_python=".venv/bin/python"
+    fi
+    PYTHON="${backend_python:-python3}" bash test-preflight.sh
+    PYTHON="${backend_python:-python3}" BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" BACKEND_PYTEST_XDIST=auto BACKEND_PYTEST_WORKERS=auto bash test.sh
   )
 }
 
