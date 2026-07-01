@@ -1,9 +1,9 @@
-import { realpathSync } from 'fs'
-import { readFile, stat } from 'fs/promises'
+import { readFile, realpath, stat } from 'fs/promises'
 import { extname, resolve, sep } from 'path'
 import type { RewindFrame, RewindFrameImageResult } from '../../shared/types'
 
 const MAX_FRAME_IMAGE_BYTES = 8 * 1024 * 1024
+const rootRealpathCache = new Map<string, Promise<string | null>>()
 
 export function frameImageNotFound(message: string): RewindFrameImageResult {
   return { ok: false, code: 'not_found', message }
@@ -20,10 +20,24 @@ function ocrPreview(text: string): string {
   return text.replace(/\s+/g, ' ').trim().slice(0, 240)
 }
 
-export function resolveFrameImagePath(rootPath: string, imagePath: string): string | null {
+function cachedRootRealpath(rootPath: string): Promise<string | null> {
+  const key = resolve(rootPath)
+  let cached = rootRealpathCache.get(key)
+  if (!cached) {
+    cached = realpath(key).catch(() => null)
+    rootRealpathCache.set(key, cached)
+  }
+  return cached
+}
+
+export async function resolveFrameImagePath(
+  rootPath: string,
+  imagePath: string
+): Promise<string | null> {
   try {
-    const root = realpathSync(resolve(rootPath))
-    const full = realpathSync(resolve(imagePath))
+    const root = await cachedRootRealpath(rootPath)
+    if (!root) return null
+    const full = await realpath(resolve(imagePath))
     const normalizedRoot = process.platform === 'win32' ? root.toLowerCase() : root
     const normalizedFull = process.platform === 'win32' ? full.toLowerCase() : full
     if (normalizedFull !== normalizedRoot && !normalizedFull.startsWith(normalizedRoot + sep)) {
@@ -49,7 +63,7 @@ export async function readRewindFrameImageDataUrl(
   imagePath: string,
   rootPath: string
 ): Promise<string | null> {
-  const full = resolveFrameImagePath(rootPath, imagePath)
+  const full = await resolveFrameImagePath(rootPath, imagePath)
   if (!full) return null
   const buf = await readBoundedFrameImage(full)
   if (!buf) return null
@@ -61,7 +75,7 @@ export async function readRewindFrameImage(
   rootPath: string
 ): Promise<RewindFrameImageResult> {
   if (!frame?.id) return frameImageNotFound('Frame not found')
-  const full = resolveFrameImagePath(rootPath, frame.imagePath)
+  const full = await resolveFrameImagePath(rootPath, frame.imagePath)
   if (!full) return frameImageNotFound('Frame image not found')
   try {
     const buf = await readBoundedFrameImage(full)
