@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop recordings that could stay stuck after the recording window closed"
+}
