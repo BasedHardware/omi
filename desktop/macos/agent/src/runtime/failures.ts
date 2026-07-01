@@ -95,7 +95,7 @@ export function failureFromProcessExit(input: {
 function classifyAdapterProcessFailure(
   adapterId: ProductionAdapterId,
   diagnostic: string
-): Partial<RuntimeFailure> | undefined {
+): (Pick<RuntimeFailure, "code" | "userMessage"> & Partial<RuntimeFailure>) | undefined {
   if (adapterId === "openclaw" && isOpenClawInvalidConfig(diagnostic)) {
     return {
       code: "adapter_config_invalid",
