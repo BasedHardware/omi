@@ -27,7 +27,8 @@ from models.imessage import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
-from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, start_background_task
+from utils.llm.person_profile import generate_person_profile
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -151,8 +152,12 @@ def _build_conversation(
     )
 
 
-async def _process_conversations(uid: str, language: Optional[str], conversations: List[CreateConversation]) -> None:
-    """Background coordinator: run the full post-processing pipeline per conversation."""
+async def _process_conversations(
+    uid: str, language: Optional[str], conversations: List[CreateConversation], person_ids: List[str]
+) -> None:
+    """Background coordinator: run the full post-processing pipeline per conversation,
+    then refresh each involved person's profile (now that their conversations are
+    stored and indexed)."""
     processed = 0
     for create in conversations:
         try:
@@ -160,6 +165,13 @@ async def _process_conversations(uid: str, language: Optional[str], conversation
             processed += 1
         except Exception as e:
             logger.error(f'imessage: process_conversation failed uid={uid}: {sanitize(str(e))}')
+
+    for person_id in person_ids:
+        try:
+            await run_blocking(llm_executor, generate_person_profile, uid, person_id)
+        except Exception as e:
+            logger.warning(f'imessage: profile generation failed uid={uid} person={person_id}: {sanitize(str(e))}')
+
     if processed:
         doc = await run_blocking(db_executor, _get_doc, uid)
         await run_blocking(
@@ -226,7 +238,10 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
     await run_blocking(db_executor, _save_doc, uid, patch)
 
     if conversations:
-        start_background_task(_process_conversations(uid, req.language, conversations), name=f'imessage_ingest_{uid}')
+        start_background_task(
+            _process_conversations(uid, req.language, conversations, list(people_ids)),
+            name=f'imessage_ingest_{uid}',
+        )
 
     logger.info(
         f'imessage ingest uid={uid} threads={len(req.threads)} convs={len(conversations)} '
