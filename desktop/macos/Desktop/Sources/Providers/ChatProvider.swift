@@ -2682,7 +2682,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Appends both messages to the in-memory provider session immediately, then
     /// persists them sequentially in the background so later follow-ups retain context.
     @discardableResult
-    func recordCompletedTurn(userText: String, assistantText: String, logLabel: String = "completed") -> (
+    func recordCompletedTurn(
+        userText: String,
+        assistantText: String,
+        logLabel: String = "completed",
+        messageSource: String = "desktop_chat"
+    ) -> (
         user: ChatMessage?, assistant: ChatMessage?
     ) {
         let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2713,12 +2718,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if let userMessage {
                 await self?.persistRecordedTurnMessage(
                     userMessage, text: user, sender: "human",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: messageSource)
             }
             if let aiMessage {
                 await self?.persistRecordedTurnMessage(
                     aiMessage, text: assistant, sender: "ai",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: messageSource)
             }
             await MainActor.run { self?.pendingSaves.end() }
         }
@@ -2733,14 +2738,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// or sync to the backend. Empty sides are skipped (a tool-only turn with no
     /// spoken reply still records the user's request).
     func recordVoiceTurn(userText: String, assistantText: String) {
-        recordCompletedTurn(userText: userText, assistantText: assistantText, logLabel: "voice")
+        recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: "voice",
+            messageSource: "realtime_voice"
+        )
     }
 
     /// Persist one recorded-turn message and sync its server ID back into `messages` so a
     /// subsequent poll doesn't duplicate it. Failures leave the in-memory copy unsynced
     /// (matches the existing saveMessage sites — no retry).
     private func persistRecordedTurnMessage(
-        _ message: ChatMessage, text: String, sender: String, appId: String?, sessionId: String?, logLabel: String
+        _ message: ChatMessage,
+        text: String,
+        sender: String,
+        appId: String?,
+        sessionId: String?,
+        logLabel: String,
+        messageSource: String
     ) async {
         do {
             let response = try await APIClient.shared.saveMessage(
@@ -2749,7 +2765,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 appId: appId,
                 sessionId: sessionId,
                 clientMessageId: message.id,
-                messageSource: "realtime_voice"
+                messageSource: messageSource
             )
             await MainActor.run {
                 if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
