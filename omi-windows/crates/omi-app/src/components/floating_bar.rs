@@ -1,20 +1,15 @@
-/// Floating control bar overlay.
-///
-/// This component renders as a CSS `position: fixed` bar at the bottom-centre
-/// of the Dioxus webview.  It is always present in the DOM and shown/hidden by
-/// toggling the `.fbar-visible` class.
-///
-/// Actions available in the bar:
-///   • Start / Stop recording (same logic as the Dashboard page)
-///   • Quick AI prompt — typed text is sent to the LLM and the response is
-///     appended to the live transcript panel so the user can see it inline
-///   • Status pill showing the current recording state
-
 use dioxus::prelude::*;
+
 use crate::app::{Db, Route};
 use crate::config::AppConfig;
 use crate::proactive::Suggestion;
 use crate::recording::{LiveTranscript, RecordingStatus, StopRecording};
+
+#[derive(Clone, Debug)]
+struct ChatEntry {
+    role: String,
+    content: String,
+}
 
 #[component]
 pub fn FloatingBar() -> Element {
@@ -24,28 +19,47 @@ pub fn FloatingBar() -> Element {
     let recording_status: Signal<RecordingStatus> = use_context();
     let live_transcript: Signal<LiveTranscript> = use_context();
     let mut stop_handle: Signal<Option<StopRecording>> = use_context();
-
-    // Agent suggestions (pills)
     let suggestions: Signal<Vec<Suggestion>> = use_context();
     let suggestion_prompt: Signal<Option<String>> = use_context();
     let mut continuous_voice_mode: Signal<bool> = use_context();
+    let ptt_active: Signal<bool> = use_context();
+    let voice_history: Signal<Vec<(String, String)>> = use_context();
     let nav = use_navigator();
 
     let is_recording = matches!(*recording_status.read(), RecordingStatus::Recording { .. });
     let is_idle = matches!(*recording_status.read(), RecordingStatus::Idle);
     let is_error = matches!(*recording_status.read(), RecordingStatus::Error(_));
-
     let has_api_key = !config.read().deepgram_api_key.is_empty();
 
-    // Quick AI prompt state
     let mut prompt_text = use_signal(String::new);
-    let mut ai_response = use_signal(String::new);
+    let mut chat_history = use_signal(Vec::<ChatEntry>::new);
     let ai_loading = use_signal(|| false);
+    let mut is_expanded = use_signal(|| false);
 
-    let bar_class = if *visible.read() {
-        "fbar fbar-visible"
-    } else {
+    // Sync voice history into chat_history
+    use_effect(move || {
+        let vh = voice_history.read();
+        if !vh.is_empty() {
+            let mut entries = chat_history.read().clone();
+            for (q, a) in vh.iter() {
+                entries.push(ChatEntry { role: "user".into(), content: q.clone() });
+                if !a.is_empty() {
+                    entries.push(ChatEntry { role: "assistant".into(), content: a.clone() });
+                }
+            }
+            if entries.len() > 40 {
+                entries.drain(0..entries.len() - 40);
+            }
+            chat_history.set(entries);
+        }
+    });
+
+    let bar_class = if !*visible.read() {
         "fbar"
+    } else if *is_expanded.read() || !chat_history.read().is_empty() {
+        "fbar fbar-visible fbar-expanded"
+    } else {
+        "fbar fbar-visible fbar-compact"
     };
 
     let status_class = if is_recording {
@@ -59,20 +73,50 @@ pub fn FloatingBar() -> Element {
     let status_label = match &*recording_status.read() {
         RecordingStatus::Idle => "Idle".to_string(),
         RecordingStatus::Recording { device } => {
-            let short = if device.len() > 18 { format!("{}…", &device[..18]) } else { device.clone() };
+            let short = if device.len() > 18 {
+                format!("{}…", &device[..18])
+            } else {
+                device.clone()
+            };
             format!("● {short}")
         }
         RecordingStatus::Error(_) => "Error".to_string(),
     };
 
+    let position_style = {
+        let cfg = config.read();
+        if let Some((x, y)) = cfg.floating_bar_position {
+            format!("left: {x}px; bottom: auto; top: {y}px; transform: none;")
+        } else {
+            String::new()
+        }
+    };
+
     rsx! {
-        div { class: "{bar_class}",
-            // ── Status pill ───────────────────────────────────────────────────
+        div {
+            class: "{bar_class}",
+            style: "{position_style}",
+            onmouseenter: move |_| is_expanded.set(true),
+            onmouseleave: move |_| {
+                if prompt_text.read().is_empty() && !*ai_loading.read() {
+                    is_expanded.set(false);
+                }
+            },
+
+            // ── PTT indicator ────────────────────────────────────────────────
+            if *ptt_active.read() {
+                div { class: "fbar-ptt-indicator",
+                    span { class: "fbar-ptt-dot" }
+                    span { "Listening..." }
+                }
+            }
+
+            // ── Status pill ──────────────────────────────────────────────────
             div { class: "{status_class}",
                 span { "{status_label}" }
             }
 
-            // ── Record / Stop ─────────────────────────────────────────────────
+            // ── Record / Stop ────────────────────────────────────────────────
             if is_recording {
                 button {
                     class: "fbar-btn fbar-btn-stop",
@@ -100,13 +144,8 @@ pub fn FloatingBar() -> Element {
                         stop_handle.set(Some(StopRecording::new(stop_tx)));
                         spawn(async move {
                             crate::recording::start_recording(
-                                api_key,
-                                diarize,
-                                db_val,
-                                cfg,
-                                stop_rx,
-                                &mut status,
-                                &mut transcript,
+                                api_key, diarize, db_val, cfg, stop_rx,
+                                &mut status, &mut transcript,
                             )
                             .await;
                         });
@@ -117,7 +156,7 @@ pub fn FloatingBar() -> Element {
 
             button {
                 class: if *continuous_voice_mode.read() { "fbar-btn fbar-btn-active" } else { "fbar-btn" },
-                title: "Voice Chat Mode (Ctrl+Shift+V)\nOmi will auto-reply and restart recording.",
+                title: "Voice Chat Mode (Ctrl+Shift+V)",
                 onclick: move |_| {
                     let cur = *continuous_voice_mode.read();
                     continuous_voice_mode.set(!cur);
@@ -125,38 +164,49 @@ pub fn FloatingBar() -> Element {
                 "Chat"
             }
 
-            // ── Quick AI prompt ───────────────────────────────────────────────
+            // ── Quick AI prompt ──────────────────────────────────────────────
             input {
                 class: "fbar-input",
                 r#type: "text",
                 placeholder: "Ask Omi anything…",
                 value: "{prompt_text}",
+                onfocus: move |_| is_expanded.set(true),
                 oninput: move |e| prompt_text.set(e.value()),
                 onkeypress: move |e| {
                     if e.key() == Key::Enter {
                         let text = prompt_text.read().trim().to_string();
                         if !text.is_empty() && !*ai_loading.read() {
                             let cfg = config.read().clone();
-                            let mut resp = ai_response.clone();
                             let mut loading = ai_loading.clone();
                             let mut pt = prompt_text.clone();
+                            let mut history = chat_history.clone();
+
+                            // Push user entry immediately
+                            let mut entries = history.read().clone();
+                            entries.push(ChatEntry { role: "user".into(), content: text.clone() });
+                            history.set(entries);
+
                             spawn(async move {
                                 loading.set(true);
                                 pt.set(String::new());
                                 let (api_key, url, model) = crate::llm::resolve_llm_endpoint(&cfg);
                                 let result = crate::llm::complete(
-                                    &api_key,
-                                    &url,
-                                    &model,
+                                    &api_key, &url, &model,
                                     vec![crate::llm::LlmMessage { role: "user".into(), content: text }],
                                     Some(300),
                                 )
                                 .await;
                                 loading.set(false);
-                                match result {
-                                    Ok(answer) => resp.set(answer),
-                                    Err(e) => resp.set(format!("Error: {e}")),
+                                let answer = match result {
+                                    Ok(a) => a,
+                                    Err(e) => format!("Error: {e}"),
+                                };
+                                let mut entries = history.read().clone();
+                                entries.push(ChatEntry { role: "assistant".into(), content: answer });
+                                if entries.len() > 40 {
+                                    entries.drain(0..entries.len() - 40);
                                 }
+                                history.set(entries);
                             });
                         }
                     }
@@ -178,19 +228,27 @@ pub fn FloatingBar() -> Element {
                 "✕"
             }
 
-            // ── AI response popup ─────────────────────────────────────────────
-            if !ai_response.read().is_empty() {
-                div { class: "fbar-response",
-                    div { class: "fbar-response-text", "{ai_response}" }
+            // ── Chat history log ─────────────────────────────────────────────
+            if !chat_history.read().is_empty() {
+                div { class: "fbar-chat-log",
+                    for entry in chat_history.read().iter() {
+                        div {
+                            class: if entry.role == "user" { "fbar-chat-msg fbar-chat-user" } else { "fbar-chat-msg fbar-chat-assistant" },
+                            span { class: "fbar-chat-role",
+                                if entry.role == "user" { "You" } else { "Omi" }
+                            }
+                            span { "{entry.content}" }
+                        }
+                    }
                     button {
-                        class: "fbar-btn fbar-btn-close",
-                        onclick: move |_| ai_response.set(String::new()),
-                        "✕"
+                        class: "fbar-btn fbar-btn-clear",
+                        onclick: move |_| chat_history.set(Vec::new()),
+                        "Clear"
                     }
                 }
             }
 
-            // ── Proactive suggestion pills ─────────────────────────────────────
+            // ── Proactive suggestion pills ───────────────────────────────────
             if !suggestions.read().is_empty() {
                 div { class: "fbar-pills",
                     for sug in suggestions.read().clone() {
