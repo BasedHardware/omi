@@ -1,4 +1,4 @@
-import 'package:omi/services/base_integration_service.dart';
+import 'package:omi/services/integrations/base_integration_service.dart';
 
 class GoogleCalendarService extends BaseIntegrationService {
   static const String _appKey = 'google_calendar';
