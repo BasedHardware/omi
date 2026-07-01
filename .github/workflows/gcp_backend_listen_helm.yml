@@ -115,12 +115,15 @@ jobs:
             --set gsa.name="${gsa_name}"
           # Trigger an immediate sync so newly-listed keys are pulled before the
           # listen deployment restarts (otherwise its env refs resolve empty).
+          force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
           kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
             ${{ vars.ENV }}-omi-backend-external-secret \
-            force-sync="$(date +%s)" --overwrite
-          kubectl -n ${{ vars.ENV }}-omi-backend wait \
-            externalsecret/${{ vars.ENV }}-omi-backend-external-secret \
-            --for=condition=Ready --timeout=120s
+            force-sync="${force_sync_at}" --overwrite
+          python3 backend/scripts/wait_external_secret_refresh.py \
+            --namespace ${{ vars.ENV }}-omi-backend \
+            --name ${{ vars.ENV }}-omi-backend-external-secret \
+            --min-refresh-time "${force_sync_at}" \
+            --timeout-seconds 120
           kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o json \
             | python3 backend/scripts/verify_k8s_secret_keys.py \
                 ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml

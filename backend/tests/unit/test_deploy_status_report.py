@@ -98,5 +98,34 @@ def test_cloud_run_report_requires_ready_revision_to_serve_expected_traffic() ->
     )
 
 
+def test_cloud_run_report_fails_when_expected_service_is_missing() -> None:
+    report, findings = render_cloud_run_report(
+        {'services': []},
+        services=['backend'],
+        expected_traffic=parse_expected_traffic(['backend=backend-abc1234-1']),
+    )
+
+    assert '| `backend` | - | - | - | - | missing |' in report
+    assert (
+        Finding(
+            'FAIL',
+            'backend',
+            'expected revision backend-abc1234-1 to serve 100% traffic, but service data is missing',
+        )
+        in findings
+    )
+
+
+def test_cloud_run_report_fails_when_describe_failed() -> None:
+    report, findings = render_cloud_run_report(
+        {'services': [], 'errors': [{'service': 'backend', 'exitCode': 1}]},
+        services=['backend'],
+        expected_traffic=parse_expected_traffic(['backend=backend-abc1234-1']),
+    )
+
+    assert '| `backend` | - | - | - | - | missing |' in report
+    assert Finding('FAIL', 'backend', 'gcloud run services describe failed with exit code 1') in findings
+
+
 def test_secret_key_verifier_reads_expected_keys_without_secret_values() -> None:
     assert expected_keys(FIXTURES / 'backend_secrets_values.yaml') == {'OPENAI_API_KEY', 'SENTINEL_FAKE_ONLY'}

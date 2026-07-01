@@ -32,6 +32,12 @@ class Finding:
     message: str
 
 
+@dataclass(frozen=True)
+class CloudRunFetchError:
+    service: str
+    exit_code: int
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Read-only deploy rollout/status reporter for Omi services.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
@@ -191,6 +197,7 @@ def render_cloud_run_report(
     expected_traffic: dict[str, str],
 ) -> tuple[str, list[Finding]]:
     service_map = normalize_cloud_run_services(state)
+    fetch_errors = cloud_run_fetch_errors_by_service(state)
     lines = [
         'Cloud Run revision status',
         '| Service | Latest created | Latest ready | Traffic | Template image | Status |',
@@ -202,7 +209,25 @@ def render_cloud_run_report(
         service = service_map.get(service_name)
         if not service:
             lines.append(f'| `{service_name}` | - | - | - | - | missing |')
-            findings.append(Finding('WARN', service_name, 'Cloud Run service not found in report input'))
+            fetch_error = fetch_errors.get(service_name)
+            if fetch_error:
+                findings.append(
+                    Finding(
+                        'FAIL',
+                        service_name,
+                        f'gcloud run services describe failed with exit code {fetch_error.exit_code}',
+                    )
+                )
+            elif service_name in expected_traffic:
+                findings.append(
+                    Finding(
+                        'FAIL',
+                        service_name,
+                        f'expected revision {expected_traffic[service_name]} to serve 100% traffic, but service data is missing',
+                    )
+                )
+            else:
+                findings.append(Finding('WARN', service_name, 'Cloud Run service not found in report input'))
             continue
 
         status = service.get('status', {})
@@ -325,6 +350,7 @@ def fetch_k8s_state(namespace: str) -> dict[str, Any]:
 
 def fetch_cloud_run_state(*, project: str, region: str, services: list[str]) -> dict[str, Any]:
     fetched = []
+    errors = []
     for service in services:
         command = [
             'gcloud',
@@ -339,7 +365,9 @@ def fetch_cloud_run_state(*, project: str, region: str, services: list[str]) -> 
         result = subprocess.run(command, check=False, capture_output=True, text=True)
         if result.returncode == 0:
             fetched.append(json.loads(result.stdout))
-    return {'services': fetched}
+        else:
+            errors.append({'service': service, 'exitCode': result.returncode})
+    return {'services': fetched, 'errors': errors}
 
 
 def kubectl_json(namespace: str, resource: str) -> dict[str, Any]:
@@ -384,6 +412,21 @@ def normalize_cloud_run_services(state: dict[str, Any]) -> dict[str, dict[str, A
             name = object_name(service)
             if name:
                 result[name] = service
+    return result
+
+
+def cloud_run_fetch_errors_by_service(state: dict[str, Any]) -> dict[str, CloudRunFetchError]:
+    raw_errors = state.get('errors') or state.get('fetchErrors') or []
+    if not isinstance(raw_errors, list):
+        return {}
+    result = {}
+    for error in raw_errors:
+        if not isinstance(error, dict):
+            continue
+        service = str(error.get('service') or '')
+        if not service:
+            continue
+        result[service] = CloudRunFetchError(service=service, exit_code=int(error.get('exitCode') or 1))
     return result
 
 
