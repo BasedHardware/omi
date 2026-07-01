@@ -198,6 +198,65 @@ class TestFirstCallPropagates:
 
 
 # ---------------------------------------------------------------------------
+# Regression: legitimate None payloads can be cached (cubic-dev-ai fix)
+# ---------------------------------------------------------------------------
+
+
+class TestNonePayloadCaching:
+    """Regression: a loader that returns None must be cacheable. The previous
+    implementation used `None` as the empty-cache sentinel, which made
+    legitimate `None` payloads uncacheable. Now uses a private _MISSING sentinel."""
+
+    async def test_none_payload_can_be_cached(self):
+        cache: DailyRefreshCache[object] = DailyRefreshCache(ttl_seconds=60)
+
+        async def none_loader() -> None:
+            return None
+
+        result = await cache.get_or_refresh(none_loader)
+        assert result is None
+        # has_value is True (we DID cache the None)
+        assert cache.has_value is True
+        # Subsequent call within TTL: loader NOT re-invoked
+        assert cache.loader_call_count == 1
+        result2 = await cache.get_or_refresh(none_loader)
+        assert result2 is None
+        assert cache.loader_call_count == 1
+
+    async def test_none_payload_stale_fallback(self):
+        cache: DailyRefreshCache[object] = DailyRefreshCache(ttl_seconds=60)
+        call_count = 0
+
+        async def flaky_none_loader() -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return None  # success on first call
+            raise RuntimeError("upstream is down")  # fail on subsequent
+
+        # First call: None cached.
+        first = await cache.get_or_refresh(flaky_none_loader)
+        assert first is None
+        assert cache.has_value is True
+
+        # Force refresh (invalidate keeps value for fallback).
+        cache.invalidate()
+
+        # Second call: loader raises, stale None returned.
+        second = await cache.get_or_refresh(flaky_none_loader)
+        assert second is None  # stale fallback
+
+    async def test_empty_cache_with_none_payload_does_not_match_existing_none(self):
+        """A cache that has never loaded anything must have has_value=False
+        even if the eventual payload would be None. The sentinel prevents
+        confusing 'value is None' with 'no value cached'."""
+        cache: DailyRefreshCache[object] = DailyRefreshCache(ttl_seconds=60)
+        assert cache.has_value is False
+        # _is_fresh is False (never loaded)
+        assert cache._is_fresh() is False
+
+
+# ---------------------------------------------------------------------------
 # AC6: age_seconds
 # ---------------------------------------------------------------------------
 
