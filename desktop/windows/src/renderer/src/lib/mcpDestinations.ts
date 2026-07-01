@@ -22,6 +22,7 @@ export type McpHealthResult = {
 }
 
 const DEFAULT_OMI_API_BASE = 'https://api.omi.me'
+const HOSTED_MCP_TIMEOUT_MS = 15_000
 
 function normalizedApiBase(): string {
   const raw = (import.meta.env.VITE_OMI_API_BASE as string | undefined) || DEFAULT_OMI_API_BASE
@@ -86,11 +87,18 @@ export function parseHostedMcpMemoryCount(payload: unknown): number {
 
 export async function testHostedMcpConnection(key: string): Promise<McpHealthResult> {
   const { url, init } = buildHostedMcpHealthRequest(key)
+  const controller = new AbortController()
+  const timeout = globalThis.setTimeout(() => controller.abort(), HOSTED_MCP_TIMEOUT_MS)
   let response: Response
   try {
-    response = await fetch(url, init)
+    response = await fetch(url, { ...init, signal: controller.signal })
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Hosted MCP request timed out.')
+    }
     throw new Error(`Hosted MCP request failed: ${(error as Error).message}`)
+  } finally {
+    globalThis.clearTimeout(timeout)
   }
 
   if (!response.ok) {
