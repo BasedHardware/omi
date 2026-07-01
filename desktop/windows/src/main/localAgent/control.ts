@@ -17,7 +17,7 @@ function validatePort(port: number): number {
 }
 
 function tokenStatusError(): string {
-  return 'Local agent token is unavailable. Rotate the token to repair local access.'
+  return 'Local agent token is unavailable. Check secure storage and rotate the token if needed.'
 }
 
 export function getLocalAgentStatus(): LocalAgentStatus {
@@ -76,7 +76,6 @@ export function copyLocalAgentToken(): LocalAgentStatus {
     }
     tokenClipboardClearTimer = null
   }, TOKEN_CLIPBOARD_TTL_MS)
-  tokenClipboardClearTimer.unref?.()
   return getLocalAgentStatus()
 }
 
