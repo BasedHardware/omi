@@ -10,14 +10,38 @@ struct AppleNoteRecord: Identifiable, Sendable {
 
 enum AppleNotesReaderError: LocalizedError {
   case storeNotFound
-  case storeUnavailable
+  case authorizationDenied(path: String)
+  case invalidSelectedFolder(path: String)
+  case schemaUnavailable(path: String)
+  case storeReadFailed(path: String, reason: String)
 
   var errorDescription: String? {
     switch self {
     case .storeNotFound:
       return "Apple Notes data store not found."
-    case .storeUnavailable:
-      return "Apple Notes data store is unavailable."
+    case .authorizationDenied:
+      return "Omi needs permission to read Apple Notes. Select the Apple Notes folder or grant Full Disk Access, then try again."
+    case .invalidSelectedFolder:
+      return "Choose the Apple Notes folder named group.com.apple.notes."
+    case .schemaUnavailable:
+      return "Apple Notes data store could not be read because its database format was not recognized."
+    case .storeReadFailed(_, let reason):
+      return "Apple Notes data store could not be read: \(reason)"
+    }
+  }
+
+  var reasonCode: String {
+    switch self {
+    case .storeNotFound:
+      return "store_not_found"
+    case .authorizationDenied:
+      return "authorization_denied"
+    case .invalidSelectedFolder:
+      return "invalid_selected_folder"
+    case .schemaUnavailable:
+      return "schema_unavailable"
+    case .storeReadFailed:
+      return "store_read_failed"
     }
   }
 }
@@ -35,20 +59,115 @@ actor AppleNotesReaderService {
 
   private let selectedFolderDefaultsKey = "onboardingAppleNotesFolderPath"
 
-  func readRecentNotes(maxResults: Int = 40) async throws -> [AppleNoteRecord] {
-    guard let storeURL = locateNotesStoreURL() else {
-      throw AppleNotesReaderError.storeNotFound
-    }
-
-    var configuration = Configuration()
-    configuration.readonly = true
+  func readRecentNotes(maxResults: Int = 40, selectedFolderPath: String? = nil) async throws -> [AppleNoteRecord] {
+    let boundedMaxResults = min(max(maxResults, 0), 1_000)
+    let storeURL = try locateNotesStoreURL(selectedFolderPath: selectedFolderPath)
 
     do {
-      let dbQueue = try DatabaseQueue(path: storeURL.path, configuration: configuration)
-      return try await dbQueue.read { db in
-        let rows = try Row.fetchAll(
-          db,
-          sql: """
+      let dbQueue = try openReadOnlyStore(at: storeURL)
+      return try await fetchRecentNotes(from: dbQueue, maxResults: boundedMaxResults)
+    } catch let error as AppleNotesReaderError {
+      log("AppleNotesReaderService: Notes read failed code=\(error.reasonCode) path=\(storeURL.path)")
+      throw error
+    } catch {
+      let classified = Self.classifyReadError(error, path: storeURL.path)
+      log("AppleNotesReaderService: Notes read failed code=\(classified.reasonCode) path=\(storeURL.path): \(error)")
+      throw classified
+    }
+  }
+
+  func validateSelectedFolder(path: String, remember: Bool = true) async throws -> URL {
+    let folderURL = URL(fileURLWithPath: path)
+    let resolvedFolder = try Self.resolveSelectedFolder(folderURL)
+    let storeURL = try locateNotesStoreURL(selectedFolderPath: resolvedFolder.path)
+
+    do {
+      let dbQueue = try openReadOnlyStore(at: storeURL)
+      _ = try await countReadableNotes(from: dbQueue)
+      if remember {
+        rememberSelectedFolder(path: resolvedFolder.path)
+      }
+      log("AppleNotesReaderService: Validated selected Notes folder at \(resolvedFolder.path)")
+      return resolvedFolder
+    } catch let error as AppleNotesReaderError {
+      log("AppleNotesReaderService: Selected folder validation failed code=\(error.reasonCode) path=\(storeURL.path)")
+      throw error
+    } catch {
+      let classified = Self.classifyReadError(error, path: storeURL.path)
+      log("AppleNotesReaderService: Selected folder validation failed code=\(classified.reasonCode) path=\(storeURL.path): \(error)")
+      throw classified
+    }
+  }
+
+  nonisolated static func resolveSelectedFolder(
+    _ selectedURL: URL,
+    fileManager: FileManager = .default,
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) throws -> URL {
+    let groupContainersURL = homeDirectory
+      .appendingPathComponent("Library/Group Containers", isDirectory: true)
+
+    if selectedURL.path == groupContainersURL.path {
+      let inferredURL = groupContainersURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
+      guard fileManager.fileExists(atPath: inferredURL.path) else {
+        throw AppleNotesReaderError.invalidSelectedFolder(path: selectedURL.path)
+      }
+      return inferredURL
+    }
+
+    if selectedURL.lastPathComponent == "group.com.apple.notes" {
+      guard fileManager.fileExists(atPath: selectedURL.path) else {
+        throw AppleNotesReaderError.invalidSelectedFolder(path: selectedURL.path)
+      }
+      return selectedURL
+    }
+
+    let nestedURL = selectedURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
+    guard fileManager.fileExists(atPath: nestedURL.path) else {
+      throw AppleNotesReaderError.invalidSelectedFolder(path: selectedURL.path)
+    }
+    return nestedURL
+  }
+
+  nonisolated static func classifyReadError(_ error: Error, path: String) -> AppleNotesReaderError {
+    if let notesError = error as? AppleNotesReaderError {
+      return notesError
+    }
+
+    let message = String(describing: error)
+    let localized = error.localizedDescription
+    let combined = "\(message) \(localized)".lowercased()
+
+    if combined.contains("sqlite error 23")
+      || combined.contains("authorization denied")
+      || combined.contains("not authorized")
+      || combined.contains("operation not permitted")
+      || combined.contains("permission denied")
+    {
+      return .authorizationDenied(path: path)
+    }
+
+    if combined.contains("no such table")
+      || combined.contains("no such column")
+      || combined.contains("database disk image is malformed")
+    {
+      return .schemaUnavailable(path: path)
+    }
+
+    return .storeReadFailed(path: path, reason: localized)
+  }
+
+  private func openReadOnlyStore(at storeURL: URL) throws -> DatabaseQueue {
+    var configuration = Configuration()
+    configuration.readonly = true
+    return try DatabaseQueue(path: storeURL.path, configuration: configuration)
+  }
+
+  private func fetchRecentNotes(from dbQueue: DatabaseQueue, maxResults: Int) async throws -> [AppleNoteRecord] {
+    try await dbQueue.read { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: """
               SELECT
                 Z_PK,
                 ZTITLE,
@@ -61,39 +180,50 @@ actor AppleNotesReaderService {
               ORDER BY ZMODIFICATIONDATE DESC
               LIMIT ?
             """,
-          arguments: [maxResults * 3]
-        )
+        arguments: [maxResults * 3]
+      )
 
-        let notes = rows.compactMap { row -> AppleNoteRecord? in
-          guard let rawTitle = row["ZTITLE"] as? String else {
-            return nil
-          }
-
-          let id = (row["Z_PK"] as? Int64) ?? Int64(row["Z_PK"] as? Int ?? 0)
-          let modifiedAtValue =
-            (row["ZMODIFICATIONDATE"] as? Double)
-            ?? Double(row["ZMODIFICATIONDATE"] as? Int64 ?? 0)
-
-          let title = Self.normalizeNoteField(rawTitle)
-          let summary = Self.normalizeNoteField(row["ZSUMMARY"] as? String ?? "")
-
-          guard !title.isEmpty, !Self.isLikelyAttachment(title: title, summary: summary) else {
-            return nil
-          }
-
-          return AppleNoteRecord(
-            id: id,
-            title: title,
-            summary: summary,
-            modifiedAt: Date(timeIntervalSinceReferenceDate: modifiedAtValue)
-          )
+      let notes = rows.compactMap { row -> AppleNoteRecord? in
+        guard let rawTitle = row["ZTITLE"] as? String else {
+          return nil
         }
 
-        return Array(notes.prefix(maxResults))
+        let id = (row["Z_PK"] as? Int64) ?? Int64(row["Z_PK"] as? Int ?? 0)
+        let modifiedAtValue =
+          (row["ZMODIFICATIONDATE"] as? Double)
+          ?? Double(row["ZMODIFICATIONDATE"] as? Int64 ?? 0)
+
+        let title = Self.normalizeNoteField(rawTitle)
+        let summary = Self.normalizeNoteField(row["ZSUMMARY"] as? String ?? "")
+
+        guard !title.isEmpty, !Self.isLikelyAttachment(title: title, summary: summary) else {
+          return nil
+        }
+
+        return AppleNoteRecord(
+          id: id,
+          title: title,
+          summary: summary,
+          modifiedAt: Date(timeIntervalSinceReferenceDate: modifiedAtValue)
+        )
       }
-    } catch {
-      log("AppleNotesReaderService: Failed reading Notes store at \(storeURL.path): \(error)")
-      throw AppleNotesReaderError.storeUnavailable
+
+      return Array(notes.prefix(maxResults))
+    }
+  }
+
+  private func countReadableNotes(from dbQueue: DatabaseQueue) async throws -> Int {
+    try await dbQueue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: """
+          SELECT COUNT(*)
+          FROM ZICCLOUDSYNCINGOBJECT
+          WHERE ZNOTE IS NOT NULL
+            AND ZMARKEDFORDELETION = 0
+            AND ZTITLE IS NOT NULL
+        """
+      ) ?? 0
     }
   }
 
@@ -234,13 +364,13 @@ actor AppleNotesReaderService {
     UserDefaults.standard.set(path, forKey: selectedFolderDefaultsKey)
   }
 
-  private func locateNotesStoreURL() -> URL? {
+  private func locateNotesStoreURL(selectedFolderPath: String? = nil) throws -> URL {
     let fm = FileManager.default
     let home = fm.homeDirectoryForCurrentUser
 
     var candidates: [URL] = []
 
-    if let selectedFolderPath = UserDefaults.standard.string(forKey: selectedFolderDefaultsKey),
+    if let selectedFolderPath = selectedFolderPath ?? UserDefaults.standard.string(forKey: selectedFolderDefaultsKey),
       !selectedFolderPath.isEmpty
     {
       let selectedFolderURL = URL(fileURLWithPath: selectedFolderPath)
@@ -262,6 +392,11 @@ actor AppleNotesReaderService {
           .appendingPathComponent("LocalAccount", isDirectory: true)
           .appendingPathComponent("NoteStore.sqlite", isDirectory: false)
       )
+
+      guard let storeURL = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else {
+        throw AppleNotesReaderError.invalidSelectedFolder(path: selectedFolderPath)
+      }
+      return storeURL
     }
 
     candidates.append(
@@ -281,7 +416,10 @@ actor AppleNotesReaderService {
         .appendingPathComponent("NoteStore.sqlite", isDirectory: false)
     )
 
-    return candidates.first(where: { fm.fileExists(atPath: $0.path) })
+    guard let storeURL = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else {
+      throw AppleNotesReaderError.storeNotFound
+    }
+    return storeURL
   }
 
   private static func normalizeNoteField(_ value: String) -> String {
