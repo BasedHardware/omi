@@ -33,16 +33,14 @@
       "NEXT_PUBLIC_FIREBASE_APP_ID",
       "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID",
       "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
-      "NEXT_PUBLIC_RAPIDAPI_KEY",
-      "NEXT_PUBLIC_RAPIDAPI_HOST",
-      "NEXT_PUBLIC_LINKEDIN_API_KEY",
-      "NEXT_PUBLIC_LINKEDIN_API_HOST",
       "NEXT_PUBLIC_MIXPANEL_TOKEN",
       "NEXT_PUBLIC_EXTRA_PROMPT_RULES"
     ]
   },
   "public_client_env_sources": {
-    "allowed": []
+    "allowed": [
+      "STAGING_API_URL"
+    ]
   },
   "restricted_public_client_keys": {
     "PUBLIC_GOOGLE_MAPS_API_KEY": {

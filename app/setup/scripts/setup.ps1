@@ -83,7 +83,14 @@ function SetupAppEnv {
     ) -join [Environment]::NewLine
     [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".client.dev.env"), $content, [System.Text.Encoding]::UTF8)
     Copy-Item -Path ".client.dev.env" -Destination ".client.env" -Force
-    python3 ../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
+    if (Get-Command "python3" -ErrorAction SilentlyContinue) {
+        python3 ../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
+    } elseif (Get-Command "py" -ErrorAction SilentlyContinue) {
+        py -3 ../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
+    } else {
+        Write-Host "Python 3 is required to validate public client env files. Install Python 3 and retry."
+        exit 1
+    }
 }
 
 function SetupKeystoreAndroid {

@@ -45,6 +45,8 @@ jobs:
       - name: Build and Push Docker image
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
+          DEPLOY_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}"
+          IMAGE_TAG="${DEPLOY_ENV}-${SHORT_SHA}"
           docker build \
             --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }} \
             --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }} \
@@ -54,10 +56,10 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }} \
             --build-arg API_URL=${{ secrets.API_URL }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA -f web/frontend/Dockerfile .
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG -f web/frontend/Dockerfile .
             
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA
-          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA" >> "$GITHUB_ENV"
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG
+          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG" >> "$GITHUB_ENV"
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2

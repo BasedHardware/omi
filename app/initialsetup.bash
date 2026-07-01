@@ -28,6 +28,7 @@ cat .client.env.example > .client.env
 # Prompt user to review public client config
 echo "Review app/.client.dev.env and app/.client.env. Do not add private API keys or server-only secrets."
 read -p "Press enter to continue after reviewing the public client config."
+../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
 
 # Run Build Runner
 echo "Running Build Runner..."

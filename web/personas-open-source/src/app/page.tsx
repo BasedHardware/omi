@@ -79,13 +79,9 @@ const formatDate = (dateString: string): string => {
 const fetchTwitterTimeline = async (screenname: string) => {
   try {
     const response = await fetch(
-      `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/timeline.php?screenname=${screenname}`,
-      {
-        headers: {
-          'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-          'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
-        },
-      },
+      `/api/social-profile?provider=twitter-timeline&username=${encodeURIComponent(
+        screenname,
+      )}`,
     );
 
     const data = await response.json();
@@ -620,13 +616,9 @@ export default function HomePage() {
     try {
       const profileExists = await checkExistingProfile(cleanHandle, 'twitter');
       const profileResponse = await fetch(
-        `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${cleanHandle}`,
-        {
-          headers: {
-            'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-            'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
-          },
-        },
+        `/api/social-profile?provider=twitter-profile&username=${encodeURIComponent(
+          cleanHandle,
+        )}`,
       );
       if (!profileResponse.ok) return false;
       const profileData: TwitterProfile = await profileResponse.json();
@@ -729,13 +721,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       const profileExists = await checkExistingProfile(cleanHandle, 'linkedin');
       const encodedHandle = encodeURIComponent(cleanHandle);
       const profileResponse = await fetch(
-        `https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`,
-        {
-          headers: {
-            'x-rapidapi-key': process.env.NEXT_PUBLIC_LINKEDIN_API_KEY!,
-            'x-rapidapi-host': process.env.NEXT_PUBLIC_LINKEDIN_API_HOST!,
-          },
-        },
+        `/api/social-profile?provider=linkedin-profile&username=${encodedHandle}`,
       );
       if (!profileResponse.ok) return false;
       const profileData: LinkedinProfile = await profileResponse.json();

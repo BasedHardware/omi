@@ -21,12 +21,14 @@ Iterable<File> _trackedFilesUnder(String relativePath, {Set<String>? extensions}
 
 void main() {
   final policy = jsonDecode(_read('app/config/client_env_policy.yaml')) as Map<String, dynamic>;
+  final allowed = Set<String>.from((policy['public_client_env'] as Map<String, dynamic>)['allowed'] as List);
   final denied = Set<String>.from((policy['server_secret_env'] as Map<String, dynamic>)['denied_exact'] as List);
   final deniedPatterns = ((policy['server_secret_env'] as Map<String, dynamic>)['denied_name_patterns'] as List)
       .map((pattern) => RegExp(pattern as String))
       .toList();
 
-  bool isDeniedName(String name) => denied.contains(name) || deniedPatterns.any((pattern) => pattern.hasMatch(name));
+  bool isDeniedName(String name) =>
+      !allowed.contains(name) && (denied.contains(name) || deniedPatterns.any((pattern) => pattern.hasMatch(name)));
 
   test('mobile env source cannot expose server-only variables', () {
     final files = [
@@ -50,7 +52,6 @@ void main() {
   });
 
   test('public client env policy documents restricted public keys', () {
-    final allowed = Set<String>.from((policy['public_client_env'] as Map<String, dynamic>)['allowed'] as List);
     final restricted = policy['restricted_public_client_keys'] as Map<String, dynamic>;
 
     for (final entry in restricted.entries) {

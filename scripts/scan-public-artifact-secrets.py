@@ -117,7 +117,7 @@ def extract_dmg(path: Path, dest: Path, errors: list[str]) -> Path:
             if child.is_dir():
                 shutil.copytree(child, destination, symlinks=True)
             else:
-                shutil.copy2(child, destination)
+                shutil.copy2(child, destination, follow_symlinks=False)
     except (OSError, subprocess.CalledProcessError) as exc:
         errors.append(f"{path}: failed to inspect DMG: {exc}")
     finally:
@@ -143,7 +143,7 @@ def materialize(path: Path, dest: Path, errors: list[str]) -> Path:
         if zipfile.is_zipfile(path):
             try:
                 extract_zip(path, target)
-            except ValueError as exc:
+            except (OSError, ValueError, zipfile.BadZipFile) as exc:
                 errors.append(f"{path}: failed to inspect zip archive: {exc}")
         else:
             errors.append(f"{path}: {suffix} is expected to be zip-compatible but could not be opened")
@@ -210,7 +210,7 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
                 elif zipfile.is_zipfile(archive_path):
                     try:
                         extract_zip(archive_path, nested_dest)
-                    except ValueError as exc:
+                    except (OSError, ValueError, zipfile.BadZipFile) as exc:
                         errors.append(f"{path}: failed to inspect nested zip archive {rel_archive}: {exc}")
                 elif looks_like_tar(archive_path):
                     try:

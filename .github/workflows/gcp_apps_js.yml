@@ -43,10 +43,12 @@ jobs:
       - name: Build and Push Docker image
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
+          DEPLOY_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}"
+          IMAGE_TAG="${DEPLOY_ENV}-${SHORT_SHA}"
           docker build \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA -f plugins/apps-js/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA
-          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SHORT_SHA" >> "$GITHUB_ENV"
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG -f plugins/apps-js/Dockerfile .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG
+          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
         id: deploy
