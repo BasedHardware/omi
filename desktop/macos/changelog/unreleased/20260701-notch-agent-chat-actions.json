@@ -1,0 +1,3 @@
+{
+  "change": "Updated notch chat agent controls so spawned subagents open from tool calls and settings moved to a hover-only right-side control."
+}
