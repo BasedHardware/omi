@@ -41,6 +41,8 @@ describe('rewind DB search', () => {
   })
 
   afterEach(async () => {
+    const db = await import('./db')
+    db.closeDatabase()
     delete process.env.OMI_DB_PATH
     delete process.env.OMI_REWIND_DISABLE_FTS
     vi.resetModules()
