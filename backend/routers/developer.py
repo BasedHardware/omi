@@ -128,12 +128,14 @@ def _coerce_optional_memory_datetime(value) -> Optional[datetime]:
     return None
 
 
-def _datetime_to_utc_epoch(value: datetime) -> int:
+def _datetime_to_utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
-        value = value.replace(tzinfo=timezone.utc)
-    else:
-        value = value.astimezone(timezone.utc)
-    return int(value.timestamp())
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _datetime_to_utc_epoch(value: datetime) -> int:
+    return int(_datetime_to_utc(value).timestamp())
 
 
 def _semantic_fetch_limit(limit: int) -> int:
@@ -1102,10 +1104,11 @@ def search_conversations(
     if not query_text:
         raise HTTPException(status_code=422, detail="query cannot be empty")
 
+    if start_date and end_date and _datetime_to_utc(end_date) < _datetime_to_utc(start_date):
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+
     starts_at = _datetime_to_utc_epoch(start_date) if start_date else None
     ends_at = _datetime_to_utc_epoch(end_date) if end_date else None
-    if starts_at is not None and ends_at is not None and ends_at < starts_at:
-        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
     matches = vector_db.find_similar_conversations(
         uid=uid,
         query=query_text,
