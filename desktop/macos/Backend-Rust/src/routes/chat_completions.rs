@@ -1105,6 +1105,29 @@ pub fn chat_completions_routes() -> Router<AppState> {
 mod tests {
     use super::*;
 
+    fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages,
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        }
+    }
+
+    fn user_message(text: &str) -> ChatMessage {
+        ChatMessage {
+            role: "user".to_string(),
+            content: Some(json!(text)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
     #[test]
     fn transient_statuses_retry() {
         for s in [408, 425, 429, 500, 502, 503, 504, 529] {

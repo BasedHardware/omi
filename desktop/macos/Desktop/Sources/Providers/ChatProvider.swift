@@ -2824,7 +2824,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     text: trimmedText,
                     sender: "human",
                     appId: capturedAppId,
-                    sessionId: capturedSessionId
+                    sessionId: capturedSessionId,
+                    clientMessageId: localId
                 )
                 await MainActor.run {
                     if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
@@ -2870,7 +2871,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     text: trimmedText,
                     sender: "ai",
                     appId: capturedAppId,
-                    sessionId: capturedSessionId
+                    sessionId: capturedSessionId,
+                    clientMessageId: localId
                 )
                 await MainActor.run {
                     if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
@@ -2893,7 +2895,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Appends both messages to the in-memory provider session immediately, then
     /// persists them sequentially in the background so later follow-ups retain context.
     @discardableResult
-    func recordCompletedTurn(userText: String, assistantText: String, logLabel: String = "completed") -> (
+    func recordCompletedTurn(
+        userText: String,
+        assistantText: String,
+        logLabel: String = "completed",
+        messageSource: String = "desktop_chat"
+    ) -> (
         user: ChatMessage?, assistant: ChatMessage?
     ) {
         let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2924,12 +2931,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if let userMessage {
                 await self?.persistRecordedTurnMessage(
                     userMessage, text: user, sender: "human",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: messageSource)
             }
             if let aiMessage {
                 await self?.persistRecordedTurnMessage(
                     aiMessage, text: assistant, sender: "ai",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: messageSource)
             }
             await MainActor.run { self?.pendingSaves.end() }
         }
@@ -2944,18 +2951,35 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// or sync to the backend. Empty sides are skipped (a tool-only turn with no
     /// spoken reply still records the user's request).
     func recordVoiceTurn(userText: String, assistantText: String) {
-        recordCompletedTurn(userText: userText, assistantText: assistantText, logLabel: "voice")
+        recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: "voice",
+            messageSource: "realtime_voice"
+        )
     }
 
     /// Persist one recorded-turn message and sync its server ID back into `messages` so a
     /// subsequent poll doesn't duplicate it. Failures leave the in-memory copy unsynced
     /// (matches the existing saveMessage sites — no retry).
     private func persistRecordedTurnMessage(
-        _ message: ChatMessage, text: String, sender: String, appId: String?, sessionId: String?, logLabel: String
+        _ message: ChatMessage,
+        text: String,
+        sender: String,
+        appId: String?,
+        sessionId: String?,
+        logLabel: String,
+        messageSource: String
     ) async {
         do {
             let response = try await APIClient.shared.saveMessage(
-                text: text, sender: sender, appId: appId, sessionId: sessionId)
+                text: text,
+                sender: sender,
+                appId: appId,
+                sessionId: sessionId,
+                clientMessageId: message.id,
+                messageSource: messageSource
+            )
             await MainActor.run {
                 if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
                     self.messages[index].id = response.id
@@ -3128,7 +3152,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
                 return nil
             }
-            usageLimiter.recordQuery()
         }
 
         // QueryTracer: picked up from the TaskLocal context established by the
@@ -3215,6 +3238,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             ? nil
             : encodeAttachmentsMetadata(attachmentsForMessage)
 
+        if isUsingOmiAccountProvider {
+            usageLimiter.recordQuery()
+        }
+
         // Save user message to backend and add to UI.
         // (skip for follow-ups — sendFollowUp already did both)
         //
@@ -3242,7 +3269,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         sender: "human",
                         appId: capturedAppId,
                         sessionId: capturedSessionId,
-                        metadata: attachmentMetadataJSON
+                        metadata: attachmentMetadataJSON,
+                        clientMessageId: userMessageId
                     )
                     // Adopt the server ID (local UUID → server ID) and mark synced.
                     // isSynced=true enables rating buttons on the message bubble.
@@ -3682,7 +3710,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         sender: "ai",
                         appId: capturedAppId,
                         sessionId: capturedSessionId,
-                        metadata: toolMetadata
+                        metadata: toolMetadata,
+                        clientMessageId: aiMessageId
                     )
                     // Adopt the server ID so future polls find this message by ID
                     // (existingIds check in pollForNewMessages). isSynced=true enables
@@ -3732,15 +3761,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageLength: responseLength
             )
 
-            // Skip client-side usage recording for piMono (the backend already
-            // logs usage server-side via POST /v2/chat/completions, so recording
-            // here would double-count) and for local harnesses (Hermes/OpenClaw).
-            // The backend's record_llm_usage_bucket always increments the
-            // grand-total desktop_chat bucket regardless of the account
-            // parameter, and /usage-quota sums that bucket regardless of account,
-            // so any POST — even with account="local" — still depletes the user's
-            // Omi/pi-mono quota. The client-side quota gates already skip local
-            // providers, so skip the POST here too. Use the actual harness, not
+            // Skip client-side cost telemetry for piMono because /v2/chat/completions
+            // already logs Omi-account token/cost usage server-side. Question
+            // quota is recorded by the backend when the accepted human message
+            // is persisted, so model calls and helper calls cannot double-count. Local harnesses
+            // (Hermes/OpenClaw) skip telemetry entirely; use the actual harness, not
             // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
             // override the harness without changing the user's global preference.
             let effectiveHarness = activeBridgeHarness
@@ -3822,7 +3847,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                                 sender: "ai",
                                 appId: capturedAppId,
                                 sessionId: capturedSessionId,
-                                metadata: partialToolMetadata
+                                metadata: partialToolMetadata,
+                                clientMessageId: aiMessageId
                             )
                             await MainActor.run {
                                 if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {

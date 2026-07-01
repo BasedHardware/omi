@@ -274,7 +274,8 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
 // The realtime WS is client↔provider direct, so the backend never sees usage inline.
 // As a first pass, the CLIENT reports the provider's own per-turn token counts here and
 // we price + record them into the same llm_usage ledger chat uses (account "realtime"),
-// so realtime spend counts toward the user's quota. This is CLIENT-TRUSTED (a tampered
+// and separately increment the explicit desktop question quota counter for the
+// accepted managed turn. This is CLIENT-TRUSTED (a tampered
 // client could under-report) — acceptable for v1; the eventual hardening is server-side
 // reconciliation against the provider Usage API (OpenAI exposes per-user usage via the
 // OpenAI-Safety-Identifier; the minted realtime_sessions records are the audit trail).
@@ -367,6 +368,18 @@ async fn report_usage(
         .await
     {
         tracing::error!("realtime usage record failed for uid={}: {}", user.uid, e);
+        return StatusCode::BAD_GATEWAY;
+    }
+    if let Err(e) = state
+        .firestore
+        .record_desktop_chat_quota_question_with_account(&user.uid, Some("realtime"))
+        .await
+    {
+        tracing::error!(
+            "realtime quota question record failed for uid={}: {}",
+            user.uid,
+            e
+        );
         return StatusCode::BAD_GATEWAY;
     }
     tracing::info!(
