@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { RewindFrame, RewindSearchGroup } from '../../../../shared/types'
 
 const timeLabel = (ts: number): string =>
@@ -22,21 +22,48 @@ const ResultImage = memo(function ResultImage({
   frame: RewindFrame
   className: string
 }): React.JSX.Element {
+  const root = useRef<HTMLSpanElement | null>(null)
+  const [visible, setVisible] = useState(false)
   const [image, setImage] = useState<{ path: string; src: string } | null>(null)
   const src = image?.path === frame.imagePath ? image.src : null
 
   useEffect(() => {
+    if (visible) return
+    const node = root.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return
+        setVisible(true)
+        observer.disconnect()
+      },
+      { rootMargin: '240px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [visible])
+
+  useEffect(() => {
+    if (!visible) return
     let alive = true
-    void window.omi.rewindFrameImage(frame.imagePath).then((dataUrl) => {
-      if (alive) setImage({ path: frame.imagePath, src: dataUrl })
-    })
+    void window.omi
+      .rewindFrameImage(frame.imagePath)
+      .then((dataUrl) => {
+        if (alive) setImage({ path: frame.imagePath, src: dataUrl })
+      })
+      .catch(() => {
+        if (alive) setImage(null)
+      })
     return () => {
       alive = false
     }
-  }, [frame.imagePath])
+  }, [frame.imagePath, visible])
 
   return (
-    <span className={`block overflow-hidden rounded bg-black/40 ${className}`}>
+    <span ref={root} className={`block overflow-hidden rounded bg-black/40 ${className}`}>
       {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : null}
     </span>
   )
