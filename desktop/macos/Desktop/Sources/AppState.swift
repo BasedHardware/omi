@@ -35,6 +35,7 @@ enum FinishConversationResult {
 enum DesktopConversationMatchPolicy {
   /// Backend and local clocks can differ slightly around WebSocket close/reconnect.
   static let startedAtTolerance: TimeInterval = 10
+  static let cloudReconciliationStatuses: [ConversationStatus] = [.inProgress, .processing, .completed]
 
   static func matchesDesktopConversation(
     startedAt conversationStartedAt: Date?,
@@ -87,6 +88,17 @@ enum DesktopConversationMatchPolicy {
     source: ConversationSource?
   ) -> Bool {
     conversationId == boundBackendId && source == .desktop && status != .inProgress
+  }
+
+  static func shouldFinalizeTimestampMatchedConversation(status: ConversationStatus) -> Bool {
+    status == .inProgress
+  }
+
+  static func canCompleteTimestampMatchedConversation(
+    status: ConversationStatus,
+    source: ConversationSource?
+  ) -> Bool {
+    source == .desktop && status != .inProgress
   }
 
   static func canForceProcessBoundCloudSession(

@@ -20,6 +20,7 @@ from utils.transcribe_decisions import (
     should_include_speech_profile,
     should_initialize_vad_gate,
     should_load_speech_profile,
+    should_process_on_disconnect,
     should_queue_speaker_embedding,
     should_skip_speaker_detection,
     should_spawn_speaker_match,
@@ -184,6 +185,69 @@ def test_conversation_lifecycle_actions():
             conversation_creation_timeout=120,
         )
         == ConversationLifecycleAction.process_and_create_new
+    )
+
+
+def test_disconnect_processing_only_targets_single_channel_in_progress_with_content():
+    content_conversation = {
+        'status': 'in_progress',
+        'transcript_segments': [{'text': 'synthetic transcript'}],
+        'photos': [],
+    }
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation=content_conversation,
+            in_progress_status='in_progress',
+        )
+        is True
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=True,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation=content_conversation,
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1001,
+            conversation_id='conversation-1',
+            conversation=content_conversation,
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation={**content_conversation, 'status': 'processing'},
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation={'status': 'in_progress', 'transcript_segments': [], 'photos': []},
+            in_progress_status='in_progress',
+        )
+        is False
     )
 
 

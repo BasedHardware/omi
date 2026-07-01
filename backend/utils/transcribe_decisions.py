@@ -137,6 +137,23 @@ def decide_lifecycle_action(
     return ConversationLifecycleAction.continue_current
 
 
+def should_process_on_disconnect(
+    *,
+    is_multi_channel: bool,
+    close_code: int,
+    conversation_id: Optional[str],
+    conversation,
+    in_progress_status,
+) -> bool:
+    if close_code != 1000:
+        return False
+    if is_multi_channel or not conversation_id or not conversation:
+        return False
+    if conversation.get('status') != in_progress_status:
+        return False
+    return bool(conversation.get('transcript_segments') or conversation.get('photos'))
+
+
 def person_id_for_client(person_id: Optional[str], speaker_auto_assign_enabled: bool) -> str:
     if speaker_auto_assign_enabled and person_id:
         return person_id
