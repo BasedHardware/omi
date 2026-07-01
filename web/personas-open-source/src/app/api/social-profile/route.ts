@@ -4,6 +4,7 @@ const rapidApiKey = process.env.RAPIDAPI_KEY;
 const rapidApiHost = process.env.RAPIDAPI_HOST;
 const linkedinApiKey = process.env.LINKEDIN_API_KEY;
 const linkedinApiHost = process.env.LINKEDIN_API_HOST;
+const firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
 const MAX_USERNAME_LENGTH = 64;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -16,12 +17,6 @@ const rapidApiHeaders = (key?: string, host?: string) => {
     'x-rapidapi-key': key,
     'x-rapidapi-host': host,
   };
-};
-
-const clientIp = (req: Request) => {
-  const forwardedFor = req.headers.get('x-forwarded-for');
-  if (forwardedFor) return forwardedFor.split(',')[0]?.trim() || 'unknown';
-  return req.headers.get('x-real-ip') || 'unknown';
 };
 
 const isRateLimited = (key: string) => {
@@ -43,6 +38,28 @@ const isRateLimited = (key: string) => {
   return current.count > RATE_LIMIT_MAX_REQUESTS;
 };
 
+const authenticatedUid = async (req: Request) => {
+  const authorization = req.headers.get('authorization');
+  const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token || !firebaseApiKey) return null;
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(
+      firebaseApiKey,
+    )}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: token }),
+    },
+  );
+
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as { users?: Array<{ localId?: string }> };
+  return data.users?.[0]?.localId || null;
+};
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const provider = url.searchParams.get('provider');
@@ -56,7 +73,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Invalid username' }, { status: 400 });
   }
 
-  if (isRateLimited(clientIp(req))) {
+  const uid = await authenticatedUid(req);
+  if (!uid) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (isRateLimited(uid)) {
     return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
   }
 
