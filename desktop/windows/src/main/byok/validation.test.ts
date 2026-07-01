@@ -84,5 +84,11 @@ describe('BYOK validation', () => {
       ok: true,
       status: 200
     })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://api.deepgram.com/v1/projects',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal)
+      })
+    )
   })
 })
