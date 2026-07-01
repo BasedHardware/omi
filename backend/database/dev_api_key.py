@@ -109,7 +109,7 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
 
     # Check cache first
     cached_data = redis_db.get_cached_dev_api_key_data(hashed_key)
-    if cached_data:
+    if cached_data and cached_data.get("key_id"):
         return cached_data
 
     # If not in cache, query database
@@ -127,8 +127,19 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
 
     if user_id:
         # Cache the key with scopes (None if not present) and update last_used_at
-        redis_db.cache_dev_api_key(hashed_key, user_id, scopes)
+        redis_db.cache_dev_api_key(
+            hashed_key,
+            user_id,
+            scopes,
+            key_id=key_data.get("id") or key_doc.id,
+            app_id=key_data.get("app_id"),
+        )
         key_ref = key_doc.reference
         key_ref.update({"last_used_at": datetime.utcnow()})
 
-    return {"user_id": user_id, "scopes": scopes}
+    return {
+        "user_id": user_id,
+        "scopes": scopes,
+        "key_id": key_data.get("id") or key_doc.id,
+        "app_id": key_data.get("app_id"),
+    }

@@ -101,3 +101,32 @@ def get_user_id_by_api_key(api_key: str) -> Optional[str]:
         key_ref.update({"last_used_at": datetime.utcnow()})
 
     return user_id
+
+
+def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
+    """Verifies an MCP API key and returns uid plus key identity for rate limiting."""
+    if not api_key.startswith("omi_mcp_"):
+        return None
+    secret_part = api_key.replace("omi_mcp_", "", 1)
+    hashed_key = hash_api_key(secret_part)
+
+    keys_ref = db.collection("mcp_api_keys").where("hashed_key", "==", hashed_key).limit(1)
+    docs = list(keys_ref.stream())
+
+    if not docs:
+        return None
+
+    key_doc = docs[0]
+    key_data = key_doc.to_dict()
+    user_id = key_data.get("user_id")
+
+    if user_id:
+        key_ref = key_doc.reference
+        key_ref.update({"last_used_at": datetime.utcnow()})
+
+    return {
+        "user_id": user_id,
+        "scopes": key_data.get("scopes"),
+        "key_id": key_data.get("id") or key_doc.id,
+        "app_id": key_data.get("app_id"),
+    }

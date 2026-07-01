@@ -283,16 +283,19 @@ def rate_limit_dependency(endpoint: str = "", requests_per_window: int = 60, win
     return rate_limit
 
 
-def _enforce_rate_limit(key: str, policy_name: str):
+def _enforce_rate_limit(key: str, policy_name: str, fail_closed: bool = False):
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
-    One Redis round-trip per call (Lua script). Fail-open on Redis errors.
+    One Redis round-trip per call (Lua script). First-party user paths fail open on
+    Redis errors; API-key abuse controls pass fail_closed=True.
     """
     max_requests, window = get_effective_limit(policy_name)
     try:
         allowed, remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
     except redis_pkg.exceptions.RedisError as e:
-        logger.error(f"Rate limit Redis error (allowing request): {e}")
+        logger.error(f"Rate limit Redis error policy={policy_name} fail_closed={fail_closed}: {e}")
+        if fail_closed:
+            raise HTTPException(status_code=503, detail="Rate limit service unavailable")
         return
 
     if not allowed:
@@ -308,6 +311,25 @@ def _enforce_rate_limit(key: str, policy_name: str):
                 "Retry-After": str(retry_after),
             },
         )
+
+
+def check_api_key_rate_limit(
+    *,
+    prefix: str,
+    uid: str,
+    app_id: str | None,
+    key_id: str | None,
+    policy_name: str,
+):
+    """Fail-closed rate limit for Developer/MCP API-key requests.
+
+    Key by API key identity so one leaked key cannot consume a user's entire
+    first-party quota and so rotating/revoking a key isolates abusive traffic.
+    """
+    if not key_id:
+        raise HTTPException(status_code=403, detail="Missing API key identity")
+    key = f"{prefix}:{uid}:{app_id or 'unknown_app'}:{key_id}"
+    _enforce_rate_limit(key, policy_name, fail_closed=True)
 
 
 def with_rate_limit(auth_dependency, policy_name: str):
