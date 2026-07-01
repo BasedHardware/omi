@@ -16,13 +16,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! python3 - <<'PY' >/dev/null 2>&1
-import yaml
+cat >"$TMPDIR/yaml.py" <<'PY'
+def safe_load(handle):
+    data = {}
+    for raw_line in handle.read().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        if value == "[]":
+            parsed = []
+        else:
+            try:
+                parsed = int(value)
+            except ValueError:
+                parsed = value
+        data[key.strip()] = parsed
+    return data
 PY
-then
-  echo "omi-harness schema tests skipped: PyYAML is not installed"
-  exit 0
-fi
+export PYTHONPATH="$TMPDIR${PYTHONPATH:+:$PYTHONPATH}"
 
 write_flow() {
   local path="$1" version="$2"
