@@ -49,7 +49,9 @@ def denied_patterns(policy: dict) -> list[re.Pattern[str]]:
 
 
 def allowed_names(policy: dict) -> set[str]:
-    return set(policy["public_client_env"]["allowed"]) | set(policy.get("legacy_public_client_env", {}).get("allowed", []))
+    return set(policy["public_client_env"]["allowed"]) | set(
+        policy.get("legacy_public_client_env", {}).get("allowed", [])
+    )
 
 
 def name_is_denied(name: str, exact: set[str], patterns: list[re.Pattern[str]]) -> bool:
