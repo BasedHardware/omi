@@ -570,10 +570,11 @@ class MemoryDB(Memory):
 
     def __init__(self, **data):
         super().__init__(**data)
-        # Deprecated alias for legacy clients: mirror `id` only. Do not copy
-        # `conversation_id` — that produces id/memory_id conflicts on desktop.
-        if self.memory_id is None:
-            self.memory_id = self.id
+        # Deprecated alias for legacy clients: always mirror `id`. Older code stored
+        # `memory_id = conversation_id` on the doc; serving that stored value makes
+        # desktop's ServerMemory decoder reject the whole memories list, so the alias
+        # must be normalized here rather than trusted from Firestore.
+        self.memory_id = self.id
 
     @property
     def is_active(self) -> bool:
