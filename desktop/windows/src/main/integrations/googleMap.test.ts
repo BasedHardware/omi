@@ -24,8 +24,37 @@ describe('mapGmailMessage', () => {
   })
 
   it('header lookup is case-insensitive and tolerates missing fields', () => {
-    const item = mapGmailMessage({ id: 'm2', payload: { headers: [{ name: 'subject', value: 'Hi' }] } })
+    const item = mapGmailMessage({
+      id: 'm2',
+      payload: { headers: [{ name: 'subject', value: 'Hi' }] }
+    })
     expect(item).toEqual({ id: 'm2', subject: 'Hi', from: '', snippet: '', internalDateMs: 0 })
+  })
+
+  it('ignores a header object that has no name', () => {
+    const item = mapGmailMessage({
+      id: 'm3',
+      payload: {
+        headers: [
+          { value: 'orphan' } as unknown as { name: string; value: string },
+          { name: 'Subject', value: 'Hi' }
+        ]
+      }
+    })
+    expect(item).toEqual({ id: 'm3', subject: 'Hi', from: '', snippet: '', internalDateMs: 0 })
+  })
+
+  it('ignores a header whose name is not a string', () => {
+    const item = mapGmailMessage({
+      id: 'm4',
+      payload: {
+        headers: [
+          { name: 123, value: 'numeric' } as unknown as { name: string; value: string },
+          { name: 'Subject', value: 'Hi' }
+        ]
+      }
+    })
+    expect(item).toEqual({ id: 'm4', subject: 'Hi', from: '', snippet: '', internalDateMs: 0 })
   })
 
   it('returns null without an id', () => {
@@ -51,7 +80,11 @@ describe('mapCalendarEvent', () => {
   })
 
   it('handles all-day events (date, not dateTime) and missing summary', () => {
-    const item = mapCalendarEvent({ id: 'e2', start: { date: '2026-06-10' }, end: { date: '2026-06-11' } })
+    const item = mapCalendarEvent({
+      id: 'e2',
+      start: { date: '2026-06-10' },
+      end: { date: '2026-06-11' }
+    })
     expect(item?.title).toBe('(no title)')
     expect(item?.startMs).toBe(Date.parse('2026-06-10'))
     expect(item?.location).toBeUndefined()
