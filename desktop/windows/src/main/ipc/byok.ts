@@ -46,16 +46,19 @@ function normalizeKey(value: unknown): string {
 
 function normalizeMessages(value: unknown): ChatMessage[] {
   if (!Array.isArray(value)) throw new Error('BYOK chat requires messages')
-  return value
-    .filter((message): message is ChatMessage => {
-      if (!message || typeof message !== 'object') return false
-      const record = message as Partial<ChatMessage>
-      return (
-        (record.role === 'user' || record.role === 'assistant') &&
-        typeof record.content === 'string'
-      )
-    })
-    .map((message) => ({ id: message.id, role: message.role, content: message.content }))
+  return value.map((message, index) => {
+    if (!message || typeof message !== 'object') {
+      throw new Error(`Invalid BYOK chat message at index ${index}`)
+    }
+    const record = message as Partial<ChatMessage>
+    if (
+      (record.role !== 'user' && record.role !== 'assistant') ||
+      typeof record.content !== 'string'
+    ) {
+      throw new Error(`Invalid BYOK chat message at index ${index}`)
+    }
+    return { id: record.id, role: record.role, content: record.content }
+  })
 }
 
 function normalizeSaveRequest(raw: unknown): ByokSaveRequest {
@@ -104,6 +107,12 @@ function normalizeChatRequest(raw: unknown): ByokChatRequest {
     systemPrompt:
       typeof record.systemPrompt === 'string' && record.systemPrompt.trim()
         ? record.systemPrompt.trim()
+        : undefined,
+    timeoutMs:
+      typeof record.timeoutMs === 'number' &&
+      Number.isFinite(record.timeoutMs) &&
+      record.timeoutMs > 0
+        ? Math.min(record.timeoutMs, 60_000)
         : undefined
   }
 }
@@ -151,13 +160,15 @@ export function registerByokHandlers(): void {
         const key = loadByokKey(modelProvider)
         if (!key) throw new Error(`No ${modelProvider} key is saved`)
         return sendByokChat(modelProvider, key, request.messages, request.modelId, {
-          systemPrompt: request.systemPrompt
+          systemPrompt: request.systemPrompt,
+          timeoutMs: request.timeoutMs
         })
       }
       const active = loadActiveByokChatKey()
       if (!active) throw new Error('No BYOK chat provider is active')
       return sendByokChat(active.provider, active.key, request.messages, request.modelId, {
-        systemPrompt: request.systemPrompt
+        systemPrompt: request.systemPrompt,
+        timeoutMs: request.timeoutMs
       })
     }
   )
