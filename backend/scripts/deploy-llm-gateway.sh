@@ -42,7 +42,15 @@ python backend/scripts/validate-llm-gateway-env.py \
   "$VALUES_FILE"
 
 if [[ "$SKIP_BACKEND_SECRETS" != "true" ]]; then
-  backend/scripts/deploy-backend-secrets.sh
+  env -u CHART_DIR -u VALUES_FILE -u RELEASE_NAME \
+    ENVIRONMENT="$ENVIRONMENT" \
+    NAMESPACE="$NAMESPACE" \
+    DRY_RUN="$DRY_RUN" \
+    GCP_PROJECT_ID="${GCP_PROJECT_ID:-}" \
+    GKE_CLUSTER="${GKE_CLUSTER:-}" \
+    REGION="${REGION:-}" \
+    BACKEND_SECRETS_GSA="${BACKEND_SECRETS_GSA:-}" \
+    backend/scripts/deploy-backend-secrets.sh
   if [[ "$DRY_RUN" != "true" ]]; then
     sleep 10
   fi

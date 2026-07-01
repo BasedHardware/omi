@@ -12,6 +12,8 @@ NAMESPACE="${NAMESPACE:-}"
 RELEASE_NAME="${RELEASE_NAME:-}"
 DRY_RUN="${DRY_RUN:-false}"
 WAIT_EXTERNAL_SECRET="${WAIT_EXTERNAL_SECRET:-true}"
+EXTERNAL_SECRET_NAME="${EXTERNAL_SECRET_NAME:-}"
+TARGET_SECRET_NAME="${TARGET_SECRET_NAME:-}"
 
 if [[ -z "$ENVIRONMENT" ]]; then
   echo "ERROR: ENVIRONMENT or ENV is required" >&2
@@ -48,6 +50,44 @@ if [[ ! -f "$VALUES_FILE" ]]; then
   exit 2
 fi
 
+read_values_field() {
+  local field_path="$1"
+  python3 - "$VALUES_FILE" "$field_path" <<'PY'
+from pathlib import Path
+import sys
+
+import yaml
+
+values_path = Path(sys.argv[1])
+field_path = sys.argv[2].split('.')
+with values_path.open('r', encoding='utf-8') as handle:
+    value = yaml.safe_load(handle)
+for part in field_path:
+    if not isinstance(value, dict):
+        value = None
+        break
+    value = value.get(part)
+if value is None:
+    value = ''
+print(value)
+PY
+}
+
+if [[ -z "$EXTERNAL_SECRET_NAME" ]]; then
+  EXTERNAL_SECRET_NAME="$(read_values_field externalSecret.name)"
+fi
+if [[ -z "$TARGET_SECRET_NAME" ]]; then
+  TARGET_SECRET_NAME="$(read_values_field externalSecret.targetSecretName)"
+fi
+if [[ -z "$EXTERNAL_SECRET_NAME" ]]; then
+  echo "ERROR: externalSecret.name is required in $VALUES_FILE or EXTERNAL_SECRET_NAME" >&2
+  exit 2
+fi
+if [[ -z "$TARGET_SECRET_NAME" ]]; then
+  echo "ERROR: externalSecret.targetSecretName is required in $VALUES_FILE or TARGET_SECRET_NAME" >&2
+  exit 2
+fi
+
 HELM_ARGS=(
   "$RELEASE_NAME"
   "$CHART_DIR"
@@ -68,14 +108,14 @@ fi
 helm -n "$NAMESPACE" upgrade --install "${HELM_ARGS[@]}"
 force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 kubectl -n "$NAMESPACE" annotate externalsecret \
-  "${ENVIRONMENT}-omi-backend-external-secret" \
+  "$EXTERNAL_SECRET_NAME" \
   force-sync="${force_sync_at}" --overwrite
 if [[ "$WAIT_EXTERNAL_SECRET" == "true" ]]; then
   python3 backend/scripts/wait_external_secret_refresh.py \
     --namespace "$NAMESPACE" \
-    --name "${ENVIRONMENT}-omi-backend-external-secret" \
+    --name "$EXTERNAL_SECRET_NAME" \
     --min-refresh-time "${force_sync_at}" \
     --timeout-seconds 120
-  kubectl -n "$NAMESPACE" get secret "${ENVIRONMENT}-omi-backend-secrets" -o json \
+  kubectl -n "$NAMESPACE" get secret "$TARGET_SECRET_NAME" -o json \
     | python3 backend/scripts/verify_k8s_secret_keys.py "$VALUES_FILE"
 fi
