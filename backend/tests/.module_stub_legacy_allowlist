@@ -7,7 +7,7 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 #
-# Total: 78 entries.
+# Total: 72 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
@@ -17,7 +17,6 @@ backend/tests/unit/test_billable_transcription_seconds.py
 backend/tests/unit/test_byok_security.py
 backend/tests/unit/test_conversation_events_bounds.py
 backend/tests/unit/test_conversations_date_range_validation.py
-backend/tests/unit/test_daily_summary_zero_coordinate_locations.py
 backend/tests/unit/test_delete_account_purge_storage.py
 backend/tests/unit/test_desktop_transcribe.py
 backend/tests/unit/test_desktop_updates.py
@@ -61,7 +60,6 @@ backend/tests/unit/test_patch_adapter.py
 backend/tests/unit/test_people_conversations_500s.py
 backend/tests/unit/test_process_conversation_usage_context.py
 backend/tests/unit/test_prompt_caching.py
-backend/tests/unit/test_rate_limiting.py
 backend/tests/unit/test_review_queue_non_active_routes.py
 backend/tests/unit/test_short_audio_embedding.py
 backend/tests/unit/test_short_term_memory.py
@@ -69,11 +67,8 @@ backend/tests/unit/test_skip_classifier_restrict.py
 backend/tests/unit/test_speaker_sample.py
 backend/tests/unit/test_speaker_sample_migration.py
 backend/tests/unit/test_speech_profile_existence.py
-backend/tests/unit/test_storage_opus_encoding.py
 backend/tests/unit/test_storage_upload_audio_chunk_data_protection.py
 backend/tests/unit/test_streaming_deepgram_backoff.py
-backend/tests/unit/test_subscription_plans.py
-backend/tests/unit/test_subscription_restructure.py
 backend/tests/unit/test_sync_fair_use_gate.py
 backend/tests/unit/test_sync_playback_service.py
 backend/tests/unit/test_sync_transcription_prefs.py
@@ -83,6 +78,5 @@ backend/tests/unit/test_vad_gate.py
 backend/tests/unit/test_vad_onnx.py
 backend/tests/unit/test_voice_message_language.py
 backend/tests/unit/test_vram_batch.py
-backend/tests/unit/test_webhook_auto_disable.py
 backend/tests/unit/test_ws_auth_handshake.py
 backend/tests/unit/v3_router_probes/fastapi_route_contract.py
