@@ -1,4 +1,8 @@
-import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
+import axios, {
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig
+} from 'axios'
 import { auth } from './firebase'
 import type { McpKeyRecord } from '../../../shared/types'
 
@@ -52,6 +56,7 @@ export const omiApi = makeClient(import.meta.env.VITE_OMI_API_BASE as string)
 export const desktopApi = makeClient(import.meta.env.VITE_OMI_DESKTOP_API_BASE as string)
 
 export async function createWindowsMcpKey(): Promise<McpKeyRecord> {
-  const response = await omiApi.post<McpKeyRecord>('/v1/mcp/keys', { name: 'Omi Windows' })
+  const config: AxiosRequestConfig & { __noRetry: true } = { __noRetry: true }
+  const response = await omiApi.post<McpKeyRecord>('/v1/mcp/keys', { name: 'Omi Windows' }, config)
   return response.data
 }
