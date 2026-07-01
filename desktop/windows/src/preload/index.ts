@@ -17,7 +17,8 @@ import type {
   InsightPayload,
   AutomationPlan,
   StepResult,
-  McpKeyRecord
+  McpKeyRecord,
+  McpKeyCopyRequest
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -79,6 +80,8 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
   mcpKeyCreate: (key: McpKeyRecord) => ipcRenderer.invoke('mcpKey:create', key),
   mcpKeyRead: () => ipcRenderer.invoke('mcpKey:read'),
+  mcpKeyCopy: (request: McpKeyCopyRequest) => ipcRenderer.invoke('mcpKey:copy', request),
+  mcpKeyTest: () => ipcRenderer.invoke('mcpKey:test'),
   mcpKeyDelete: () => ipcRenderer.invoke('mcpKey:delete'),
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
