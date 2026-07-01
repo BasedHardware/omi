@@ -14,7 +14,10 @@ export const BUILT_IN_EXCLUDED_APPS: string[] = [
   'CleanShot',
   'Loom',
   'Snagit',
-  'OBS',
+  // OBS Studio, matched by process name. The bare token "OBS" substring-matched
+  // unrelated apps like Obsidian and silently excluded them from Rewind.
+  'obs64',
+  'obs32',
   'Monosnap',
   'Lightshot',
   'ShareX',

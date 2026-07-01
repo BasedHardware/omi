@@ -32,4 +32,12 @@ describe('summarizeActivity', () => {
     expect(out.length).toBeLessThanOrEqual(40)
     expect(out.startsWith('## ')).toBe(true)
   })
+  it('does not leave a lone surrogate when truncating a verbose block', () => {
+    const out = summarizeActivity([f('A', 'B', '😀'.repeat(50))], 10)
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(out)).toBe(false)
+  })
+  it('keeps the whole summary within the budget including the separator', () => {
+    const out = summarizeActivity([f('A', 'aa', 'x'.repeat(20)), f('B', 'bb', 'y'.repeat(20))], 61)
+    expect(out.length).toBeLessThanOrEqual(61)
+  })
 })
