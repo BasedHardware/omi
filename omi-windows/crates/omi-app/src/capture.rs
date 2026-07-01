@@ -1,4 +1,4 @@
-/// Background screen capture task: screenshot → OCR → DB.
+/// Background screen capture task: screenshot → dedup → OCR → DB.
 
 use tokio::time::{interval, Duration};
 use base64::Engine;
@@ -7,32 +7,46 @@ use crate::config::AppConfig;
 pub async fn run_capture_task(db: omi_db::Database, interval_secs: u64, initial_cfg: AppConfig) {
     tracing::info!("[CAPTURE] Task spawned, waiting for first tick in {interval_secs}s...");
 
-    // Capture one frame immediately on startup so we don't wait a full interval
-    capture_one(&db, &initial_cfg).await;
+    let enable_video = initial_cfg.video_chunk_encoding_enabled;
+    let ffmpeg_path = if initial_cfg.ffmpeg_path.is_empty() { None } else { Some(initial_cfg.ffmpeg_path.clone()) };
+    let monitor_mode = initial_cfg.capture_monitor_mode.clone();
+
+    let engine = std::sync::Arc::new(std::sync::Mutex::new(
+        omi_capture::CaptureEngine::new(enable_video, ffmpeg_path)
+    ));
+
+    capture_one(&db, &initial_cfg, &engine, &monitor_mode).await;
 
     let mut tick = interval(Duration::from_secs(interval_secs));
-    tick.tick().await; // consume the immediate tick
+    tick.tick().await;
     tracing::info!("[CAPTURE] Periodic loop running every {interval_secs}s");
 
     loop {
         tick.tick().await;
-        // Reload config each loop so toggling in Settings takes effect
         let cfg = AppConfig::load();
         if !cfg.screen_capture_enabled {
             tracing::info!("[CAPTURE] Screen capture disabled in config, sleeping");
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         }
-        capture_one(&db, &cfg).await;
+        let mode = cfg.capture_monitor_mode.clone();
+        capture_one(&db, &cfg, &engine, &mode).await;
     }
 }
 
-async fn capture_one(db: &omi_db::Database, cfg: &AppConfig) {
-    tracing::info!("[CAPTURE] Capturing screen...");
-
+async fn capture_one(
+    db: &omi_db::Database,
+    cfg: &AppConfig,
+    engine: &std::sync::Arc<std::sync::Mutex<omi_capture::CaptureEngine>>,
+    monitor_mode: &str,
+) {
     let db_clone = db.clone();
+    let engine_clone = engine.clone();
+    let mode = monitor_mode.to_string();
+
     let result = tokio::task::spawn_blocking(move || {
-        omi_capture::capture_and_ocr()
+        let mut eng = engine_clone.lock().unwrap();
+        eng.capture_tick(&mode)
     })
     .await;
 
@@ -44,7 +58,6 @@ async fn capture_one(db: &omi_db::Database, cfg: &AppConfig) {
                 record.ocr_text.as_ref().map(|t| t.len()).unwrap_or(0)
             );
 
-            // Respect OCR enabled setting
             if !cfg.ocr_enabled {
                 record.ocr_text = None;
             } else if let Some(ref mut text) = record.ocr_text {
@@ -57,17 +70,13 @@ async fn capture_one(db: &omi_db::Database, cfg: &AppConfig) {
                 }
             }
 
-            // Read JPEG bytes and encode as base64 data URI so the webview
-            // can render it without file:// protocol restrictions.
             let data_uri = match std::fs::read(&record.thumbnail_path) {
                 Ok(bytes) => {
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                    tracing::info!("[CAPTURE] Encoded {} bytes as base64", bytes.len());
                     Some(format!("data:image/jpeg;base64,{b64}"))
                 }
                 Err(e) => {
                     tracing::error!("[CAPTURE] Failed to read JPEG for base64: {e}");
-                    // Fall back to file path
                     Some(record.thumbnail_path.clone())
                 }
             };
@@ -171,10 +180,10 @@ async fn capture_one(db: &omi_db::Database, cfg: &AppConfig) {
             }
         }
         Ok(Ok(None)) => {
-            tracing::warn!("[CAPTURE] capture_and_ocr returned None (no monitor?)");
+            tracing::debug!("[CAPTURE] Frame skipped (dedup or no monitor)");
         }
         Ok(Err(e)) => {
-            tracing::error!("[CAPTURE] capture_and_ocr error: {e:#}");
+            tracing::error!("[CAPTURE] capture error: {e:#}");
         }
         Err(e) => {
             tracing::error!("[CAPTURE] spawn_blocking panicked: {e}");
