@@ -113,21 +113,38 @@ actor OnboardingMemoryLogImportService {
       }
       let profileSummary = parsed["profile"] as? String ?? ""
 
+      // Batch the extracted memories through POST /v3/memories/batch instead
+      // of fanning out one POST /v3/memories per string. The per-memory loop
+      // could trip the backend `memories:create` limiter (bursts of 429s) and
+      // cause Firestore cross-transaction contention (503s) on import. One
+      // batch request = one Firestore write + one embeddings call + one
+      // Pinecone upsert on the server, regardless of batch size. Mirrors the
+      // accepted local-file import path in OnboardingPagedIntroCoordinator.
+      // Note: the batch model carries content/visibility/category/tags/headline
+      // (source.memorySource info is already reflected in source.tags).
+      let chunkSize = APIClient.memoriesBatchMaxSize
       var memoriesSaved = 0
-      for memory in memoryStrings {
-        do {
-          _ = try await APIClient.shared.createMemory(
+      var index = 0
+      while index < memoryStrings.count {
+        let end = min(index + chunkSize, memoryStrings.count)
+        let chunk = memoryStrings[index..<end].map { memory in
+          MemoryBatchItem(
             content: memory,
             visibility: "private",
             category: .system,
             tags: source.tags,
-            source: source.memorySource,
             headline: source.headline
           )
-          memoriesSaved += 1
+        }
+        index = end
+
+        do {
+          let response = try await APIClient.shared.createMemoriesBatch(Array(chunk))
+          memoriesSaved += response.createdCount
         } catch {
           log(
-            "OnboardingMemoryLogImportService: Failed saving \(source.displayName) memory: \(error)"
+            "OnboardingMemoryLogImportService: Failed saving \(source.displayName) memory batch "
+              + "(\(chunk.count) items): \(error)"
           )
         }
       }
