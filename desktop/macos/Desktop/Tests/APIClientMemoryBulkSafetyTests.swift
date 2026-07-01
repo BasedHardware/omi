@@ -256,6 +256,37 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         XCTAssertEqual(callCount, 2)
         XCTAssertEqual(delays, [2])
     }
+
+    func testOnboardingMemoryBatchImportRetriesTransientNetworkError() async {
+        let item = MemoryBatchItem(
+            content: "The user wants resilient onboarding imports.",
+            visibility: "private",
+            category: .system,
+            tags: ["import"],
+            headline: "Resilient Import",
+            source: "test"
+        )
+        let api = FakeMemoryBatchAPI(
+            outcomes: [
+                .failure(URLError(.timedOut)),
+                .success(BatchMemoriesResponse(memories: [], createdCount: 1)),
+            ])
+        let recorder = SleepRecorder()
+
+        let result = await OnboardingMemoryBatchImportService.save(
+            [item],
+            logPrefix: "test",
+            apiClient: api,
+            sleep: { delay in await recorder.sleep(delay) }
+        )
+
+        XCTAssertEqual(result.saved, 1)
+        XCTAssertEqual(result.failed, 0)
+        let callCount = await api.callCount()
+        let delays = await recorder.recordedDelays()
+        XCTAssertEqual(callCount, 2)
+        XCTAssertEqual(delays, [2])
+    }
 }
 
 private func XCTAssertThrowsErrorAsync<T>(

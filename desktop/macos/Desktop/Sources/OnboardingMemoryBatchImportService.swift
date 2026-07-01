@@ -69,8 +69,22 @@ enum OnboardingMemoryBatchImportService {
   }
 
   private static func shouldRetry(_ error: Error) -> Bool {
-    guard case let APIError.httpError(statusCode, _) = error else { return false }
-    return statusCode == 429 || (500...599).contains(statusCode)
+    if case let APIError.httpError(statusCode, _) = error {
+      return statusCode == 429 || (500...599).contains(statusCode)
+    }
+
+    guard let urlError = error as? URLError else { return false }
+    switch urlError.code {
+    case .timedOut,
+      .cannotFindHost,
+      .cannotConnectToHost,
+      .dnsLookupFailed,
+      .networkConnectionLost,
+      .notConnectedToInternet:
+      return true
+    default:
+      return false
+    }
   }
 
   private static func sleepSeconds(_ seconds: UInt64) async {
