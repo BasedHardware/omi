@@ -78,6 +78,9 @@ conn.executemany(
         ("kTCCServiceScreenCapture", "com.omi.omi-pref-only", 0, 2, 1),
         ("kTCCServiceMicrophone", "com.omi.desktop-dev", 0, 2, 1),
         ("kTCCServiceMicrophone", "com.omi.review-build", 0, 2, 1),
+        ("kTCCServiceMicrophone", "/Applications/Omi.app/Contents/MacOS/Omi", 1, 2, 1),
+        ("kTCCServiceMicrophone", "/Applications/Omi Dev.app/Contents/MacOS/Omi", 1, 2, 1),
+        ("kTCCServiceMicrophone", "/Applications/omi-path-only.app/Contents/MacOS/Omi", 1, 2, 1),
     ],
 )
 conn.commit()
@@ -101,6 +104,10 @@ assert "com.omi.desktop-dev" in data["keep_bundle_ids"]
 assert data["summary"]["apps"].get("keep") == 2, data["summary"]
 assert data["summary"]["apps"].get("candidate") == 1, data["summary"]
 assert data["summary"]["apps"].get("review") == 1, data["summary"]
+tcc_classes = {row["client"]: row["classification"] for row in data["tcc"]["rows"]}
+assert tcc_classes["/Applications/Omi.app/Contents/MacOS/Omi"] == "keep", tcc_classes
+assert tcc_classes["/Applications/Omi Dev.app/Contents/MacOS/Omi"] == "keep", tcc_classes
+assert tcc_classes["/Applications/omi-path-only.app/Contents/MacOS/Omi"] == "candidate", tcc_classes
 PY
 
 cat >"$bin/tccutil" <<'SH'

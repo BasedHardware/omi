@@ -38,7 +38,8 @@ Options:
                    Preserve this Omi bundle ID. May be passed more than once.
   --candidate-prefix BUNDLE_ID_PREFIX
                    Mark matching Omi bundle IDs as reset candidates. May be
-                   passed more than once. Defaults to com.omi.omi-.
+                   passed more than once and is additive with the default
+                   com.omi.omi- prefix.
   --help           Show this help
 USAGE
 }
@@ -147,6 +148,19 @@ def classify_bundle_id(bundle_id):
     if bundle_id.startswith("com.omi."):
         return "review"
     return "other"
+
+
+def classify_tcc_client(client):
+    classification = classify_bundle_id(client)
+    if classification != "other" or not isinstance(client, str):
+        return classification
+
+    path = client.lower()
+    if "/omi.app/" in path or "/omi beta.app/" in path or "/omi dev.app/" in path:
+        return "keep"
+    if "/omi-" in path and ".app/" in path:
+        return "candidate"
+    return classification
 
 
 def read_plist(path):
@@ -296,7 +310,7 @@ def collect_tcc_rows():
         rows = []
         for row in conn.execute(sql):
             item = {key: row[key] for key in selected}
-            item["classification"] = classify_bundle_id(item.get("client"))
+            item["classification"] = classify_tcc_client(item.get("client"))
             if item.get("last_modified") is not None:
                 try:
                     item["last_modified_iso"] = dt.datetime.fromtimestamp(
@@ -343,7 +357,7 @@ def candidate_bundle_ids(inventory):
             bundle_ids.add(domain)
     for item in inventory["tcc"]["rows"]:
         client = item.get("client")
-        if classify_bundle_id(client) == "candidate":
+        if classify_tcc_client(client) == "candidate":
             bundle_ids.add(client)
 
     # Defensive guard: never allow keep IDs or non-candidate com.omi IDs into apply.
