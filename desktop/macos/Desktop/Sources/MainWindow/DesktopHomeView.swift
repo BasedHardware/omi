@@ -514,6 +514,9 @@ struct DesktopHomeView: View {
 
     var visibleRawValues: Set<Int> = [
       SidebarNavItem.dashboard.rawValue, SidebarNavItem.rewind.rawValue,
+      // AI Clone is tier 0 (always available) — keep it out of the tier-gated
+      // redirect so navigating to it from the dashboard card isn't bounced.
+      SidebarNavItem.aiClone.rawValue,
     ]
     if currentTierLevel >= 2 { visibleRawValues.insert(SidebarNavItem.memories.rawValue) }
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }

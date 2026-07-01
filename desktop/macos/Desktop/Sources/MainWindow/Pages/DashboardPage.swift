@@ -227,6 +227,8 @@ struct DashboardPage: View {
     @State private var conversationCount: Int?
     @State private var memoryCount: Int?
     @State private var taskCount: Int?
+    /// Number of contacts with a trained AI Clone persona (drives the AI Clone tile value).
+    @State private var trainedCloneCount: Int?
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -313,6 +315,7 @@ struct DashboardPage: View {
             syncCaptureState()
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
+            Task { await loadTrainedCloneCount() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
@@ -320,6 +323,7 @@ struct DashboardPage: View {
             syncCaptureState()
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
+            Task { await loadTrainedCloneCount() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -496,10 +500,12 @@ struct DashboardPage: View {
             taskValue: taskMetricValue,
             memoryValue: memoryMetricValue,
             screenshotValue: screenshotMetricValue,
+            aiCloneValue: aiCloneMetricValue,
             onConversations: { navigate(to: .conversations) },
             onTasks: { navigate(to: .tasks) },
             onMemories: { navigate(to: .memories) },
-            onScreenshots: { navigate(to: .rewind) }
+            onScreenshots: { navigate(to: .rewind) },
+            onAIClone: { navigate(to: .aiClone) }
         )
     }
 
@@ -653,6 +659,10 @@ struct DashboardPage: View {
         screenshotCount.map(formattedCount) ?? "—"
     }
 
+    private var aiCloneMetricValue: String {
+        trainedCloneCount.map(formattedCount) ?? "—"
+    }
+
     private func navigate(to item: SidebarNavItem) {
         selectedIndex = item.rawValue
         AnalyticsManager.shared.tabChanged(tabName: item.title)
@@ -778,6 +788,13 @@ struct DashboardPage: View {
         let stats = await RewindIndexer.shared.getStats()
         await MainActor.run {
             screenshotCount = stats?.total
+        }
+    }
+
+    private func loadTrainedCloneCount() async {
+        let count = await AIClonePersonaService.shared.allPersonas().count
+        await MainActor.run {
+            trainedCloneCount = count
         }
     }
 
@@ -2039,10 +2056,12 @@ private struct HomeCenterMemoryColumn: View {
     let taskValue: String
     let memoryValue: String
     let screenshotValue: String
+    let aiCloneValue: String
     let onConversations: () -> Void
     let onTasks: () -> Void
     let onMemories: () -> Void
     let onScreenshots: () -> Void
+    let onAIClone: () -> Void
 
     var body: some View {
         content
@@ -2107,6 +2126,20 @@ private struct HomeCenterMemoryColumn: View {
                     systemImage: "photo.on.rectangle.angled",
                     action: onScreenshots
                 )
+            }
+
+            HStack(spacing: 8) {
+                HomeCenterMetricTile(
+                    title: "AI Clone",
+                    value: aiCloneValue,
+                    systemImage: "person.2.fill",
+                    action: onAIClone
+                )
+                // Keep the trailing half empty so the AI Clone tile matches the
+                // width/sizing of the tiles in the rows above (a 5th item in a
+                // 2-up grid), rather than stretching full-width.
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82)
             }
         }
         .frame(maxWidth: .infinity))
