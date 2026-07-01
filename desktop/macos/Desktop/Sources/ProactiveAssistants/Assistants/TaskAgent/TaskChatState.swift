@@ -244,7 +244,7 @@ class TaskChatState: ObservableObject {
                     self?.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
-                        status: status == "started" ? .running : .completed,
+                        status: ChatProvider.mapBridgeToolStatus(status),
                         toolUseId: toolUseId,
                         input: input
                     )
@@ -568,47 +568,15 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    // Mirrors ChatProvider.addToolActivity — kept in lockstep.
-    // TODO: DRY these two implementations into a shared helper.
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-
-        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
-
-        if status == .running {
-            if let toolUseId = toolUseId, toolInput != nil {
-                for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
-                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: st,
-                            toolUseId: toolUseId, input: toolInput, output: output
-                        )
-                        return
-                    }
-                }
-            }
-            messages[index].contentBlocks.append(
-                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
-                          toolUseId: toolUseId, input: toolInput)
-            )
-        } else {
-            for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, let st, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
-                   st.isInFlight {
-                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
-                    if matches {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: .completed,
-                            toolUseId: toolUseId ?? existingTuid,
-                            input: toolInput ?? existingInput,
-                            output: output
-                        )
-                        break
-                    }
-                }
-            }
-        }
+        ChatContentBlock.applyToolActivity(
+            to: &messages[index].contentBlocks,
+            toolName: toolName,
+            status: status,
+            toolUseId: toolUseId,
+            input: input
+        )
     }
 
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
