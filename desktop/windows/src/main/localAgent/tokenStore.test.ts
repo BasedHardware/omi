@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,6 +26,7 @@ import {
   clearLocalAgentToken,
   ensureLocalAgentToken,
   loadLocalAgentToken,
+  LocalAgentTokenStoreError,
   rotateLocalAgentToken,
   saveLocalAgentToken
 } from './tokenStore'
@@ -78,5 +79,12 @@ describe('local agent token store', () => {
     expect(() => saveLocalAgentToken('local_secret_token')).toThrow(
       'Secure storage is unavailable on this system'
     )
+  })
+
+  it('surfaces corrupt stored tokens without rotating them', () => {
+    writeFileSync(join(electronState.userData, 'local-agent-token.json'), '{"token":""}', 'utf8')
+
+    expect(() => loadLocalAgentToken()).toThrow(LocalAgentTokenStoreError)
+    expect(() => ensureLocalAgentToken()).toThrow(LocalAgentTokenStoreError)
   })
 })
