@@ -68,6 +68,44 @@ private final class BulkURLCapture: URLProtocol, @unchecked Sendable {
     }
 }
 
+private actor FakeMemoryBatchAPI: MemoryBatchCreating {
+    private let outcomes: [Result<BatchMemoriesResponse, Error>]
+    private var index = 0
+    private var calls = 0
+
+    init(outcomes: [Result<BatchMemoriesResponse, Error>]) {
+        self.outcomes = outcomes
+    }
+
+    func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse {
+        calls += 1
+        let outcome = outcomes[min(index, outcomes.count - 1)]
+        index += 1
+        switch outcome {
+        case .success(let response):
+            return response
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func callCount() -> Int {
+        calls
+    }
+}
+
+private actor SleepRecorder {
+    private var delays: [UInt64] = []
+
+    func sleep(_ delay: UInt64) async {
+        delays.append(delay)
+    }
+
+    func recordedDelays() -> [UInt64] {
+        delays
+    }
+}
+
 final class APIClientMemoryBulkSafetyTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -186,6 +224,37 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         XCTAssertEqual(chunks.count, 2)
         XCTAssertEqual(chunks[0].count, APIClient.memoriesBatchMaxSize)
         XCTAssertEqual(chunks[1], [APIClient.memoriesBatchMaxSize, APIClient.memoriesBatchMaxSize + 1])
+    }
+
+    func testOnboardingMemoryBatchImportRetriesRateLimitedChunk() async {
+        let item = MemoryBatchItem(
+            content: "The user likes local verification.",
+            visibility: "private",
+            category: .system,
+            tags: ["import"],
+            headline: "Verification",
+            source: "test"
+        )
+        let api = FakeMemoryBatchAPI(
+            outcomes: [
+                .failure(APIError.httpError(statusCode: 429)),
+                .success(BatchMemoriesResponse(memories: [], createdCount: 1)),
+            ])
+        let recorder = SleepRecorder()
+
+        let result = await OnboardingMemoryBatchImportService.save(
+            [item],
+            logPrefix: "test",
+            apiClient: api,
+            sleep: { delay in await recorder.sleep(delay) }
+        )
+
+        XCTAssertEqual(result.saved, 1)
+        XCTAssertEqual(result.failed, 0)
+        let callCount = await api.callCount()
+        let delays = await recorder.recordedDelays()
+        XCTAssertEqual(callCount, 2)
+        XCTAssertEqual(delays, [2])
     }
 }
 
