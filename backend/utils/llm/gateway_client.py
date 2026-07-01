@@ -21,6 +21,7 @@ LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
 LLM_GATEWAY_CALLER = 'backend'
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
+BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
 
@@ -47,6 +48,7 @@ def invoke_chat_structured_gateway(
     output_model: type[StructuredOutput],
     *,
     feature: str,
+    timeout_seconds: float = CHAT_EXTRACTION_TIMEOUT_SECONDS,
 ) -> StructuredOutput | None:
     """Call the LLM gateway for chat structured extraction (pilot).
 
@@ -57,7 +59,7 @@ def invoke_chat_structured_gateway(
     code without first offloading via ``run_blocking(llm_executor, ...)``.
     """
     try:
-        with httpx.Client(timeout=CHAT_EXTRACTION_TIMEOUT_SECONDS) as client:
+        with httpx.Client(timeout=timeout_seconds) as client:
             response = client.post(
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
                 headers=_gateway_headers(),
