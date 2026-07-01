@@ -10,6 +10,7 @@ from typing import List, Optional
 from database import memories as memories_db
 from database.entities import person_entity_id
 from utils.llm.clients import get_llm
+from utils.llm.local_shim import local_cli_llm_text
 from utils.retrieval.tool_services.person_service import resolve_person
 
 logger = logging.getLogger(__name__)
@@ -63,8 +64,11 @@ def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[
         f"Draft the user's reply to {name}:"
     )
 
-    response = get_llm('memories').invoke(prompt)
-    draft = (response.content if hasattr(response, 'content') else str(response)).strip()
+    draft = local_cli_llm_text(prompt)
+    if draft is None:
+        response = get_llm('memories').invoke(prompt)
+        draft = (response.content if hasattr(response, 'content') else str(response)).strip()
+    draft = draft.strip()
     # Strip a wrapping pair of quotes if the model added them.
     if len(draft) >= 2 and draft[0] in "\"'" and draft[-1] == draft[0]:
         draft = draft[1:-1].strip()

@@ -19,6 +19,7 @@ from database.entities import person_entity_id
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llm.clients import get_llm
+from utils.llm.local_shim import local_cli_llm_text
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +111,10 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
     )
 
     try:
-        response = get_llm('memories').invoke(prompt)
-        content = response.content if hasattr(response, 'content') else str(response)
+        content = local_cli_llm_text(prompt)
+        if content is None:
+            response = get_llm('memories').invoke(prompt)
+            content = response.content if hasattr(response, 'content') else str(response)
         parsed = _extract_json(content)
     except Exception as e:
         logger.warning(f"generate_person_profile LLM failed uid={uid} person={person_id}: {e}")
