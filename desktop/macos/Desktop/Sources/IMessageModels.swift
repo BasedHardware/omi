@@ -85,3 +85,36 @@ struct IMessageStatusPayload: Decodable {
     case conversationsIngested = "conversations_ingested"
   }
 }
+
+// MARK: - Reply drafting
+
+struct IMessageDraftMessagePayload: Codable, Sendable {
+  let text: String
+  let isFromMe: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case text
+    case isFromMe = "is_from_me"
+  }
+}
+
+struct IMessageDraftRequestPayload: Encodable {
+  let person: String
+  let thread: [IMessageDraftMessagePayload]
+  let intent: String?
+}
+
+struct IMessageDraftResponsePayload: Decodable {
+  let draft: String
+}
+
+/// A thread whose latest message is inbound (awaiting a reply), shown in the Replies inbox.
+struct IMessageInboxThread: Identifiable, Sendable {
+  var id: String { chatGUID }
+  let chatGUID: String
+  let displayName: String
+  let lastMessage: String
+  let lastDate: Date
+  let personRef: String  // handle or name used to resolve the person server-side
+  let context: [IMessageDraftMessagePayload]
+}

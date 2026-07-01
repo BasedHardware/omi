@@ -79,33 +79,115 @@ actor IMessageReaderService {
       for row in rows {
         let rowid = (row["rowid"] as? Int64) ?? Int64(row["rowid"] as? Int ?? 0)
         maxROWID = max(maxROWID, rowid)
-
-        guard let chatGUID = row["chat_guid"] as? String, !chatGUID.isEmpty else { continue }
-        guard
-          let text = AttributedBodyDecoder.bestText(
-            text: row["text"] as? String, attributedBody: row["body"] as? Data), !text.isEmpty
-        else { continue }
-
-        let isFromMe = ((row["is_from_me"] as? Int64) ?? Int64(row["is_from_me"] as? Int ?? 0)) == 1
-        let rawDate = (row["date"] as? Int64) ?? Int64(row["date"] as? Int ?? 0)
-        let seconds = rawDate > 1_000_000_000_000 ? Double(rawDate) / 1_000_000_000.0 : Double(rawDate)
-        let guid = (row["guid"] as? String) ?? "\(chatGUID)-\(rowid)"
-
-        records.append(
-          IMessageRecord(
-            rowid: rowid,
-            guid: guid,
-            text: text,
-            isFromMe: isFromMe,
-            date: Date(timeIntervalSinceReferenceDate: seconds),
-            handle: row["handle"] as? String,
-            chatGUID: chatGUID,
-            chatIdentifier: row["chat_identifier"] as? String,
-            chatDisplayName: row["chat_display_name"] as? String
-          ))
+        if let record = Self.record(from: row) {
+          records.append(record)
+        }
       }
 
       return (records, maxROWID)
     }
+  }
+
+  /// Recent inbound threads awaiting a reply, for the Replies inbox. Does NOT
+  /// advance the ingest cursor — this is a read-only view over recent history.
+  func readInboxThreads(days: Int = 7, limit: Int = 800, perThreadContext: Int = 15) async throws
+    -> [IMessageInboxThread]
+  {
+    var config = Configuration()
+    config.readonly = true
+    let dbQueue: DatabaseQueue
+    do {
+      dbQueue = try DatabaseQueue(
+        path: IMessagePermissionPolicy.chatDatabaseURL.path, configuration: config)
+    } catch {
+      throw IMessageReaderError.accessDenied
+    }
+
+    let cutoffDate =
+      Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date(timeIntervalSince1970: 0)
+    let cutoffNanos = Int64(cutoffDate.timeIntervalSinceReferenceDate * 1_000_000_000)
+
+    let records: [IMessageRecord] = try await dbQueue.read { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: """
+            SELECT m.ROWID AS rowid, m.guid AS guid, m.text AS text, m.attributedBody AS body,
+                   m.date AS date, m.is_from_me AS is_from_me, h.id AS handle,
+                   c.guid AS chat_guid, c.chat_identifier AS chat_identifier,
+                   c.display_name AS chat_display_name
+            FROM message m
+            LEFT JOIN handle h ON m.handle_id = h.ROWID
+            LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+            LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+            WHERE m.date >= ?
+              AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
+            ORDER BY m.ROWID ASC LIMIT ?
+          """,
+        arguments: [cutoffNanos, limit]
+      )
+      return rows.compactMap { Self.record(from: $0) }
+    }
+
+    var byChat: [String: [IMessageRecord]] = [:]
+    for record in records {
+      byChat[record.chatGUID, default: []].append(record)
+    }
+
+    var items: [IMessageInboxThread] = []
+    for (chatGUID, recs) in byChat {
+      let sorted = recs.sorted { $0.date < $1.date }
+      guard let last = sorted.last, !last.isFromMe else { continue }  // only threads awaiting a reply
+
+      let isGroup =
+        chatGUID.contains(";+;") || (sorted.first?.chatIdentifier?.hasPrefix("chat") ?? false)
+      var name = last.chatDisplayName ?? last.handle ?? "Unknown"
+      var personRef = last.handle ?? name
+      if !isGroup, let handle = last.handle {
+        name = await IMessageContactResolver.shared.displayName(for: handle) ?? last.chatDisplayName ?? handle
+        personRef = handle
+      }
+
+      let context = sorted.suffix(perThreadContext).map {
+        IMessageDraftMessagePayload(text: $0.text, isFromMe: $0.isFromMe)
+      }
+      items.append(
+        IMessageInboxThread(
+          chatGUID: chatGUID,
+          displayName: name,
+          lastMessage: last.text,
+          lastDate: last.date,
+          personRef: personRef,
+          context: context
+        ))
+    }
+
+    items.sort { $0.lastDate > $1.lastDate }
+    return items
+  }
+
+  private static func record(from row: Row) -> IMessageRecord? {
+    let rowid = (row["rowid"] as? Int64) ?? Int64(row["rowid"] as? Int ?? 0)
+    guard let chatGUID = row["chat_guid"] as? String, !chatGUID.isEmpty else { return nil }
+    guard
+      let text = AttributedBodyDecoder.bestText(
+        text: row["text"] as? String, attributedBody: row["body"] as? Data), !text.isEmpty
+    else { return nil }
+
+    let isFromMe = ((row["is_from_me"] as? Int64) ?? Int64(row["is_from_me"] as? Int ?? 0)) == 1
+    let rawDate = (row["date"] as? Int64) ?? Int64(row["date"] as? Int ?? 0)
+    let seconds = rawDate > 1_000_000_000_000 ? Double(rawDate) / 1_000_000_000.0 : Double(rawDate)
+    let guid = (row["guid"] as? String) ?? "\(chatGUID)-\(rowid)"
+
+    return IMessageRecord(
+      rowid: rowid,
+      guid: guid,
+      text: text,
+      isFromMe: isFromMe,
+      date: Date(timeIntervalSinceReferenceDate: seconds),
+      handle: row["handle"] as? String,
+      chatGUID: chatGUID,
+      chatIdentifier: row["chat_identifier"] as? String,
+      chatDisplayName: row["chat_display_name"] as? String
+    )
   }
 }

@@ -5565,6 +5565,14 @@ extension APIClient {
   func imessageConnectionStatus() async throws -> IMessageStatusPayload {
     try await get("v1/imessage/connection-status")
   }
+
+  func imessageDraftReply(person: String, thread: [IMessageDraftMessagePayload], intent: String?) async throws
+    -> String
+  {
+    let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent)
+    let resp: IMessageDraftResponsePayload = try await post("v1/imessage/draft-reply", body: body)
+    return resp.draft
+  }
 }
 
 struct XOAuthURLResponse: Decodable {
