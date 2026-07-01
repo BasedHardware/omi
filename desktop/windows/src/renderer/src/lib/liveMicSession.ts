@@ -6,6 +6,7 @@ import { getPreferences } from './preferences'
 import { uploadConversationFromSegments } from './localSttUpload'
 import { transcriptWordCount } from './retentionRules'
 import { buildLocalGraph } from './kgSynthesis'
+import { toast } from './toast'
 
 // Force a local-KG rebuild so conversation-derived memories reach the brain map,
 // throttled to once per 30 min (the rebuild is two LLM calls). Delayed so the
@@ -98,10 +99,11 @@ export function startLiveMicSession(): LiveMicController {
         startedAt: args.startedAt,
         finishedAt: args.finishedAt,
         language: getPreferences().language
-        })
+      })
         .catch((e) => {
           const message = e instanceof Error ? e.message : String(e)
           console.warn('[local-stt] conversation upload failed:', message)
+          toast('Could not save local transcript', { tone: 'error', body: message })
         })
         .finally(pollForNewConversation)
     } else {
