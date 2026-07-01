@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { SettingsSearchProvider, useSettingsSearch } from '../components/settings/searchContext'
 import { SettingsTabRail } from '../components/settings/SettingsTabRail'
@@ -22,14 +22,22 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   advanced: AdvancedTab
 }
 
+function tabFromSearchParams(searchParams: URLSearchParams): SettingsTabId {
+  const tab = searchParams.get('tab')
+  return tab && SETTINGS_TABS.some((t) => t.id === tab) ? (tab as SettingsTabId) : 'general'
+}
+
 function SettingsInner(): React.JSX.Element {
   const { query, setQuery } = useSettingsSearch()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [active, setActive] = useState<SettingsTabId>(() => {
-    const tab = searchParams.get('tab')
-    return tab && SETTINGS_TABS.some((t) => t.id === tab) ? (tab as SettingsTabId) : 'general'
+    return tabFromSearchParams(searchParams)
   })
+
+  useEffect(() => {
+    setActive(tabFromSearchParams(searchParams))
+  }, [searchParams])
 
   return (
     <div className="flex h-full min-h-0">
