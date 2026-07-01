@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { LocalAgentRuntimeContext, LocalAgentToolDefinition } from '../localAgent/tools'
-import { buildPiChatRequest, chatCompletionsUrl, sendPiChat } from './chatBridge'
+import {
+  buildPiChatRequest,
+  chatCompletionsUrl,
+  resultToToolContent,
+  sendPiChat
+} from './chatBridge'
 
 const toolDefinitions = vi.hoisted<LocalAgentToolDefinition[]>(() => [
   {
@@ -100,6 +105,14 @@ describe('Pi/Omi chat bridge', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it('formats non-JSON local tool results defensively', () => {
+    const cyclic: { self?: unknown } = {}
+    cyclic.self = cyclic
+
+    expect(resultToToolContent(undefined)).toBe('null')
+    expect(resultToToolContent(cyclic)).toBe('[object Object]')
+  })
+
   it('routes model tool calls through the Windows local tool executor', async () => {
     const requests: unknown[] = []
     const fetchImpl = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
@@ -186,6 +199,66 @@ describe('Pi/Omi chat bridge', () => {
       toolCalls: [{ id: 'toolu_1', name: 'execute_sql' }],
       usage: { promptTokens: 18, completionTokens: 7, totalTokens: 25 }
     })
+  })
+
+  it('serializes unusual local tool results without crashing chat', async () => {
+    const requests: unknown[] = []
+    const fetchImpl = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      requests.push(JSON.parse(String(init.body)))
+      if (requests.length === 1) {
+        return jsonResponse({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'toolu_undefined',
+                    type: 'function',
+                    function: {
+                      name: 'get_local_status',
+                      arguments: '{}'
+                    }
+                  }
+                ]
+              },
+              finish_reason: 'tool_calls'
+            }
+          ]
+        })
+      }
+      return jsonResponse({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Handled the tool result.'
+            },
+            finish_reason: 'stop'
+          }
+        ]
+      })
+    })
+
+    const result = await sendPiChat(
+      {
+        token: 'firebase-token',
+        messages: [{ role: 'user', content: 'Check local status' }]
+      },
+      {
+        fetchImpl,
+        runTool: vi.fn().mockResolvedValue(undefined),
+        toolDefinitions: () => toolDefinitions,
+        runtimeContext,
+        desktopApiBaseUrl: 'https://desktop.example.test'
+      }
+    )
+
+    expect((requests[1] as { messages: { role: string; content?: string }[] }).messages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ role: 'tool', content: 'null' })])
+    )
+    expect(result.text).toBe('Handled the tool result.')
   })
 
   it('rejects model tool calls outside the Pi/Omi chat allowlist before execution', async () => {
