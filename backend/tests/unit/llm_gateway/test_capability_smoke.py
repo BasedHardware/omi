@@ -36,20 +36,25 @@ from llm_gateway.scripts.capability_smoke import (
     results_to_json,
     smoke_lane,
 )
-from tests.unit.llm_gateway._private.fake_capability_provider import (
+from llm_gateway.scripts.deterministic_provider import (
     FakeProvider,
+    FakeCall,
     ProviderAuthError,
+    ProviderRequest,
+    ProviderResponse,
 )
 from llm_gateway.scripts.capability_smoke import _DEFAULT_GATEWAY_CONFIG_DIR
 from llm_gateway.gateway.schemas import (
     Capabilities,
     StructuredOutputMode,
 )
-from tests.unit.llm_gateway._private.fake_capability_provider import (
-    FakeProvider,
+from llm_gateway.scripts.deterministic_provider import (
     FakeCall,
+    FakeProvider,
+    ProviderAuthError,
+    ProviderRequest,
+    ProviderResponse,
 )
-from tests.unit.llm_gateway._private.fake_capability_provider import ProviderAuthError
 
 # Default config dir: package-relative (NOT CWD-relative) per R5b's design.
 DEFAULT_CONFIG_DIR = _DEFAULT_GATEWAY_CONFIG_DIR
@@ -259,14 +264,12 @@ class TestFakeProviderScenarios:
         fake = FakeProvider()
         fake.set_default_scenario("timeout")
         req = ProviderRequest(model="m", messages=[], timeout_seconds=0.05)
-        with pytest.raises((asyncio.TimeoutError, Exception)) as exc_info:
+        with pytest.raises(asyncio.TimeoutError) as exc_info:
             # The fake sleeps past the timeout; the smoke uses asyncio.wait_for
             # which would catch this in production. For the fake test, the
             # underlying sleep past timeout_seconds is what we want to assert.
             await fake.chat_completion(req)
-        # Either the smoke's wait_for raised TimeoutError, or the fake itself
-        # raised after sleeping. Both are valid.
-        assert "timed out" in str(exc_info.value).lower() or "timeout" in str(exc_info.value).lower()
+        assert "timed out" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_auth_error_raises_provider_auth_error(self):
@@ -421,6 +424,27 @@ class TestIterTargetLanes:
         cfg = load_gateway_config(DEFAULT_CONFIG_DIR, prod_mode=False)
         pairs = _iter_target_lanes(cfg, lane_filter="omi:auto:does-not-exist")
         assert pairs == []
+
+    def test_missing_supported_lane_raises(self, tmp_path):
+        """If a supported lane is missing from lanes.yaml, raise loudly.
+
+        Per cubic-dev-ai review on PR #8746: missing lanes must fail
+        loudly so config regressions don't get a falsely-green smoke result.
+        """
+        from llm_gateway.gateway.config_loader import ConfigValidationError
+
+        import yaml as _yaml
+
+        cfg_dir = tmp_path / "config"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        for fname, body in [
+            ("lanes.yaml", {"lanes": []}),
+            ("route_artifacts.yaml", {"route_artifacts": []}),
+            ("feature_bundles.yaml", {"feature_bundles": []}),
+        ]:
+            (cfg_dir / fname).write_text(_yaml.safe_dump(body, sort_keys=False))
+        with pytest.raises(ConfigValidationError, match="no such lane"):
+            _iter_target_lanes(load_gateway_config(cfg_dir, prod_mode=False))
 
 
 # ---------------------------------------------------------------------------

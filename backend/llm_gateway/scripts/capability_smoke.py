@@ -307,7 +307,11 @@ def _build_provider(provider_arg: str) -> Provider:
     registers the Anthropic provider.
     """
     if provider_arg == "fake":
-        from tests.unit.llm_gateway._private.fake_capability_provider import FakeProvider
+        # The deterministic provider lives on the production-side import
+        # path (NOT in tests/.../_private/) so the smoke's default doesn't
+        # couple production code to the test tree. Per cubic-dev-ai review
+        # on PR #8746.
+        from llm_gateway.scripts.deterministic_provider import FakeProvider
 
         fake = FakeProvider()
         fake.set_default_scenario("pass")
@@ -329,16 +333,29 @@ def _iter_target_lanes(
     Only includes lanes in SUPPORTED_AUTO_LANE_IDS (R5b's restriction
     excludes the 3 audio/embedding placeholders). For each lane, picks
     the active_route artifact.
+
+    Raises ConfigValidationError if a supported lane is missing from
+    lanes.yaml or if its active_route doesn't resolve to a real artifact.
+    Per cubic-dev-ai review on PR #8746: missing lanes must fail
+    loudly so config regressions don't get a falsely-green smoke result.
     """
+    from llm_gateway.gateway.config_loader import ConfigValidationError
+
     pairs: list[tuple[LaneConfig, RouteArtifact]] = []
     for lane_id in sorted(SUPPORTED_AUTO_LANE_IDS):
         if lane_filter and lane_id != lane_filter:
             continue
         if lane_id not in cfg.lanes:
-            continue  # allowlist has lane not in YAML; skip
+            raise ConfigValidationError(
+                f"SUPPORTED_AUTO_LANE_IDS contains {lane_id!r} but lanes.yaml has no such lane. "
+                f"Add it to lanes.yaml or remove it from the supported allowlist."
+            )
         lane = cfg.lanes[lane_id]
         if lane.active_route not in cfg.route_artifacts:
-            continue
+            raise ConfigValidationError(
+                f"lane {lane_id!r} active_route {lane.active_route!r} has no matching route_artifacts.yaml entry. "
+                f"Add the artifact to route_artifacts.yaml or fix the lane's active_route."
+            )
         artifact = cfg.route_artifacts[lane.active_route]
         pairs.append((lane, artifact))
     return pairs
