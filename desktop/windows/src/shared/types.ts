@@ -58,6 +58,23 @@ export type McpKeyRecord = {
   key: string
 }
 
+export type McpKeyMetadata = {
+  id: string
+  name: string
+  maskedKey: string
+}
+
+export type McpKeyCopyRequest =
+  | { kind: 'key' }
+  | {
+      kind: 'text'
+      text: string
+    }
+
+export type McpKeyTestResult = {
+  memoryCount: number
+}
+
 // Capture modes a recording session can start in. 'mic' = audio only;
 // 'screen' = mic + screen capture + system audio (both audio streams
 // transcribed independently).
@@ -236,7 +253,9 @@ export type OmiBridgeApi = {
   googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   mcpKeyCreate: (key: McpKeyRecord) => Promise<void>
-  mcpKeyRead: () => Promise<McpKeyRecord | null>
+  mcpKeyRead: () => Promise<McpKeyMetadata | null>
+  mcpKeyCopy: (request: McpKeyCopyRequest) => Promise<void>
+  mcpKeyTest: () => Promise<McpKeyTestResult>
   mcpKeyDelete: () => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
