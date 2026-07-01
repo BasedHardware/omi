@@ -22,6 +22,23 @@ struct IMessageMessage: Sendable {
   let date: Date
 }
 
+// MARK: - Platform-agnostic conversion
+
+extension IMessageContact {
+  /// Map to the generic contact shape consumed by the AI Clone pipeline.
+  func asImportedContact() -> ImportedContact {
+    ImportedContact(
+      id: id, displayName: displayName, messageCount: messageCount, platform: "imessage")
+  }
+}
+
+extension IMessageMessage {
+  /// Map to the generic message shape consumed by the AI Clone pipeline.
+  func asImportedMessage() -> ImportedMessage {
+    ImportedMessage(isFromMe: isFromMe, text: text, date: date)
+  }
+}
+
 enum IMessageReaderError: LocalizedError {
   case chatDatabaseNotFound
   case fullDiskAccessDenied
