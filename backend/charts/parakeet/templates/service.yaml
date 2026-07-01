@@ -3,6 +3,7 @@ kind: BackendConfig
 metadata:
   name: parakeet-backend-config
 spec:
+  timeoutSec: 120
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5
