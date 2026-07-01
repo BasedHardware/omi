@@ -28,14 +28,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from llm_gateway.gateway.schemas import LaneId
 
 if TYPE_CHECKING:
     from llm_gateway.gateway.config_loader import GatewayConfig
-
-logger = logging.getLogger(__name__)
 
 
 # Default catalog location (relative to this file)

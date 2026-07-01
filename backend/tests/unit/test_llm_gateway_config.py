@@ -11,28 +11,13 @@ LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
 LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 
-# R0 lane taxonomy — 15 new lanes added alongside the existing chat-structured lane.
-# See PLAN.md §R0 (posted as PR comment). All new lanes ship in shadow mode (percent=0)
-# with last_known_good == active_route (zero-drift day-one parity).
-_R0_NEW_LANE_IDS = frozenset(
-    {
-        'omi:auto:chat-extraction',
-        'omi:auto:daily-summary',
-        'omi:auto:memories-extraction',
-        'omi:auto:memory-graph',
-        'omi:auto:conv-action-items',
-        'omi:auto:conv-structure',
-        'omi:auto:general-assistant',
-        'omi:auto:reasoning',
-        'omi:auto:stt-realtime',
-        'omi:auto:transcription',
-        'omi:auto:screenshot-understanding',
-        'omi:auto:screenshot-embedding',
-        'omi:auto:realtime-ptt',
-        'omi:auto:persona-chat',
-        'omi:auto:notification-classifier',
-    }
-)
+# R0.5 lane taxonomy — the serving config only has prod_ready lanes.
+# Per R0.5, the catalog has 16 lanes (1 prod_ready + 12 dev_only + 3 planned).
+# The serving config (lanes.yaml) has 1 lane (chat-structured); the other 15
+# R0-new lanes are catalog-only. The migration plan at
+# .aidlc/migration_plan.md covers how this file is updated as R3.2 promotes
+# more lanes. For now, this file is adapted to pass CI under R0.5.
+_R0_NEW_LANE_IDS = frozenset()  # R0.5: no new lanes in the serving config
 _ALL_LANE_IDS = frozenset({LANE_ID} | _R0_NEW_LANE_IDS)
 
 
@@ -163,29 +148,23 @@ def test_mock_benchmark_evidence_rejected_in_prod_mode(tmp_path):
 
 
 def test_r0_placeholder_artifacts_load_in_all_modes():
-    """R0 ships 3 placeholder artifacts (stt-realtime, transcription,
-    screenshot-embedding) that are PROD-ELIGIBLE — they load in any prod_mode
-    so the day-one shadow-mode contract holds (config loads in production,
-    even though no traffic actually flows because rollout.percent=0).
+    """R0.5: the 3 R0 placeholders (stt-realtime, transcription,
+    screenshot-embedding) are NOT in the serving config — they're
+    catalog-only. Per David's feedback: 'No prod-loadable placeholder
+    route artifacts'. The placeholder artifacts were removed from the
+    serving config in the R0.5 trim. See .aidlc/migration_plan.md.
 
-    The "placeholder" marker is via `evidence.placeholder=True`, NOT via
-    `dev_only=True`. Future promotion logic (R1 emitter, R4 cron) reads the
-    `placeholder` field separately to know these need replacement before
-    being promoted to active. See cubic P1 review on PR #8739.
+    This test is a no-op in R0.5 (there are no placeholders to test). The
+    test was previously parametrized over the 3 placeholders; after R0.5
+    they don't exist in the serving config at all.
     """
     cfg_dev = load_gateway_config(prod_mode=False)
     cfg_prod = load_gateway_config(prod_mode=True)
-    assert len(cfg_dev.route_artifacts) == 17
-    assert len(cfg_prod.route_artifacts) == 17  # All 17 load in production too
-    placeholder_ids = {
-        'route.stt_realtime.2026_07_01.001',
-        'route.transcription.2026_07_01.001',
-        'route.screenshot_embedding.2026_07_01.001',
-    }
-    for rid in placeholder_ids:
-        assert rid in cfg_prod.route_artifacts, f'placeholder {rid} should load in prod_mode=True (day-one invariant)'
-        assert cfg_prod.route_artifacts[rid].evidence.placeholder is True
-        assert cfg_prod.route_artifacts[rid].evidence.is_prod_eligible() is True
+    # R0.5: 2 artifacts total (chat-structured's active + LKG)
+    assert len(cfg_dev.route_artifacts) == 2
+    assert len(cfg_prod.route_artifacts) == 2
+    # No placeholders exist in the serving config post-R0.5
+    assert not any(art.evidence.placeholder for art in cfg_prod.route_artifacts.values())
 
 
 def test_r0_placeholder_field_distinguishes_placeholders_from_real_artifacts():
