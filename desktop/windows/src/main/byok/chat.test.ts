@@ -172,33 +172,36 @@ describe('BYOK chat', () => {
 
   it('keeps the timeout active while reading the response body', async () => {
     vi.useFakeTimers()
-    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      const signal = init?.signal as AbortSignal
-      return {
-        ok: true,
-        status: 200,
-        json: () =>
-          new Promise((_resolve, reject) => {
-            signal.addEventListener('abort', () => {
-              const error = new Error('aborted')
-              error.name = 'AbortError'
-              reject(error)
+    try {
+      const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+        const signal = init?.signal as AbortSignal
+        return {
+          ok: true,
+          status: 200,
+          json: () =>
+            new Promise((_resolve, reject) => {
+              signal.addEventListener('abort', () => {
+                const error = new Error('aborted')
+                error.name = 'AbortError'
+                reject(error)
+              })
             })
-          })
-      } as Response
-    })
+        } as Response
+      })
 
-    const result = sendByokChat(
-      'openai',
-      'sk-openai-secret',
-      [{ role: 'user', content: 'hello' }],
-      undefined,
-      { fetchImpl: fetchImpl as unknown as typeof fetch, timeoutMs: 5 }
-    )
-    const assertion = expect(result).rejects.toThrow('BYOK chat request timed out')
+      const result = sendByokChat(
+        'openai',
+        'sk-openai-secret',
+        [{ role: 'user', content: 'hello' }],
+        undefined,
+        { fetchImpl: fetchImpl as unknown as typeof fetch, timeoutMs: 5 }
+      )
+      const assertion = expect(result).rejects.toThrow('BYOK chat request timed out')
 
-    await vi.advanceTimersByTimeAsync(5)
-    await assertion
-    vi.useRealTimers()
+      await vi.advanceTimersByTimeAsync(5)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
