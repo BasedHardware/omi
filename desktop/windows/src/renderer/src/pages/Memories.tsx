@@ -71,6 +71,10 @@ export function Memories(): React.JSX.Element {
     }
   }, [all, loadAllMemories, manage, search])
 
+  useEffect(() => {
+    if (!manage) setAll(null)
+  }, [manage, memories])
+
   const closeCompose = (): void => {
     setComposing(false)
     setDraft('')
