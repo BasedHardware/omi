@@ -45,3 +45,9 @@ tests/unit/test_user_speaker_embedding.py
 tests/unit/test_speech_profile_existence.py
 tests/unit/test_llm_usage_db.py
 tests/unit/test_llm_usage_tracker.py
+tests/unit/test_mcp_api_key_auth_context.py
+tests/unit/test_mcp_api_key_full_access.py
+tests/unit/test_mcp_oauth.py
+tests/unit/test_async_webhooks.py
+tests/unit/test_people_conversations_500s.py
+tests/unit/test_v3_account_generation_source.py
