@@ -32,7 +32,7 @@ class OmiEditDialog {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: ResponsiveHelper.backgroundTertiary, width: 1),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 12))
+              BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 12)),
             ],
           ),
           child: Column(

@@ -61,7 +61,6 @@ def _make_mock_gpu_worker(results_fn=None):
 
 
 class TestBatchEngineSubmit:
-
     @pytest.fixture
     def loop(self):
         loop = asyncio.new_event_loop()
@@ -115,7 +114,6 @@ class TestBatchEngineSubmit:
 
 
 class TestBatchEngineQueueFull:
-
     def test_queue_full_error(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=100, max_wait_seconds=10.0, max_queue_depth=2)
@@ -140,7 +138,6 @@ class TestBatchEngineQueueFull:
 
 
 class TestBatchEngineFileCleanup:
-
     def test_owns_file_cleaned_after_success(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01)
@@ -214,7 +211,6 @@ class TestBatchEngineFileCleanup:
 
 
 class TestBatchEngineErrorPropagation:
-
     def test_gpu_error_propagates_to_all_futures(self):
         gpu = MagicMock(spec=GPUWorker)
         gpu.is_ready = True
@@ -277,7 +273,6 @@ class TestBatchEngineErrorPropagation:
 
 
 class TestBatchEngineResultMismatch:
-
     def test_fewer_results_than_requests(self):
         def short_results(payload):
             return [{"text": "only-one", "timestamp": {}}]
@@ -305,7 +300,6 @@ class TestBatchEngineResultMismatch:
 
 
 class TestBatchEngineMetrics:
-
     def test_metrics_track_requests_and_batches(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=2, max_wait_seconds=0.01)
@@ -331,7 +325,6 @@ class TestBatchEngineMetrics:
 
 
 class TestBatchEngineShutdown:
-
     def test_stop_flushes_pending(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=100, max_wait_seconds=100.0)
@@ -389,7 +382,6 @@ class TestBatchEngineShutdown:
 
 
 class TestBatchEngineCallbacks:
-
     def test_on_batch_complete_called_with_timing(self):
         gpu = _make_mock_gpu_worker()
         callback_data = {}
@@ -457,7 +449,6 @@ class TestBatchEngineCallbacks:
 
 
 class TestConcurrentFlush:
-
     def test_inflight_semaphore_bounds_concurrent_gpu_calls(self):
         concurrent_count = {"current": 0, "peak": 0}
 
@@ -564,7 +555,6 @@ class TestConcurrentFlush:
 
 
 class TestMaxInflight2:
-
     def test_sequential_batching_accumulates_requests(self):
         """With flush_pending gate held during GPU work, requests accumulate
         into larger batches instead of being flushed one-at-a-time."""
@@ -619,7 +609,6 @@ class TestMaxInflight2:
 
 
 class TestFlushGuard:
-
     def test_no_duplicate_flush_tasks(self):
         gate = asyncio.Event()
         flush_entries = {"count": 0}
@@ -667,7 +656,6 @@ class TestFlushGuard:
 
 
 class TestDurationPassthrough:
-
     def test_payload_includes_durations(self):
         submitted_payloads = []
 
@@ -707,7 +695,6 @@ class TestDurationPassthrough:
 
 
 class TestLazyVramInit:
-
     def test_vram_init_deferred_until_worker_ready(self):
         """VRAM info is zero at start() time, populated later — lazy init picks it up."""
         submitted_payloads = []
@@ -754,8 +741,222 @@ class TestLazyVramInit:
             loop.close()
 
 
-class TestUnlinkSafe:
+class TestBatchesInflight:
+    def test_full_batch_uses_second_inflight_slot(self):
+        """When a full batch is processing (inflight=1), a second full batch
+        should dispatch immediately using the second inflight slot."""
+        batch_sizes = []
+        gate = asyncio.Event()
 
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            batch_sizes.append(payload["batch_size"])
+
+            async def resolve():
+                if len(batch_sizes) == 1:
+                    await gate.wait()
+                results = [{"text": f"ok_{i}"} for i in range(payload["batch_size"])]
+                if not fut.done():
+                    fut.set_result(results)
+                item.inference_seconds = 0.01
+
+            asyncio.ensure_future(resolve())
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    futs = [asyncio.ensure_future(engine.submit(f"/tmp/a{i}.wav")) for i in range(4)]
+                    await asyncio.sleep(0.02)
+                    assert len(batch_sizes) >= 1, "First batch should have dispatched"
+                    more_futs = [asyncio.ensure_future(engine.submit(f"/tmp/b{i}.wav")) for i in range(4)]
+                    await asyncio.sleep(0.02)
+                    assert len(batch_sizes) >= 2, (
+                        f"Second full batch should dispatch while first is inflight "
+                        f"(got {len(batch_sizes)} dispatches, batches={batch_sizes})"
+                    )
+                    gate.set()
+                    all_futs = futs + more_futs
+                    results = await asyncio.wait_for(asyncio.gather(*all_futs, return_exceptions=True), timeout=10)
+                    successes = [r for r in results if not isinstance(r, Exception)]
+                    assert len(successes) == 8
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_batches_inflight_resets_after_gpu_error(self):
+        """After a GPU error, _batches_inflight must return to 0 so the
+        flush timer can dispatch future batches."""
+        call_count = {"n": 0}
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                loop.call_soon(fut.set_exception, RuntimeError("GPU exploded"))
+            else:
+                results = [{"text": "ok"} for _ in range(payload["batch_size"])]
+                loop.call_soon(fut.set_result, results)
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    with pytest.raises(RuntimeError, match="GPU exploded"):
+                        await asyncio.wait_for(engine.submit("/tmp/fail.wav"), timeout=5)
+                    assert (
+                        engine._batches_inflight == 0
+                    ), f"_batches_inflight must be 0 after error, got {engine._batches_inflight}"
+                    result = await asyncio.wait_for(engine.submit("/tmp/ok.wav"), timeout=5)
+                    assert result["text"] == "ok"
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_timer_flush_blocked_during_inflight(self):
+        """When _batches_inflight > 0, the 2ms flush timer must NOT create
+        new flush tasks — requests accumulate instead."""
+        batch_sizes = []
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            batch_sizes.append(payload["batch_size"])
+
+            async def delayed_resolve():
+                await asyncio.sleep(0.1)
+                results = [{"text": f"ok_{i}"} for i in range(payload["batch_size"])]
+                if not fut.done():
+                    fut.set_result(results)
+                item.inference_seconds = 0.1
+
+            asyncio.ensure_future(delayed_resolve())
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=32, max_wait_seconds=0.002, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    futs = []
+                    futs.append(asyncio.ensure_future(engine.submit("/tmp/first.wav")))
+                    await asyncio.sleep(0.01)
+                    for i in range(5):
+                        futs.append(asyncio.ensure_future(engine.submit(f"/tmp/later_{i}.wav")))
+                        await asyncio.sleep(0.005)
+                    results = await asyncio.wait_for(asyncio.gather(*futs, return_exceptions=True), timeout=10)
+                    successes = [r for r in results if not isinstance(r, Exception)]
+                    assert len(successes) == 6
+                    batch1_count = sum(1 for b in batch_sizes if b == 1)
+                    assert batch1_count <= 1, (
+                        f"At most 1 batch=1 expected (got {batch1_count}, batches={batch_sizes}). "
+                        f"Timer should not flush while batches_inflight > 0."
+                    )
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_batches_inflight_resets_after_oom(self):
+        """After a CUDA OOM, _batches_inflight must return to 0."""
+        oom_fired = {"count": 0}
+
+        def on_oom():
+            oom_fired["count"] += 1
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            loop.call_soon(fut.set_exception, RuntimeError("CUDA out of memory"))
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(
+            gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0, on_gpu_oom=on_oom
+        )
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    with pytest.raises(RuntimeError, match="CUDA out of memory"):
+                        await asyncio.wait_for(engine.submit("/tmp/oom.wav"), timeout=5)
+                    assert engine._batches_inflight == 0
+                    assert oom_fired["count"] == 1
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_batches_inflight_resets_on_empty_pending(self):
+        """Directly calling _flush_batch with empty _pending must still
+        decrement _batches_inflight (exercises the early return branch)."""
+        gpu = _make_mock_gpu_worker()
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=1.0, max_inflight=2, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    assert engine._batches_inflight == 0
+                    await engine._flush_batch()
+                    assert (
+                        engine._batches_inflight == 0
+                    ), f"_batches_inflight must be 0 after empty-pending flush, got {engine._batches_inflight}"
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+
+class TestUnlinkSafe:
     def test_unlink_existing(self):
         with tempfile.NamedTemporaryFile(delete=False) as f:
             path = f.name

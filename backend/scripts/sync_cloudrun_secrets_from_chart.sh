@@ -11,26 +11,45 @@
 # list, so every chart change reliably propagates.
 #
 # Usage:
-#   sync_cloudrun_secrets_from_chart.sh <env> [<service> …]
+#   sync_cloudrun_secrets_from_chart.sh <env> [--project <gcp-project-id>] [<service> …]
 #
 #   env       one of: dev | prod
 #   services  defaults to: backend backend-sync backend-integration
 #
 # Requires: yq (mikefarah), gcloud authed for the target project.
+# Project must be supplied via --project or GCP_PROJECT_ID.
 
 set -euo pipefail
 
 ENV="${1:-}"
 shift || true
-SERVICES=("${@:-backend backend-sync backend-integration}")
+PROJECT_OVERRIDE=""
+SERVICES=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --project)
+      PROJECT_OVERRIDE="${2:-}"
+      if [ -z "$PROJECT_OVERRIDE" ]; then
+        echo "--project requires a GCP project id" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    *)
+      SERVICES+=("$1")
+      shift
+      ;;
+  esac
+done
+if [ "${#SERVICES[@]}" -eq 0 ]; then
+  SERVICES=(backend backend-sync backend-integration)
+fi
 
 case "$ENV" in
   dev)
-    PROJECT="based-hardware-dev"
     VALUES_FILE="backend/charts/backend-secrets/dev_omi_backend_secrets_values.yaml"
     ;;
   prod)
-    PROJECT="based-hardware"
     VALUES_FILE="backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml"
     ;;
   *)
@@ -38,6 +57,12 @@ case "$ENV" in
     exit 2
     ;;
 esac
+
+PROJECT="${PROJECT_OVERRIDE:-${GCP_PROJECT_ID:-}}"
+if [ -z "$PROJECT" ]; then
+  echo "GCP project id required: pass --project <id> or set GCP_PROJECT_ID" >&2
+  exit 2
+fi
 
 if ! command -v yq >/dev/null 2>&1; then
   echo "yq (mikefarah) is required: https://github.com/mikefarah/yq" >&2

@@ -881,6 +881,7 @@ class _FakeParakeetWebSocket:
         if data == 'finalize':
             await self._messages.put(json.dumps({'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}))
             await self._messages.put(None)
+            await self._messages.put(None)
 
     async def close(self):
         await self._messages.put(None)
@@ -914,15 +915,16 @@ class TestProcessAudioParakeet(unittest.TestCase):
                     ws, enter_started, allow_enter
                 )
 
-                socket_task = asyncio.create_task(process_audio_parakeet(segments.extend, 'en', 16000, 1))
-                await asyncio.wait_for(enter_started.wait(), timeout=1)
-                await asyncio.sleep(0)
-                self.assertFalse(socket_task.done())
+                with patch('utils.stt.streaming.asyncio.sleep', AsyncMock()):
+                    socket_task = asyncio.create_task(process_audio_parakeet(segments.extend, 'en', 16000, 1))
+                    await asyncio.wait_for(enter_started.wait(), timeout=1)
+                    await asyncio.sleep(0)
+                    self.assertFalse(socket_task.done())
 
-                allow_enter.set()
-                sock = await asyncio.wait_for(socket_task, timeout=1)
-                sock.send(b'pcm')
-                await sock.drain_and_close()
+                    allow_enter.set()
+                    sock = await asyncio.wait_for(socket_task, timeout=1)
+                    sock.send(b'pcm')
+                    await sock.drain_and_close()
 
                 self.assertEqual(ws.sent, [b'pcm', 'finalize'])
                 self.assertEqual(segments, [{'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}])
@@ -1402,7 +1404,6 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_default_routes_to_deepgram(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
@@ -1446,7 +1447,6 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
 
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_factory_returns_deepgram_by_default(self):
         from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider

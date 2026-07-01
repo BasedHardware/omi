@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.578",
+      "date": "2026-07-01",
+      "changes": [
+        "Desktop sign-in now receives browser OAuth callbacks through a local loopback listener before falling back to custom URL schemes."
+      ]
+    },
+    {
+      "version": "0.11.577",
+      "date": "2026-06-30",
+      "changes": [
+        "Improved desktop sign-in reliability and added stage-level auth diagnostics for Apple and Google sign-in"
+      ]
+    },
+    {
+      "version": "0.11.576",
+      "date": "2026-06-30",
+      "changes": [
+        "Fixed legacy memories failing to load on desktop due to memory_id alias conflicts, and preserved device-scoped memory results after cache reload"
+      ]
+    },
+    {
+      "version": "0.11.575",
+      "date": "2026-06-30",
+      "changes": [
+        "Improved agent MCP setup so generated Hermes and OpenClaw instructions use the current app backend stage"
+      ]
+    },
+    {
+      "version": "0.11.574",
+      "date": "2026-06-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.573",
       "date": "2026-06-30",
       "changes": [

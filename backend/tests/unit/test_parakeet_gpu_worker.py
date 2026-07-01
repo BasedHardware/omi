@@ -82,7 +82,6 @@ def _start_worker_with_mock():
 
 
 class TestGPUWorkerLifecycle:
-
     def test_start_and_stop(self):
         worker = _start_worker_with_mock()
         assert worker.is_ready
@@ -129,7 +128,6 @@ class TestGPUWorkerLifecycle:
 
 
 class TestGPUWorkerSubmitSync:
-
     @pytest.fixture(autouse=True)
     def worker(self):
         w = _start_worker_with_mock()
@@ -168,7 +166,6 @@ class TestGPUWorkerSubmitSync:
 
 
 class TestGPUWorkerSubmitAsync:
-
     @pytest.fixture(autouse=True)
     def worker(self):
         w = _start_worker_with_mock()
@@ -200,21 +197,19 @@ class TestGPUWorkerSubmitAsync:
 
 
 class TestGPUWorkerQueueFull:
-
     def test_sync_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
-        for _ in range(512):
-            try:
-                worker._queue.put_nowait(WorkItem(WorkType.BATCH_TRANSCRIBE, {}))
-            except queue.Full:
-                break
+        worker._queue = MagicMock()
+        worker._queue.put.side_effect = queue.Full
 
         with pytest.raises(RuntimeError, match="GPU queue full"):
             worker.submit_sync({"audio_paths": ["/tmp/a.wav"]}, timeout=0.1)
 
     def test_async_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
         for _ in range(512):
             try:
@@ -232,7 +227,6 @@ class TestGPUWorkerQueueFull:
 
 
 class TestExtractResults:
-
     def test_extract_with_timestamps(self):
         hyp = MagicMock()
         hyp.text = "hello world"
@@ -270,7 +264,6 @@ class TestExtractResults:
 
 
 class TestGPUWorkerGC:
-
     def test_gc_collect_increments_counter(self):
         worker = GPUWorker()
         worker._gc_interval = 3
@@ -293,7 +286,6 @@ class TestGPUWorkerGC:
 
 
 class TestDrainQueue:
-
     def test_drain_rejects_pending_sync_items(self):
         worker = GPUWorker()
         evt = threading.Event()
@@ -331,7 +323,6 @@ class TestDrainQueue:
 
 
 class TestSafeSetHelpers:
-
     def test_safe_set_result_on_pending(self):
         loop = asyncio.new_event_loop()
         try:
@@ -373,7 +364,6 @@ class TestSafeSetHelpers:
 
 
 class TestBF16Loading:
-
     def test_bf16_enabled_calls_to_bfloat16(self):
         import gpu_worker as gw_mod
 
@@ -421,7 +411,6 @@ class TestBF16Loading:
 
 
 class TestTorchCompile:
-
     def test_compile_enabled_wraps_model(self):
         import gpu_worker as gw_mod
 
@@ -466,7 +455,6 @@ class TestTorchCompile:
 
 
 class TestCUDAGraphConfig:
-
     def test_cuda_graphs_disabled_calls_disable(self):
         nemo_asr = _get_nemo_asr()
         mock_model = _make_mock_model()
@@ -500,7 +488,6 @@ class TestCUDAGraphConfig:
 
 
 class TestTorchStartupOptimizations:
-
     def test_cudnn_benchmark_enabled(self):
         import gpu_worker as gw_mod
 
@@ -539,7 +526,6 @@ class TestTorchStartupOptimizations:
 
 
 class TestAttentionModeConfig:
-
     def test_default_attention_mode_is_full(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PARAKEET_ATTENTION_MODE", None)
@@ -647,7 +633,6 @@ class TestAttentionModeConfig:
 
 
 class TestSwitchAttention:
-
     def test_switch_to_local(self):
         with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_LOCAL_ATTN_CONTEXT": "64,64"}):
             worker = GPUWorker()
@@ -716,7 +701,6 @@ class TestSwitchAttention:
 
 
 class TestDurationGuard:
-
     def test_duration_guard_raises_on_oversized_file(self):
         with patch.dict(os.environ, {"PARAKEET_MAX_FILE_DURATION": "60"}):
             worker = _start_worker_with_mock()
@@ -747,7 +731,6 @@ class TestDurationGuard:
 
 
 class TestAudioDurationSec:
-
     def test_soundfile_path(self, tmp_path):
         import gpu_worker as gw_mod
 
@@ -812,7 +795,6 @@ class TestAudioDurationSec:
 
 
 class TestAutoAttentionSwitching:
-
     def test_auto_switches_to_local_for_long_audio(self):
         with patch.dict(
             os.environ,
@@ -886,7 +868,6 @@ class TestAutoAttentionSwitching:
 
 
 class TestDurationGuardBoundary:
-
     def test_duration_exactly_at_limit_passes(self):
         with patch.dict(os.environ, {"PARAKEET_MAX_FILE_DURATION": "60"}):
             worker = _start_worker_with_mock()
@@ -905,7 +886,6 @@ class TestDurationGuardBoundary:
 
 
 class TestMemGetInfoGuard:
-
     def test_mem_get_info_not_called_when_cuda_unavailable(self):
         import gpu_worker as gw_mod
 
@@ -957,7 +937,6 @@ class TestMemGetInfoGuard:
 
 
 class TestDurationPassthroughInGPUWorker:
-
     def test_durations_from_batcher_used_instead_of_file_probe(self):
         with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
             worker = _start_worker_with_mock()

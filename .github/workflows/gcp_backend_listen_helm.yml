@@ -85,6 +85,9 @@ jobs:
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
+            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
+            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
             --dry-run
 
@@ -94,10 +97,21 @@ jobs:
       # never reaches K8s, and the deployment's secretKeyRef resolves to an
       # empty value — code reads os.getenv(...) as None.
       - name: Upgrade backend-secrets Helm chart
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
         run: |
+          if [[ -n "${BACKEND_SECRETS_GSA}" ]]; then
+            gsa_name="${BACKEND_SECRETS_GSA}"
+          else
+            gsa_name="${{ vars.ENV }}-omi-backend-eso-gsa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          fi
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
             ./backend/charts/backend-secrets \
-            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
+            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml \
+            --set gke.projectID=${{ vars.GCP_PROJECT_ID }} \
+            --set gke.clusterLocation=${{ env.REGION }} \
+            --set gke.clusterName=${{ vars.GKE_CLUSTER }} \
+            --set gsa.name="${gsa_name}"
           # Trigger an immediate sync so newly-listed keys are pulled before the
           # listen deployment restarts (otherwise its env refs resolve empty).
           kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
@@ -110,6 +124,9 @@ jobs:
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
+            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
+            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}"
 
       - name: Verify rollout

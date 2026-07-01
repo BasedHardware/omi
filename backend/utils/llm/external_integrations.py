@@ -79,7 +79,9 @@ def get_message_structure(
     Message Content: ```{text}```
     Message Source: {text_source_spec}
 
-    {format_instructions}'''.replace('    ', '').strip()
+    {format_instructions}'''.replace(
+        '    ', ''
+    ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | get_llm('external_structure') | parser
@@ -121,7 +123,9 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       For Calendar Events, include any events or meetings mentioned in the content.
 
       Text: ```{text}```
-      '''.replace('    ', '').strip()
+      '''.replace(
+        '    ', ''
+    ).strip()
 
     response = _coerce_structured(
         get_llm('external_structure').with_structured_output(StructuredExtraction).invoke(prompt)
@@ -169,7 +173,9 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     ```
     ${conversation_history}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     with track_usage(uid, Features.DAILY_SUMMARY):
         return get_llm('daily_summary_simple').invoke(prompt).content
@@ -216,10 +222,13 @@ def generate_comprehensive_daily_summary(
         (c.finished_at - c.started_at).total_seconds() / 60 for c in non_discarded if c.finished_at and c.started_at
     )
 
-    # Extract ALL locations from non-discarded conversations
+    # Extract ALL locations from non-discarded conversations.
+    # latitude/longitude are required floats on the Geolocation model, so guarding on
+    # their truthiness wrongly drops a valid coordinate of exactly 0.0 (for example
+    # longitude 0.0 on the prime meridian). Guard on the geolocation's presence instead.
     locations = []
     for c in non_discarded:
-        if c.geolocation and c.geolocation.latitude and c.geolocation.longitude:
+        if c.geolocation:
             # Convert UTC time to user's local timezone
             local_time = None
             if c.started_at:

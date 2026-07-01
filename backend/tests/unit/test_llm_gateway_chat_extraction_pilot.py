@@ -5,8 +5,10 @@ import types
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
+import yaml
 
 for module_name in (
     'database.auth',
@@ -41,9 +43,17 @@ clients_stub.parser = object()
 sys.modules.setdefault('utils.llm.clients', clients_stub)
 
 from utils import byok
-from utils.llm import chat, gateway_client
+from utils.llm import chat, gateway_client, gateway_observability
 from utils.llm import conversation_processing
-from models.structured_extraction import ActionItemsExtraction
+from models.conversation_enums import CategoryEnum
+from models.structured import Structured
+from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
+
+GATEWAY_FEATURE_MODELS = {
+    'chat_extraction.requires_context': chat.RequiresContext,
+    'conversation_structure.extract.shadow': ConversationStructureExtraction,
+    'conversation_action_items.extract.shadow': ActionItemsExtraction,
+}
 
 
 class FakeParser:
@@ -126,6 +136,7 @@ def _mock_gateway_client(monkeypatch, fake_post):
 
 _VALUE_TRUE_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"value": true}'}}]})
 _UNEXPECTED_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"unexpected": true}'}}]})
+_UNEXPECTED_STRUCTURE_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"answer": "ok"}'}}]})
 
 
 def test_requires_context_gateway_success_returns_parsed_result(monkeypatch):
@@ -159,7 +170,7 @@ def test_requires_context_byok_context_skips_gateway(monkeypatch):
     monkeypatch.setattr(
         chat, 'record_chat_extraction_gateway_result', gateway_client.record_chat_extraction_gateway_result
     )
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     monkeypatch.setattr(chat, 'get_llm', lambda feature: FakeLLM(chat.RequiresContext(value=True), existing_calls))
     monkeypatch.setattr(
         chat,
@@ -188,6 +199,30 @@ def test_requires_context_invalid_gateway_content_falls_back(monkeypatch):
 
     assert chat.requires_context('what did I discuss yesterday?') is False
     assert existing_calls == [chat.RequiresContext]
+
+
+def test_gateway_validation_rejects_conversation_structure_defaults_masking_missing_fields(monkeypatch):
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _UNEXPECTED_STRUCTURE_RESPONSE)
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'extract structure',
+        ConversationStructureExtraction,
+        feature='conversation_structure.extract.shadow',
+    )
+
+    assert result is None
+    assert counter.calls == [
+        (
+            {
+                'feature': 'conversation_structure.extract.shadow',
+                'outcome': 'fallback',
+                'reason': 'schema_validation',
+            },
+            1,
+        )
+    ]
 
 
 def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeypatch):
@@ -230,6 +265,19 @@ def test_strict_schema_normalizes_action_item_extraction_for_openai():
     assert {'type': 'null'} in action_item_schema['properties']['due_at']['anyOf']
 
 
+def test_strict_schema_keeps_conversation_structure_shadow_contract_narrow():
+    schema = gateway_client._strict_model_json_schema(ConversationStructureExtraction)
+
+    assert schema['additionalProperties'] is False
+    assert schema['required'] == ['title', 'overview', 'emoji', 'category']
+    assert set(schema['properties']) == {'title', 'overview', 'emoji', 'category'}
+    assert 'action_items' not in schema['properties']
+    assert 'events' not in schema['properties']
+    assert '$ref' not in schema['properties']['category']
+    assert schema['properties']['category']['type'] == 'string'
+    assert 'enum' in schema['properties']['category']
+
+
 def test_strict_schema_removes_defaults_recursively():
     schema = gateway_client._strict_model_json_schema(ActionItemsExtraction)
 
@@ -245,16 +293,70 @@ def test_strict_schema_removes_defaults_recursively():
     walk(schema)
 
 
-def test_chat_structured_gateway_records_success_metric(monkeypatch):
+@pytest.mark.parametrize(('feature', 'output_model'), sorted(GATEWAY_FEATURE_MODELS.items()))
+def test_gateway_feature_payloads_use_openai_strict_schema_subset(feature, output_model):
+    payload = gateway_client._chat_structured_payload('fixture prompt', output_model, feature=feature)
+    schema = payload['response_format']['json_schema']['schema']
+
+    assert payload['model'] == 'omi:auto:chat-structured'
+    assert payload['response_format']['json_schema']['strict'] is True
+    assert payload['metadata']['omi_feature'] == feature
+    _assert_openai_strict_schema_subset(schema)
+
+
+def test_feature_bundles_have_gateway_payload_contract_coverage():
+    config_path = Path(__file__).resolve().parents[2] / 'llm_gateway' / 'config' / 'feature_bundles.yaml'
+    configured = {bundle['feature'] for bundle in yaml.safe_load(config_path.read_text())['feature_bundles']}
+
+    assert configured <= set(GATEWAY_FEATURE_MODELS)
+
+
+def _assert_openai_strict_schema_subset(schema):
+    unsupported_keys = {
+        'allOf',
+        'oneOf',
+        'not',
+        'if',
+        'then',
+        'else',
+        'dependentRequired',
+        'dependentSchemas',
+        'patternProperties',
+    }
+
+    def walk(node, path='$'):
+        if isinstance(node, dict):
+            for key in unsupported_keys:
+                assert key not in node, f'{path} contains unsupported strict schema key: {key}'
+            if '$ref' in node:
+                siblings = set(node) - {'$ref'}
+                assert not siblings, f'{path} has $ref sibling keys: {sorted(siblings)}'
+            if node.get('type') == 'object':
+                assert node.get('additionalProperties') is False, f'{path} must set additionalProperties=false'
+                properties = node.get('properties')
+                if isinstance(properties, dict):
+                    assert node.get('required') == list(properties.keys()), f'{path} must require every property'
+            assert 'default' not in node, f'{path} must not contain default'
+            for key, value in node.items():
+                walk(value, f'{path}.{key}')
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f'{path}[{index}]')
+
+    walk(schema)
+
+
+def test_chat_structured_gateway_records_success_metric(monkeypatch, caplog):
     counter = FakeCounter()
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _VALUE_TRUE_RESPONSE)
 
-    result = gateway_client.invoke_chat_structured_gateway(
-        'classified prompt',
-        chat.RequiresContext,
-        feature='chat_extraction.requires_context',
-    )
+    with caplog.at_level(logging.INFO, logger='utils.llm.gateway_observability'):
+        result = gateway_client.invoke_chat_structured_gateway(
+            'classified prompt',
+            chat.RequiresContext,
+            feature='chat_extraction.requires_context',
+        )
 
     assert result == chat.RequiresContext(value=True)
     assert counter.calls == [
@@ -267,11 +369,16 @@ def test_chat_structured_gateway_records_success_metric(monkeypatch):
             1,
         )
     ]
+    assert 'llm_gateway_backend_event kind=request_result' in caplog.text
+    assert 'feature=chat_extraction.requires_context' in caplog.text
+    assert 'outcome=success' in caplog.text
+    assert 'reason=ok' in caplog.text
+    assert 'classified prompt' not in caplog.text
 
 
 def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
     counter = FakeCounter()
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _UNEXPECTED_RESPONSE)
 
     result = gateway_client.invoke_chat_structured_gateway(
@@ -353,7 +460,7 @@ def test_conversation_discard_byok_skips_gateway_and_uses_legacy_llm(monkeypatch
 
     byok.set_byok_keys({'openai': 'secret'})
     counter = FakeCounter()
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     monkeypatch.setattr(
         conversation_processing,
         'invoke_chat_structured_gateway',
@@ -450,3 +557,159 @@ def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
     assert captured['output_model'] is conversation_processing.ActionItemsExtraction
     assert captured['feature'] == 'conversation_action_items.extract.shadow'
     assert 'submit report by Friday' in captured['prompt']
+
+
+def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch, caplog):
+    captured = {}
+    counter = FakeCounter()
+    call_order = []
+
+    class LegacyParser:
+        @staticmethod
+        def get_format_instructions():
+            return 'return legacy structure'
+
+    class FakeParser:
+        def __init__(self, pydantic_object):
+            self.pydantic_object = pydantic_object
+
+        def get_format_instructions(self):
+            return 'return shadow structure'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            assert values['format_instructions'] == 'return legacy structure'
+            call_order.append('legacy')
+            return Structured(
+                title='Weekly Planning',
+                overview='Discussed project launch tasks.',
+                emoji='📋',
+                category=CategoryEnum.work,
+            )
+
+    def fake_gateway(prompt, output_model, *, feature):
+        call_order.append('gateway')
+        captured.update({'prompt': prompt, 'output_model': output_model, 'feature': feature})
+        return output_model(
+            title='Weekly Plan',
+            overview='Discussed launch tasks for the project.',
+            emoji='📋',
+            category=CategoryEnum.work,
+        )
+
+    class ImmediateFuture:
+        def result(self):
+            return None
+
+        def add_done_callback(self, callback):
+            callback(self)
+
+    def immediate_submit(fn, *args):
+        fn(*args)
+        return ImmediateFuture()
+
+    monkeypatch.setenv(conversation_processing.CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV, 'true')
+    monkeypatch.setenv(conversation_processing.CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV, '1.0')
+    monkeypatch.setattr(conversation_processing, 'parser', LegacyParser())
+    monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', immediate_submit)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS', counter)
+
+    with caplog.at_level(logging.INFO, logger='utils.llm.gateway_observability'):
+        result = conversation_processing.get_transcript_structure(
+            'we discussed project launch tasks',
+            datetime(2026, 6, 28, tzinfo=timezone.utc),
+            'en',
+            'UTC',
+            'uid',
+        )
+
+    assert result.title == 'Weekly Planning'
+    assert result.overview == 'Discussed project launch tasks.'
+    assert call_order == ['legacy', 'gateway']
+    assert captured['output_model'] is ConversationStructureExtraction
+    assert captured['feature'] == 'conversation_structure.extract.shadow'
+    assert 'return shadow structure' in captured['prompt']
+    comparison_labels = [labels for labels, _amount in counter.calls]
+    assert {
+        'feature': 'conversation_structure.extract.shadow',
+        'field': 'category',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert {
+        'feature': 'conversation_structure.extract.shadow',
+        'field': 'emoji',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert any(labels['field'] == 'title_similarity' for labels in comparison_labels)
+    assert any(labels['field'] == 'overview_similarity' for labels in comparison_labels)
+    assert 'llm_gateway_backend_event kind=shadow_comparison' in caplog.text
+    assert 'feature=conversation_structure.extract.shadow' in caplog.text
+    assert 'field=title_similarity' in caplog.text
+    assert 'Weekly Planning' not in caplog.text
+    assert 'Discussed project launch tasks.' not in caplog.text
+
+
+def test_conversation_structure_shadow_disabled_skips_gateway(monkeypatch):
+    captured = {'gateway_called': False, 'submitted': False}
+    counter = FakeCounter()
+
+    class LegacyParser:
+        @staticmethod
+        def get_format_instructions():
+            return 'return legacy structure'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            return Structured(title='Legacy Title', overview='Legacy Overview', category=CategoryEnum.work)
+
+    def fake_gateway(*args, **kwargs):
+        captured['gateway_called'] = True
+        return None
+
+    def fake_submit(*args, **kwargs):
+        captured['submitted'] = True
+
+    monkeypatch.delenv(conversation_processing.CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(conversation_processing, 'parser', LegacyParser())
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', fake_submit)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+
+    result = conversation_processing.get_transcript_structure(
+        'we discussed project launch tasks',
+        datetime(2026, 6, 28, tzinfo=timezone.utc),
+        'en',
+        'UTC',
+        'uid',
+    )
+
+    assert result.title == 'Legacy Title'
+    assert captured == {'gateway_called': False, 'submitted': False}
+    assert (
+        {
+            'feature': 'conversation_structure.extract.shadow',
+            'outcome': 'skipped',
+            'reason': 'disabled',
+        },
+        1,
+    ) in counter.calls

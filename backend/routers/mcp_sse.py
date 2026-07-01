@@ -36,19 +36,41 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.default_read_rollout import (
+    MemoryReadDecision,
+    read_default_read_rollout,
+)
+from utils.memory.memory_service import (
+    MemoryService,
+    raise_if_legacy_write_blocked,
+    resolve_external_memory_write_context,
+)
+from utils.memory.memory_system import MemorySystem
+from utils.memory.product_authorization import (
+    ProductAuthorizationContext,
+    authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
+)
+from utils.memory.surface_routing import pin_memory_system
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
+    McpVerifiedAuth,
+    build_mcp_default_memory_read_context,
     collect_filtered_memories,
+    list_default_mcp_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
+    search_default_mcp_memories_vector,
 )
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -61,29 +83,8 @@ MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
-
-MCP_LEGACY_API_KEY_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
+MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
+MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -119,9 +120,40 @@ class MCPAuthContext:
     uid: str
     auth_type: str
     scopes: list[str]
+    app_id: Optional[str] = None
+    key_id: Optional[str] = None
     client_id: Optional[str] = None
     resource: Optional[str] = None
     grant_id: Optional[str] = None
+    memory_context: Optional[ProductAuthorizationContext] = None
+
+
+def _mcp_memory_context_from_api_key_user_data(user_data: dict) -> ProductAuthorizationContext:
+    verified_auth = McpVerifiedAuth(
+        uid=user_data["user_id"],
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+        scopes=tuple(user_data.get("scopes") or ()),
+    )
+    return build_mcp_default_memory_read_context(verified_auth)
+
+
+def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[ProductAuthorizationContext]:
+    """Validate an MCP API key and return its memory product auth context."""
+    if not authorization:
+        return None
+
+    token = authorization
+    if authorization.startswith("Bearer "):
+        token = authorization[7:]
+
+    if not token.startswith("omi_mcp_"):
+        return None
+
+    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    if not user_data or not user_data.get("user_id"):
+        return None
+    return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
 def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:
@@ -134,10 +166,17 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_id = mcp_api_key_db.get_user_id_by_api_key(token)
-        if not user_id:
+        user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        if not user_data or not user_data.get("user_id"):
             return None
-        return MCPAuthContext(uid=user_id, auth_type="legacy_mcp_key", scopes=MCP_LEGACY_API_KEY_SCOPES)
+        return MCPAuthContext(
+            uid=user_data["user_id"],
+            auth_type="legacy_mcp_key",
+            scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
+            app_id=user_data.get("app_id"),
+            key_id=user_data.get("key_id"),
+            memory_context=_mcp_memory_context_from_api_key_user_data(user_data),
+        )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:
@@ -691,6 +730,16 @@ class ToolExecutionError(Exception):
         super().__init__(self.message)
 
 
+def _raise_tool_error_from_http(exc: HTTPException) -> None:
+    if exc.status_code == 404:
+        raise ToolExecutionError("Memory not found", code=-32001) from exc
+    if exc.status_code == 402:
+        raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002) from exc
+    if exc.status_code in {403, 409, 503}:
+        raise ToolExecutionError(str(exc.detail), code=-32009) from exc
+    raise ToolExecutionError(str(exc.detail)) from exc
+
+
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
     """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
     if not value:
@@ -701,8 +750,14 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
 
-def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
+def execute_tool(
+    user_id: str,
+    tool_name: str,
+    arguments: dict,
+    auth_context: Optional[ProductAuthorizationContext] = None,
+) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
+    memory_system = pin_memory_system(user_id, db_client=db)
 
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
@@ -741,6 +796,51 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+
+        if memory_system == MemorySystem.CANONICAL:
+            filtered = collect_filtered_memories(
+                lambda batch_offset, batch_limit: [
+                    m.model_dump(mode='json')
+                    for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+                ],
+                limit=limit,
+                offset=offset,
+                reviewed=reviewed,
+                manually_added=manually_added,
+                include_activity=include_activity,
+                include_sensitive=include_sensitive,
+                updated_after=updated_after,
+                sort=sort,
+                categories=valid_categories or None,
+            )
+            memories = filtered['memories']
+            for memory in memories:
+                if memory.get('is_locked', False):
+                    content = memory.get('content', '')
+                    memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+            return {"memories": memories}
+
+        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
+        memory_list_results = list_default_mcp_memories(
+            uid=user_id,
+            limit=limit,
+            offset=offset,
+            db_client=db,
+            rollout_decision=memory_rollout,
+            categories=valid_categories,
+            reviewed=reviewed,
+            manually_added=manually_added,
+        )
+        if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
+            return {"memories": memory_list_results.memories}
+        if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+            return {"memories": []}
+
         result = collect_filtered_memories(
             lambda batch_offset, batch_limit: memories_db.get_memories(
                 user_id, batch_limit, batch_offset, valid_categories, sort=sort
@@ -767,11 +867,38 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not content:
             raise ToolExecutionError("Content is required")
 
-        # Auto-categorize memories from MCP clients
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+        try:
+            write_context = resolve_external_memory_write_context(
+                user_id,
+                db_client=db,
+                memory_system=memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_create",
+            )
+            raise_if_legacy_write_blocked(write_context)
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
+
         category = identify_category_for_memory(content)
         memory = Memory(content=content, category=category)
         memory_db = MemoryDB.from_memory(memory, user_id, None, True)
-        memories_db.create_memory(user_id, memory_db.model_dump())
+        try:
+            memory_db = MemoryService(db_client=db).create_external_memory(
+                user_id,
+                memory_db,
+                memory_system=write_context.memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_create",
+                upsert_vector=False,
+                require_canonical_promotion=True,
+            )
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
 
         return {"success": True, "memory": memory_db.model_dump()}
 
@@ -780,13 +907,23 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
 
-        memory = memories_db.get_memory(user_id, memory_id)
-        if not memory:
-            raise ToolExecutionError("Memory not found", code=-32001)
-        if memory.get('is_locked', False):
-            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
-        memories_db.delete_memory(user_id, memory_id)
+        try:
+            MemoryService(db_client=db).delete_external_memory(
+                user_id,
+                memory_id,
+                memory_system=memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_delete",
+                delete_vector=False,
+            )
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
         return {"success": True}
 
     elif tool_name == "edit_memory":
@@ -795,13 +932,26 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
 
-        memory = memories_db.get_memory(user_id, memory_id)
-        if not memory:
-            raise ToolExecutionError("Memory not found", code=-32001)
-        if memory.get('is_locked', False):
-            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
-        memories_db.edit_memory(user_id, memory_id, content)
+        if not content.strip():
+            raise ToolExecutionError("content must not be empty", code=-32602)
+        try:
+            MemoryService(db_client=db).update_external_memory_content(
+                user_id,
+                memory_id,
+                content,
+                memory_system=memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_edit",
+                upsert_vector=False,
+            )
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
         return {"success": True}
 
     elif tool_name == "get_conversations":
@@ -886,6 +1036,29 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
+
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+
+        if memory_system == MemorySystem.CANONICAL:
+            memory_service = MemoryService(db_client=db)
+            return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
+
+        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
+        vector_search_results = search_default_mcp_memories_vector(
+            uid=user_id,
+            query=query,
+            limit=limit,
+            db_client=db,
+            rollout_decision=memory_rollout,
+        )
+        if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
+            return {"memories": vector_search_results.memories}
+        if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+            return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
         if not matches:
@@ -1189,8 +1362,10 @@ def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Opt
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
         try:
-            _require_tool_scope(auth_context, tool_name)
-            result = execute_tool(auth_context.uid, tool_name, arguments)
+            mcp_auth_context = auth_context
+            _require_tool_scope(mcp_auth_context, tool_name)
+            auth_context = mcp_auth_context.memory_context
+            result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
@@ -1426,9 +1601,10 @@ async def mcp_streamable_http(
     auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
     if not auth_context:
         raise invalid_mcp_auth_exception()
+    user_id = auth_context.uid
 
     # Rate limit per-user
-    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
+    await run_blocking(critical_executor, check_rate_limit_inline, user_id, "mcp:sse")
 
     # Parse request body
     try:

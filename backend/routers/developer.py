@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 import database.folders as folders_db
@@ -14,8 +14,11 @@ import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 
+from models.folder import Folder
+from utils.client_device import resolve_client_device_from_request
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
     Conversation as OmiConversation,
@@ -37,21 +40,43 @@ from dependencies import (
     get_current_user_id,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
-    get_uid_with_memories_read,
-    get_uid_with_memories_write,
+    get_developer_memory_default_memory_batch_write_context,
+    get_developer_memory_default_memory_read_context,
+    get_developer_memory_default_memory_write_context,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
     get_uid_with_goals_read,
     get_uid_with_goals_write,
 )
+from utils.apps import update_personas_async
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
+from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
+from utils.mcp_memories import collect_filtered_memories
+from utils.memory.developer_memory_adapter import (
+    search_memory_default_developer_memories,
+    search_memory_default_developer_memories_vector,
+)
+from utils.memory.product_authorization import (
+    ProductAuthorizationContext,
+    authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
+)
+from utils.memory.default_read_rollout import (
+    MemoryReadDecision,
+    guard_legacy_memory_write,
+    read_default_read_rollout,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -260,17 +285,87 @@ class BatchMemoriesResponse(BaseModel):
     operation_id="listMemories",
 )
 def get_memories(
-    uid: str = Depends(get_uid_with_memories_read),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
 ):
+    uid = auth_context.uid
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     category_list = []
     if categories:
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+
+    # Grant check must run before the memory-system branch so a canonical-cohort
+    # user holding a legacy/read-only Developer key without a persisted default-read
+    # grant is denied, instead of listing canonical memories before authorization.
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail={
+                'enabled': False,
+                'reason': app_key_grant.reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+                'app_id': auth_context.app_id,
+                'key_id': auth_context.key_id,
+            },
+        )
+
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        # Over-fetch raw pages and let collect_filtered_memories apply category
+        # filtering during the scan, so categories=manual&limit=25 always returns
+        # up to 25 matching rows instead of filtering a single unfiltered page.
+        filtered = collect_filtered_memories(
+            lambda batch_offset, batch_limit: [
+                m.model_dump(mode='json')
+                for m in memorydb_list_with_locked_preview(
+                    MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+                )
+            ],
+            limit=limit,
+            offset=offset,
+            categories=[c.value for c in category_list] if category_list else None,
+            sort='scoring_desc',
+        )
+        memories = filtered['memories']
+        return [CleanerMemory.model_validate(memory) for memory in memories]
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
+    memory_result = search_memory_default_developer_memories(
+        uid=uid,
+        query='',
+        limit=limit,
+        offset=offset,
+        db_client=db,
+        rollout_decision=memory_rollout,
+        categories=[c.value for c in category_list],
+    )
+
+    if memory_result.read_decision == MemoryReadDecision.USE_MEMORY:
+        return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
+    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'enabled': False,
+                'reason': memory_result.fallback_reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+        )
+    if memory_result.should_use_legacy_fallback:
+        pass
+
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
     # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
@@ -295,10 +390,115 @@ def get_memories(
     return valid_memories
 
 
+@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
+def search_memories_vector(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=100),
+):
+    """Search developer-readable default memory memory through hydrated vector candidates.
+
+    This narrow developer API vector endpoint fails closed unless the authenticated
+    Developer API app/key has a verified memories.read scope, a persisted app/key
+    default-read grant, and the server-owned rollout state enables developer_api
+    memory default-memory reads. Vector hits are hydrated from authoritative
+    `users/{uid}/memory_items` before returning results, so stale Short-term and
+    Archive remain unavailable by default.
+    """
+
+    uid = auth_context.uid
+
+    # Grant check must run before the memory-system branch so a canonical-cohort
+    # user holding a legacy/read-only Developer key without a persisted default-read
+    # grant is denied, instead of searching canonical memories before authorization.
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail={
+                'enabled': False,
+                'reason': app_key_grant.reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+                'app_id': auth_context.app_id,
+                'key_id': auth_context.key_id,
+            },
+        )
+
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
+        items = []
+        for match in matches:
+            memory = match.memory
+            items.append(
+                {
+                    'id': memory.id,
+                    'content': memory.content,
+                    'category': memory.category.value if hasattr(memory.category, 'value') else memory.category,
+                    'relevance_score': round(match.score, 4),
+                }
+            )
+        return {
+            'items': items,
+            'returned_count': len(items),
+            'archive_default_visible': False,
+            'policy': {
+                'consumer': 'developer_api',
+                'app_has_default_memory_grant': True,
+                'archive_capability': False,
+                'raw_provenance_capability': False,
+            },
+        }
+
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
+    memory_result = search_memory_default_developer_memories_vector(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=db,
+        rollout_decision=memory_rollout,
+    )
+    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'enabled': False,
+                'reason': memory_result.fallback_reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+        )
+    if memory_result.should_use_legacy_fallback:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'enabled': False,
+                'reason': memory_result.fallback_reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+        )
+    return {
+        'items': memory_result.memories,
+        'returned_count': len(memory_result.memories),
+        'archive_default_visible': False,
+        'policy': {
+            'consumer': 'developer_api',
+            'app_has_default_memory_grant': True,
+            'archive_capability': False,
+            'raw_provenance_capability': False,
+        },
+    }
+
+
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories")),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
 ):
     """
     Create a new memory for the authenticated user.
@@ -311,23 +511,70 @@ def create_memory(
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
 
-    # Auto-categorize if no category provided
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories. The canonical branch skips the
+    # legacy write guard inside create_external_memory(), so the grant check must
+    # run first for both canonical and legacy paths.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
-    # Create Memory object
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        memory = Memory(
+            content=request.content.strip(),
+            category=category,
+            visibility=request.visibility,
+            tags=request.tags,
+        )
+        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        memory_db = MemoryService(db_client=db).create_external_memory(
+            uid,
+            memory_db,
+            memory_system=memory_system,
+            consumer='developer_api',
+            operation='create_memory',
+            upsert_vector=False,
+            require_canonical_promotion=True,
+        )
+        if memory.visibility == 'public':
+            postprocess_executor.submit(update_personas_async, uid)
+        return DeveloperMemory(
+            id=memory_db.id,
+            content=memory_db.content,
+            category=memory_db.category,
+            visibility=memory_db.visibility,
+            tags=memory_db.tags,
+            created_at=memory_db.created_at,
+            updated_at=memory_db.updated_at,
+            manually_added=memory_db.manually_added,
+            scoring=memory_db.scoring,
+        )
+
     memory = Memory(
         content=request.content.strip(),
         category=category,
         visibility=request.visibility,
         tags=request.tags,
     )
-
-    # Convert to MemoryDB object
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-
-    # Save to database
-    memories_db.create_memory(uid, memory_db.dict())
-
+    memory_db = MemoryService(db_client=db).create_external_memory(
+        uid,
+        memory_db,
+        memory_system=memory_system,
+        consumer='developer_api',
+        operation='create_memory',
+        upsert_vector=False,
+        require_canonical_promotion=True,
+    )
+    if memory.visibility == 'public':
+        postprocess_executor.submit(update_personas_async, uid)
     return DeveloperMemory(
         id=memory_db.id,
         content=memory_db.content,
@@ -348,64 +595,61 @@ def create_memory(
 )
 def create_memories_batch(
     request: BatchMemoriesRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories_batch")),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_batch_write_context),
 ):
     """
     Create multiple memories in a batch.
 
     - **memories**: List of memories to create (max 25)
     """
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories. Gated before any memory
+    # construction so rejected requests build no side effects.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
     if len(request.memories) > 25:
         raise HTTPException(status_code=422, detail="Maximum 25 memories per batch request")
 
-    # Prepare memories
     memory_dbs = []
     has_public = False
 
     for mem_req in request.memories:
         if not mem_req.content or len(mem_req.content.strip()) == 0:
             raise HTTPException(status_code=422, detail="All memories must have non-empty content")
-
-        # Auto-categorize if no category provided
         category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
-
-        # Create Memory object
         memory = Memory(
             content=mem_req.content.strip(),
             category=category,
             visibility=mem_req.visibility,
             tags=mem_req.tags,
         )
-
-        # Convert to MemoryDB object
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
         memory_dbs.append(memory_db)
-
         if memory.visibility == 'public':
             has_public = True
 
-    # Save all memories to database
-    memories_db.save_memories(uid, [mem.dict() for mem in memory_dbs])
-
-    # Upsert vectors in a single Pinecone call so these memories show up in
-    # semantic search. Previously the dev batch endpoint skipped this step and
-    # batch-created memories were invisible to RAG retrieval.
-    upsert_memory_vectors_batch(
+    memory_system = pin_memory_system(uid, db_client=db)
+    created_dbs = MemoryService(db_client=db).create_external_memory_batch(
         uid,
-        [
-            {
-                "memory_id": mem.id,
-                "content": mem.content,
-                "category": mem.category.value,
-            }
-            for mem in memory_dbs
-        ],
+        memory_dbs,
+        memory_system=memory_system,
+        consumer='developer_api',
+        operation='batch_create_memories',
+        upsert_vectors=memory_system != MemorySystem.CANONICAL,
+        require_canonical_promotion=True,
     )
+    if has_public:
+        postprocess_executor.submit(update_personas_async, uid)
 
-    # Prepare response
     created_memories = [
         DeveloperMemory(
             id=mem.id,
@@ -417,29 +661,40 @@ def create_memories_batch(
             updated_at=mem.updated_at,
             manually_added=mem.manually_added,
         )
-        for mem in memory_dbs
+        for mem in created_dbs
     ]
-
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
 @router.delete("/v1/dev/user/memories/{memory_id}", tags=["Memories"], operation_id="deleteMemory")
 def delete_memory(
     memory_id: str,
-    uid: str = Depends(get_uid_with_memories_write),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
 ):
     """
     Delete a memory by ID.
 
     - **memory_id**: The ID of the memory to delete
     """
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
 
-    memories_db.delete_memory(uid, memory_id)
+    memory_system = pin_memory_system(uid, db_client=db)
+    MemoryService(db_client=db).delete_external_memory(
+        uid,
+        memory_id,
+        memory_system=memory_system,
+        consumer='developer_api',
+        operation='delete_memory',
+        delete_vector=False,
+    )
     return {"success": True}
 
 
@@ -452,7 +707,7 @@ def delete_memory(
 def update_memory(
     memory_id: str,
     request: UpdateMemoryRequest,
-    uid: str = Depends(get_uid_with_memories_write),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
 ):
     """
     Update a memory's content, visibility, tags, or category.
@@ -463,16 +718,58 @@ def update_memory(
     - **tags**: New tags for the memory (optional)
     - **category**: New category for the memory (optional)
     """
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
 
     if request.content is None and request.visibility is None and request.tags is None and request.category is None:
         raise HTTPException(
             status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
         )
+
+    memory_service = MemoryService(db_client=db)
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        # Validate existence before mutations so a missing memory returns 404
+        # (matching legacy) rather than letting the update helpers raise
+        # ValueError, which FastAPI surfaces as a 500.
+        if _read_canonical_memory_item(uid, memory_id, db_client=db) is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        if request.content is not None and not request.content.strip():
+            raise HTTPException(status_code=422, detail="content must not be empty")
+        if request.content is not None:
+            memory_service.update_content(uid, memory_id, request.content.strip())
+        if request.visibility is not None:
+            if request.visibility not in ['public', 'private']:
+                raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
+            memory_service.update_visibility(uid, memory_id, request.visibility)
+        if request.tags is not None or request.category is not None:
+            memory_service.update_product_fields(
+                uid,
+                memory_id,
+                tags=request.tags,
+                category=request.category.value if request.category is not None else None,
+            )
+        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return memory_item_to_memorydb(item).model_dump()
+
+    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
+    if not write_guard.allowed:
+        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
+
+    memory = memories_db.get_memory(uid, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
     old_visibility = memory.get('visibility')
 
@@ -570,6 +867,10 @@ def get_action_items(
     - **limit**: Maximum number of items to return
     - **offset**: Number of items to skip
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -919,7 +1220,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
         description="Stable client-generated session ID. When provided, retries return the same conversation ID.",
     )
     source: Optional[ConversationSource] = Field(
-        default=ConversationSource.external_integration,
+        default=ConversationSource.phone,
         description="Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)",
     )
     started_at: Optional[datetime] = Field(default=None, description="When conversation started (defaults to now)")
@@ -928,6 +1229,8 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
+    client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
 
     @field_validator('client_session_id')
     @classmethod
@@ -1005,6 +1308,10 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 25 if include_transcript else 100))
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
@@ -1062,7 +1369,7 @@ def get_conversations(
 )
 def create_conversation(
     request: CreateConversationRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
+    uid: str = Depends(get_uid_with_conversations_write),
 ):
     """
     Create a new conversation from text for the authenticated user.
@@ -1203,7 +1510,11 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
 
 
 def _create_conversation_from_segments(
-    uid: str, request: CreateConversationFromTranscriptRequest
+    uid: str,
+    request: CreateConversationFromTranscriptRequest,
+    *,
+    client_device_id: Optional[str] = None,
+    client_platform: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -1267,8 +1578,9 @@ def _create_conversation_from_segments(
     # Language defaults
     language_code = request.language or 'en'
 
-    # Source defaults
-    source = request.source or ConversationSource.external_integration
+    # Segment uploads are transcript-shaped; default to phone so process_conversation uses
+    # the transcript path (CreateConversation has no text_source field).
+    source = request.source or ConversationSource.phone
 
     conversation_id = None
     if request.client_session_id:
@@ -1294,6 +1606,9 @@ def _create_conversation_from_segments(
                 )
                 return _conversation_response_from_data(existing_conversation)
 
+    resolved_client_device_id = client_device_id or request.client_device_id
+    resolved_client_platform = client_platform or request.client_platform
+
     # Create conversation object with transcript segments
     if conversation_id:
         create_conversation_obj = OmiConversation(
@@ -1305,6 +1620,8 @@ def _create_conversation_from_segments(
             language=language_code,
             geolocation=geolocation,
             source=source,
+            client_device_id=resolved_client_device_id,
+            client_platform=resolved_client_platform,
             structured=Structured(),
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
@@ -1331,6 +1648,8 @@ def _create_conversation_from_segments(
             language=language_code,
             geolocation=geolocation,
             source=source,
+            client_device_id=resolved_client_device_id,
+            client_platform=resolved_client_platform,
         )
 
     # Process conversation
@@ -1359,6 +1678,7 @@ def _create_conversation_from_segments(
 @router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
+    http_request: Request,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).
@@ -1366,7 +1686,13 @@ def create_conversation_from_segments_user(
     Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
     the conversation persisted, processed (memories/summaries), and synced across devices — exactly
     like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
-    return _create_conversation_from_segments(uid, request)
+    device_ctx = resolve_client_device_from_request(http_request)
+    return _create_conversation_from_segments(
+        uid,
+        request,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
+    )
 
 
 @router.post(
@@ -1377,7 +1703,8 @@ def create_conversation_from_segments_user(
 )
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
+    http_request: Request,
+    uid: str = Depends(get_uid_with_conversations_write),
 ):
     """
     Create a new conversation from structured transcript segments.
@@ -1426,7 +1753,13 @@ def create_conversation_from_segments(
     }
     ```
     """
-    return _create_conversation_from_segments(uid, request)
+    device_ctx = resolve_client_device_from_request(http_request)
+    return _create_conversation_from_segments(
+        uid,
+        request,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
+    )
 
 
 @router.delete(

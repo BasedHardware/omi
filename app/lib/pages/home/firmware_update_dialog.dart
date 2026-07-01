@@ -328,7 +328,10 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                         borderRadius: BorderRadius.circular(_buttonSize / 2),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
                       child: const Center(

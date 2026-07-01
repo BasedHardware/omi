@@ -116,6 +116,7 @@ Keep this map up to date. When adding, removing, or changing inter-service calls
 
 ### App (Flutter)
 
+- Public app env is public: Flutter Envied values are compiled into IPA/AAB artifacts. New app config must go through `app/config/client_env_policy.yaml`, `app/.client.env.example`, and `scripts/create-public-client-env.sh`. Never add provider API keys, OAuth client secrets, service accounts, private keys, admin tokens, signing credentials, or backend-only secrets to `app/lib/env/**`, app env templates, Codemagic app build steps, generated Dart, or bundled app resources. `obfuscate: true` is not a security boundary. Run `python3 scripts/check-public-client-secrets.py` after any app env or release workflow change.
 - All user-facing strings must use l10n (`context.l10n.keyName`) — never hardcoded strings. Add keys to ARB files using `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
 - When adding new l10n keys, translate all non-English locales — never leave English text in a non-English ARB file. Don't hardcode the count; the authoritative list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`. Use the `omi-add-missing-language-keys-l10n` skill, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - **Firebase Prod Config** — never run `flutterfire configure`; it overwrites prod credentials. Prod config files live in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
@@ -269,6 +270,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 ## Testing
 
 - Run `backend/test-preflight.sh` first to verify tools, packages, and env vars.
+- OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 - Backend changes: run `backend/test.sh`. App changes: run `app/test.sh`. Run before committing.
 - Backend unit tests need `python3`, `pytest`, packages from `requirements.txt`, `ENCRYPTION_SECRET` (set by test.sh). Integration tests optionally need `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ADMIN_KEY`, Redis, `GOOGLE_APPLICATION_CREDENTIALS`.
 

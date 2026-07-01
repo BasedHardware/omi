@@ -358,9 +358,8 @@ def search_apps(
     category: str | None = Query(default=None, description='Filter by category id'),
     rating: float | None = Query(default=None, ge=0, le=5, description='Minimum rating filter'),
     capability: str | None = Query(default=None, description='Filter by capability id'),
-    sort: str | None = Query(
-        default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'
-    ),
+    sort: str
+    | None = Query(default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'),
     my_apps: bool | None = Query(default=None, description='Filter to show only user\'s apps'),
     installed_apps: bool | None = Query(default=None, description='Filter to show only installed/enabled apps'),
     offset: int = Query(default=0, ge=0),
@@ -1046,6 +1045,12 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     if app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     update_app_visibility_in_db(app_id, private)
+    # Toggling visibility of an approved app changes whether it appears in the public marketplace
+    # list, so invalidate that cache too (mirrors approve/reject/delete). Otherwise a newly public
+    # app does not show, and a newly private one keeps showing, until the list cache TTL expires
+    # (issue #3783).
+    if app.approved:
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
@@ -1670,7 +1675,8 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(escape(t.name) for t in tools)
 
-    return HTMLResponse(f"""
+    return HTMLResponse(
+        f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -1687,7 +1693,8 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])

@@ -1713,12 +1713,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8464,12 +8459,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9375,6 +9365,17 @@ class AppLocalizationsBn extends AppLocalizations {
   String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
 
   @override
+  String get memoryThisDevice => 'এই ডিভাইস';
+  @override
+  String get memoryThisIphone => 'এই iPhone';
+  @override
+  String get memoryThisPhone => 'এই ফোন';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Omi কীভাবে ব্যবহার করবেন';
 
   @override

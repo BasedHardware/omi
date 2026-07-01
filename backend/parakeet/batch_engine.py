@@ -53,6 +53,7 @@ class BatchEngine:
         self._lock = asyncio.Lock()
         self._flush_task: Optional[asyncio.Task] = None
         self._flush_pending = False
+        self._batches_inflight = 0
         self._inflight_tasks: set[asyncio.Task] = set()
         self._inflight_sem: Optional[asyncio.Semaphore] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -207,7 +208,7 @@ class BatchEngine:
     async def _flush_loop(self) -> None:
         while not self._shutting_down:
             await asyncio.sleep(self._max_wait_seconds)
-            if self._pending and not self._flush_pending:
+            if self._pending and not self._flush_pending and self._batches_inflight == 0:
                 self._flush_pending = True
                 t = asyncio.create_task(self._guarded_flush())
                 self._inflight_tasks.add(t)
@@ -261,6 +262,7 @@ class BatchEngine:
 
     async def _flush_batch(self) -> None:
         await self._inflight_sem.acquire()
+        self._batches_inflight += 1
         try:
             self._try_init_vram()
             async with self._lock:
@@ -269,6 +271,7 @@ class BatchEngine:
                 batch = self._form_vram_safe_batch(self._pending)
                 batch_set = set(id(r) for r in batch)
                 self._pending = [r for r in self._pending if id(r) not in batch_set]
+            self._flush_pending = False
 
             if not batch:
                 return
@@ -346,6 +349,7 @@ class BatchEngine:
                     if req.owns_file:
                         _unlink_safe(req.audio_path)
         finally:
+            self._batches_inflight -= 1
             self._inflight_sem.release()
 
     @property

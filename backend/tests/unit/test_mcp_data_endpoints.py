@@ -130,7 +130,11 @@ if not isinstance(getattr(sys.modules['database._client'], '__file__', None), st
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
+sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
+    side_effect=lambda dependency, _policy: dependency
+)
 sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
+sys.modules['utils.other.endpoints'].check_api_key_rate_limit = MagicMock()
 sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()

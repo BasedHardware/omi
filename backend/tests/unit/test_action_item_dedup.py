@@ -68,6 +68,7 @@ _vector_db_spec = importlib.util.spec_from_file_location('action_item_dedup_vect
 if _vector_db_spec is None or _vector_db_spec.loader is None:
     raise ImportError(f'Unable to load vector_db from {_vector_db_path}')
 vector_db = importlib.util.module_from_spec(_vector_db_spec)
+sys.modules[_vector_db_spec.name] = vector_db
 _vector_db_spec.loader.exec_module(vector_db)
 
 if previous_clients_stub is None:

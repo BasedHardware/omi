@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, run_blocking
+from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
 
 from fastapi import (
     APIRouter,
@@ -516,7 +516,9 @@ async def transcribe_voice_message(
 
         resolved_language = resolve_voice_message_language(uid, language)
         try:
-            transcript, detected_language = transcribe_pcm_bytes(
+            transcript, detected_language = await run_blocking(
+                sync_executor,
+                transcribe_pcm_bytes,
                 audio_bytes,
                 uid,
                 language=resolved_language,
@@ -598,7 +600,9 @@ async def transcribe_voice_message(
     is_multi = resolved_language == 'multi'
     for wav_path in wav_paths:
         try:
-            transcript, detected_language = transcribe_voice_message_segment(wav_path, uid, language=resolved_language)
+            transcript, detected_language = await run_blocking(
+                sync_executor, transcribe_voice_message_segment, wav_path, uid, language=resolved_language
+            )
             if transcript:
                 transcripts.append(transcript)
             if is_multi and detected_language:

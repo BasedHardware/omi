@@ -484,16 +484,57 @@ def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
 
 
 @try_catch_decorator
+def cache_mcp_api_key_auth_context(
+    hashed_key: str,
+    user_id: str,
+    scopes: Optional[List[str]] = None,
+    key_id: str = None,
+    app_id: str = None,
+    memory_grant_seeded: bool = True,
+    auth_context_version: int = 2,
+    ttl: int = 3600,
+):
+    """Caches the user_id, key identity, and scopes for a given MCP API key."""
+    cache_data = {
+        "user_id": user_id,
+        "scopes": scopes,
+        "key_id": key_id,
+        "app_id": app_id,
+        "memory_grant_seeded": memory_grant_seeded,
+        "auth_context_version": auth_context_version,
+    }
+    r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
+    r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
+
+
+@try_catch_decorator
 def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
     """Retrieves the user_id for a given hashed MCP API key from cache."""
-    user_id = r.get(f'mcp_api_key:{hashed_key}')
-    return user_id.decode() if user_id else None
+    auth_context = get_cached_mcp_api_key_auth_context(hashed_key)
+    return auth_context.get("user_id") if auth_context else None
+
+
+@try_catch_decorator
+def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[dict]:
+    """Retrieves MCP API key auth context, accepting older uid-only cache values."""
+    cached = r.get(f'mcp_api_key_auth:{hashed_key}')
+    if not cached:
+        cached = r.get(f'mcp_api_key:{hashed_key}')
+    if not cached:
+        return None
+    decoded = cached.decode() if isinstance(cached, bytes) else cached
+    try:
+        cache_data = json.loads(decoded)
+    except (TypeError, ValueError):
+        return {"user_id": decoded, "scopes": None, "key_id": None, "app_id": None}
+    return cache_data if isinstance(cache_data, dict) else None
 
 
 @try_catch_decorator
 def delete_cached_mcp_api_key(hashed_key: str):
     """Deletes a cached MCP API key."""
     r.delete(f'mcp_api_key:{hashed_key}')
+    r.delete(f'mcp_api_key_auth:{hashed_key}')
 
 
 # ******************************************************
@@ -501,9 +542,16 @@ def delete_cached_mcp_api_key(hashed_key: str):
 # ******************************************************
 
 
-def cache_dev_api_key(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
-    """Caches the user_id and scopes for a given hashed Developer API key."""
-    cache_data = {"user_id": user_id, "scopes": scopes}
+def cache_dev_api_key(
+    hashed_key: str,
+    user_id: str,
+    scopes: Optional[List[str]] = None,
+    ttl: int = 3600,
+    key_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+):
+    """Caches Developer API key auth context for uid-only and memory app/key authorization."""
+    cache_data = {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
     r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
 
 
@@ -652,7 +700,8 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script("""
+_RATE_LIMIT_LUA = r.register_script(
+    """
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -665,7 +714,8 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-""")
+"""
+)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -694,7 +744,8 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script("""
+_TTS_RATE_LIMIT_LUA = r.register_script(
+    """
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -722,7 +773,8 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-""")
+"""
+)
 
 
 def _seconds_until_midnight_utc() -> int:
@@ -767,6 +819,15 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
     result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
+    """Throttle client_devices registry upserts to once per (uid, device) every `ttl` seconds."""
+    try:
+        result = r.set(f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
+        return True
 
 
 def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600) -> bool:

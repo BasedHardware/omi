@@ -69,6 +69,7 @@ class GPUWorker:
         self._ready = threading.Event()
         self._load_error: Optional[Exception] = None
         self._running = False
+        self._submit_lock = threading.Lock()
         self._attn_mode = os.getenv("PARAKEET_ATTENTION_MODE", "full").lower()
         if self._attn_mode not in _VALID_ATTN_MODES:
             raise ValueError(f"PARAKEET_ATTENTION_MODE must be one of {_VALID_ATTN_MODES}, got '{self._attn_mode}'")
@@ -106,14 +107,15 @@ class GPUWorker:
             raise self._load_error
 
     def stop(self) -> None:
-        if not self._running:
-            return
+        with self._submit_lock:
+            if not self._running:
+                return
+            self._running = False
         evt = threading.Event()
         try:
             self._queue.put(WorkItem(WorkType.SHUTDOWN, None, sync_event=evt), timeout=5)
         except queue.Full:
             pass
-        self._running = False
         if self._thread:
             self._thread.join(timeout=30)
 
@@ -122,23 +124,31 @@ class GPUWorker:
             fut = loop.create_future()
             fut.set_exception(RuntimeError("GPU worker not ready"))
             return fut, None
-        fut = loop.create_future()
-        item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
-        try:
-            self._queue.put_nowait(item)
-        except queue.Full:
-            fut.set_exception(RuntimeError("GPU queue full"))
-        return fut, item
+        with self._submit_lock:
+            if not self._running:
+                fut = loop.create_future()
+                fut.set_exception(RuntimeError("GPU worker shutting down"))
+                return fut, None
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            try:
+                self._queue.put_nowait(item)
+            except queue.Full:
+                fut.set_exception(RuntimeError("GPU queue full"))
+            return fut, item
 
     def submit_sync(self, payload: dict, timeout: float = 120.0) -> list:
         if not self.is_ready:
             raise RuntimeError("GPU worker not ready")
-        evt = threading.Event()
-        item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, sync_event=evt)
-        try:
-            self._queue.put(item, timeout=5)
-        except queue.Full:
-            raise RuntimeError("GPU queue full")
+        with self._submit_lock:
+            if not self._running:
+                raise RuntimeError("GPU worker shutting down")
+            evt = threading.Event()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, sync_event=evt)
+            try:
+                self._queue.put(item, timeout=5)
+            except queue.Full:
+                raise RuntimeError("GPU queue full")
         if not evt.wait(timeout=timeout):
             raise TimeoutError("GPU transcription timed out")
         if item.sync_error is not None:
@@ -148,12 +158,15 @@ class GPUWorker:
     def submit_embedding_sync(self, payload: dict, timeout: float = 30.0):
         if not self.is_ready:
             raise RuntimeError("GPU worker not ready")
-        evt = threading.Event()
-        item = WorkItem(WorkType.EMBEDDING, payload, sync_event=evt)
-        try:
-            self._queue.put(item, timeout=5)
-        except queue.Full:
-            raise RuntimeError("GPU queue full")
+        with self._submit_lock:
+            if not self._running:
+                raise RuntimeError("GPU worker shutting down")
+            evt = threading.Event()
+            item = WorkItem(WorkType.EMBEDDING, payload, sync_event=evt)
+            try:
+                self._queue.put(item, timeout=5)
+            except queue.Full:
+                raise RuntimeError("GPU queue full")
         if not evt.wait(timeout=timeout):
             raise TimeoutError("GPU embedding timed out")
         if item.sync_error is not None:
@@ -409,7 +422,9 @@ class GPUWorker:
                                 ek: (
                                     round(ev, 4)
                                     if isinstance(ev, float)
-                                    else str(ev) if not isinstance(ev, (int, str)) else ev
+                                    else str(ev)
+                                    if not isinstance(ev, (int, str))
+                                    else ev
                                 )
                                 for ek, ev in e.items()
                             }
