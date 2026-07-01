@@ -336,3 +336,53 @@ def route_artifact(route_artifact_id: str, *, model: str = 'gpt-4.1-mini') -> di
 def write_yaml(path: Path, payload: dict) -> None:
     with path.open('w', encoding='utf-8') as handle:
         yaml.safe_dump(payload, handle, sort_keys=False)
+
+
+# ---------------------------------------------------------------------------
+# required_lane_ids cross-validation (per cubic review on PR #8744)
+# ---------------------------------------------------------------------------
+
+
+def test_required_lane_ids_missing_raises(tmp_path):
+    """If a required_lane_ids entry is missing from lanes.yaml, the loader fails.
+
+    Catches the silent-runtime-failure mode where a SUPPORTED_AUTO_LANE_IDS
+    entry was added but the corresponding lane was never put in lanes.yaml.
+    """
+    write_config(tmp_path)
+    with pytest.raises(ConfigValidationError, match='lanes.yaml is missing required lane ids'):
+        load_gateway_config(
+            tmp_path,
+            prod_mode=False,
+            required_lane_ids={LANE_ID, 'omi:auto:does-not-exist'},
+        )
+
+
+def test_required_lane_ids_satisfied_succeeds(tmp_path):
+    """If every required lane id is present in lanes.yaml, load succeeds."""
+    write_config(tmp_path)
+    cfg = load_gateway_config(
+        tmp_path,
+        prod_mode=False,
+        required_lane_ids={LANE_ID},
+    )
+    assert LANE_ID in cfg.lanes
+
+
+def test_required_lane_ids_default_none_skips_cross_validation(tmp_path):
+    """When required_lane_ids is None (default), no cross-validation runs.
+
+    Write a minimal config with NO lanes (no cross-validation triggered);
+    required_lane_ids=None means the loader doesn't check against an
+    allowlist. (Note: the existing _validate_feature_bundles still checks
+    bundle→lane references, but that's a separate invariant.)
+    """
+    cfg_dir = tmp_path
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    # Empty lanes (no chat-structured), empty route_artifacts, empty feature_bundles.
+    write_yaml(cfg_dir / 'lanes.yaml', {'lanes': []})
+    write_yaml(cfg_dir / 'route_artifacts.yaml', {'route_artifacts': []})
+    write_yaml(cfg_dir / 'feature_bundles.yaml', {'feature_bundles': []})
+    cfg = load_gateway_config(cfg_dir, prod_mode=False)
+    assert LANE_ID not in cfg.lanes
+    assert cfg.lanes == {}

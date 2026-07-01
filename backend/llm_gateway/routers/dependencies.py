@@ -7,10 +7,12 @@ from pathlib import Path
 from llm_gateway.gateway.config_loader import (
     DEFAULT_CONFIG_DIR,
     GatewayConfig,
+    load_gateway_config,
 )
 from llm_gateway.gateway.config_reload import GatewayConfigReloader
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
+from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
 
 logger = logging.getLogger(__name__)
 

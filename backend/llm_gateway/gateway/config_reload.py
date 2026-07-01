@@ -13,6 +13,7 @@ instead of 'restart the pod.'"
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,7 @@ from llm_gateway.gateway.config_loader import (
     load_gateway_config,
 )
 from llm_gateway.gateway.daily_refresh import DailyRefreshCache
+from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +83,21 @@ class GatewayConfigReloader:
     async def _load(self) -> GatewayConfig:
         """Loader passed to DailyRefreshCache; runs under the cache lock.
 
+        Config loading is sync (yaml.safe_load + Pydantic validation) and
+        can take ~10-50ms on cold start. To avoid blocking the event loop
+        while the request handler is awaiting `get()`, the sync load runs
+        in a threadpool via `asyncio.to_thread`.
+
         Raises ConfigValidationError on bad config; DailyRefreshCache does
         the stale-fallback dance (returns last good value if available,
         propagates if first-call).
         """
-        cfg = load_gateway_config(self.config_dir, prod_mode=None)
+        cfg = await asyncio.to_thread(
+            load_gateway_config,
+            self.config_dir,
+            prod_mode=None,
+            required_lane_ids=SUPPORTED_AUTO_LANE_IDS,
+        )
         self._cached = cfg
         return cfg
 
