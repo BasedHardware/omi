@@ -93,6 +93,32 @@ def test_extract_kg_on_promotion():
         )
 
 
+def test_extract_kg_can_preserve_item_updated_at():
+    item = _long_term_item()
+    db = MagicMock()
+    with (
+        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
+            return_value={"nodes": [], "edges": []},
+        ),
+        patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_touching_flag,
+        patch(
+            "utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted_without_touching_updated_at"
+        ) as mock_preserving_flag,
+    ):
+        result = extract_kg_for_promoted_memory(
+            "uid-canonical",
+            item,
+            db_client=db,
+            preserve_item_updated_at=True,
+        )
+
+    assert result.success is True
+    mock_touching_flag.assert_not_called()
+    mock_preserving_flag.assert_called_once_with("uid-canonical", "mem_lt", db_client=db)
+
+
 def test_extract_kg_failure_leaves_kg_extracted_false():
     item = _long_term_item(kg_extracted=False)
     db = MagicMock()

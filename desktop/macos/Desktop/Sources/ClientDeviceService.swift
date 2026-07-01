@@ -8,8 +8,17 @@ final class ClientDeviceService {
 
   private let keychainService = "com.omi.client-device-id"
   private let keychainAccount = "install-uuid"
+  private let devInstallIdDefaultsKey = "dev-client-device-install-uuid"
+  private let bundleIdentifier: String?
+  private let userDefaults: UserDefaults
 
-  private init() {}
+  init(
+    bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+    userDefaults: UserDefaults = .standard
+  ) {
+    self.bundleIdentifier = bundleIdentifier
+    self.userDefaults = userDefaults
+  }
 
   var deviceIdHash: String {
     let installId = loadOrCreateInstallId()
@@ -48,11 +57,29 @@ final class ClientDeviceService {
   }
 
   private func loadOrCreateInstallId() -> String {
+    if usesBundleScopedDevInstallId {
+      return loadOrCreateDevInstallId()
+    }
     if let existing = readKeychainInstallId() {
       return existing
     }
     let fresh = UUID().uuidString
     saveKeychainInstallId(fresh)
+    return fresh
+  }
+
+  private var usesBundleScopedDevInstallId: Bool {
+    guard let bundleIdentifier else { return false }
+    // Throwaway named dev bundles should not prompt for the shared login-keychain item.
+    return bundleIdentifier.hasPrefix("com.omi.omi-")
+  }
+
+  private func loadOrCreateDevInstallId() -> String {
+    if let existing = userDefaults.string(forKey: devInstallIdDefaultsKey), !existing.isEmpty {
+      return existing
+    }
+    let fresh = UUID().uuidString
+    userDefaults.set(fresh, forKey: devInstallIdDefaultsKey)
     return fresh
   }
 

@@ -1988,19 +1988,30 @@ struct MemoryBatchItem: Encodable {
   let category: String
   let tags: [String]
   let headline: String?
+  let source: String?
+  let windowTitle: String?
 
   init(
     content: String,
     visibility: String = "private",
     category: MemoryCategory = .system,
     tags: [String] = [],
-    headline: String? = nil
+    headline: String? = nil,
+    source: String? = nil,
+    windowTitle: String? = nil
   ) {
     self.content = content
     self.visibility = visibility
     self.category = category.rawValue
     self.tags = tags
     self.headline = headline
+    self.source = source
+    self.windowTitle = windowTitle
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case content, visibility, category, tags, headline, source
+    case windowTitle = "window_title"
   }
 }
 

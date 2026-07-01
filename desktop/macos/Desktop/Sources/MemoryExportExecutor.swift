@@ -39,6 +39,7 @@ enum MemoryExportExecutor {
     // file write. Do it deterministically ourselves (idempotent local write).
     if MemoryBankConnector.handles(destination) {
       let message = try MemoryBankConnector.connect(destination, key: key)
+      await MemoryExportService.shared.markConnected(destination)
       return Outcome(taskTitle: message, mode: .completed)
     }
 
@@ -141,6 +142,9 @@ enum MemoryExportExecutor {
       log("Claude cloud setup: native automation attempt \(attempt) result=\(cloudFormFillResultSummary(lastResult))")
       if cloudFormFillSucceeded(lastResult) {
         CloudConnectorFormAutomation.dismissGuidanceOverlay()
+        if lastResult.contains("Claude connector connected.") {
+          await MemoryExportService.shared.markConnected(.claude)
+        }
         return Outcome(
           taskTitle: "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
           mode: .completed)

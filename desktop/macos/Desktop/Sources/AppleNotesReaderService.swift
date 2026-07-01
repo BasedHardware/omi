@@ -170,24 +170,22 @@ actor AppleNotesReaderService {
       }
       let profileSummary = parsed["profile"] as? String ?? ""
 
-      var memoriesSaved = 0
-      for memory in memoryStrings {
-        do {
-          _ = try await APIClient.shared.createMemory(
+      let memoryItems = memoryStrings.map { memory in
+        MemoryBatchItem(
             content: memory,
             visibility: "private",
             category: .system,
             tags: ["apple_notes", "import", "profile"],
-            source: "apple_notes",
-            headline: "Apple Notes Insight"
-          )
-          memoriesSaved += 1
-        } catch {
-          log("AppleNotesReaderService: Failed to save memory: \(error)")
-        }
+            headline: "Apple Notes Insight",
+            source: "apple_notes"
+        )
       }
+      let saveResult = await OnboardingMemoryBatchImportService.save(
+        memoryItems,
+        logPrefix: "AppleNotesReaderService"
+      )
 
-      return (memoriesSaved, profileSummary)
+      return (saveResult.saved, profileSummary)
     } catch {
       if attempt < maxAttempts {
         log("AppleNotesReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
@@ -205,38 +203,31 @@ actor AppleNotesReaderService {
     let notesToSave = limit.map { Array(notes.prefix($0)) } ?? notes
     guard !notesToSave.isEmpty else { return (0, 0) }
 
-    let concurrency = min(8, notesToSave.count)
-    var nextIndex = 0
-
-    return await withTaskGroup(of: Bool.self) { group in
-      func enqueueNext() {
-        guard nextIndex < notesToSave.count else { return }
-        let note = notesToSave[nextIndex]
-        nextIndex += 1
-        group.addTask {
-          await Self.saveMemory(for: note)
-        }
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "MMM d, yyyy"
+    let memoryItems = notesToSave.map { note in
+      var content = note.title
+      if !note.summary.isEmpty {
+        content += "\n\n" + note.summary
       }
 
-      for _ in 0..<concurrency {
-        enqueueNext()
-      }
-
-      var saved = 0
-      var failed = 0
-
-      while let success = await group.next() {
-        if success {
-          saved += 1
-        } else {
-          failed += 1
-        }
-        enqueueNext()
-      }
-
-      log("AppleNotesReaderService: Saved \(saved) notes as memories (\(failed) failed)")
-      return (saved, failed)
+      return MemoryBatchItem(
+        content: content,
+        visibility: "private",
+        category: .system,
+        tags: ["apple_notes", "import", "note"],
+        headline: note.title,
+        source: "apple_notes",
+        windowTitle: "Apple Notes — \(dateFormatter.string(from: note.modifiedAt))"
+      )
     }
+
+    let result = await OnboardingMemoryBatchImportService.save(
+      memoryItems,
+      logPrefix: "AppleNotesReaderService"
+    )
+    log("AppleNotesReaderService: Saved \(result.saved) notes as memories (\(result.failed) failed)")
+    return result
   }
 
   func rememberSelectedFolder(path: String) {
@@ -351,29 +342,4 @@ actor AppleNotesReaderService {
     return responseText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  nonisolated private static func saveMemory(for note: AppleNoteRecord) async -> Bool {
-    let dateFormatter = DateFormatter()
-    dateFormatter.dateFormat = "MMM d, yyyy"
-
-    var content = note.title
-    if !note.summary.isEmpty {
-      content += "\n\n" + note.summary
-    }
-
-    do {
-      _ = try await APIClient.shared.createMemory(
-        content: content,
-        visibility: "private",
-        category: .system,
-        tags: ["apple_notes", "import", "note"],
-        source: "apple_notes",
-        windowTitle: "Apple Notes — \(dateFormatter.string(from: note.modifiedAt))",
-        headline: note.title
-      )
-      return true
-    } catch {
-      log("AppleNotesReaderService: Failed to save raw note memory \(note.id): \(error)")
-      return false
-    }
-  }
 }

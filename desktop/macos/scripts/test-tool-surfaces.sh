@@ -17,6 +17,12 @@ ensure_npm_deps() {
 }
 
 ensure_npm_deps "$DESKTOP_DIR/agent"
+
+(
+  cd "$DESKTOP_DIR/agent"
+  npm run build --silent
+)
+
 (
   cd "$DESKTOP_DIR/agent"
   npm test -- --run \

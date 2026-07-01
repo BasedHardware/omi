@@ -310,23 +310,20 @@ actor GmailReaderService {
 
       log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
 
-      // Save memories
-      var memoriesSaved = 0
-      for memory in memoryStrings {
-        do {
-          _ = try await APIClient.shared.createMemory(
+      let memoryItems = memoryStrings.map { memory in
+        MemoryBatchItem(
             content: memory,
             visibility: "private",
             category: .system,
             tags: ["gmail", "onboarding", "profile"],
-            source: "gmail",
-            headline: "Email Profile Insight"
-          )
-          memoriesSaved += 1
-        } catch {
-          log("GmailReaderService: Failed to save synthesized memory: \(error)")
-        }
+            headline: "Email Profile Insight",
+            source: "gmail"
+        )
       }
+      let saveResult = await OnboardingMemoryBatchImportService.save(
+        memoryItems,
+        logPrefix: "GmailReaderService"
+      )
 
       // Save tasks
       var tasksSaved = 0
@@ -343,9 +340,9 @@ actor GmailReaderService {
       }
 
       log(
-        "GmailReaderService: Synthesis complete — \(memoriesSaved) memories, \(tasksSaved) tasks"
+        "GmailReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks"
       )
-      return (memoriesSaved, tasksSaved, profileSummary)
+      return (saveResult.saved, tasksSaved, profileSummary)
 
     } catch {
       if attempt < maxAttempts {
@@ -364,38 +361,30 @@ actor GmailReaderService {
   func saveAsMemories(emails: [GmailEmail]) async -> (saved: Int, failed: Int) {
     guard !emails.isEmpty else { return (0, 0) }
 
-    let concurrency = min(8, emails.count)
-    var nextIndex = 0
+    let memoryItems = emails.map { email in
+      let dateStr = email.date.formatted(date: .abbreviated, time: .shortened)
+      let senderName =
+        email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces)
+        ?? email.from
+      let content = "Email from \(senderName) — \"\(email.subject)\": \(email.snippet)"
 
-    return await withTaskGroup(of: Bool.self) { group in
-      func enqueueNext() {
-        guard nextIndex < emails.count else { return }
-        let email = emails[nextIndex]
-        nextIndex += 1
-        group.addTask {
-          await Self.saveMemory(for: email)
-        }
-      }
-
-      for _ in 0..<concurrency {
-        enqueueNext()
-      }
-
-      var saved = 0
-      var failed = 0
-
-      while let success = await group.next() {
-        if success {
-          saved += 1
-        } else {
-          failed += 1
-        }
-        enqueueNext()
-      }
-
-      log("GmailReaderService: Saved \(saved) emails as memories (\(failed) failed)")
-      return (saved, failed)
+      return MemoryBatchItem(
+        content: content,
+        visibility: "private",
+        category: .system,
+        tags: ["gmail", "email"],
+        headline: email.subject,
+        source: "gmail",
+        windowTitle: "Gmail — \(dateStr)"
+      )
     }
+
+    let result = await OnboardingMemoryBatchImportService.save(
+      memoryItems,
+      logPrefix: "GmailReaderService"
+    )
+    log("GmailReaderService: Saved \(result.saved) emails as memories (\(result.failed) failed)")
+    return result
   }
 
   // MARK: - All-in-one Python: decrypt cookies + fetch Gmail session HTML + return JSON
@@ -986,27 +975,4 @@ actor GmailReaderService {
     return "after:\(formatter.string(from: start)) before:\(formatter.string(from: end))"
   }
 
-  nonisolated private static func saveMemory(for email: GmailEmail) async -> Bool {
-    let dateStr = email.date.formatted(date: .abbreviated, time: .shortened)
-    let senderName =
-      email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces)
-      ?? email.from
-    let content = "Email from \(senderName) — \"\(email.subject)\": \(email.snippet)"
-
-    do {
-      _ = try await APIClient.shared.createMemory(
-        content: content,
-        visibility: "private",
-        category: .system,
-        tags: ["gmail", "email"],
-        source: "gmail",
-        windowTitle: "Gmail — \(dateStr)",
-        headline: email.subject
-      )
-      return true
-    } catch {
-      log("GmailReaderService: Failed to save memory for email \(email.id): \(error)")
-      return false
-    }
-  }
 }

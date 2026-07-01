@@ -227,6 +227,7 @@ struct DashboardPage: View {
     @State private var conversationCount: Int?
     @State private var memoryCount: Int?
     @State private var taskCount: Int?
+    @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -266,9 +267,15 @@ struct DashboardPage: View {
         return importConnectorStatusStore.snapshot(for: connector).isConnected
     }
 
-    /// Whether the hosted MCP key exists — the app's own definition of "configured" for MCP destinations.
-    private var hasMCPDestinationConnected: Bool {
-        MemoryExportService.shared.hasStoredMCPKey
+    private func isMCPDestinationConnected(_ destination: MemoryExportDestination) -> Bool {
+        switch destination {
+        case .claude, .claudeCode:
+            return [.claude, .claudeCode].contains { memoryExportStatuses[$0]?.hasConnection == true }
+        case .chatgpt, .codex:
+            return [.chatgpt, .codex].contains { memoryExportStatuses[$0]?.hasConnection == true }
+        default:
+            return memoryExportStatuses[destination]?.hasConnection == true
+        }
     }
 
     var body: some View {
@@ -313,6 +320,7 @@ struct DashboardPage: View {
             syncCaptureState()
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
+            Task { await loadMemoryExportStatuses() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
@@ -320,6 +328,7 @@ struct DashboardPage: View {
             syncCaptureState()
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
+            Task { await loadMemoryExportStatuses() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -560,27 +569,27 @@ struct DashboardPage: View {
     private var destinationStack: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Connect your AI")
+                Text("Use omi memory anywhere")
                     .font(.system(size: 22, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
-                Text("Use Omi memory where you already work.")
+                Text("Bring your memories and tasks into the apps you already use")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(height: 62, alignment: .bottomLeading)
 
-            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: isMCPDestinationConnected(.claude)) {
                 openExportDestination(.claudeCode)
             }
-            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: isMCPDestinationConnected(.chatgpt)) {
                 openExportDestination(.codex)
             }
-            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: isMCPDestinationConnected(.openclaw)) {
                 openExportDestination(.openclaw)
             }
-            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: isMCPDestinationConnected(.hermes)) {
                 openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
@@ -778,6 +787,13 @@ struct DashboardPage: View {
         let stats = await RewindIndexer.shared.getStats()
         await MainActor.run {
             screenshotCount = stats?.total
+        }
+    }
+
+    private func loadMemoryExportStatuses() async {
+        let statuses = await MemoryExportService.shared.allStatuses()
+        await MainActor.run {
+            memoryExportStatuses = statuses
         }
     }
 
