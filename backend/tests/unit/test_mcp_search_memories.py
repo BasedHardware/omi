@@ -133,7 +133,6 @@ def _auth_context(uid: str = "user-1"):
 
 
 class TestSearchMemoriesEndpoint:
-
     def _make_memory(self, memory_id='mem-1', content='Test memory content', category='other', locked=False):
         return {
             'id': memory_id,

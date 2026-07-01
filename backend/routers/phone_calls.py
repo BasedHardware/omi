@@ -12,10 +12,11 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
-import database.phone_call_usage as phone_call_usage_db
-from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot
+from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot, reserve_phone_call_quota
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
+from utils.executors import critical_executor, db_executor, run_blocking
+from utils.multipart import MultipartMaxPartSizeRoute, PHONE_CALL_MAX_PART_SIZE, parse_multipart_form
 from utils.twilio_service import (
     generate_access_token,
     start_caller_id_verification,
@@ -35,7 +36,7 @@ def _redact_phone(number: str) -> str:
     return '***'
 
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 # ************************************************
 # *********** REQUEST/RESPONSE MODELS ************
@@ -238,7 +239,7 @@ async def twiml_voice_webhook(request: Request):
         url = f"{base_api_url}{request.url.path}"
     else:
         url = str(request.url)
-    form_data = await request.form()
+    form_data = await parse_multipart_form(request, max_part_size=PHONE_CALL_MAX_PART_SIZE)
     params = dict(form_data)
 
     if not validate_twilio_signature(url, params, signature):
@@ -263,7 +264,7 @@ async def twiml_voice_webhook(request: Request):
     caller_number = None
 
     if uid:
-        primary = phone_calls_db.get_primary_phone_number(uid)
+        primary = await run_blocking(db_executor, phone_calls_db.get_primary_phone_number, uid)
         if primary:
             caller_number = primary.get('phone_number')
 
@@ -284,9 +285,9 @@ async def twiml_voice_webhook(request: Request):
     # Final quota + destination check before placing the call. Free-tier users
     # on exhausted monthly buckets or disallowed destinations are turned away
     # here so Twilio never actually dials; we then refuse to count the attempt.
-    snapshot = get_quota_snapshot(uid)
-    if not snapshot.has_access:
-        response.say('Monthly phone call limit reached. Goodbye.')
+    snapshot = await run_blocking(db_executor, get_quota_snapshot, uid)
+    if not snapshot.is_paid and (snapshot.monthly_limit or 0) <= 0:
+        response.say('Phone calls require a paid subscription. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
     try:
         check_destination_allowed(snapshot, to_number)
@@ -295,7 +296,7 @@ async def twiml_voice_webhook(request: Request):
         return Response(content=str(response), media_type='text/xml')
 
     # Verify the number is still a valid outgoing caller ID in Twilio
-    is_verified = check_caller_id_verified(caller_number)
+    is_verified = await run_blocking(critical_executor, check_caller_id_verified, caller_number)
     print(
         f"twiml_voice_webhook: caller_id={_redact_phone(caller_number)}, verified_in_twilio={is_verified}, to={_redact_phone(to_number)}"
     )
@@ -305,14 +306,14 @@ async def twiml_voice_webhook(request: Request):
         response.say('Your caller ID is not verified. Please re-verify your phone number.')
         return Response(content=str(response), media_type='text/xml')
 
-    # Count the call against the free-tier bucket before handing Twilio the
-    # dial instructions. We increment only after all guards pass so rejected
-    # attempts don't eat the user's quota.
-    try:
-        if not snapshot.is_paid:
-            phone_call_usage_db.increment_current_month(uid)
-    except Exception:
-        traceback.print_exc()
+    # Reserve quota immediately before handing Twilio the dial instructions.
+    # The reservation is atomic so concurrent TwiML requests cannot all pass
+    # the same stale quota snapshot.
+    if not snapshot.is_paid:
+        snapshot = await run_blocking(db_executor, reserve_phone_call_quota, uid)
+        if not snapshot.has_access:
+            response.say('Monthly phone call limit reached. Goodbye.')
+            return Response(content=str(response), media_type='text/xml')
 
     dial_kwargs = {'caller_id': caller_number}
     if snapshot.max_duration_seconds and snapshot.max_duration_seconds > 0:

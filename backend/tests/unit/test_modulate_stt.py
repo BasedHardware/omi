@@ -1404,7 +1404,6 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_default_routes_to_deepgram(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
@@ -1448,7 +1447,6 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
 
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_factory_returns_deepgram_by_default(self):
         from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider

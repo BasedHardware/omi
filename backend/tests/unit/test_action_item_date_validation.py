@@ -243,7 +243,6 @@ def _make_config(uid="test-user-123"):
 
 
 class TestCreateActionItemDateValidation:
-
     def test_rejects_date_months_in_past(self):
         """Due date from September 2025 should be rejected."""
         result = create_action_item_tool(
@@ -365,7 +364,6 @@ class TestCreateActionItemDateValidation:
 
 
 class TestUpdateActionItemDateValidation:
-
     def test_rejects_past_date_on_update(self):
         """Updating due date to a past date should be rejected."""
         result = update_action_item_tool(
@@ -425,7 +423,6 @@ class TestUpdateActionItemDateValidation:
 
 
 class TestExtractActionItemsPostValidation:
-
     def test_prompt_contains_current_time_and_staleness_rule(self):
         """The extraction prompt source should contain current_time and staleness logic."""
         # Load conversation_processing to inspect source
@@ -468,7 +465,6 @@ class TestExtractActionItemsPostValidation:
         with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
             conv_proc, 'PydanticOutputParser'
         ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -510,7 +506,6 @@ class TestExtractActionItemsPostValidation:
         with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
             conv_proc, 'PydanticOutputParser'
         ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -554,7 +549,6 @@ class TestExtractActionItemsPostValidation:
         with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
             conv_proc, 'PydanticOutputParser'
         ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -598,7 +592,6 @@ class TestExtractActionItemsPostValidation:
         with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
             conv_proc, 'PydanticOutputParser'
         ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
