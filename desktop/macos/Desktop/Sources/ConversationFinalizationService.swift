@@ -240,8 +240,13 @@ actor ConversationFinalizationService {
     }
 
     let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
+    // Include `in_progress` so we can discover a backend conversation the timeout task never
+    // processed (e.g. websocket closed before the lifecycle timeout fired). The list endpoint
+    // defaults to processing,completed, so without this a stuck in_progress conversation is
+    // invisible and reconciliation exhausts. See issue #8749.
     let existing = try await APIClient.shared.getConversations(
       limit: 5,
+      statuses: [.inProgress, .processing, .completed],
       includeDiscarded: true,
       startDate: session.startedAt.addingTimeInterval(-5),
       endDate: finishedAt.addingTimeInterval(5)
@@ -253,6 +258,18 @@ actor ConversationFinalizationService {
         sessionStartedAt: session.startedAt
       )
     }) {
+      // A stuck in_progress match needs finalization, not just a status copy — otherwise the
+      // local session would be marked done while the backend conversation never processes.
+      if match.status == .inProgress {
+        if try await completeCloudConversation(
+          id: match.id,
+          sessionId: sessionId,
+          allowForceProcess: true
+        ) {
+          log("ConversationFinalization: Finalized stuck in_progress cloud session \(sessionId) -> \(match.id)")
+          return
+        }
+      }
       let status = LocalConversationStatus(rawValue: match.status.rawValue) ?? .processing
       try await TranscriptionStorage.shared.markSessionCompleted(
         id: sessionId,

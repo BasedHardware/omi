@@ -1,0 +1,3 @@
+{
+  "change": "Fixed recordings that could get stuck and never appear as a conversation by finalizing in-progress conversations during reconciliation"
+}
