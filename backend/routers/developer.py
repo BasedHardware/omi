@@ -128,6 +128,18 @@ def _coerce_optional_memory_datetime(value) -> Optional[datetime]:
     return None
 
 
+def _datetime_to_utc_epoch(value: datetime) -> int:
+    if value.tzinfo is None or value.utcoffset() is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return int(value.timestamp())
+
+
+def _semantic_fetch_limit(limit: int) -> int:
+    return min(limit * 3, 60)
+
+
 class CleanerMemory(BaseModel):
     # Core fields (aligned with MemoryResponse)
     id: str
@@ -285,7 +297,7 @@ def get_memories(
 def search_memories(
     query: str = Query(..., min_length=1, max_length=500),
     limit: int = Query(10, ge=1, le=25),
-    uid: str = Depends(get_uid_with_memories_read),
+    uid: str = Depends(with_rate_limit(get_uid_with_memories_read, "dev:memories_search")),
 ):
     """
     Semantically search user memories using the same vector index used by internal retrieval.
@@ -296,7 +308,7 @@ def search_memories(
     if not query_text:
         raise HTTPException(status_code=422, detail="query cannot be empty")
 
-    matches = vector_db.find_similar_memories(uid, query_text, threshold=0.0, limit=limit)
+    matches = vector_db.find_similar_memories(uid, query_text, threshold=0.0, limit=_semantic_fetch_limit(limit))
     if not matches:
         return []
 
@@ -327,7 +339,7 @@ def search_memories(
             )
             continue
 
-    return results
+    return results[:limit]
 
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
@@ -1079,7 +1091,7 @@ def search_conversations(
     end_date: Optional[datetime] = None,
     limit: int = Query(10, ge=1, le=25),
     include_transcript: bool = False,
-    uid: str = Depends(get_uid_with_conversations_read),
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_read, "dev:conversations_search")),
 ):
     """
     Semantically search user conversations using the same vector index used by internal retrieval.
@@ -1090,14 +1102,16 @@ def search_conversations(
     if not query_text:
         raise HTTPException(status_code=422, detail="query cannot be empty")
 
-    starts_at = int(start_date.timestamp()) if start_date else None
-    ends_at = int(end_date.timestamp()) if end_date else None
+    starts_at = _datetime_to_utc_epoch(start_date) if start_date else None
+    ends_at = _datetime_to_utc_epoch(end_date) if end_date else None
+    if starts_at is not None and ends_at is not None and ends_at < starts_at:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
     matches = vector_db.find_similar_conversations(
         uid=uid,
         query=query_text,
         starts_at=starts_at,
         ends_at=ends_at,
-        limit=limit,
+        limit=_semantic_fetch_limit(limit),
     )
     if not matches:
         return []
@@ -1136,7 +1150,7 @@ def search_conversations(
             )
             continue
 
-    return results
+    return results[:limit]
 
 
 @router.get("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
