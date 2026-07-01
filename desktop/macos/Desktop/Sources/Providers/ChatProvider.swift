@@ -940,6 +940,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                     self.resetSessionStateForAuthChange()
                     AgentRuntimeStatusStore.shared.reset()
+                    MainChatRuntimeSessionStore.clearAll()
                 }
             }
 
@@ -1145,6 +1146,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         cachedMainSystemPrompt = ""
         cachedFloatingSystemPrompt = ""
         cachedFloatingPillSystemPrompt = ""
+    }
+
+    private var runtimeOwnerId: String {
+        AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+    }
+
+    private func mainChatRuntimeChatId(sessionId: String?) -> String {
+        guard let sessionId, !sessionId.isEmpty else {
+            return MainChatRuntimeSessionStore.defaultChatId
+        }
+        return sessionId
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
@@ -1511,6 +1523,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         deletingSessionIds.insert(session.id)
         do {
             try await APIClient.shared.deleteChatSession(sessionId: session.id)
+            MainChatRuntimeSessionStore.clear(ownerId: runtimeOwnerId, chatId: session.id)
             deletingSessionIds.remove(session.id)
             sessions.removeAll { $0.id == session.id }
 
@@ -2095,10 +2108,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Formats the last 10 non-empty messages in the current session as a conversation history string.
     /// Used to seed new ACP sessions with context from the existing chat UI history.
     private func buildConversationHistory() -> String {
-        let recent = messages.filter { !$0.text.isEmpty }.suffix(10)
+        let recent = messages.filter { !$0.copyableText.isEmpty }.suffix(10)
         return recent.map { msg in
             let role = msg.sender == .user ? "User" : "Assistant"
-            return "\(role): \(msg.text)"
+            return "\(role): \(msg.copyableText)"
         }.joined(separator: "\n")
     }
 
@@ -2110,17 +2123,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     ) async -> String? {
         guard surface?.surfaceKind == "main_chat" else { return nil }
         let recentMessages = messages
-            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .filter { !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .suffix(6)
             .enumerated()
             .map { index, message in
-                [
+                let content = message.copyableText
+                return [
                     "snippetId": "recent_message_\(index + 1)",
                     "sourceKind": "chat_surface",
                     "operation": message.sender == .user ? "recent_user_message" : "recent_assistant_message",
                     "provenance": ["sessionKey": sessionKey, "messageId": message.id],
-                    "content": String(message.text.prefix(2_000)),
-                    "redactedContent": String(message.text.prefix(2_000)),
+                    "content": String(content.prefix(2_000)),
+                    "redactedContent": String(content.prefix(2_000)),
                     "sensitivityTier": "low",
                 ] as [String: Any]
             }
@@ -3577,10 +3591,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let resolvedSurface =
                 surfaceRef
                 ?? (systemPromptStyle == .main && !isOnboarding ? AgentSurfaceReference.mainChat(chatId: sessionId) : nil)
-            let resolvedOmiSessionId = omiSessionId ?? resolvedSurface.flatMap {
-                AgentRuntimeStatusStore.shared.knownSessionId(for: $0)
-            }
             let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
+            let persistedMainChatSessionId =
+                resolvedSurface?.surfaceKind == "main_chat"
+                ? MainChatRuntimeSessionStore.sessionId(
+                    ownerId: runtimeOwnerId,
+                    chatId: mainChatRuntimeChatId(sessionId: sessionId)
+                )
+                : nil
+            let resolvedOmiSessionId =
+                omiSessionId
+                ?? persistedMainChatSessionId
+                ?? resolvedSurface.flatMap {
+                    AgentRuntimeStatusStore.shared.knownSessionId(for: $0)
+                }
             let resolvedLegacyClientScope =
                 legacyClientScope
                 ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(resolvedSessionKey)" : nil)
@@ -3764,6 +3788,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Persist the ACP session ID during onboarding so we can resume after app restart
             if isOnboarding && !queryResult.sessionId.isEmpty {
                 OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
+            }
+            if !isOnboarding,
+               resolvedSurface?.surfaceKind == "main_chat",
+               !queryResult.omiSessionId.isEmpty {
+                MainChatRuntimeSessionStore.save(
+                    sessionId: queryResult.omiSessionId,
+                    ownerId: runtimeOwnerId,
+                    chatId: mainChatRuntimeChatId(sessionId: sessionId)
+                )
             }
 
             // Analytics: track query completion
@@ -4373,6 +4406,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Default chat mode: clear UI immediately, delete in background
             messages = []
             resetMessagesPagination()
+            MainChatRuntimeSessionStore.clear(
+                ownerId: runtimeOwnerId,
+                chatId: MainChatRuntimeSessionStore.defaultChatId
+            )
             log("Cleared default chat messages")
             Task {
                 do {
@@ -4384,6 +4421,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         } else {
             // Session mode: clear UI immediately, delete old session in background, create new
             let sessionToDelete = currentSession
+            if let session = sessionToDelete {
+                MainChatRuntimeSessionStore.clear(ownerId: runtimeOwnerId, chatId: session.id)
+            }
 
             // Immediately clear UI state
             if let session = sessionToDelete {

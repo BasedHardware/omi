@@ -32,6 +32,19 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("\"sourceKind\": \"chat_surface\""))
     XCTAssertTrue(source.contains("prompt: promptForBridge"))
     XCTAssertTrue(source.contains("\"screenshotImages\": \"dispatch_required\""))
+    XCTAssertTrue(source.contains("message.copyableText"))
+    XCTAssertFalse(source.contains("filter { !$0.text.isEmpty }.suffix(10)"))
+  }
+
+  func testMainChatPersistsRuntimeSessionContinuity() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+
+    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.sessionId("))
+    XCTAssertTrue(source.contains("?? persistedMainChatSessionId"))
+    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.save("))
+    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.clear(ownerId: runtimeOwnerId"))
+    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.clearAll()"))
+    XCTAssertTrue(source.contains("if !isOnboarding,"))
   }
 
   func testMainChatAddsNonConsumingCoordinatorRouteContextBeforeBridgeQuery() throws {
