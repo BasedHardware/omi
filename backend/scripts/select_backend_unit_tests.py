@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import json
 from pathlib import Path
 from pathlib import PurePosixPath
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
+WORKFLOW_CONTRACTS_PATH = BACKEND_DIR / 'testing' / 'workflow_contracts.json'
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -222,6 +224,22 @@ def path_matches(path: str, pattern: str) -> bool:
     return PurePosixPath(path).match(pattern)
 
 
+def load_workflow_contracts() -> list[dict]:
+    if not WORKFLOW_CONTRACTS_PATH.exists():
+        return []
+    return list(json.loads(WORKFLOW_CONTRACTS_PATH.read_text()).get('workflows', []))
+
+
+def workflow_contract_tests_for_path(path: str, all_tests: list[str]) -> set[str]:
+    selected: set[str] = set()
+    for workflow in load_workflow_contracts():
+        sources = tuple(workflow.get('sources') or ())
+        if not any(path_matches(path, source) for source in sources):
+            continue
+        selected.update(test for test in workflow.get('tests') or () if test in all_tests)
+    return selected
+
+
 def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> tuple[list[str], str]:
     changed_paths = [path for path in (normalize_changed_path(path) for path in changed_paths) if path]
     if not changed_paths:
@@ -232,7 +250,10 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 
     for path in changed_paths:
-        if is_full_run_path(path):
+        selected.update(workflow_contract_tests_for_path(path, all_tests))
+
+    for path in changed_paths:
+        if is_full_run_path(path) and not workflow_contract_tests_for_path(path, all_tests):
             return all_tests, f'{path} requires the full backend unit suite'
 
     for path in test_paths:
@@ -250,7 +271,7 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
     if not backend_paths:
         return [], 'no backend files changed'
     if selected:
-        return sorted(selected), 'selected backend unit tests from changed paths'
+        return sorted(selected), 'selected backend unit tests from changed paths and workflow contracts'
     return all_tests, 'backend changes did not match a narrow area'
 
 

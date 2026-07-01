@@ -269,6 +269,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 ## Testing
 
 - Run `backend/test-preflight.sh` first to verify tools, packages, and env vars.
+- High-risk backend workflows (checkpoint/resume, retry/idempotency, side-effect fanout, rollout/repair jobs) must be listed in `backend/testing/workflow_contracts.json` with local contract tests; source-only changes must run those tests before PR.
 - OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 - Backend changes: run `backend/test.sh`. App changes: run `app/test.sh`. Run before committing.
 - Backend unit tests need `python3`, `pytest`, packages from `requirements.txt`, `ENCRYPTION_SECRET` (set by test.sh). Integration tests optionally need `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ADMIN_KEY`, Redis, `GOOGLE_APPLICATION_CREDENTIALS`.

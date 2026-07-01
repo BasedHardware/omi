@@ -10,6 +10,7 @@ cd "$SCRIPT_DIR"
 bash tests/test-app-config.sh
 bash tests/test-settings-seed.sh
 bash tests/test-cleanup-omi-tcc.sh
+bash tests/test-omi-harness.sh
 echo ""
 
 echo "=== Rust Backend Tests ==="

@@ -433,7 +433,7 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     kg_calls = []
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
-        lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
+        lambda u, ids, **kwargs: kg_calls.append((u, list(ids), kwargs.get("db_client"))),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
@@ -441,6 +441,7 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     assert kg_calls
     assert kg_calls[0][0] == uid
     assert payload["id"] in kg_calls[0][1]
+    assert kg_calls[0][2] is canonical_db
 
 
 def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonical_db):
