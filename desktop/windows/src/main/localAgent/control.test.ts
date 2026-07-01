@@ -22,7 +22,8 @@ vi.mock('electron', () => ({
   clipboard: {
     writeText: (value: string): void => {
       electronState.clipboardText = value
-    }
+    },
+    readText: (): string => electronState.clipboardText
   },
   safeStorage: {
     isEncryptionAvailable: (): boolean => electronState.encryptionAvailable,
@@ -84,6 +85,7 @@ describe('local agent controls', () => {
   })
 
   afterEach(async () => {
+    vi.useRealTimers()
     await stopLocalAgentServer()
     rmSync(electronState.userData, { recursive: true, force: true })
   })
@@ -97,7 +99,8 @@ describe('local agent controls', () => {
       currentPort: null,
       localUrl: null,
       toolEndpoint: null,
-      hasToken: false
+      hasToken: false,
+      tokenError: null
     })
   })
 
@@ -147,11 +150,16 @@ describe('local agent controls', () => {
   })
 
   it('copies the bearer token without returning it in status', () => {
+    vi.useFakeTimers()
     const status = copyLocalAgentToken()
 
     expect(electronState.clipboardText).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(status.hasToken).toBe(true)
+    expect(status.tokenError).toBeNull()
     expect(status).not.toHaveProperty('token')
+
+    vi.advanceTimersByTime(60_000)
+    expect(electronState.clipboardText).toBe('')
   })
 
   it('rotates the bearer token and invalidates the old one', async () => {
