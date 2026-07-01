@@ -5,6 +5,8 @@ import { DEFAULT_LANGUAGE } from './languages'
 
 const KEY = 'omi-windows-prefs-v1'
 
+export type ChatRuntimeMode = 'auto' | 'omi-hosted' | 'pi' | 'claude-acp'
+
 export type Preferences = {
   captionIntervalMs: number
   showRecordingBadge: boolean
@@ -18,7 +20,7 @@ export type Preferences = {
   chatHistoryMode: 'per-launch' | 'infinite'
   // Runtime backing chat and agent tasks. 'auto' uses native Pi/Omi first, then
   // Omi hosted if Pi is explicitly disabled; BYOK is handled by its own split.
-  chatRuntimeMode: 'auto' | 'omi-hosted' | 'pi' | 'claude-acp'
+  chatRuntimeMode: ChatRuntimeMode
   // Skills selected in Integrations -> Skills. Optional until the skills UI split lands.
   enabledSkillIds?: string[]
   recordingConsentedAt?: number
