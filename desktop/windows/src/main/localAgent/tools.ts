@@ -541,7 +541,7 @@ async function screenshotResponse(name: string, args: JsonObject): Promise<Local
     })
   }
 
-  return ok(name, mapScreenshot(result), result.imageMimeType)
+  return ok(name, mapScreenshot(result))
 }
 
 function getDailyRecap(args: JsonObject): JsonObject {
