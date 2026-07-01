@@ -79,13 +79,33 @@ function statusText(status: ByokProviderStatus | undefined): string {
   return `Saved (${status.maskedKey})`
 }
 
-export function ByokTab(): React.JSX.Element {
+type ByokBusyKey = `${ByokProvider}:${'save' | 'test' | 'delete'}` | 'use'
+
+export function ByokTab({ active }: { active: boolean }): React.JSX.Element {
   const [byokStatus, setByokStatus] = useState<ByokStatus | null>(null)
   const [draftKeys, setDraftKeys] = useState<Record<ByokProvider, string>>(EMPTY_DRAFT_KEYS)
-  const [byokBusy, setByokBusy] = useState('')
+  const [byokBusy, setByokBusy] = useState<Set<ByokBusyKey>>(() => new Set())
   const [models, setModels] = useState<AvailableModel[]>([])
   const [modelsBusy, setModelsBusy] = useState(false)
   const [selectedModels, setSelectedModels] = useState(getPreferences().defaultModelByPurpose ?? {})
+  const [loaded, setLoaded] = useState(false)
+
+  const beginBusy = (key: ByokBusyKey): void => {
+    setByokBusy((current) => new Set(current).add(key))
+  }
+
+  const endBusy = (key: ByokBusyKey): void => {
+    setByokBusy((current) => {
+      const next = new Set(current)
+      next.delete(key)
+      return next
+    })
+  }
+
+  const isBusy = (key: ByokBusyKey): boolean => byokBusy.has(key)
+
+  const isProviderBusy = (provider: ByokProvider): boolean =>
+    isBusy(`${provider}:save`) || isBusy(`${provider}:test`) || isBusy(`${provider}:delete`)
 
   const refreshByokStatus = async (): Promise<void> => {
     try {
@@ -108,12 +128,17 @@ export function ByokTab(): React.JSX.Element {
   }
 
   useEffect(() => {
-    void refreshByokStatus()
-    void refreshByokModels()
     return onPreferencesChange((prefs) => {
       setSelectedModels(prefs.defaultModelByPurpose ?? {})
     })
   }, [])
+
+  useEffect(() => {
+    if (!active || loaded) return
+    setLoaded(true)
+    void refreshByokStatus()
+    void refreshByokModels()
+  }, [active, loaded])
 
   const configuredModels = useMemo(
     () => models.filter((model) => model.provider === 'omi' || model.configured),
@@ -134,7 +159,8 @@ export function ByokTab(): React.JSX.Element {
       toast('Paste a key before saving', { tone: 'warn' })
       return
     }
-    setByokBusy(`${provider}:save`)
+    const busyKey = `${provider}:save` as const
+    beginBusy(busyKey)
     try {
       setByokStatus(await window.omi.byokSave({ provider, key }))
       setDraftKeys((current) => ({ ...current, [provider]: '' }))
@@ -143,13 +169,14 @@ export function ByokTab(): React.JSX.Element {
     } catch (e) {
       toast('Could not save key', { tone: 'error', body: (e as Error).message })
     } finally {
-      setByokBusy('')
+      endBusy(busyKey)
     }
   }
 
   const testProvider = async (provider: ByokProvider): Promise<void> => {
     const key = draftKeys[provider].trim()
-    setByokBusy(`${provider}:test`)
+    const busyKey = `${provider}:test` as const
+    beginBusy(busyKey)
     try {
       const result = await window.omi.byokTest({ provider, key: key || undefined })
       if (!key) await refreshByokStatus()
@@ -161,12 +188,13 @@ export function ByokTab(): React.JSX.Element {
     } catch (e) {
       toast('Key validation failed', { tone: 'error', body: (e as Error).message })
     } finally {
-      setByokBusy('')
+      endBusy(busyKey)
     }
   }
 
   const deleteProvider = async (provider: ByokProvider): Promise<void> => {
-    setByokBusy(`${provider}:delete`)
+    const busyKey = `${provider}:delete` as const
+    beginBusy(busyKey)
     try {
       setByokStatus(await window.omi.byokDelete(provider))
       setDraftKeys((current) => ({ ...current, [provider]: '' }))
@@ -184,12 +212,12 @@ export function ByokTab(): React.JSX.Element {
     } catch (e) {
       toast('Could not remove key', { tone: 'error', body: (e as Error).message })
     } finally {
-      setByokBusy('')
+      endBusy(busyKey)
     }
   }
 
   const selectChatProvider = async (provider: ByokChatProvider | null): Promise<void> => {
-    setByokBusy('use')
+    beginBusy('use')
     try {
       setByokStatus(await window.omi.byokUse({ provider }))
       toast(provider ? 'BYOK chat provider selected' : 'Omi hosted chat selected', {
@@ -198,7 +226,7 @@ export function ByokTab(): React.JSX.Element {
     } catch (e) {
       toast('Could not change chat provider', { tone: 'error', body: (e as Error).message })
     } finally {
-      setByokBusy('')
+      endBusy('use')
     }
   }
 
@@ -228,7 +256,7 @@ export function ByokTab(): React.JSX.Element {
         control={
           <select
             value={byokStatus?.activeChatProvider ?? ''}
-            disabled={byokBusy === 'use'}
+            disabled={isBusy('use')}
             onChange={(e) => {
               const provider = e.target.value ? (e.target.value as ByokChatProvider) : null
               void selectChatProvider(provider)
@@ -298,8 +326,7 @@ export function ByokTab(): React.JSX.Element {
         <div className="space-y-3">
           {PROVIDERS.map((provider) => {
             const status = byokStatus?.providers[provider.id]
-            const busyPrefix = `${provider.id}:`
-            const busy = byokBusy.startsWith(busyPrefix)
+            const busy = isProviderBusy(provider.id)
             return (
               <div
                 key={provider.id}
