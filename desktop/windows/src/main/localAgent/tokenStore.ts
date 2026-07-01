@@ -7,6 +7,13 @@ type StoredLocalAgentTokenFile = {
   token: string
 }
 
+export class LocalAgentTokenStoreError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'LocalAgentTokenStoreError'
+  }
+}
+
 function file(): string {
   return join(app.getPath('userData'), 'local-agent-token.json')
 }
@@ -29,10 +36,15 @@ export function loadLocalAgentToken(): string | null {
   if (!existsSync(f)) return null
   try {
     const raw = JSON.parse(readFileSync(f, 'utf8')) as StoredLocalAgentTokenFile
-    if (!raw.token) return null
-    return safeStorage.decryptString(Buffer.from(raw.token, 'base64'))
-  } catch {
-    return null
+    if (!raw || typeof raw.token !== 'string' || !raw.token) {
+      throw new Error('stored token file is invalid')
+    }
+    const token = safeStorage.decryptString(Buffer.from(raw.token, 'base64'))
+    if (!token) throw new Error('stored token decrypts to an empty value')
+    return token
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown token store error'
+    throw new LocalAgentTokenStoreError(`Failed to load local agent token: ${message}`)
   }
 }
 
