@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import TypeVar
 
 import httpx
+from jsonschema import ValidationError as JsonSchemaValidationError
+from jsonschema import validate as validate_json_schema
 from pydantic import BaseModel, ValidationError
 
 from utils.llm.gateway_observability import record_gateway_request_result
@@ -87,7 +90,7 @@ def invoke_chat_structured_gateway(
     except httpx.RequestError:
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='request_error')
         return None
-    except ValidationError:
+    except (ValidationError, JsonSchemaValidationError):
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='schema_validation')
         return None
     except Exception:
@@ -140,6 +143,7 @@ def _strict_model_json_schema(output_model: type[BaseModel]) -> dict:
     """
     schema = output_model.model_json_schema()
     _normalize_strict_schema(schema)
+    _inline_ref_siblings(schema)
     return schema
 
 
@@ -171,6 +175,45 @@ def _normalize_strict_schema(schema: dict) -> None:
                 _normalize_strict_schema(alt_schema)
 
 
+def _inline_ref_siblings(schema: dict) -> None:
+    """Inline local ``$ref`` schemas that carry sibling metadata.
+
+    Pydantic emits enum fields as ``{"$ref": "#/$defs/Enum", "description": ...}``.
+    That is valid JSON Schema, but OpenAI strict structured outputs reject some
+    ``$ref`` nodes with sibling keywords. Pure local refs are left intact because
+    nested object refs are accepted and keep large schemas compact.
+    """
+
+    definitions = schema.get('$defs') or schema.get('definitions') or {}
+    if not isinstance(definitions, dict):
+        definitions = {}
+
+    def resolve_ref(ref: str) -> dict | None:
+        prefix = '#/$defs/'
+        if not ref.startswith(prefix):
+            return None
+        target = definitions.get(ref.removeprefix(prefix))
+        return deepcopy(target) if isinstance(target, dict) else None
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            ref = node.get('$ref')
+            if isinstance(ref, str) and len(node) > 1:
+                resolved = resolve_ref(ref)
+                if resolved is not None:
+                    siblings = {key: value for key, value in node.items() if key != '$ref'}
+                    node.clear()
+                    node.update(resolved)
+                    node.update(siblings)
+            for value in list(node.values()):
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(schema)
+
+
 def _extract_choice_content(response_body: object) -> object:
     if not isinstance(response_body, Mapping):
         return None
@@ -190,4 +233,5 @@ def _validate_output_model(
     output_model: type[StructuredOutput],
     decoded: Mapping[str, object],
 ) -> StructuredOutput:
+    validate_json_schema(instance=decoded, schema=_strict_model_json_schema(output_model))
     return output_model.model_validate(decoded)
