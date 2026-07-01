@@ -72,6 +72,7 @@ from utils.memory.canonical_memory_adapter import (
     neutral_vector_id_for_memory,
     purge_canonical_derived_user_data,
     retract_conversation_sourced_memories,
+    update_canonical_memory_visibility,
     write_canonical_extraction_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
@@ -465,6 +466,26 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
     assert kg_calls == [(uid, [memory_id])]
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
+
+
+def test_update_canonical_visibility_validates_before_persisting(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-invalid-visibility", content="Visibility invariant")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    before = dict(canonical_db.docs[item_path])
+
+    with pytest.raises(ValueError, match="visibility"):
+        update_canonical_memory_visibility(uid, memory_id, "friends", db_client=canonical_db)
+
+    assert canonical_db.docs[item_path] == before
 
 
 def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, canonical_db):

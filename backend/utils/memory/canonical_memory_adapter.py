@@ -436,8 +436,15 @@ def _apply_product_metadata(item: MemoryItem, metadata: Dict[str, Any]) -> Memor
 
 
 def _persist_memory_item(uid: str, item: MemoryItem, *, db_client) -> None:
+    item = MemoryItem.model_validate(item.model_dump(mode="python"))
     path = f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}"
     db_client.document(path).set(item.model_dump(mode="json"))
+
+
+def _validated_memory_item_copy(item: MemoryItem, updates: Dict[str, Any]) -> MemoryItem:
+    payload = item.model_dump(mode="python")
+    payload.update(updates)
+    return MemoryItem.model_validate(payload)
 
 
 def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
@@ -616,22 +623,21 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
     if not trimmed:
         raise ValueError("canonical update requires non-empty content")
     now = datetime.now(timezone.utc)
-    updated = item.model_copy(update={"content": trimmed, "updated_at": now, "user_asserted": True})
-    item_path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    client.document(item_path).set(updated.model_dump(mode="json"))
+    updated = _validated_memory_item_copy(item, {"content": trimmed, "updated_at": now, "user_asserted": True})
+    _persist_memory_item(uid, updated, db_client=client)
     if (
         updated.tier == MemoryLayer.long_term
         and getattr(updated, "kg_extracted", False)
         and resolve_memory_system(uid, db_client=client) == MemorySystem.CANONICAL
     ):
         invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
-        updated = updated.model_copy(update={"kg_extracted": False})
-        client.document(item_path).set({"kg_extracted": False, "updated_at": now}, merge=True)
+        updated = _validated_memory_item_copy(updated, {"kg_extracted": False, "updated_at": now})
+        _persist_memory_item(uid, updated, db_client=client)
         from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 
         kg_result = extract_kg_for_promoted_memory(uid, updated, db_client=client)
         if kg_result.success:
-            updated = updated.model_copy(update={"kg_extracted": True})
+            updated = _validated_memory_item_copy(updated, {"kg_extracted": True})
     sync_atom_keyword_index_for_item(updated, db_client=client)
     sync_canonical_memory_vector(updated)
     return updated
@@ -643,8 +649,8 @@ def update_canonical_memory_visibility(uid: str, memory_id: str, visibility: str
     if item is None:
         raise ValueError(f"canonical memory not found: {memory_id}")
     now = datetime.now(timezone.utc)
-    updated = item.model_copy(update={"visibility": visibility, "updated_at": now})
-    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    updated = _validated_memory_item_copy(item, {"visibility": visibility, "updated_at": now})
+    _persist_memory_item(uid, updated, db_client=client)
     return updated
 
 
@@ -657,7 +663,7 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
     promotion = dict(item.promotion or {})
     promotion["reviewed"] = True
     promotion["user_review"] = value
-    updated = item.model_copy(update={"promotion": promotion, "updated_at": now})
+    updated = _validated_memory_item_copy(item, {"promotion": promotion, "updated_at": now})
     _persist_memory_item(uid, updated, db_client=client)
     return updated
 
@@ -682,7 +688,7 @@ def update_canonical_memory_product_fields(
     if not metadata:
         return item
     now = datetime.now(timezone.utc)
-    updated = _apply_product_metadata(item, metadata).model_copy(update={"updated_at": now})
+    updated = _validated_memory_item_copy(_apply_product_metadata(item, metadata), {"updated_at": now})
     _persist_memory_item(uid, updated, db_client=client)
     return updated
 
@@ -716,16 +722,17 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
         if ev_ref.get().exists:
             ev_ref.set(next_evidence.model_dump(mode="json"))
 
-    updated_item = item.model_copy(
-        update={
+    updated_item = _validated_memory_item_copy(
+        item,
+        {
             "status": MemoryItemStatus.tombstoned,
             "source_state": SourceState.tombstoned,
             "content": None,
             "evidence": tombstoned_evidence,
             "updated_at": now,
-        }
+        },
     )
-    db_client.document(f"{collections.memory_items}/{item.memory_id}").set(updated_item.model_dump(mode="json"))
+    _persist_memory_item(uid, updated_item, db_client=db_client)
 
     purge_candidates = [
         {
