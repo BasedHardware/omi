@@ -200,6 +200,9 @@ for attr in [
     "extract_action_items",
 ]:
     setattr(llm_conv, attr, MagicMock())
+# process_conversation imports identified_participant_names from this module (issue #3602);
+# return an empty roster so the title path stays neutral here.
+llm_conv.identified_participant_names = MagicMock(return_value=[])
 
 llm_external = sys.modules["utils.llm.external_integrations"]
 for attr in ["summarize_experience_text", "get_message_structure"]:
