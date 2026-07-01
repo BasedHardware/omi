@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "Fixed AI connection setup showing a misleading memory-pressure error after non-memory agent runtime crashes"
-  ]
-}
