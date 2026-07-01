@@ -27,7 +27,8 @@ export function getLocalAgentStatus(): LocalAgentStatus {
   let tokenError: string | null = null
   try {
     hasToken = loadLocalAgentToken() !== null
-  } catch {
+  } catch (error) {
+    console.warn('[local-agent] failed to load token:', error)
     tokenError = tokenStatusError()
   }
   return {
