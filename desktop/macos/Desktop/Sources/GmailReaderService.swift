@@ -764,18 +764,56 @@ actor GmailReaderService {
     process.standardOutput = pipe
     process.standardError = errPipe
 
+    // Drain pipes asynchronously to avoid deadlock: the helper prints the full
+    // JSON payload for up to 300 emails to stdout, which can exceed the pipe
+    // buffer. waitUntilExit() blocks if the child blocks in write() on a full
+    // buffer, so read concurrently instead of after exit. (mirrors CalendarReaderService)
+    var outputData = Data()
+    var errData = Data()
+    let outputSem = DispatchSemaphore(value: 0)
+    let errSem = DispatchSemaphore(value: 0)
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+      let d = handle.availableData
+      if d.isEmpty {
+        pipe.fileHandleForReading.readabilityHandler = nil
+        outputSem.signal()
+      } else {
+        outputData.append(d)
+      }
+    }
+    errPipe.fileHandleForReading.readabilityHandler = { handle in
+      let d = handle.availableData
+      if d.isEmpty {
+        errPipe.fileHandleForReading.readabilityHandler = nil
+        errSem.signal()
+      } else {
+        errData.append(d)
+      }
+    }
+
     do {
       try process.run()
+      // Timeout so the import surfaces an actionable error instead of spinning forever.
+      DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(60)) {
+        if process.isRunning { process.terminate() }
+      }
       process.waitUntilExit()
     } catch {
       throw GmailReaderError.networkError("Failed to run Python: \(error.localizedDescription)")
     }
 
-    let output = pipe.fileHandleForReading.readDataToEndOfFile()
-    let errOutput =
-      String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    // Wait for pipe reads to finish (max 5s after process exit)
+    _ = outputSem.wait(timeout: .now() + .seconds(5))
+    _ = errSem.wait(timeout: .now() + .seconds(5))
+
+    let output = outputData
+    let errOutput = String(data: errData, encoding: .utf8) ?? ""
     if !errOutput.isEmpty {
       log("GmailReaderService: Python stderr: \(errOutput.prefix(500))")
+    }
+    if output.isEmpty {
+      throw GmailReaderError.networkError(
+        "Gmail helper produced no output (timed out or exited early)")
     }
 
     guard let json = try? JSONSerialization.jsonObject(with: output) as? [String: Any] else {

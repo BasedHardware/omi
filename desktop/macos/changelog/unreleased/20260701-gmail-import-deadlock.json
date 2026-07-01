@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Gmail/Email import hanging forever on 'Importing…' when reading a large mailbox"
+}
