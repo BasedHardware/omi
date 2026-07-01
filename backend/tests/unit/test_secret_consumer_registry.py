@@ -246,6 +246,23 @@ def test_source_high_risk_env_reference_requires_registry_entry(tmp_path):
     assert 'source env reference' in report['issues'][0]['message']
 
 
+def test_openapi_venv_source_env_references_are_ignored(tmp_path):
+    verifier = _load_verifier()
+    registry = _base_registry()
+    registry_path = tmp_path / 'backend/deploy/secret_consumer_registry.yaml'
+    _write_yaml(registry_path, registry)
+
+    source = tmp_path / 'backend/.openapi-venv/lib/python3.11/site-packages/provider/client.py'
+    source.parent.mkdir(parents=True)
+    env_name = 'PROVIDER_' + 'TOKEN'
+    source.write_text(f'import os\nvalue = os.getenv("{env_name}")\n', encoding='utf-8')
+
+    report = verifier.build_report(root=tmp_path, registry_path=registry_path)
+
+    assert report['status'] == 'PASS'
+    assert report['issues'] == []
+
+
 def test_dynamic_workflow_secret_lookup_fails_closed(tmp_path):
     verifier = _load_verifier()
     registry = _base_registry()
