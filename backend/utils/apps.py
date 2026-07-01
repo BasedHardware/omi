@@ -923,12 +923,56 @@ def generate_api_key() -> Tuple[str, str, str]:
     return f'sk_{raw_key}', hashed_key, formatted_label
 
 
-def verify_api_key(app_id: str, api_key: str) -> bool:
+def _lookup_api_key(app_id: str, api_key: str):
+    """Look up an API key doc by app + raw key. Returns the stored dict or None.
+
+    Single source of truth for key parsing (the optional 'sk_' prefix) and
+    hashing. Both verify_api_key and verify_api_key_for_uid use this.
+    """
     if api_key.startswith("sk_"):
         api_key = api_key[3:]
     hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
-    stored_key = get_api_key_by_hash_db(app_id, hashed_key)
-    return stored_key is not None
+    return get_api_key_by_hash_db(app_id, hashed_key)
+
+
+def verify_api_key(app_id: str, api_key: str) -> bool:
+    """Lightweight check: does this raw key exist for the app?
+
+    Used by integration endpoints where the caller holds an app-level key
+    and the uid comes from the URL (existing pattern across the 7+
+    integration routes). For endpoints that impersonate the user (e.g.
+    persona-chat), use verify_api_key_for_uid instead.
+    """
+    return _lookup_api_key(app_id, api_key) is not None
+
+
+def verify_api_key_for_uid(app_id: str, uid: str, api_key: str) -> bool:
+    """Verify an API key was issued for the given uid.
+
+    Stricter than verify_api_key: in addition to checking the key exists for
+    the app, this confirms the key was issued by that specific uid. Used by
+    endpoints where the caller impersonates the user (e.g. persona-chat) so
+    a developer holding a valid app-level key can't act on behalf of any
+    enabled user — only the user they actually own the key for.
+
+    Legacy keys (created before this check existed) don't have a 'uid' field.
+    We fall back to the parent app's owner uid, which is the same as the
+    developer's uid — the same security model as before, just looked up via
+    a different path. New keys stamped with 'uid' (by create_api_key_for_app)
+    bypass this fallback.
+    """
+    stored = _lookup_api_key(app_id, api_key)
+    if not stored:
+        return False
+    key_uid = stored.get("uid")
+    if key_uid is not None:
+        return key_uid == uid
+    # Legacy key: fall back to the parent app's owner uid (set when the app
+    # was created). Same security model as before the check was added.
+    app = get_app_by_id_db(app_id)
+    if not app:
+        return False
+    return app.get("uid") == uid
 
 
 def app_has_action(app: dict, action_name: str) -> bool:
@@ -965,6 +1009,16 @@ def app_can_read_conversations(app: dict) -> bool:
 def app_can_create_conversation(app: dict) -> bool:
     """Check if an app can create a conversation."""
     return app_has_action(app, 'create_conversation')
+
+
+def app_can_persona_chat(app: dict) -> bool:
+    """Check if an app can invoke persona chat on behalf of the user.
+
+    Used by /v2/integrations/{app_id}/user/persona-chat — gates the
+    endpoint so only apps that opt in (via external_integration.actions
+    containing {'action': 'persona_chat'}) can drive the user's persona.
+    """
+    return app_has_action(app, 'persona_chat')
 
 
 def is_user_app_enabled(uid: str, app_id: str) -> bool:
