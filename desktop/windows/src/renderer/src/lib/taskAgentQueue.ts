@@ -88,7 +88,8 @@ async function runWithProvider(run: TaskAgentRun): Promise<void> {
   const messages: ChatMessage[] = [{ role: 'user', content: run.prompt }]
   switch (run.provider) {
     case 'pi': {
-      if (!window.omi.piChatEnabled) throw new Error('Pi/Omi chat is not enabled in this build.')
+      const piStatus = await window.omi.piChatStatus()
+      if (!piStatus.enabled) throw new Error('Pi/Omi chat is not enabled in this build.')
       const token = await auth.currentUser?.getIdToken()
       const response = await window.omi.piChatSend({
         token: token ?? '',
