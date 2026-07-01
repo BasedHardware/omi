@@ -47,6 +47,24 @@ class DeviceUtils {
     }
   }
 
+  /// Whether an Omi-type device is a DevKit / dev board rather than the
+  /// consumer pendant. DevKit boards enumerate as [DeviceType.omi] just like the
+  /// consumer device, so callers that only want the consumer pendant (e.g. the
+  /// interactive device onboarding, which teaches button press / power cycle /
+  /// double-tap) must distinguish by model number or advertised name.
+  ///
+  /// Match specifically on `DEVKIT` — NOT a loose `DEV` — because the consumer
+  /// firmware's default model number fallback is literally `'Omi Device'`, whose
+  /// uppercase form contains `DEV`.
+  static bool isOmiDevKit({String? modelNumber, String? deviceName}) {
+    bool matches(String? value) {
+      if (value == null || value.isEmpty) return false;
+      return value.toUpperCase().contains('DEVKIT');
+    }
+
+    return matches(modelNumber) || matches(deviceName);
+  }
+
   /// Get device image path by device type and model number (most accurate)
   /// Falls back to device name if type/model not available
   static String getDeviceImagePath({DeviceType? deviceType, String? modelNumber, String? deviceName}) {
