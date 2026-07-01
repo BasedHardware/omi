@@ -81,3 +81,11 @@ tests/unit/test_byok_security.py
 tests/unit/test_billable_transcription_seconds.py
 tests/unit/test_skip_classifier_restrict.py
 tests/unit/test_dg_start_guard.py
+tests/unit/test_parakeet_batch_engine.py
+tests/unit/test_parakeet_batch_engine.py
+tests/unit/test_parakeet_batch_routing.py
+tests/unit/test_parakeet_builtin_embedding.py
+tests/unit/test_parakeet_diarization.py
+tests/unit/test_parakeet_endpoints.py
+tests/unit/test_parakeet_gpu_worker.py
+tests/unit/test_parakeet_nim.py
