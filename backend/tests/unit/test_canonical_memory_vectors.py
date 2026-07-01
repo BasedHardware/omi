@@ -50,8 +50,8 @@ from database.memory_vector_metadata import (
 from database.memory_vector_metadata import build_memory_vector_metadata
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import ApplyStatus, MemoryControlState
-from models.memory_search_gateway import SearchDecision, SearchMode
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 
 
@@ -249,6 +249,76 @@ def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypat
     assert payload["metadata"]["memory_schema_version"] == MEMORY_VECTOR_SCHEMA_VERSION
     assert payload["metadata"]["memory_layer"] == "short_term"
     assert fake_index.upserts[0]["namespace"] == "ns2"
+
+
+def test_upsert_canonical_memory_vector_strips_null_optional_metadata(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+
+    item = _item(memory_id="mem_hash001", tier=MemoryTier.short_term).model_copy(
+        update={"source_commit_id": None, "content_hash": None}
+    )
+    vector_db.upsert_canonical_memory_vector(item)
+
+    metadata = fake_index.upserts[0]["vectors"][0]["metadata"]
+    assert "source_commit_id" not in metadata
+    assert "content_hash" not in metadata
+    assert metadata["projection_commit_id"] == "commit-ledger"
+
+
+def test_hydration_allows_missing_vector_source_freshness_when_authoritative_item_is_null():
+    item = _item(memory_id="mem_null_freshness", tier=MemoryTier.short_term).model_copy(
+        update={"source_commit_id": None, "content_hash": None}
+    )
+    hit = SearchVectorHit(
+        vector_id="mem_null_freshness",
+        memory_id=item.memory_id,
+        score=0.9,
+        projection_commit_id="commit-ledger",
+        vector_updated_at=datetime(2026, 6, 24, 12, 5, tzinfo=timezone.utc),
+        uid=item.uid,
+        account_generation=item.account_generation,
+        item_revision=item.item_revision,
+    )
+
+    result = hydrate_and_filter_vector_hits(
+        hits=[hit],
+        authoritative_items={item.memory_id: item},
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        mode=SearchMode.default,
+        required_projection_commit_id="commit-ledger",
+        required_account_generation=item.account_generation,
+    )
+
+    assert result.decisions[item.memory_id] == SearchDecision.allowed
+    assert [search_result.item.memory_id for search_result in result.results] == [item.memory_id]
+    assert result.repair_purge_candidates == []
+
+
+def test_hydration_rejects_missing_vector_source_freshness_when_authoritative_item_has_values():
+    item = _item(memory_id="mem_required_freshness", tier=MemoryTier.short_term)
+    hit = SearchVectorHit(
+        vector_id="mem_required_freshness",
+        memory_id=item.memory_id,
+        score=0.9,
+        projection_commit_id="commit-ledger",
+        vector_updated_at=datetime(2026, 6, 24, 12, 5, tzinfo=timezone.utc),
+        uid=item.uid,
+        account_generation=item.account_generation,
+        item_revision=item.item_revision,
+    )
+
+    result = hydrate_and_filter_vector_hits(
+        hits=[hit],
+        authoritative_items={item.memory_id: item},
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        mode=SearchMode.default,
+        required_projection_commit_id="commit-ledger",
+        required_account_generation=item.account_generation,
+    )
+
+    assert result.decisions[item.memory_id] == SearchDecision.stale_vector
+    assert result.results == []
+    assert result.repair_purge_candidates[0]["reason"] == "missing_vector_freshness_metadata"
 
 
 def test_query_memory_vector_candidates_matches_neutral_metadata(monkeypatch):

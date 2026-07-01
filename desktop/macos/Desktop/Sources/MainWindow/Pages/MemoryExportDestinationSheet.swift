@@ -22,6 +22,38 @@ struct ExportsSection: View {
     }
   }
 
+  private func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
+    let fallback = MemoryExportStatus(
+      exportedCount: 0,
+      lastExportedAt: nil,
+      detailText: nil,
+      isConfigured: false,
+      hasConnection: false)
+
+    switch destination {
+    case .claude:
+      return aggregateStatus(for: [.claude, .claudeCode], fallback: fallback)
+    case .chatgpt:
+      return aggregateStatus(for: [.chatgpt, .codex], fallback: fallback)
+    default:
+      return statuses[destination] ?? fallback
+    }
+  }
+
+  private func aggregateStatus(
+    for destinations: [MemoryExportDestination],
+    fallback: MemoryExportStatus
+  ) -> MemoryExportStatus {
+    let values = destinations.map { statuses[$0] ?? fallback }
+    return MemoryExportStatus(
+      exportedCount: values.map(\.exportedCount).max() ?? 0,
+      lastExportedAt: values.compactMap(\.lastExportedAt).max(),
+      detailText: values.compactMap(\.detailText).first,
+      isConfigured: values.contains(where: \.hasConnection),
+      hasConnection: values.contains(where: \.hasConnection)
+    )
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Exports")
@@ -38,9 +70,7 @@ struct ExportsSection: View {
             destination: entry.destination,
             titleOverride: entry.title,
             subtitleOverride: entry.subtitle,
-            status: statuses[entry.destination]
-              ?? MemoryExportStatus(
-                exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
+            status: status(for: entry.destination)
           ) {
             onSelectDestination(entry.destination)
           }
@@ -126,7 +156,7 @@ private struct MemoryExportRow: View {
         Spacer(minLength: 12)
 
         ImportConnectorActionButton(
-          title: actionTitle, isConnected: status.isConfigured || status.exportedCount > 0)
+          title: actionTitle, isConnected: status.hasConnection)
       }
       .padding(.horizontal, 14)
       .padding(.vertical, 11)
@@ -675,7 +705,10 @@ struct MemoryExportDestinationSheet: View {
         .fixedSize(horizontal: false, vertical: true)
 
       Button(model.isExecuting ? "Starting Omi…" : executeButtonTitle) {
-        Task { await model.executeWithOmi(destination: destination) }
+        Task {
+          await model.executeWithOmi(destination: destination)
+          statuses[destination] = await MemoryExportService.shared.status(for: destination)
+        }
       }
       .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
       .disabled(model.isExecuting)
