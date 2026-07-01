@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/providers/integration_provider.dart';
-import 'package:omi/services/apple_health_service.dart';
+import 'package:omi/services/integrations/apple_health_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
