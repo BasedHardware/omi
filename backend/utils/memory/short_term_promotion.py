@@ -166,7 +166,7 @@ def _merge_required_promotion_duplicate(
     trigger_reason: str,
     now: datetime,
     db_client,
-) -> MemoryItem:
+) -> tuple[MemoryItem, bool]:
     collections = MemoryCollections(uid=uid)
     evidence_by_id = {evidence.evidence_id: evidence for evidence in existing.evidence}
     for evidence in item.evidence:
@@ -198,8 +198,8 @@ def _merge_required_promotion_duplicate(
     )
     db_client.document(f"{collections.memory_items}/{existing.memory_id}").set(merged_existing.model_dump(mode="json"))
     db_client.document(f"{collections.memory_items}/{item.memory_id}").set(superseded_source.model_dump(mode="json"))
-    sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
-    return merged_existing
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
+    return merged_existing, keyword_sync_succeeded
 
 
 def list_fast_track_promotable_items(
@@ -322,16 +322,19 @@ def promote_short_term_item_via_apply(
     if is_required_promotion_item(item):
         existing_duplicate = _exact_long_term_duplicate(uid, item, db_client=client)
         if existing_duplicate is not None:
+            merged_item, keyword_sync_succeeded = _merge_required_promotion_duplicate(
+                uid,
+                item,
+                existing_duplicate,
+                trigger_reason=trigger_reason,
+                now=current_time,
+                db_client=client,
+            )
             return (
-                _merge_required_promotion_duplicate(
-                    uid,
-                    item,
-                    existing_duplicate,
-                    trigger_reason=trigger_reason,
-                    now=current_time,
-                    db_client=client,
-                ),
+                merged_item,
                 False,
+                CanonicalKgPromotionResult(skipped_reason="merged_into_existing"),
+                keyword_sync_succeeded,
             )
     operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=client)
     idempotency_key = deterministic_contract_id(

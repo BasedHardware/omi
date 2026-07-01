@@ -287,7 +287,7 @@ def rebuild_atom_keyword_index(uid: str, *, db_client=None) -> AtomKeywordRebuil
     purge_user_atom_keyword_index(uid, db_client=client)
     indexed = 0
     for item in indexable:
-        if upsert_atom_keyword_doc(item):
+        if upsert_atom_keyword_doc(item, db_client=client):
             indexed += 1
 
     expected = len(indexable)
