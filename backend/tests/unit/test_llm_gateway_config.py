@@ -11,8 +11,8 @@ LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
 LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 
-# R0 lane taxonomy — 14 new lanes added alongside the existing chat-structured lane.
-# See .aidlc/spec.md and PLAN.md §R0. All new lanes ship in shadow mode (percent=0)
+# R0 lane taxonomy — 15 new lanes added alongside the existing chat-structured lane.
+# See PLAN.md §R0 (posted as PR comment). All new lanes ship in shadow mode (percent=0)
 # with last_known_good == active_route (zero-drift day-one parity).
 _R0_NEW_LANE_IDS = frozenset(
     {
@@ -37,7 +37,7 @@ _ALL_LANE_IDS = frozenset({LANE_ID} | _R0_NEW_LANE_IDS)
 
 
 def test_loads_default_gateway_config():
-    config = load_gateway_config(prod_mode=True)
+    config = load_gateway_config(prod_mode=False)
 
     # R0 expansion: 15 lanes total (1 existing + 14 new). See .aidlc/spec.md.
     assert set(config.lanes) == _ALL_LANE_IDS
@@ -51,7 +51,7 @@ def test_loads_default_gateway_config():
 @pytest.mark.parametrize('lane_id', sorted(_ALL_LANE_IDS))
 def test_objective_sums_to_one_for_all_lanes(lane_id):
     """Every lane's objective (quality+latency+cost) must sum to 1.0 within 1e-3."""
-    cfg = load_gateway_config(prod_mode=True)
+    cfg = load_gateway_config(prod_mode=False)
     obj = cfg.lanes[lane_id].objective
     assert abs(obj.quality + obj.latency + obj.cost - 1.0) < 1e-3
 
@@ -63,7 +63,7 @@ def test_new_lane_has_active_route_equal_to_last_known_good(lane_id):
     This makes a swap-day regression in R1+ revert to today's behavior in one
     executor call. Drift here means the safety net is broken.
     """
-    cfg = load_gateway_config(prod_mode=True)
+    cfg = load_gateway_config(prod_mode=False)
     lane = cfg.lanes[lane_id]
     assert lane.last_known_good == lane.active_route
 
@@ -75,7 +75,7 @@ def test_new_lane_is_shadow_zero_percent(lane_id):
     The gateway's shadow-mode behavior applies — no traffic shift. R3 lifts
     this to dual-path; R4's nightly cron never auto-merges.
     """
-    cfg = load_gateway_config(prod_mode=True)
+    cfg = load_gateway_config(prod_mode=False)
     lane = cfg.lanes[lane_id]
     # The lane itself doesn't carry rollout — that's per-artifact. Resolve
     # the artifact and assert its rollout shape.
@@ -160,6 +160,59 @@ def test_mock_benchmark_evidence_rejected_in_prod_mode(tmp_path):
     load_gateway_config(tmp_path, prod_mode=False)
     with pytest.raises(ConfigValidationError, match='dev-only benchmark evidence'):
         load_gateway_config(tmp_path, prod_mode=True)
+
+
+def test_r0_placeholder_artifacts_rejected_in_prod_mode():
+    """R0 ships 3 placeholder artifacts (stt-realtime, transcription,
+    screenshot-embedding) marked dev_only: true. They load fine in dev/staging
+    (prod_mode=False, the default) but are correctly rejected in production
+    (prod_mode=True). This is the structural signal that future promotion
+    logic (R1 emitter, R4 cron) reads to know these lanes still need real
+    artifacts from R3 before they can ship to prod.
+    """
+    with pytest.raises(ConfigValidationError, match='dev-only benchmark evidence') as exc_info:
+        load_gateway_config(prod_mode=True)
+    # The loader fails fast on the first dev_only artifact. Verify at least
+    # one placeholder is named in the error message; the rest are checked
+    # separately in test_r0_non_placeholder_artifacts_remain_prod_eligible.
+    msg = str(exc_info.value)
+    assert 'route.stt_realtime.2026_07_01.001' in msg
+
+
+def test_r0_placeholder_artifacts_load_in_dev_mode():
+    """Companion to test_r0_placeholder_artifacts_rejected_in_prod_mode:
+    placeholders load fine in dev/staging (prod_mode=False)."""
+    cfg = load_gateway_config(prod_mode=False)
+    # All 17 artifacts (14 real + 3 placeholders) are in the config
+    assert len(cfg.route_artifacts) == 17
+    # The 3 placeholders are present and have dev_only: true
+    placeholder_ids = {
+        'route.stt_realtime.2026_07_01.001',
+        'route.transcription.2026_07_01.001',
+        'route.screenshot_embedding.2026_07_01.001',
+    }
+    for rid in placeholder_ids:
+        assert rid in cfg.route_artifacts
+        assert cfg.route_artifacts[rid].evidence.dev_only is True
+
+
+def test_r0_non_placeholder_artifacts_remain_prod_eligible():
+    """Sanity check: only the 3 placeholders are dev_only; the other 14 R0
+    artifacts + 2 existing chat-structured artifacts are all prod-eligible
+    (Evidence.is_prod_eligible() returns True)."""
+    cfg = load_gateway_config(prod_mode=False)
+    placeholder_route_ids = {
+        'route.stt_realtime.2026_07_01.001',
+        'route.transcription.2026_07_01.001',
+        'route.screenshot_embedding.2026_07_01.001',
+    }
+    for rid, artifact in cfg.route_artifacts.items():
+        if rid in placeholder_route_ids:
+            assert artifact.evidence.dev_only is True
+            assert not artifact.evidence.is_prod_eligible()
+        else:
+            assert artifact.evidence.dev_only is False
+            assert artifact.evidence.is_prod_eligible()
 
 
 @pytest.mark.parametrize(

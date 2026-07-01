@@ -83,7 +83,7 @@ def test_resolve_chat_completion_route_zero_drift_for_each_lane(lane_id):
     """
     from llm_gateway.gateway.resolver import resolve_lane, _route_by_id
 
-    config = load_gateway_config(prod_mode=True)
+    config = load_gateway_config(prod_mode=False)
     lane = resolve_lane(config, lane_id)
     assert lane.lane_id == lane_id
     active = _route_by_id(config, lane.active_route, pointer_name='active_route')
@@ -92,7 +92,7 @@ def test_resolve_chat_completion_route_zero_drift_for_each_lane(lane_id):
 
 
 def test_resolves_supported_auto_lane_to_active_artifact():
-    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), valid_request())
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=False), valid_request())
 
     assert resolved.lane.lane_id == LANE_ID
     assert resolved.active_route.route_artifact_id == ACTIVE_ROUTE
@@ -105,36 +105,36 @@ def test_unknown_auto_lane_is_model_not_found():
     request = valid_request(model='omi:auto:unknown')
 
     with pytest.raises(GatewayModelNotFoundError, match='auto lane not found'):
-        resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+        resolve_chat_completion_route(load_gateway_config(prod_mode=False), request)
 
 
 def test_missing_model_is_invalid_request_not_model_not_found():
     request = valid_request(model='')
 
     with pytest.raises(GatewayInvalidRequestError, match='model is required'):
-        resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+        resolve_chat_completion_route(load_gateway_config(prod_mode=False), request)
 
 
 def test_bare_provider_model_is_rejected():
     request = valid_request(model='gpt-4o-mini')
 
     with pytest.raises(GatewayUnsupportedModelError, match='provider model names'):
-        resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+        resolve_chat_completion_route(load_gateway_config(prod_mode=False), request)
 
 
 def test_request_capability_mismatch_is_not_lkg_eligible():
     request = valid_request(stream=True)
 
     with pytest.raises(GatewayCapabilityMismatchError) as exc_info:
-        resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+        resolve_chat_completion_route(load_gateway_config(prod_mode=False), request)
 
     assert getattr(exc_info.value, 'failure_class', None) == FailureClass.CAPABILITY_MISMATCH
-    route = load_gateway_config(prod_mode=True).route_artifacts[ACTIVE_ROUTE]
+    route = load_gateway_config(prod_mode=False).route_artifacts[ACTIVE_ROUTE]
     assert not is_lkg_eligible(route, FailureClass.CAPABILITY_MISMATCH)
 
 
 def test_active_artifact_capability_mismatch_is_invalid_config():
-    base = load_gateway_config(prod_mode=True)
+    base = load_gateway_config(prod_mode=False)
     config = config_with_active_route(
         base.route_artifacts[ACTIVE_ROUTE].model_copy(
             update={
@@ -152,7 +152,7 @@ def test_active_artifact_capability_mismatch_is_invalid_config():
 
 
 def test_lkg_is_selected_only_for_active_route_policy_allowed_failure():
-    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), valid_request())
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=False), valid_request())
 
     selected = select_lkg_route_for_failure(resolved, FailureClass.TIMEOUT_BEFORE_OUTPUT)
 
@@ -173,14 +173,14 @@ def test_lkg_is_selected_only_for_active_route_policy_allowed_failure():
     ],
 )
 def test_lkg_rejected_for_byok_capability_and_config_failure_classes(failure_class):
-    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), valid_request())
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=False), valid_request())
 
     assert not is_lkg_eligible(resolved.active_route, failure_class)
     assert select_lkg_route_for_failure(resolved, failure_class) is None
 
 
 def test_lkg_rejected_when_failure_not_in_active_route_fallback_policy():
-    base = load_gateway_config(prod_mode=True)
+    base = load_gateway_config(prod_mode=False)
     active_route = base.route_artifacts[ACTIVE_ROUTE]
     config = config_with_active_route(
         active_route.model_copy(
@@ -222,7 +222,7 @@ def valid_request(**overrides):
 
 
 def config_with_active_route(active_route):
-    base = load_gateway_config(prod_mode=True)
+    base = load_gateway_config(prod_mode=False)
     route_artifacts = dict(base.route_artifacts)
     route_artifacts[ACTIVE_ROUTE] = active_route
     return GatewayConfig(

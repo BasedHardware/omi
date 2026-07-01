@@ -556,7 +556,7 @@ route_artifacts:
       benchmark_snapshot: bench.omi.stt_realtime.2026_07_01
       eval_report: eval.stt_realtime.v1
       benchmark_source: omi_eval
-      dev_only: false
+      dev_only: true
     rollout:
       stage: shadow
       percent: 0
@@ -588,7 +588,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:641ab66fc106abad7e32d13180bd89dd0954b6816c3840da476b31f4c8f0bdc8
+    artifact_digest: sha256:9723d514993ff8c2dea12868fb5c894129157af164c6fd56fa3322448cb9c6f2
   - route_artifact_id: route.transcription.2026_07_01.001
     lane_id: omi:auto:transcription
     surface: openai.chat_completions
@@ -609,7 +609,7 @@ route_artifacts:
       benchmark_snapshot: bench.omi.transcription.2026_07_01
       eval_report: eval.transcription.v1
       benchmark_source: omi_eval
-      dev_only: false
+      dev_only: true
     rollout:
       stage: shadow
       percent: 0
@@ -641,7 +641,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:d7956f52439fde970c88bc3232dc890355542c64dfec99bd889e264f0ffa2f2e
+    artifact_digest: sha256:9fbb5b1f61a53d6aeaa72ee4a1f8bb0cfaf1194bb6f3d6e5dc64803e082acb01
   - route_artifact_id: route.screenshot_understanding.2026_07_01.001
     lane_id: omi:auto:screenshot-understanding
     surface: openai.chat_completions
@@ -715,7 +715,7 @@ route_artifacts:
       benchmark_snapshot: bench.omi.screenshot_embedding.2026_07_01
       eval_report: eval.screenshot_embedding.v1
       benchmark_source: omi_eval
-      dev_only: false
+      dev_only: true
     rollout:
       stage: shadow
       percent: 0
@@ -747,7 +747,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:dfff7c0f04c0c28ae6fad5ce6ed374a6f72b734a7fcffb7bf1847536ba62e996
+    artifact_digest: sha256:7567fe06367cdc09f768feb274c0208520471f5b764bbb93e1a0ba9a184ead6b
   - route_artifact_id: route.realtime_ptt.2026_07_01.001
     lane_id: omi:auto:realtime-ptt
     surface: openai.chat_completions

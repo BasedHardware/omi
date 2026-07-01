@@ -28,8 +28,7 @@ lanes:
     active_route: route.chat_structured.2026_06_27.001
     last_known_good: route.chat_structured.2026_06_20.001
 
-  # R0: 14 new LaneConfig entries (shadow-mode, percent=0, last_known_good == active_route).
-  # See .aidlc/spec.md for objective weights + capability flags per lane.
+  # R0: 15 new LaneConfig entries (shadow-mode, percent=0, last_known_good == active_route).
   # Day-one invariant: each new lane's active_route == last_known_good, sourced from
   # backend/utils/llm/model_config.py MODEL_QOS_PROFILES["premium"] (or the documented
   # placeholder for STT/transcription/embedding lanes — those land in R3).
