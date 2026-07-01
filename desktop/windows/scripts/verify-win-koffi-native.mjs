@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const MIN_PE_SIZE = 1024
 const packageRoots =
   process.argv.length > 2
     ? process.argv.slice(2).map((path) => resolve(path))
@@ -10,19 +11,30 @@ const packageRoots =
 
 const verifyPeFile = (file) => {
   const stat = statSync(file)
-  if (stat.size <= 0) {
+  if (stat.size < MIN_PE_SIZE) {
     throw new Error(`Koffi native module is empty: ${file}`)
   }
 
   const fd = openSync(file, 'r')
-  const header = Buffer.alloc(2)
+  const dosHeader = Buffer.alloc(64)
   try {
-    readSync(fd, header, 0, 2, 0)
+    readSync(fd, dosHeader, 0, dosHeader.length, 0)
+    if (dosHeader.subarray(0, 2).toString('ascii') !== 'MZ') {
+      throw new Error(`Koffi native module is not a Windows binary: ${file}`)
+    }
+
+    const peOffset = dosHeader.readUInt32LE(0x3c)
+    if (peOffset <= 0 || peOffset > stat.size - 4) {
+      throw new Error(`Koffi native module has an invalid PE header offset: ${file}`)
+    }
+
+    const peSignature = Buffer.alloc(4)
+    readSync(fd, peSignature, 0, peSignature.length, peOffset)
+    if (peSignature.toString('binary') !== 'PE\u0000\u0000') {
+      throw new Error(`Koffi native module is missing a PE signature: ${file}`)
+    }
   } finally {
     closeSync(fd)
-  }
-  if (header.toString('ascii') !== 'MZ') {
-    throw new Error(`Koffi native module is not a Windows binary: ${file}`)
   }
   return stat.size
 }
