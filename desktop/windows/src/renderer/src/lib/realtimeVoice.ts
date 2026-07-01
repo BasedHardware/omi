@@ -1,4 +1,5 @@
 import type { Preferences } from './preferences'
+import type { LocalTtsStatus } from '../../../shared/types'
 
 export type RealtimeVoiceProvider = NonNullable<Preferences['realtimeVoiceProvider']>
 
@@ -13,19 +14,23 @@ export type RealtimeVoiceReadiness = {
 }
 
 export function realtimeVoiceReadiness(
-  preferences: Preferences
+  preferences: Preferences,
+  localTtsStatus?: LocalTtsStatus | null
 ): RealtimeVoiceReadiness {
   const provider = preferences.realtimeVoiceProvider ?? 'omi-relay'
   const enabled = !!preferences.realtimeVoiceEnabled
   if (provider === 'local-kokoro') {
+    const ready = enabled && Boolean(localTtsStatus?.available)
     return {
       enabled,
       provider,
-      ready: enabled,
+      ready,
       label: 'Local Kokoro',
       keyPath: 'Local model runtime',
       transcriptionPath: 'Omi /v4/listen remains active for transcription',
-      reason: undefined
+      reason: ready
+        ? undefined
+        : (localTtsStatus?.reason ?? 'Local Kokoro TTS runtime is not ready')
     }
   }
   const relayConfigured = !!import.meta.env.VITE_OMI_REALTIME_VOICE_URL
