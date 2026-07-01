@@ -15,7 +15,33 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest, validate_chat_completion_request
 
-SUPPORTED_AUTO_LANE_IDS = frozenset({'omi:auto:chat-structured'})
+# R0 lane taxonomy (see .aidlc/spec.md and PLAN.md §R0):
+#   - 1 existing lane: chat-structured (the gateway's pilot lane)
+#   - 15 new lanes: every AI capability in Omi, shipped in shadow mode
+# The frozenset is the only gate between product code and lane resolution.
+# Adding a lane here without it being in lanes.yaml + route_artifacts.yaml is
+# a hard error at config load (load_gateway_config fails).
+SUPPORTED_AUTO_LANE_IDS = frozenset(
+    {
+        'omi:auto:chat-structured',  # existing — pilot lane
+        # R0 new lanes (15):
+        'omi:auto:chat-extraction',
+        'omi:auto:daily-summary',
+        'omi:auto:memories-extraction',
+        'omi:auto:memory-graph',
+        'omi:auto:conv-action-items',
+        'omi:auto:conv-structure',
+        'omi:auto:general-assistant',
+        'omi:auto:reasoning',
+        'omi:auto:stt-realtime',
+        'omi:auto:transcription',
+        'omi:auto:screenshot-understanding',
+        'omi:auto:screenshot-embedding',
+        'omi:auto:realtime-ptt',
+        'omi:auto:persona-chat',
+        'omi:auto:notification-classifier',
+    }
+)
 AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
     {

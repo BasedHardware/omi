@@ -112,3 +112,799 @@ route_artifacts:
         - missing_byok_key
         - capability_mismatch
         - invalid_config
+  - route_artifact_id: route.chat_extraction.2026_07_01.001
+    lane_id: omi:auto:chat-extraction
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.chat_extraction.2026_07_01
+      eval_report: eval.chat_extraction.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:9ffa51e797f342a72a927a5e4a08bc8a128e7b47914965fb48c7a21e328bb845
+  - route_artifact_id: route.daily_summary.2026_07_01.001
+    lane_id: omi:auto:daily-summary
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5.4-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.daily_summary.2026_07_01
+      eval_report: eval.daily_summary.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:d38d583c27788bed44fba4e777be6cf984e0afc26f3899153757b6ba60bc61b3
+  - route_artifact_id: route.memories_extraction.2026_07_01.001
+    lane_id: omi:auto:memories-extraction
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.memories_extraction.2026_07_01
+      eval_report: eval.memories_extraction.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:4cf68098f5f76ee76ae0c54dcf5d38544dd0a96c827072c28ac500f7e7c29924
+  - route_artifact_id: route.memory_graph.2026_07_01.001
+    lane_id: omi:auto:memory-graph
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.memory_graph.2026_07_01
+      eval_report: eval.memory_graph.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:98513a22ab0207022d734acb84e0a112fea440ccb995627dfb46645370786901
+  - route_artifact_id: route.conv_action_items.2026_07_01.001
+    lane_id: omi:auto:conv-action-items
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5.4-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.conv_action_items.2026_07_01
+      eval_report: eval.conv_action_items.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:ceae186e7ffae6bae10264941596b004d5c90dab426729d4322c214070835acc
+  - route_artifact_id: route.conv_structure.2026_07_01.001
+    lane_id: omi:auto:conv-structure
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5.4-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.conv_structure.2026_07_01
+      eval_report: eval.conv_structure.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:ab80dc3fbc00c4d9a8909206950b2cb0b7f8cfcb20bb6f11bbf0863e4944b280
+  - route_artifact_id: route.general_assistant.2026_07_01.001
+    lane_id: omi:auto:general-assistant
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5.4-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: true
+      structured_output: json_object
+      tools: true
+    evidence:
+      benchmark_snapshot: bench.omi.general_assistant.2026_07_01
+      eval_report: eval.general_assistant.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:d60aa6dcc1c4b90e879373009ee45492a7eb5a0014ce1629163e9154a4b378a1
+  - route_artifact_id: route.reasoning.2026_07_01.001
+    lane_id: omi:auto:reasoning
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5.4-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.reasoning.2026_07_01
+      eval_report: eval.reasoning.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:ca8a7ceed1ea4048c0a762c7fdb0c6a6a22058b3c96988e0c43388fe08e02c40
+  - route_artifact_id: route.stt_realtime.2026_07_01.001
+    lane_id: omi:auto:stt-realtime
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.stt_realtime.2026_07_01
+      eval_report: eval.stt_realtime.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:641ab66fc106abad7e32d13180bd89dd0954b6816c3840da476b31f4c8f0bdc8
+  - route_artifact_id: route.transcription.2026_07_01.001
+    lane_id: omi:auto:transcription
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.transcription.2026_07_01
+      eval_report: eval.transcription.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:d7956f52439fde970c88bc3232dc890355542c64dfec99bd889e264f0ffa2f2e
+  - route_artifact_id: route.screenshot_understanding.2026_07_01.001
+    lane_id: omi:auto:screenshot-understanding
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_object
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.screenshot_understanding.2026_07_01
+      eval_report: eval.screenshot_understanding.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:5cf21d14ef658ab11e82a8d374c4f59b6f20e8de68874cbd6b02e61441c1421c
+  - route_artifact_id: route.screenshot_embedding.2026_07_01.001
+    lane_id: omi:auto:screenshot-embedding
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.screenshot_embedding.2026_07_01
+      eval_report: eval.screenshot_embedding.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:dfff7c0f04c0c28ae6fad5ce6ed374a6f72b734a7fcffb7bf1847536ba62e996
+  - route_artifact_id: route.realtime_ptt.2026_07_01.001
+    lane_id: omi:auto:realtime-ptt
+    surface: openai.chat_completions
+    primary:
+      provider: anthropic
+      model: claude-sonnet-4-6
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: true
+      structured_output: json_object
+      tools: true
+    evidence:
+      benchmark_snapshot: bench.omi.realtime_ptt.2026_07_01
+      eval_report: eval.realtime_ptt.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:8296a9cefa387f304c9652a7eb9b763587de132582b1052910774203556e69bb
+  - route_artifact_id: route.persona_chat.2026_07_01.001
+    lane_id: omi:auto:persona-chat
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-nano
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: true
+      structured_output: json_object
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.persona_chat.2026_07_01
+      eval_report: eval.persona_chat.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:c6fa711b349f3b4f18bf74aa087b2fe2115f41008de34c26f0c4399d756bb3c3
+  - route_artifact_id: route.notification_classifier.2026_07_01.001
+    lane_id: omi:auto:notification-classifier
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5.4-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 8000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.notification_classifier.2026_07_01
+      eval_report: eval.notification_classifier.v1
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    fallback_policy:
+      fallback_on:
+      - timeout_before_output
+      - provider_429_omi_paid
+      - provider_5xx_omi_paid
+      never_fallback_on:
+      - byok_auth
+      - byok_quota
+      - byok_rate_limit
+      - byok_unsupported_provider
+      - missing_byok_key
+      - capability_mismatch
+      - invalid_config
+    artifact_digest: sha256:c2d54291023d04bb10bab2b7eef48c48d58335756987c20956ece7cbe7be92d5
+

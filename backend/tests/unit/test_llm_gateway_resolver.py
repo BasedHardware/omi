@@ -11,6 +11,7 @@ from llm_gateway.gateway.errors import (
     GatewayUnsupportedModelError,
 )
 from llm_gateway.gateway.resolver import (
+    SUPPORTED_AUTO_LANE_IDS,
     is_auto_lane_id,
     is_lkg_eligible,
     resolve_chat_completion_route,
@@ -22,11 +23,72 @@ LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
 LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 
+# R0 lane taxonomy — see .aidlc/spec.md and PLAN.md §R0.
+# 16 lanes total: 1 existing (chat-structured) + 15 new.
+_R0_NEW_LANE_IDS = frozenset(
+    {
+        'omi:auto:chat-extraction',
+        'omi:auto:daily-summary',
+        'omi:auto:memories-extraction',
+        'omi:auto:memory-graph',
+        'omi:auto:conv-action-items',
+        'omi:auto:conv-structure',
+        'omi:auto:general-assistant',
+        'omi:auto:reasoning',
+        'omi:auto:stt-realtime',
+        'omi:auto:transcription',
+        'omi:auto:screenshot-understanding',
+        'omi:auto:screenshot-embedding',
+        'omi:auto:realtime-ptt',
+        'omi:auto:persona-chat',
+        'omi:auto:notification-classifier',
+    }
+)
+_ALL_LANE_IDS = frozenset({LANE_ID} | _R0_NEW_LANE_IDS)
+
 
 def test_is_auto_lane_id_only_matches_omi_auto_namespace():
     assert is_auto_lane_id(LANE_ID)
     assert not is_auto_lane_id('gpt-4o-mini')
     assert not is_auto_lane_id('openai:gpt-4o-mini')
+
+
+def test_supported_auto_lane_ids_contains_all_sixteen_r0_lanes():
+    """R0: every declared lane id must be in SUPPORTED_AUTO_LANE_IDS.
+
+    Otherwise downstream R3 product call-sites can't reference the lane and
+    is_auto_lane_id() returns False, blocking the resolver from accepting the
+    request. The frozenset is the only gate between product code and the lane.
+    """
+    assert SUPPORTED_AUTO_LANE_IDS == _ALL_LANE_IDS
+
+
+@pytest.mark.parametrize('lane_id', sorted(_ALL_LANE_IDS))
+def test_is_auto_lane_id_accepts_all_sixteen_r0_lanes(lane_id):
+    assert is_auto_lane_id(lane_id)
+
+
+@pytest.mark.parametrize('lane_id', sorted(_R0_NEW_LANE_IDS))
+def test_resolve_chat_completion_route_zero_drift_for_each_lane(lane_id):
+    """Day-one invariant: every lane's active_route == last_known_good.
+
+    A drift here means the safety net is broken — a swap-day regression would
+    fall forward to a different model instead of today's behavior.
+
+    We assert at the lane-resolution layer (resolve_lane + manual route lookup)
+    rather than resolve_chat_completion_route because the validator rejects
+    requests that don't carry response_format with json_schema. The zero-drift
+    invariant is a config-wiring invariant and doesn't need request validation
+    to be exercised.
+    """
+    from llm_gateway.gateway.resolver import resolve_lane, _route_by_id
+
+    config = load_gateway_config(prod_mode=True)
+    lane = resolve_lane(config, lane_id)
+    assert lane.lane_id == lane_id
+    active = _route_by_id(config, lane.active_route, pointer_name='active_route')
+    lkg = _route_by_id(config, lane.last_known_good, pointer_name='last_known_good')
+    assert active.route_artifact_id == lkg.route_artifact_id
 
 
 def test_resolves_supported_auto_lane_to_active_artifact():
