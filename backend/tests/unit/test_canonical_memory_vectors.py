@@ -251,6 +251,20 @@ def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypat
     assert fake_index.upserts[0]["namespace"] == "ns2"
 
 
+def test_upsert_canonical_memory_vector_strips_null_optional_metadata(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+
+    item = _item(memory_id="mem_hash001", tier=MemoryTier.short_term).model_copy(
+        update={"source_commit_id": None, "content_hash": None}
+    )
+    vector_db.upsert_canonical_memory_vector(item)
+
+    metadata = fake_index.upserts[0]["vectors"][0]["metadata"]
+    assert "source_commit_id" not in metadata
+    assert "content_hash" not in metadata
+    assert metadata["projection_commit_id"] == "commit-ledger"
+
+
 def test_query_memory_vector_candidates_matches_neutral_metadata(monkeypatch):
     vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 

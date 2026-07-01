@@ -113,26 +113,32 @@ actor OnboardingMemoryLogImportService {
       }
       let profileSummary = parsed["profile"] as? String ?? ""
 
-      var memoriesSaved = 0
-      for memory in memoryStrings {
-        do {
-          _ = try await APIClient.shared.createMemory(
+      guard !memoryStrings.isEmpty else {
+        log("OnboardingMemoryLogImportService: No durable \(source.displayName) memories found")
+        return (0, profileSummary)
+      }
+
+      let items = memoryStrings.map { memory in
+        MemoryBatchItem(
             content: memory,
             visibility: "private",
             category: .system,
             tags: source.tags,
-            source: source.memorySource,
-            headline: source.headline
-          )
-          memoriesSaved += 1
-        } catch {
-          log(
-            "OnboardingMemoryLogImportService: Failed saving \(source.displayName) memory: \(error)"
-          )
-        }
+            headline: source.headline,
+            source: source.memorySource
+        )
+      }
+      let saveResult = await OnboardingMemoryBatchImportService.save(
+        items,
+        logPrefix: "OnboardingMemoryLogImportService"
+      )
+      if saveResult.failed > 0 {
+        log(
+          "OnboardingMemoryLogImportService: Saved \(saveResult.saved) \(source.displayName) memories; \(saveResult.failed) failed"
+        )
       }
 
-      return (memoriesSaved, profileSummary)
+      return (saveResult.saved, profileSummary)
     } catch {
       log("OnboardingMemoryLogImportService: \(source.displayName) import failed: \(error)")
       return (0, "")
