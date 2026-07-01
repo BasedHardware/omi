@@ -76,6 +76,10 @@ export type PiChatResponse = {
   toolCalls: PiChatToolCall[]
 }
 
+export type PiChatStatus = {
+  enabled: boolean
+}
+
 export type ClaudeAcpStatus = {
   configured: boolean
   command: string
@@ -279,8 +283,8 @@ export type OmiBridgeApi = {
   kgSearchFiles: (q: string, fileType?: string, limit?: number) => Promise<IndexedFileRecord[]>
   /** Run a single read-only SELECT against the local DB (sqlGuard-validated). */
   kgExecuteSql: (sql: string) => Promise<KgSqlResult>
-  /** Opt-in Pi/Omi chat bridge. Normal chat keeps /v2/messages unless this flag is true. */
-  piChatEnabled: boolean
+  /** Authoritative Pi/Omi chat bridge status from the main process. */
+  piChatStatus: () => Promise<PiChatStatus>
   piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
   claudeAcpStatus: () => Promise<ClaudeAcpStatus>
   claudeAcpChatSend: (request: ClaudeAcpChatRequest) => Promise<ClaudeAcpChatResponse>
