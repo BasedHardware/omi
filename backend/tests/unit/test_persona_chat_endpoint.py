@@ -198,30 +198,24 @@ _usage_tracker_stub = _full_stub(
 # `_usage_callback = get_usage_callback()` so ChatOpenAI() can be
 # constructed at import time without pydantic 2's strict is_instance_of
 # check rejecting a MagicMock (PR #8682 post-rebase issue).
-# Import langchain_core.callbacks lazily: in pytest's full test suite,
-# `langchain_core` may have been stubbed as a bare ModuleType by an
-# earlier-collected test (e.g. test_persona_prompt_rewrite.py), so a
-# top-level `from langchain_core.callbacks import ...` would fail. We
-# try the real import first; if it fails, fall back to a stub class
-# defined dynamically that pydantic 2 will accept.
-try:
-    from langchain_core.callbacks import BaseCallbackHandler as _BaseCallbackHandler
+#
+# Cubic review follow-up (PR #8682): the previous version used a
+# try/except ImportError with a duck-typed fallback class
+# (_NullCallback: bare object with __getattr__ returning no-op
+# lambdas). pydantic v2's strict is_instance_of check rejects that
+# because it doesn't inherit from BaseCallbackHandler. The fallback
+# only ever activates when langchain_core is stubbed as a bare
+# ModuleType by an earlier-collected test — which ALSO stubs
+# langchain_openai, in which case ChatOpenAI is itself a MagicMock
+# and pydantic validation is skipped anyway. So the fallback was
+# both fragile AND dead code. Removed.
+from langchain_core.callbacks import BaseCallbackHandler as _BaseCallbackHandler
 
-    class _NullCallback(_BaseCallbackHandler):
-        """No-op callback that satisfies pydantic's BaseCallbackHandler check."""
 
-        pass
+class _NullCallback(_BaseCallbackHandler):
+    """No-op callback that satisfies pydantic's BaseCallbackHandler check."""
 
-except ImportError:
-    # Stub fallback for the cross-test-stubbing case: a class that
-    # *looks like* a BaseCallbackHandler to pydantic without actually
-    # inheriting from it (the real one isn't available because
-    # langchain_core is stubbed).
-    class _NullCallback:  # type: ignore[no-redef]
-        """Marker class — pydantic accepts it because of the duck-typed __getattr__ below."""
-
-        def __getattr__(self, _name):
-            return lambda *a, **kw: None
+    pass
 
 
 _usage_tracker_stub.get_usage_callback = lambda: _NullCallback()
