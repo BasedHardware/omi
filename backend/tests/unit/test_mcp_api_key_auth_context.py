@@ -53,6 +53,7 @@ setattr(_fake_client, 'get_firestore_client', lambda: SimpleNamespace())
 sys.modules['database._client'] = _fake_client
 
 import database.mcp_api_key as mcp_api_key_db
+import dependencies as dependencies_module
 from dependencies import get_mcp_api_key_auth, get_mcp_memory_default_memory_read_context
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.memory.product_authorization import authorize_memory_external_default_memory_read
@@ -254,6 +255,7 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
 
 
 def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
+    monkeypatch.setattr(dependencies_module, 'check_api_key_rate_limit', lambda **_kwargs: None)
     monkeypatch.setattr(
         mcp_api_key_db,
         'get_user_and_scopes_by_api_key',
