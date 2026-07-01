@@ -52,12 +52,21 @@ def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client=Non
     ref.set({"kg_extracted": True, "updated_at": datetime.now(timezone.utc)}, merge=True)
 
 
+def set_canonical_memory_kg_extracted_without_touching_updated_at(uid: str, memory_id: str, *, db_client=None) -> None:
+    """Mark KG extraction complete without changing the product-memory timestamp."""
+    client = db_client if db_client is not None else default_db_client
+    path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+    ref = client.document(path)
+    ref.set({"kg_extracted": True}, merge=True)
+
+
 def extract_kg_for_promoted_memory(
     uid: str,
     item: MemoryItem,
     *,
     user_name: str = "User",
     db_client=None,
+    preserve_item_updated_at: bool = False,
 ) -> CanonicalKgPromotionResult:
     """Extract KG nodes/edges for a newly promoted long_term memory."""
     client = db_client if db_client is not None else default_db_client
@@ -87,7 +96,10 @@ def extract_kg_for_promoted_memory(
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="exception")
     if result is None:
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="extractor_failed")
-    set_canonical_memory_kg_extracted(uid, item.memory_id, db_client=db_client)
+    if preserve_item_updated_at:
+        set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id, db_client=db_client)
+    else:
+        set_canonical_memory_kg_extracted(uid, item.memory_id, db_client=db_client)
     node_count = len(result.get("nodes") or [])
     edge_count = len(result.get("edges") or [])
     logger.info(
