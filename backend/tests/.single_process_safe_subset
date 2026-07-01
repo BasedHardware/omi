@@ -59,3 +59,9 @@ tests/unit/test_short_term_memory.py
 tests/unit/test_sync_transcription_prefs.py
 tests/unit/test_desktop_updates.py
 tests/unit/test_review_queue_non_active_routes.py
+tests/unit/test_kg_user_type_mismatch.py
+tests/unit/test_kg_edge_id_sanitization.py
+tests/unit/test_conversation_events_bounds.py
+tests/unit/test_conversations_date_range_validation.py
+tests/unit/test_delete_account_purge_storage.py
+tests/unit/test_screen_activity_tool_result_bound.py
