@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import { NextResponse } from 'next/server';
 
 const rapidApiKey = process.env.RAPIDAPI_KEY;
@@ -9,6 +11,8 @@ const firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 const MAX_USERNAME_LENGTH = 64;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
+const PRE_AUTH_RATE_LIMIT_MAX_REQUESTS = 120;
+const PRE_AUTH_CREDENTIAL_RATE_LIMIT_MAX_REQUESTS = 20;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
 
 const rapidApiHeaders = (key?: string, host?: string) => {
@@ -19,7 +23,7 @@ const rapidApiHeaders = (key?: string, host?: string) => {
   };
 };
 
-const isRateLimited = (key: string) => {
+const isRateLimited = (key: string, maxRequests = RATE_LIMIT_MAX_REQUESTS) => {
   const now = Date.now();
   if (rateLimits.size > 1000) {
     for (const [entryKey, entry] of rateLimits) {
@@ -35,7 +39,12 @@ const isRateLimited = (key: string) => {
   }
 
   current.count += 1;
-  return current.count > RATE_LIMIT_MAX_REQUESTS;
+  return current.count > maxRequests;
+};
+
+const authAttemptKey = (req: Request) => {
+  const authorization = req.headers.get('authorization') || 'missing';
+  return createHash('sha256').update(authorization).digest('hex').slice(0, 32);
 };
 
 const authenticatedUid = async (req: Request) => {
@@ -71,6 +80,16 @@ export async function GET(req: Request) {
 
   if (username.length > MAX_USERNAME_LENGTH) {
     return NextResponse.json({ error: 'Invalid username' }, { status: 400 });
+  }
+
+  if (
+    isRateLimited('preauth:global', PRE_AUTH_RATE_LIMIT_MAX_REQUESTS) ||
+    isRateLimited(
+      `preauth:${authAttemptKey(req)}`,
+      PRE_AUTH_CREDENTIAL_RATE_LIMIT_MAX_REQUESTS,
+    )
+  ) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
   }
 
   const uid = await authenticatedUid(req);

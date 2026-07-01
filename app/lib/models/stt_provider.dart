@@ -410,7 +410,11 @@ class SttProviderConfig {
         'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
         'Google Gemini': get(
           SttProvider.geminiLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
+        ).buildRequestConfig(
+          apiKey: 'YOUR_API_KEY',
+          language: 'en',
+          model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        ),
         'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
       };
 
