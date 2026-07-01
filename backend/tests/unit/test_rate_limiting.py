@@ -391,8 +391,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_developer_router_has_rate_limits(self):
         matches = self._grep_file("routers/developer.py", r"with_rate_limit.*dev:")
-        # create_memory, batch, create_conversation, from_segments = 4
-        self.assertEqual(len(matches), 4, f"developer.py expected 4 rate limits, got {len(matches)}")
+        # search_memories, create_memory, batch, create_conversation, search_conversations, from_segments = 6
+        self.assertEqual(len(matches), 6, f"developer.py expected 6 rate limits, got {len(matches)}")
 
     def test_goals_router_has_rate_limits(self):
         matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
