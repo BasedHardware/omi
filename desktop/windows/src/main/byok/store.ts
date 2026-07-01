@@ -1,6 +1,6 @@
 import { app, safeStorage } from 'electron'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { dirname, join } from 'path'
 import type {
   ByokChatProvider,
   ByokProvider,
@@ -131,7 +131,20 @@ function serialize(settings: LoadedByokSettings): StoredByokFile {
 
 function writeSettings(settings: LoadedByokSettings): void {
   encryptionRequired()
-  writeFileSync(file(), JSON.stringify(serialize(settings)), 'utf8')
+  const target = file()
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`
+  mkdirSync(dirname(target), { recursive: true })
+  try {
+    writeFileSync(tmp, JSON.stringify(serialize(settings)), 'utf8')
+    renameSync(tmp, target)
+  } catch (error) {
+    try {
+      rmSync(tmp, { force: true })
+    } catch {
+      /* best-effort */
+    }
+    throw error
+  }
 }
 
 function providerStatus(
