@@ -137,7 +137,10 @@ export function AdvancedTab(): React.JSX.Element {
     try {
       const status = await window.omi.localAgentCopyToken()
       applyLocalAgentStatus(status)
-      toast('Bearer token copied', { tone: 'success' })
+      toast('Bearer token copied', {
+        tone: 'success',
+        body: 'The token will be cleared from the clipboard after 60 seconds if unchanged.'
+      })
     } catch (e) {
       toast('Could not copy bearer token', { tone: 'error', body: (e as Error).message })
     } finally {
@@ -189,11 +192,13 @@ export function AdvancedTab(): React.JSX.Element {
 
   const localAgentSubtitle = !localAgent
     ? 'Loading local API status…'
-    : localAgent.running
-      ? `Listening on ${localAgent.localUrl}`
-      : localAgent.enabled
-        ? 'Enabled, but not currently listening. Refresh status or disable and re-enable.'
-        : 'Disabled by default. Enable to let local agents access Omi through loopback with bearer auth.'
+    : localAgent.tokenError
+      ? localAgent.tokenError
+      : localAgent.running
+        ? `Listening on ${localAgent.localUrl}`
+        : localAgent.enabled
+          ? 'Enabled, but not currently listening. Refresh status or disable and re-enable.'
+          : 'Disabled by default. Enable to let local agents access Omi through loopback with bearer auth.'
 
   // --- File indexing ---
   const [fileIndex, setFileIndex] = useState<FileIndexStatus | null>(null)
@@ -600,8 +605,8 @@ export function AdvancedTab(): React.JSX.Element {
           </div>
 
           <p className="text-sm text-text-tertiary">
-            Bearer auth is required for tools. The token is copied directly to your clipboard and is
-            not displayed here.
+            Bearer auth is required for tools. The token is copied to your clipboard, cleared after
+            60 seconds if unchanged, and not displayed here.
           </p>
         </div>
       </SettingRow>
