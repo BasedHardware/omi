@@ -84,7 +84,7 @@ function schema(
   return {
     type: 'object',
     properties,
-    required,
+    ...(required.length > 0 ? { required } : {}),
     additionalProperties
   }
 }
@@ -167,19 +167,16 @@ const TOOL_DEFINITIONS: LocalAgentToolDefinition[] = [
     name: 'get_screenshot',
     description:
       'Fetch a local Rewind screenshot image by screenshot_id. Use IDs returned by search_screen_history or execute_sql over rewind_frames.',
-    inputSchema: schema(
-      {
-        screenshot_id: {
-          type: 'number',
-          description: 'Rewind frame ID returned as screenshot_id.'
-        },
-        id: {
-          type: 'number',
-          description: 'Alias for screenshot_id.'
-        }
+    inputSchema: schema({
+      screenshot_id: {
+        type: 'number',
+        description: 'Rewind frame ID returned as screenshot_id.'
       },
-      ['screenshot_id']
-    ),
+      id: {
+        type: 'number',
+        description: 'Alias for screenshot_id.'
+      }
+    }),
     annotations: annotations()
   },
   {
@@ -256,15 +253,18 @@ const TOOL_DEFINITIONS: LocalAgentToolDefinition[] = [
 const TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => tool.name))
 
 export function listLocalAgentTools(): LocalAgentToolDefinition[] {
-  return TOOL_DEFINITIONS.map((tool) => ({
-    ...tool,
-    inputSchema: {
-      ...tool.inputSchema,
-      properties: { ...tool.inputSchema.properties },
-      required: [...(tool.inputSchema.required ?? [])]
-    },
-    annotations: { ...tool.annotations }
-  }))
+  return TOOL_DEFINITIONS.map((tool) => {
+    const required = tool.inputSchema.required
+    return {
+      ...tool,
+      inputSchema: {
+        ...tool.inputSchema,
+        properties: { ...tool.inputSchema.properties },
+        ...(required ? { required: [...required] } : {})
+      },
+      annotations: { ...tool.annotations }
+    }
+  })
 }
 
 export async function runLocalAgentTool(
