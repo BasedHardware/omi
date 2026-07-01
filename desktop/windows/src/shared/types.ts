@@ -128,6 +128,7 @@ export type ByokChatRequest = {
   messages: ChatMessage[]
   modelId?: string
   systemPrompt?: string
+  timeoutMs?: number
 }
 
 export type ByokChatResponse = {
