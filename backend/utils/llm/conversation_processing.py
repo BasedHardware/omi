@@ -18,7 +18,11 @@ from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction, StructuredExtraction
 from .clients import get_llm, parser
 from utils.byok import has_byok_keys
-from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
+from utils.llm.gateway_client import (
+    BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
+    invoke_chat_structured_gateway,
+    record_chat_extraction_gateway_result,
+)
 from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 import logging
@@ -43,11 +47,17 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def _invoke_gateway_unless_byok(prompt: str, output_model: type[BaseModel], *, feature: str) -> BaseModel | None:
+def _invoke_gateway_unless_byok(
+    prompt: str,
+    output_model: type[BaseModel],
+    *,
+    feature: str,
+    timeout_seconds: float = BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
+) -> BaseModel | None:
     if has_byok_keys():
         record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
         return None
-    return invoke_chat_structured_gateway(prompt, output_model, feature=feature)
+    return invoke_chat_structured_gateway(prompt, output_model, feature=feature, timeout_seconds=timeout_seconds)
 
 
 def _word_count(text: str) -> int:

@@ -23,6 +23,13 @@ def test_loads_default_gateway_config():
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
 
 
+def test_chat_structured_routes_have_background_shadow_timeout_budget():
+    config = load_gateway_config(prod_mode=True)
+
+    assert config.route_artifacts[ACTIVE_ROUTE].timeouts.request_ms >= 30000
+    assert config.route_artifacts[LKG_ROUTE].timeouts.request_ms >= 30000
+
+
 def test_missing_active_route_fails(tmp_path):
     write_config(tmp_path, lane_overrides={'active_route': 'route.missing'})
 
