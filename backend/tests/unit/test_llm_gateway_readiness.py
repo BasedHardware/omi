@@ -24,7 +24,16 @@ def test_ready_validates_gateway_config(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()['status'] == 'ready'
-    assert response.json()['lanes'] == ['omi:auto:chat-structured']
+    # R0.5: serving config only has prod_ready lanes. Per the catalog,
+    # that's just `chat-structured` (1 lane). The other 15 R0-new lanes
+    # are catalog-only. See .aidlc/migration_plan.md for the re-migration
+    # of the rest of this file as R3.2 promotes more lanes.
+    assert response.json()['lanes'] == sorted(
+        [
+            'omi:auto:chat-structured',
+        ]
+    )
+    # R0.5: 2 artifacts total (chat-structured's active + LKG).
     assert response.json()['route_artifact_count'] == 2
 
 

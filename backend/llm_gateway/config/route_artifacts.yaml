@@ -1,6 +1,6 @@
 route_artifacts:
   - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:c4c393fc3e915b2ecc41d4ef4cce5abd30c6439076814f55e29578eab6232e31
+    artifact_digest: sha256:8ad7a08042d5ec11fd5b77b688bb841764b3d153858fdd8f02e9a818401d5e43
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     primary:
@@ -20,7 +20,7 @@ route_artifacts:
       tools: false
     evidence:
       benchmark_snapshot: bench.omi.chat_structured.2026_06_27
-      eval_report: eval.chat_extraction_requires_context.2026_06_27
+      eval_report: eval.chat_extraction.requires_context.2026_06_27
       benchmark_source: omi_eval
       dev_only: false
     rollout:
@@ -56,13 +56,9 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:1d46ec82568f2d523da23e1df4b0956cfe876cc6ece9d05dbfb7e0edc7eda74b
+    artifact_digest: sha256:0e5f7bdb023c4ae3dbd28f5170808bf2a6acf5204c147b62f420736fa3c7c147
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
-    # LKG primary must match the legacy `chat_extraction` model (gpt-4.1-mini) so
-    # that while the pilot's active route is shadow-only, serving this route is a
-    # no-user-visible behavior match instead of silently swapping gpt-4.1-mini
-    # for gpt-4o-mini and changing classifier behavior for 100% of pilot calls.
     primary:
       provider: openai
       model: gpt-4.1-mini
@@ -78,7 +74,7 @@ route_artifacts:
       tools: false
     evidence:
       benchmark_snapshot: bench.omi.chat_structured.2026_06_20
-      eval_report: eval.chat_extraction_requires_context.2026_06_20
+      eval_report: eval.chat_extraction.requires_context.2026_06_20
       benchmark_source: omi_eval
       dev_only: false
     rollout:
