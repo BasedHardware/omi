@@ -216,27 +216,24 @@ export async function startTranscription(
   const activate = async (backend: TranscriptionBackend): Promise<OmiListenHandle | null> => {
     if (stopped || tried.has(backend)) return null
     tried.add(backend)
-    return startWithBackend(
-      source,
-      backend,
-      cb,
-      (reason, lostBackend) => {
-        if (stopped) return
-        const fallback: TranscriptionBackend = lostBackend === 'omi' ? 'local-parakeet' : 'omi'
-        void (async () => {
-          if (fallback === 'local-parakeet' && !(await localSttAvailable())) {
-            cb.onError(new Error(`Transcription stopped: ${reason}`))
-            return
-          }
-          const next = await activate(fallback)
-          if (next) {
-            active = next
-            return
-          }
+    return startWithBackend(source, backend, cb, (reason, lostBackend) => {
+      if (stopped) return
+      const fallback: TranscriptionBackend = lostBackend === 'omi' ? 'local-parakeet' : 'omi'
+      void (async () => {
+        if (fallback === 'local-parakeet' && !(await localSttAvailable())) {
+          if (stopped) return
           cb.onError(new Error(`Transcription stopped: ${reason}`))
-        })()
-      }
-    )
+          return
+        }
+        const next = await activate(fallback)
+        if (stopped) return
+        if (next) {
+          active = next
+          return
+        }
+        cb.onError(new Error(`Transcription stopped: ${reason}`))
+      })()
+    })
   }
 
   for (const backend of await initialBackendOrder()) {
