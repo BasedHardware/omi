@@ -7,7 +7,7 @@
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 # This list exists ONLY as a transitional bridge while the migration in
 # it is blocked by the pre-push hook and CI (see DECISIONS.md D4).
-# Total: 41 entries.
+# Total: 40 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
@@ -21,7 +21,6 @@ backend/tests/unit/test_fair_use_engine.py
 backend/tests/unit/test_fair_use_free_tier.py
 backend/tests/unit/test_fair_use_upgrade.py
 backend/tests/unit/test_flush_pending_batch1.py
-backend/tests/unit/test_geocoding_cache.py
 backend/tests/unit/test_gpu_worker_submit_lock.py
 backend/tests/unit/test_l2_promotion_agent_v2.py
 backend/tests/unit/test_llm_gateway_chat_extraction_pilot.py
