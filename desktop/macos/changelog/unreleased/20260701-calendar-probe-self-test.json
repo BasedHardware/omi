@@ -1,0 +1,3 @@
+{
+    "change": "Google Calendar connection checks now preserve specific network failure details and can be verified through the same real connector path the app uses"
+}

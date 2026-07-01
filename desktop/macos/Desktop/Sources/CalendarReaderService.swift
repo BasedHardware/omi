@@ -26,6 +26,20 @@ enum CalendarConnectionStatus: Equatable {
   }
 }
 
+struct CalendarFetchParameters: Equatable {
+  let daysBack: Int
+  let daysForward: Int
+  let maxResults: Int
+
+  static func normalized(daysBack: Int, daysForward: Int, maxResults: Int) -> CalendarFetchParameters {
+    CalendarFetchParameters(
+      daysBack: min(max(daysBack, 0), 3650),
+      daysForward: min(max(daysForward, 0), 3650),
+      maxResults: min(max(maxResults, 1), 2500)
+    )
+  }
+}
+
 enum CalendarReaderError: LocalizedError, Equatable {
   case noBrowserFound
   case notSignedIn
@@ -95,13 +109,26 @@ enum CalendarFailureClass: String, Equatable {
   case unknown = "unknown"
 
   var asError: CalendarReaderError {
+    asError(summary: nil)
+  }
+
+  func asError(summary: String?) -> CalendarReaderError {
+    let detail = summary?.trimmingCharacters(in: .whitespacesAndNewlines)
+    func detailOr(_ fallback: String) -> String {
+      guard let detail, !detail.isEmpty else { return fallback }
+      return detail
+    }
+
     switch self {
     case .noBrowser: return .noBrowserFound
     case .notSignedIn: return .notSignedIn
     case .sessionExpired: return .sessionExpired
-    case .decryptFailed: return .cookieDecryptionFailed("browser session could not be decrypted")
-    case .network: return .networkError("please check your connection and try again")
-    case .unknown: return .networkError("unexpected error")
+    case .decryptFailed:
+      return .cookieDecryptionFailed(detailOr("browser session could not be decrypted"))
+    case .network:
+      return .networkError(detailOr("please check your connection and try again"))
+    case .unknown:
+      return .networkError(detailOr("unexpected error"))
     }
   }
 }
@@ -221,8 +248,9 @@ actor CalendarReaderService {
   func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
     -> [CalendarEvent]
   {
-    let events = try fetchCalendarViaCookies(
+    let parameters = CalendarFetchParameters.normalized(
       daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
+    let events = try fetchCalendarViaCookies(parameters: parameters)
     return events.sorted { $0.startTime > $1.startTime }
   }
 
@@ -235,7 +263,8 @@ actor CalendarReaderService {
   /// green result guarantees the whole chain (cookies → auth → API) works.
   func verifyConnection() async -> CalendarConnectionStatus {
     do {
-      _ = try fetchCalendarViaCookies(daysBack: 1, daysForward: 1, maxResults: 1)
+      _ = try fetchCalendarViaCookies(
+        parameters: CalendarFetchParameters.normalized(daysBack: 1, daysForward: 1, maxResults: 1))
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
@@ -454,7 +483,7 @@ actor CalendarReaderService {
 
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
 
-  private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
+  private func fetchCalendarViaCookies(parameters: CalendarFetchParameters) throws
     -> [CalendarEvent]
   {
     // Build browser configs as JSON for Python
@@ -754,7 +783,7 @@ actor CalendarReaderService {
     process.executableURL = URL(fileURLWithPath: pythonPath)
     process.arguments = [
       "-c", pythonScript, configJSON,
-      String(daysBack), String(daysForward), String(maxResults),
+      String(parameters.daysBack), String(parameters.daysForward), String(parameters.maxResults),
     ]
     let pipe = Pipe()
     let errPipe = Pipe()
@@ -829,7 +858,7 @@ actor CalendarReaderService {
       log(
         "CalendarReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
           + "attempts: \(CalendarOutcomeParser.diagnosticsLine(attempts))")
-      throw cls.asError
+      throw cls.asError(summary: summary)
 
     case let .success(eventDicts, browserName):
       log("CalendarReaderService: Got \(eventDicts.count) events from \(browserName)")
