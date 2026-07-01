@@ -186,6 +186,15 @@ pub fn is_google_query(query: &str) -> bool {
     keywords.iter().any(|kw| q.contains(kw))
 }
 
+pub fn is_knowledge_intent(query: &str) -> bool {
+    let q = query.to_lowercase();
+    let keywords = [
+        "search my knowledge", "find in documents", "what do my files say",
+        "knowledge base", "uploaded pdf", "uploaded doc", "in my documents",
+    ];
+    keywords.iter().any(|kw| q.contains(kw))
+}
+
 #[derive(Debug, Clone)]
 pub enum McpResponse {
     Text(String),
