@@ -608,6 +608,62 @@ def delete_person(uid: str, person_id: str):
     person_ref.delete()
 
 
+def get_person_by_handle(uid: str, handle: str):
+    if not handle:
+        return None
+    people_ref = db.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('handles', 'array_contains', handle)).limit(1)
+    docs = list(query.stream())
+    if docs:
+        data = docs[0].to_dict()
+        data.setdefault('id', docs[0].id)
+        return data
+    return None
+
+
+def get_or_create_person_by_handle(uid: str, handle: str, display_name: str):
+    """Idempotently resolve a chat-app contact to a Person.
+
+    Contacts are identified by a normalized handle (e.g. an iMessage phone/email).
+    Resolution order: existing handle → existing person with same display name
+    (merge the handle in) → create a new person. The person id is seeded from the
+    handle so concurrent ingests converge on the same document.
+    """
+    existing = get_person_by_handle(uid, handle)
+    if existing:
+        return existing
+
+    if display_name:
+        by_name = get_person_by_name(uid, display_name)
+        if by_name:
+            handles = list(by_name.get('handles') or [])
+            if handle and handle not in handles:
+                handles.append(handle)
+                person_ref = db.collection('users').document(uid).collection('people').document(by_name['id'])
+                person_ref.update({'handles': handles, 'updated_at': datetime.now(timezone.utc)})
+                by_name['handles'] = handles
+            return by_name
+
+    person_id = document_id_from_seed(f'{uid}:imessage:{handle}')
+    person_data = {
+        'id': person_id,
+        'name': display_name or handle,
+        'handles': [handle] if handle else [],
+        'source': 'imessage',
+        'created_at': datetime.now(timezone.utc),
+        'updated_at': datetime.now(timezone.utc),
+    }
+    return create_person(uid, person_data)
+
+
+def update_person_profile(uid: str, person_id: str, profile_fields: dict):
+    """Merge per-person profile fields (relationship, profile_summary, tone_notes, ...)."""
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    update = dict(profile_fields)
+    update['updated_at'] = datetime.now(timezone.utc)
+    person_ref.update(update)
+
+
 @transactional
 def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
     """Transaction to atomically add sample and transcript."""
