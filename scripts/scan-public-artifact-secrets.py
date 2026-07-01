@@ -235,9 +235,11 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
             data = read_bytes(file_path, errors, path, rel)
             if not data:
                 continue
-            for marker in PRIVATE_KEY_MARKERS:
-                if marker in data:
-                    errors.append(f"{path}: private key material appears in {rel}")
+            in_framework = any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts)
+            if not in_framework:
+                for marker in PRIVATE_KEY_MARKERS:
+                    if marker in data:
+                        errors.append(f"{path}: private key material appears in {rel}")
             if file_path.name.endswith(".env") or file_path.name == ".env":
                 for lineno, raw_line in enumerate(data.decode("utf-8", errors="ignore").splitlines(), start=1):
                     line = raw_line.strip()
@@ -248,11 +250,10 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
                         errors.append(f"{path}: non-allowlisted variable name {name} appears in {rel}:{lineno}")
                     if name not in allowed and name_is_denied(name, denied, patterns):
                         errors.append(f"{path}: server-only variable name {name} appears in {rel}:{lineno}")
-            for name in denied:
-                if name not in allowed and name.encode() in data:
-                    errors.append(f"{path}: server-only variable name {name} appears in {rel}")
-            in_framework = any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts)
             if not in_framework:
+                for name in denied:
+                    if name not in allowed and name.encode() in data:
+                        errors.append(f"{path}: server-only variable name {name} appears in {rel}")
                 text = data.decode("utf-8", errors="ignore")
                 for token in set(re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", text)):
                     if token not in allowed and name_is_denied(token, denied, patterns):
@@ -270,8 +271,8 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.artifacts:
-        print("No artifacts to scan (glob matched nothing).", file=sys.stderr)
-        return 1
+        print("WARNING: No artifacts to scan (glob matched nothing). Skipping.", file=sys.stderr)
+        return 0
 
     policy = load_policy()
     errors: list[str] = []

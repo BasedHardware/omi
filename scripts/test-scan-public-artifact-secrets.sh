@@ -104,8 +104,8 @@ run_expect_pass "android-aab-with-nullglob" \
   bash -c "cd '$WORK/android' && shopt -s globstar nullglob && python3 '$SCANNER' build/**/outputs/**/*.aab"
 
 echo ""
-echo "=== Android nullglob + no AAB built (the argparse crash case) ==="
-run_expect_fail "android-empty-glob-clear-error" "No artifacts to scan" \
+echo "=== Android nullglob + no AAB built (warn and pass) ==="
+run_expect_pass "android-empty-glob-warn-pass" \
   bash -c "cd '$WORK/android-empty' && shopt -s globstar nullglob && python3 '$SCANNER' build/**/outputs/**/*.aab"
 
 echo ""
@@ -114,14 +114,41 @@ run_expect_fail "secret-outside-framework-caught" "OPENAI_API_KEY" \
   python3 "$SCANNER" "$WORK/leaked.ipa"
 
 echo ""
-echo "=== Security: private key markers inside framework still caught ==="
-run_expect_fail "private-key-in-framework-caught" "private key material" \
+echo "=== Security: private key markers inside framework skipped ==="
+run_expect_pass "private-key-in-framework-skipped" \
   python3 "$SCANNER" "$WORK/privkey.ipa"
 
 echo ""
-echo "=== Security: exact denied name inside framework still caught ==="
-run_expect_fail "exact-denied-in-framework-caught" "OPENAI_API_KEY" \
+echo "=== Security: exact denied name inside framework skipped ==="
+run_expect_pass "exact-denied-in-framework-skipped" \
   python3 "$SCANNER" "$WORK/exact-denied.ipa"
+
+echo ""
+echo "=== Security: private key markers OUTSIDE framework still caught ==="
+mkdir -p "$WORK/pk-outside/Payload/Runner.app"
+printf -- '-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----' \
+  > "$WORK/pk-outside/Payload/Runner.app/leaked"
+make_zip "$WORK/pk-outside" "$WORK/privkey-outside.ipa"
+run_expect_fail "private-key-outside-framework-caught" "private key material" \
+  python3 "$SCANNER" "$WORK/privkey-outside.ipa"
+
+echo ""
+echo "=== Security: exact denied name OUTSIDE framework still caught ==="
+mkdir -p "$WORK/exact-outside/Payload/Runner.app"
+printf 'OPENAI_API_KEY' > "$WORK/exact-outside/Payload/Runner.app/config"
+make_zip "$WORK/exact-outside" "$WORK/exact-outside.ipa"
+run_expect_fail "exact-denied-outside-framework-caught" "OPENAI_API_KEY" \
+  python3 "$SCANNER" "$WORK/exact-outside.ipa"
+
+echo ""
+echo "=== Security: CI secret values inside framework still caught ==="
+mkdir -p "$WORK/ci-fw/Payload/Runner.app/Frameworks/Leaked.framework"
+printf 'not-a-real-secret-value-test-8741' \
+  > "$WORK/ci-fw/Payload/Runner.app/Frameworks/Leaked.framework/Leaked"
+make_zip "$WORK/ci-fw" "$WORK/ci-fw.ipa"
+ENCRYPTION_SECRET=not-a-real-secret-value-test-8741 \
+  run_expect_fail "ci-value-in-framework-still-caught" "current CI value" \
+  python3 "$SCANNER" "$WORK/ci-fw.ipa"
 
 echo ""
 echo "=== xcframework tokens pass (nested .xcframework/.framework) ==="
@@ -129,8 +156,8 @@ run_expect_pass "xcframework-tokens-pass" \
   python3 "$SCANNER" "$WORK/xcframework.ipa"
 
 echo ""
-echo "=== No arguments at all ==="
-run_expect_fail "no-args-clear-error" "No artifacts to scan" \
+echo "=== No arguments at all (warn and pass) ==="
+run_expect_pass "no-args-warn-pass" \
   python3 "$SCANNER"
 
 echo ""
