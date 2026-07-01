@@ -85,4 +85,29 @@ describe('observability redaction', () => {
     expect(encoded).not.toContain('private-body')
     expect(payload.message).toContain('Authorization: Bearer [Filtered]')
   })
+
+  it('redacts multi-word inline content values', () => {
+    const text =
+      'request failed: response_text=hello world with private words, transcript="User said something private"'
+
+    const redacted = redactStringForObservability(text)
+
+    expect(redacted).not.toContain('hello world')
+    expect(redacted).not.toContain('User said something private')
+    expect(redacted).toContain('response_text=[Filtered content]')
+    expect(redacted).toContain('transcript="[Filtered content]"')
+  })
+
+  it('guards cyclic Error causes', () => {
+    const first = new Error('first')
+    const second = new Error('second')
+    ;(first as Error & { cause?: unknown }).cause = second
+    ;(second as Error & { cause?: unknown }).cause = first
+
+    const payload = errorToObservabilityPayload(first)
+    const encoded = JSON.stringify(payload)
+
+    expect(encoded).toContain('[Circular]')
+    expect(payload.cause).toBeDefined()
+  })
 })
