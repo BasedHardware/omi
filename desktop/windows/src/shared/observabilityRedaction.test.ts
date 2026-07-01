@@ -110,4 +110,16 @@ describe('observability redaction', () => {
     expect(encoded).toContain('[Circular]')
     expect(payload.cause).toBeDefined()
   })
+
+  it('serializes repeated Error references without labeling siblings circular', () => {
+    const error = new Error('shared failure')
+
+    const payload = sanitizeObservabilityValue({ primary: error, secondary: error }) as Record<
+      string,
+      Record<string, unknown>
+    >
+
+    expect(payload.primary.message).toBe('shared failure')
+    expect(payload.secondary.message).toBe('shared failure')
+  })
 })
