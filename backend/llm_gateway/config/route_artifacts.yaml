@@ -1,6 +1,6 @@
 route_artifacts:
   - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:c4c393fc3e915b2ecc41d4ef4cce5abd30c6439076814f55e29578eab6232e31
+    artifact_digest: sha256:33d1dd522069f9a343dcafd0c86ac9847166609630b1595d2c9d3cd5c3753bca
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     primary:
@@ -56,7 +56,7 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:1d46ec82568f2d523da23e1df4b0956cfe876cc6ece9d05dbfb7e0edc7eda74b
+    artifact_digest: sha256:16698e8bd9c456bf0e4effc13dbb515f62615a5509d9269c306164c915fbf07f
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     # LKG primary must match the legacy `chat_extraction` model (gpt-4.1-mini) so
@@ -164,7 +164,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:9ffa51e797f342a72a927a5e4a08bc8a128e7b47914965fb48c7a21e328bb845
+    artifact_digest: sha256:be8d2f093508b1af7347ecb4662a07f54b1e2c7c2de60215dcaf6632d3e4cffb
   - route_artifact_id: route.daily_summary.2026_07_01.001
     lane_id: omi:auto:daily-summary
     surface: openai.chat_completions
@@ -217,7 +217,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:d38d583c27788bed44fba4e777be6cf984e0afc26f3899153757b6ba60bc61b3
+    artifact_digest: sha256:d21a8f23775108af6ede4867160dbd14f57f5aa3e9bebe751ce4d23a9959cb79
   - route_artifact_id: route.memories_extraction.2026_07_01.001
     lane_id: omi:auto:memories-extraction
     surface: openai.chat_completions
@@ -270,7 +270,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:4cf68098f5f76ee76ae0c54dcf5d38544dd0a96c827072c28ac500f7e7c29924
+    artifact_digest: sha256:ca6bd969e045a97716da064d46ecb8a23a1d768745937235809b81a2a360b92d
   - route_artifact_id: route.memory_graph.2026_07_01.001
     lane_id: omi:auto:memory-graph
     surface: openai.chat_completions
@@ -323,7 +323,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:98513a22ab0207022d734acb84e0a112fea440ccb995627dfb46645370786901
+    artifact_digest: sha256:36d4d5245641cb6634824603a3d8b71b078f4f10271babaf322c0d7a1f1d69bb
   - route_artifact_id: route.conv_action_items.2026_07_01.001
     lane_id: omi:auto:conv-action-items
     surface: openai.chat_completions
@@ -376,7 +376,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:ceae186e7ffae6bae10264941596b004d5c90dab426729d4322c214070835acc
+    artifact_digest: sha256:8358b486faddf6e208dbb4d50a9d067ce7136098125605d478dc1a4bb152669c
   - route_artifact_id: route.conv_structure.2026_07_01.001
     lane_id: omi:auto:conv-structure
     surface: openai.chat_completions
@@ -429,7 +429,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:ab80dc3fbc00c4d9a8909206950b2cb0b7f8cfcb20bb6f11bbf0863e4944b280
+    artifact_digest: sha256:1c647e0494145fdbb142fa68f60076a1f5dcbbc96c7c9a6b9f9a24a42840b8f7
   - route_artifact_id: route.general_assistant.2026_07_01.001
     lane_id: omi:auto:general-assistant
     surface: openai.chat_completions
@@ -482,7 +482,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:d60aa6dcc1c4b90e879373009ee45492a7eb5a0014ce1629163e9154a4b378a1
+    artifact_digest: sha256:40dbf874765810695327e13b576d4e1aaa46bca2952a22fc6fb1e34949102827
   - route_artifact_id: route.reasoning.2026_07_01.001
     lane_id: omi:auto:reasoning
     surface: openai.chat_completions
@@ -535,7 +535,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:ca8a7ceed1ea4048c0a762c7fdb0c6a6a22058b3c96988e0c43388fe08e02c40
+    artifact_digest: sha256:f0705307570a2f8f748f49ad5daf3523349257780e08b7f548230d5ec4dc3b74
   - route_artifact_id: route.stt_realtime.2026_07_01.001
     lane_id: omi:auto:stt-realtime
     surface: openai.chat_completions
@@ -556,7 +556,8 @@ route_artifacts:
       benchmark_snapshot: bench.omi.stt_realtime.2026_07_01
       eval_report: eval.stt_realtime.v1
       benchmark_source: omi_eval
-      dev_only: true
+      dev_only: false
+      placeholder: true
     rollout:
       stage: shadow
       percent: 0
@@ -588,7 +589,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:9723d514993ff8c2dea12868fb5c894129157af164c6fd56fa3322448cb9c6f2
+    artifact_digest: sha256:3e18f3defb653f66a8b53891ba62eb65cd209055bc5186969539eb38804a245c
   - route_artifact_id: route.transcription.2026_07_01.001
     lane_id: omi:auto:transcription
     surface: openai.chat_completions
@@ -609,7 +610,8 @@ route_artifacts:
       benchmark_snapshot: bench.omi.transcription.2026_07_01
       eval_report: eval.transcription.v1
       benchmark_source: omi_eval
-      dev_only: true
+      dev_only: false
+      placeholder: true
     rollout:
       stage: shadow
       percent: 0
@@ -641,7 +643,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:9fbb5b1f61a53d6aeaa72ee4a1f8bb0cfaf1194bb6f3d6e5dc64803e082acb01
+    artifact_digest: sha256:04437dc6c9471925959ccd127fc7701f5eff0f4056b3b1424fe4ef3eaa747a27
   - route_artifact_id: route.screenshot_understanding.2026_07_01.001
     lane_id: omi:auto:screenshot-understanding
     surface: openai.chat_completions
@@ -694,7 +696,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:5cf21d14ef658ab11e82a8d374c4f59b6f20e8de68874cbd6b02e61441c1421c
+    artifact_digest: sha256:80a2e7d287a92cc780f8aea58314a562a34dca0868a909a6967c00bc05bb1fb3
   - route_artifact_id: route.screenshot_embedding.2026_07_01.001
     lane_id: omi:auto:screenshot-embedding
     surface: openai.chat_completions
@@ -715,7 +717,8 @@ route_artifacts:
       benchmark_snapshot: bench.omi.screenshot_embedding.2026_07_01
       eval_report: eval.screenshot_embedding.v1
       benchmark_source: omi_eval
-      dev_only: true
+      dev_only: false
+      placeholder: true
     rollout:
       stage: shadow
       percent: 0
@@ -747,7 +750,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:7567fe06367cdc09f768feb274c0208520471f5b764bbb93e1a0ba9a184ead6b
+    artifact_digest: sha256:9c98b53d1fa0bcc9a3d0a7d4276c7fb7e6a8a783b3de7fd6980b9a536ef736bd
   - route_artifact_id: route.realtime_ptt.2026_07_01.001
     lane_id: omi:auto:realtime-ptt
     surface: openai.chat_completions
@@ -800,7 +803,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:8296a9cefa387f304c9652a7eb9b763587de132582b1052910774203556e69bb
+    artifact_digest: sha256:372c9ef1b0d57fa370faa7a571525a5810f5be45cecde58c45c400540ce8307a
   - route_artifact_id: route.persona_chat.2026_07_01.001
     lane_id: omi:auto:persona-chat
     surface: openai.chat_completions
@@ -853,7 +856,7 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:c6fa711b349f3b4f18bf74aa087b2fe2115f41008de34c26f0c4399d756bb3c3
+    artifact_digest: sha256:57a4b71fc3e9d300a614d8a4d86be43d167e7603adb83403bcac7313c4a8a1d5
   - route_artifact_id: route.notification_classifier.2026_07_01.001
     lane_id: omi:auto:notification-classifier
     surface: openai.chat_completions
@@ -906,5 +909,5 @@ route_artifacts:
       - missing_byok_key
       - capability_mismatch
       - invalid_config
-    artifact_digest: sha256:c2d54291023d04bb10bab2b7eef48c48d58335756987c20956ece7cbe7be92d5
+    artifact_digest: sha256:506e4a0c6f3d9423058ed09f72c3d57de7bafb6bbac148ab383f5ef8fe6e9b92
 

@@ -162,45 +162,40 @@ def test_mock_benchmark_evidence_rejected_in_prod_mode(tmp_path):
         load_gateway_config(tmp_path, prod_mode=True)
 
 
-def test_r0_placeholder_artifacts_rejected_in_prod_mode():
+def test_r0_placeholder_artifacts_load_in_all_modes():
     """R0 ships 3 placeholder artifacts (stt-realtime, transcription,
-    screenshot-embedding) marked dev_only: true. They load fine in dev/staging
-    (prod_mode=False, the default) but are correctly rejected in production
-    (prod_mode=True). This is the structural signal that future promotion
-    logic (R1 emitter, R4 cron) reads to know these lanes still need real
-    artifacts from R3 before they can ship to prod.
+    screenshot-embedding) that are PROD-ELIGIBLE — they load in any prod_mode
+    so the day-one shadow-mode contract holds (config loads in production,
+    even though no traffic actually flows because rollout.percent=0).
+
+    The "placeholder" marker is via `evidence.placeholder=True`, NOT via
+    `dev_only=True`. Future promotion logic (R1 emitter, R4 cron) reads the
+    `placeholder` field separately to know these need replacement before
+    being promoted to active. See cubic P1 review on PR #8739.
     """
-    with pytest.raises(ConfigValidationError, match='dev-only benchmark evidence') as exc_info:
-        load_gateway_config(prod_mode=True)
-    # The loader fails fast on the first dev_only artifact. Verify at least
-    # one placeholder is named in the error message; the rest are checked
-    # separately in test_r0_non_placeholder_artifacts_remain_prod_eligible.
-    msg = str(exc_info.value)
-    assert 'route.stt_realtime.2026_07_01.001' in msg
-
-
-def test_r0_placeholder_artifacts_load_in_dev_mode():
-    """Companion to test_r0_placeholder_artifacts_rejected_in_prod_mode:
-    placeholders load fine in dev/staging (prod_mode=False)."""
-    cfg = load_gateway_config(prod_mode=False)
-    # All 17 artifacts (14 real + 3 placeholders) are in the config
-    assert len(cfg.route_artifacts) == 17
-    # The 3 placeholders are present and have dev_only: true
+    cfg_dev = load_gateway_config(prod_mode=False)
+    cfg_prod = load_gateway_config(prod_mode=True)
+    assert len(cfg_dev.route_artifacts) == 17
+    assert len(cfg_prod.route_artifacts) == 17  # All 17 load in production too
     placeholder_ids = {
         'route.stt_realtime.2026_07_01.001',
         'route.transcription.2026_07_01.001',
         'route.screenshot_embedding.2026_07_01.001',
     }
     for rid in placeholder_ids:
-        assert rid in cfg.route_artifacts
-        assert cfg.route_artifacts[rid].evidence.dev_only is True
+        assert rid in cfg_prod.route_artifacts, f'placeholder {rid} should load in prod_mode=True (day-one invariant)'
+        assert cfg_prod.route_artifacts[rid].evidence.placeholder is True
+        assert cfg_prod.route_artifacts[rid].evidence.is_prod_eligible() is True
 
 
-def test_r0_non_placeholder_artifacts_remain_prod_eligible():
-    """Sanity check: only the 3 placeholders are dev_only; the other 14 R0
-    artifacts + 2 existing chat-structured artifacts are all prod-eligible
-    (Evidence.is_prod_eligible() returns True)."""
-    cfg = load_gateway_config(prod_mode=False)
+def test_r0_placeholder_field_distinguishes_placeholders_from_real_artifacts():
+    """Sanity check: the 3 placeholders carry placeholder=True; the other 14
+    R0 artifacts + 2 existing chat-structured artifacts carry placeholder=False.
+
+    This is the structural signal future promotion logic reads (NOT is_prod_eligible)
+    to know which artifacts to replace vs preserve.
+    """
+    cfg = load_gateway_config(prod_mode=True)
     placeholder_route_ids = {
         'route.stt_realtime.2026_07_01.001',
         'route.transcription.2026_07_01.001',
@@ -208,11 +203,13 @@ def test_r0_non_placeholder_artifacts_remain_prod_eligible():
     }
     for rid, artifact in cfg.route_artifacts.items():
         if rid in placeholder_route_ids:
-            assert artifact.evidence.dev_only is True
-            assert not artifact.evidence.is_prod_eligible()
+            assert artifact.evidence.placeholder is True, f'{rid} should be marked placeholder=True'
+            assert (
+                artifact.evidence.is_prod_eligible() is True
+            ), f'{rid} must remain prod-eligible (placeholder ≠ dev_only)'
         else:
-            assert artifact.evidence.dev_only is False
-            assert artifact.evidence.is_prod_eligible()
+            assert artifact.evidence.placeholder is False, f'{rid} should default to placeholder=False'
+            assert artifact.evidence.is_prod_eligible() is True
 
 
 @pytest.mark.parametrize(
