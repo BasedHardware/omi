@@ -253,7 +253,7 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(workflow_contract_tests_for_path(path, all_tests))
 
     for path in changed_paths:
-        if is_full_run_path(path) and not workflow_contract_tests_for_path(path, all_tests):
+        if is_full_run_path(path):
             return all_tests, f'{path} requires the full backend unit suite'
 
     for path in test_paths:

@@ -543,8 +543,10 @@ def test_conversation_discard_gateway_failure_falls_back_to_legacy_llm(monkeypat
     assert conversation_processing.should_discard_conversation('hello there', duration_seconds=15) is False
 
 
-def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
+def test_action_items_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch, caplog):
     captured = {}
+    counter = FakeCounter()
+    call_order = []
 
     class FakeParser:
         def __init__(self, pydantic_object):
@@ -563,18 +565,121 @@ def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
 
         def invoke(self, values):
             assert 'submit report by Friday' in values['conversation_context']
-            return conversation_processing.ActionItemsExtraction(action_items=[])
+            call_order.append('legacy')
+            return conversation_processing.ActionItemsExtraction(
+                action_items=[
+                    {'description': 'Submit report', 'due_at': datetime(2026, 7, 3, 17, 0, tzinfo=timezone.utc)}
+                ]
+            )
 
     def fake_gateway(prompt, output_model, *, feature, timeout_seconds):
+        call_order.append('gateway')
         captured.update(
             {'prompt': prompt, 'output_model': output_model, 'feature': feature, 'timeout_seconds': timeout_seconds}
         )
-        return output_model(action_items=[])
+        return output_model(action_items=[{'description': 'Submit the report', 'due_at': datetime(2026, 7, 3, 17, 0)}])
 
+    class ImmediateFuture:
+        def result(self):
+            return None
+
+        def add_done_callback(self, callback):
+            callback(self)
+
+    def immediate_submit(fn, *args):
+        fn(*args)
+        return ImmediateFuture()
+
+    monkeypatch.setenv(conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV, 'true')
+    monkeypatch.setenv(conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV, '1.0')
     monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
     monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', immediate_submit)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS', counter)
+
+    with caplog.at_level(logging.INFO, logger='utils.llm.gateway_observability'):
+        result = conversation_processing.extract_action_items(
+            'submit report by Friday',
+            datetime(2026, 7, 1, tzinfo=timezone.utc),
+            'en',
+            'UTC',
+        )
+
+    assert [item.description for item in result] == ['Submit report']
+    assert call_order == ['legacy', 'gateway']
+    assert captured['output_model'] is conversation_processing.ActionItemsExtraction
+    assert captured['feature'] == conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE
+    assert captured['timeout_seconds'] == gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
+    assert 'submit report by Friday' in captured['prompt']
+    assert '{started_at_local}' not in captured['prompt']
+    assert '{current_time_local}' not in captured['prompt']
+    assert '{format_instructions}' not in captured['prompt']
+    assert 'return structured output' in captured['prompt']
+    comparison_labels = [labels for labels, _amount in counter.calls]
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'count',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'description_similarity',
+        'outcome': 'all_high_similarity',
+    } in comparison_labels
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'due_at_presence',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'due_at_value',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert 'llm_gateway_backend_event kind=shadow_comparison' in caplog.text
+    assert 'feature=conversation_action_items.extract.shadow' in caplog.text
+    assert 'Submit report' not in caplog.text
+    assert 'Submit the report' not in caplog.text
+
+
+def test_action_items_gateway_shadow_disabled_skips_submit(monkeypatch):
+    captured = {'gateway_called': False, 'submitted': False}
+    counter = FakeCounter()
+
+    class FakeParser:
+        def __init__(self, pydantic_object):
+            self.pydantic_object = pydantic_object
+
+        def get_format_instructions(self):
+            return 'return structured output'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            return conversation_processing.ActionItemsExtraction(action_items=[])
+
+    def fake_gateway(*args, **kwargs):
+        captured['gateway_called'] = True
+        return None
+
+    def fake_submit(*args, **kwargs):
+        captured['submitted'] = True
+
+    monkeypatch.delenv(conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', fake_submit)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
 
     result = conversation_processing.extract_action_items(
         'submit report by Friday',
@@ -584,10 +689,15 @@ def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
     )
 
     assert result == []
-    assert captured['output_model'] is conversation_processing.ActionItemsExtraction
-    assert captured['feature'] == 'conversation_action_items.extract.shadow'
-    assert captured['timeout_seconds'] == gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
-    assert 'submit report by Friday' in captured['prompt']
+    assert captured == {'gateway_called': False, 'submitted': False}
+    assert (
+        {
+            'feature': 'conversation_action_items.extract.shadow',
+            'outcome': 'skipped',
+            'reason': 'disabled',
+        },
+        1,
+    ) in counter.calls
 
 
 def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch, caplog):

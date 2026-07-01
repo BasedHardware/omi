@@ -12,7 +12,7 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
     """Sum current-month chat usage from `users/{uid}/llm_usage/{YYYY-MM-DD}` docs.
 
     Returns keys:
-      - questions: total user-initiated chat calls (desktop_chat* + backend `chat.*`)
+      - questions: total user-initiated chat calls (desktop/backend quota counters + legacy backend `chat.*`)
       - cost_usd:  total desktop_chat* cost_usd (backend GPT/Gemini chat has no cost field)
       - reset_at:  unix seconds of the start of next UTC month (when the bucket resets)
 
@@ -32,27 +32,46 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
         if not snap.exists:
             continue
         data = snap.to_dict() or {}
+        has_desktop_realtime_quota_questions = 'desktop_chat_realtime.quota_questions' in data or (
+            isinstance(data.get('desktop_chat_realtime'), dict) and 'quota_questions' in data['desktop_chat_realtime']
+        )
+        has_backend_quota_questions = any(
+            (key == 'backend_chat' and isinstance(value, dict) and 'quota_questions' in value)
+            or (key == 'backend_chat.quota_questions')
+            for key, value in data.items()
+        )
         for key, value in data.items():
             # The Rust desktop-backend commits desktop_chat usage via dotted Firestore
-            # fieldPaths (e.g. "desktop_chat.call_count"), which Firestore materializes
-            # as a NESTED map ({desktop_chat: {call_count, cost_usd, ...}}) — not the flat
-            # dotted string keys the Python backend writes. Read the grand-total
-            # `desktop_chat` map here; the `desktop_chat_*` prefixed maps (per-account /
-            # realtime breakdowns) are already summed into it, so don't double-count them.
+            # fieldPaths, which Firestore materializes as a NESTED map. Keep
+            # `call_count` as internal generation telemetry; quota enforcement uses
+            # `quota_questions`, incremented once per visible desktop user turn.
             if isinstance(value, dict):
                 if key == 'desktop_chat':
-                    questions += int(value.get('call_count', 0) or 0)
+                    questions += int(value.get('quota_questions', 0) or 0)
                     cost_usd += float(value.get('cost_usd', 0) or 0)
+                elif key == 'desktop_chat_realtime' and not has_desktop_realtime_quota_questions:
+                    # Rollout bridge: old managed realtime turns only wrote
+                    # call_count. New realtime writes both the grand-total
+                    # desktop_chat.quota_questions counter and this breakdown's
+                    # quota_questions, so only fall back when the breakdown is absent.
+                    questions += int(value.get('call_count', 0) or 0)
+                elif key == 'backend_chat':
+                    questions += int(value.get('quota_questions', 0) or 0)
                 continue
             if not isinstance(value, (int, float)):
                 continue
             if key.startswith('desktop_chat'):
-                if key.endswith('.call_count'):
+                if key == 'desktop_chat.quota_questions':
+                    questions += int(value)
+                elif key == 'desktop_chat_realtime.call_count' and not has_desktop_realtime_quota_questions:
                     questions += int(value)
                 elif key.endswith('.cost_usd'):
                     cost_usd += float(value)
-            elif key.startswith('chat.') and key.endswith('.call_count'):
-                # user-initiated backend chat (any model)
+            elif key == 'backend_chat.quota_questions':
+                questions += int(value)
+            elif key.startswith('chat.') and key.endswith('.call_count') and not has_backend_quota_questions:
+                # Legacy user-initiated backend chat (any model). New writes use
+                # backend_chat.quota_questions so LLM telemetry no longer drives quota.
                 questions += int(value)
 
     # Compute end-of-month boundary in UTC for the reset timestamp.

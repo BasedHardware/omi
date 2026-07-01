@@ -219,3 +219,4 @@ def test_enumeration_failure_blocks_firestore_wipe():
     m['delete_all_conversation_recordings'].assert_called_once_with('uid1')
     m['delete_user_data'].assert_not_called()
     m['mark_user_deletion_wipe_failed'].assert_called_with('uid1')
+    m['mark_user_deletion_wipe_completed'].assert_not_called()

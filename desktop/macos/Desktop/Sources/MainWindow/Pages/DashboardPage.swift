@@ -569,11 +569,11 @@ struct DashboardPage: View {
     private var destinationStack: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Connect your AI")
+                Text("Use omi memory anywhere")
                     .font(.system(size: 22, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
-                Text("Use Omi memory where you already work.")
+                Text("Bring your memories and tasks into the apps you already use")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)

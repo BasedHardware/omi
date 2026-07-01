@@ -26,26 +26,26 @@ YAML
 }
 
 write_flow "$TMPDIR/future.yaml" 3
-if "$HARNESS" run "$TMPDIR/future.yaml" --out "$TMPDIR/runs" >/tmp/omi-harness-future.out 2>/tmp/omi-harness-future.err; then
+if "$HARNESS" run "$TMPDIR/future.yaml" --out "$TMPDIR/runs" >"$TMPDIR/future.out" 2>"$TMPDIR/future.err"; then
   fail "future schema unexpectedly succeeded"
 fi
-if ! grep -q "newer than supported version 2" /tmp/omi-harness-future.err; then
+if ! grep -q "newer than supported version 2" "$TMPDIR/future.err"; then
   fail "future schema error did not mention supported version"
 fi
 
 write_flow "$TMPDIR/legacy.yaml" 1
-if "$HARNESS" run "$TMPDIR/legacy.yaml" --out "$TMPDIR/runs" >/tmp/omi-harness-legacy.out 2>/tmp/omi-harness-legacy.err; then
+if "$HARNESS" run "$TMPDIR/legacy.yaml" --out "$TMPDIR/runs" >"$TMPDIR/legacy.out" 2>"$TMPDIR/legacy.err"; then
   fail "legacy schema unexpectedly succeeded without explicit compatibility"
 fi
-if ! grep -q "requires explicit compatibility" /tmp/omi-harness-legacy.err; then
+if ! grep -q "requires explicit compatibility" "$TMPDIR/legacy.err"; then
   fail "legacy schema error did not mention explicit compatibility"
 fi
 
 if "$HARNESS" run "$TMPDIR/legacy.yaml" --allow-legacy-flow-version --out "$TMPDIR/runs" \
-    --port 9 >/tmp/omi-harness-legacy-opt-in.out 2>/tmp/omi-harness-legacy-opt-in.err; then
+    --port 9 >"$TMPDIR/legacy-opt-in.out" 2>"$TMPDIR/legacy-opt-in.err"; then
   fail "legacy opt-in unexpectedly passed against closed bridge port"
 fi
-if grep -q "requires explicit compatibility" /tmp/omi-harness-legacy-opt-in.err; then
+if grep -q "requires explicit compatibility" "$TMPDIR/legacy-opt-in.err"; then
   fail "legacy opt-in was still rejected by schema compatibility gate"
 fi
 

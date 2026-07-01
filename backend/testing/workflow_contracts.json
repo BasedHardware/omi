@@ -30,16 +30,6 @@
           "reason": "Existing promotion apply contract; covered by short-term promotion contract tests until migrated."
         },
         {
-          "path": "backend/utils/memory/short_term_promotion.py",
-          "function": "promote_working_item_to_long_term",
-          "reason": "Existing promotion contract; covered by short-term promotion contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/product_authorization.py",
-          "function": "resolve_product_memory_authorization",
-          "reason": "Existing authorization contract; migrate separately."
-        },
-        {
           "path": "backend/utils/memory_ingestion/pipeline.py",
           "function": "_redact_input",
           "reason": "Existing pipeline stage contract; covered by memory ingestion contract tests until migrated."

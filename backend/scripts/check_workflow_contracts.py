@@ -12,6 +12,7 @@ from typing import Any
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
 CONTRACTS_PATH = BACKEND_DIR / "testing" / "workflow_contracts.json"
+CONTRACTS_REL_PATH = "backend/testing/workflow_contracts.json"
 
 
 def load_contracts() -> dict[str, Any]:
@@ -29,11 +30,20 @@ def path_matches(path: str, pattern: str) -> bool:
     return PurePosixPath(path).match(pattern)
 
 
-def workflow_sources(contracts: dict[str, Any], changed_paths: list[str] | None = None) -> set[str]:
+def workflow_sources(
+    contracts: dict[str, Any],
+    changed_paths: list[str] | None = None,
+    *,
+    check_name: str | None = None,
+) -> set[str]:
     changed = [normalize_path(path) for path in changed_paths or [] if normalize_path(path)]
+    if changed and any(path_matches(path, CONTRACTS_REL_PATH) for path in changed):
+        changed = []
     sources: set[str] = set()
     for workflow in contracts.get("workflows", []):
         if workflow.get("risk") != "high":
+            continue
+        if check_name and check_name not in (workflow.get("checks") or []):
             continue
         patterns = workflow.get("sources", [])
         if changed and not any(any(path_matches(path, pattern) for pattern in patterns) for path in changed):
@@ -65,7 +75,7 @@ def check_no_large_tuple_results(contracts: dict[str, Any], changed_paths: list[
         for entry in contracts.get("checks", {}).get("no_large_tuple_results", {}).get("allowlist", [])
     }
     errors: list[str] = []
-    for rel_path in sorted(workflow_sources(contracts, changed_paths)):
+    for rel_path in sorted(workflow_sources(contracts, changed_paths, check_name="no_large_tuple_results")):
         source_path = REPO_DIR / rel_path
         try:
             tree = ast.parse(source_path.read_text())
