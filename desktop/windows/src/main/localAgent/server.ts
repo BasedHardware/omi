@@ -13,6 +13,7 @@ import {
 const LOCAL_AGENT_HOST = '127.0.0.1'
 const LOCAL_AGENT_APP_ID = 'com.omiwindows.app'
 const MAX_PORT_ATTEMPTS = 20
+const MAX_REQUEST_BODY_BYTES = 1_048_576
 
 export type LocalAgentServerInfo = {
   host: typeof LOCAL_AGENT_HOST
@@ -36,6 +37,17 @@ type LocalAgentServerOptions = {
 
 let runningServer: Server | null = null
 let runningInfo: LocalAgentServerInfo | null = null
+let startupPromise: Promise<LocalAgentServerInfo> | null = null
+
+class RequestBodyTooLargeError extends Error {
+  readonly code = 'request_body_too_large'
+  readonly status = 413
+
+  constructor() {
+    super(`request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`)
+    this.name = 'RequestBodyTooLargeError'
+  }
+}
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body)
@@ -49,9 +61,32 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', (chunk: Buffer) => chunks.push(chunk))
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
-    req.on('error', reject)
+    let total = 0
+    let settled = false
+
+    const fail = (error: Error): void => {
+      if (settled) return
+      settled = true
+      chunks.length = 0
+      reject(error)
+    }
+
+    req.on('data', (chunk: Buffer) => {
+      if (settled) return
+      total += chunk.length
+      if (total > MAX_REQUEST_BODY_BYTES) {
+        fail(new RequestBodyTooLargeError())
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      if (!settled) {
+        settled = true
+        resolve(Buffer.concat(chunks).toString('utf8'))
+      }
+    })
+    req.on('error', (error) => fail(error))
   })
 }
 
@@ -108,7 +143,16 @@ function route(
   appInfo: AppMetadata
 ): void {
   const method = req.method ?? 'GET'
-  const url = new URL(req.url ?? '/', info.localUrl)
+  let url: URL
+  try {
+    url = new URL(req.url ?? '/', info.localUrl)
+  } catch {
+    json(res, 400, {
+      ok: false,
+      error: { code: 'invalid_request_target', message: 'invalid_request_target' }
+    })
+    return
+  }
 
   if (method === 'GET' && url.pathname === '/health') {
     json(res, 200, {
@@ -167,7 +211,18 @@ function route(
             json(res, status, body)
           }
         })
-        .catch(() => {
+        .catch((error) => {
+          if (error instanceof RequestBodyTooLargeError) {
+            json(res, error.status, {
+              ok: false,
+              error: {
+                code: error.code,
+                message: error.message,
+                max_bytes: MAX_REQUEST_BODY_BYTES
+              }
+            })
+            return
+          }
           json(res, 400, {
             ok: false,
             error: { code: 'invalid_request_body', message: 'invalid_request_body' }
@@ -207,6 +262,18 @@ function closeServer(server: Server): Promise<void> {
 
 export async function startLocalAgentServer(
   options: LocalAgentServerOptions = {}
+): Promise<LocalAgentServerInfo> {
+  if (runningInfo) return runningInfo
+  if (startupPromise) return startupPromise
+
+  startupPromise = startLocalAgentServerInner(options).finally(() => {
+    startupPromise = null
+  })
+  return startupPromise
+}
+
+async function startLocalAgentServerInner(
+  options: LocalAgentServerOptions
 ): Promise<LocalAgentServerInfo> {
   if (runningInfo) return runningInfo
 
@@ -252,6 +319,9 @@ export function getLocalAgentServerInfo(): LocalAgentServerInfo | null {
 }
 
 export async function stopLocalAgentServer(): Promise<void> {
+  if (startupPromise) {
+    await startupPromise.catch(() => undefined)
+  }
   const server = runningServer
   runningServer = null
   runningInfo = null
