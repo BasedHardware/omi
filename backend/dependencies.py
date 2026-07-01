@@ -49,14 +49,15 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
+    user_id = user_data["user_id"]
     check_api_key_rate_limit(
         prefix="mcp",
-        uid=user_data["user_id"],
+        uid=user_id,
         app_id=user_data.get("app_id"),
         key_id=user_data.get("key_id"),
         policy_name="mcp:read",
     )
-    return user_data["user_id"]
+    return user_id
 
 
 async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiKeyAuth":
@@ -122,6 +123,13 @@ async def get_mcp_memory_default_memory_write_context(
         raise HTTPException(status_code=403, detail="Insufficient permissions. Required scope: memories.write")
     if not auth.app_id or not auth.key_id:
         raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for memory memory authorization")
+    check_api_key_rate_limit(
+        prefix="mcp",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="mcp:memories_write",
+    )
     return build_mcp_default_memory_write_context(
         McpVerifiedAuth(
             uid=auth.uid,
@@ -192,8 +200,8 @@ async def get_auth_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_ke
 
 
 async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_conversations_read(auth)
-    return auth_data.uid
+    await get_auth_with_conversations_read(auth)
+    return auth.uid
 
 
 async def get_auth_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
@@ -212,8 +220,8 @@ async def get_auth_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_k
 
 
 async def get_uid_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_conversations_write(auth)
-    return auth_data.uid
+    await get_auth_with_conversations_write(auth)
+    return auth.uid
 
 
 async def get_auth_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
@@ -230,8 +238,8 @@ async def get_auth_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_aut
 
 
 async def get_uid_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_memories_read(auth)
-    return auth_data.uid
+    await get_auth_with_memories_read(auth)
+    return auth.uid
 
 
 async def get_auth_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
@@ -250,8 +258,8 @@ async def get_auth_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_au
 
 
 async def get_uid_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_memories_write(auth)
-    return auth_data.uid
+    await get_auth_with_memories_write(auth)
+    return auth.uid
 
 
 async def get_auth_with_action_items_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
@@ -270,8 +278,8 @@ async def get_auth_with_action_items_read(auth: ApiKeyAuth = Depends(get_api_key
 
 
 async def get_uid_with_action_items_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_action_items_read(auth)
-    return auth_data.uid
+    await get_auth_with_action_items_read(auth)
+    return auth.uid
 
 
 async def get_auth_with_action_items_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
@@ -290,8 +298,8 @@ async def get_auth_with_action_items_write(auth: ApiKeyAuth = Depends(get_api_ke
 
 
 async def get_uid_with_action_items_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_action_items_write(auth)
-    return auth_data.uid
+    await get_auth_with_action_items_write(auth)
+    return auth.uid
 
 
 async def get_auth_with_goals_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
@@ -308,8 +316,8 @@ async def get_auth_with_goals_read(auth: ApiKeyAuth = Depends(get_api_key_auth))
 
 
 async def get_uid_with_goals_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_goals_read(auth)
-    return auth_data.uid
+    await get_auth_with_goals_read(auth)
+    return auth.uid
 
 
 async def get_auth_with_goals_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
@@ -326,8 +334,8 @@ async def get_auth_with_goals_write(auth: ApiKeyAuth = Depends(get_api_key_auth)
 
 
 async def get_uid_with_goals_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    auth_data = await get_auth_with_goals_write(auth)
-    return auth_data.uid
+    await get_auth_with_goals_write(auth)
+    return auth.uid
 
 
 DEVELOPER_TO_MEMORY_SCOPES = {
@@ -370,7 +378,7 @@ async def get_developer_memory_default_memory_read_context(
     )
 
 
-async def get_developer_memory_default_memory_write_context(
+async def get_developer_memory_default_memory_write_auth_context(
     auth: ApiKeyAuth = Depends(get_api_key_auth),
 ) -> ProductAuthorizationContext:
     if not has_scope(auth.scopes, Scopes.MEMORIES_WRITE):
@@ -381,13 +389,6 @@ async def get_developer_memory_default_memory_write_context(
         raise HTTPException(
             status_code=403, detail="Missing Developer API app/key identity for memory memory authorization"
         )
-    check_api_key_rate_limit(
-        prefix="dev",
-        uid=auth.uid,
-        app_id=auth.app_id,
-        key_id=auth.key_id,
-        policy_name="dev:memories",
-    )
     return ProductAuthorizationContext(
         uid=auth.uid,
         consumer='developer_api',
@@ -398,8 +399,21 @@ async def get_developer_memory_default_memory_write_context(
     )
 
 
+async def get_developer_memory_default_memory_write_context(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_auth_context),
+) -> ProductAuthorizationContext:
+    check_api_key_rate_limit(
+        prefix="dev",
+        uid=auth_context.uid,
+        app_id=auth_context.app_id,
+        key_id=auth_context.key_id,
+        policy_name="dev:memories",
+    )
+    return auth_context
+
+
 async def get_developer_memory_default_memory_batch_write_context(
-    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_auth_context),
 ) -> ProductAuthorizationContext:
     check_api_key_rate_limit(
         prefix="dev",

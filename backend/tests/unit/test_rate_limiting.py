@@ -293,8 +293,13 @@ class TestWithRateLimitWrapper(unittest.TestCase):
 
         self.assertEqual(self.ep.rate_limit_key_for_context(context), "uid1")
 
-    def test_rate_limit_key_for_context_rejects_missing_api_key_identity(self):
+    def test_rate_limit_key_for_context_falls_back_to_uid_when_api_key_identity_absent(self):
         context = types.SimpleNamespace(uid="uid1", app_id=None, key_id=None)
+
+        self.assertEqual(self.ep.rate_limit_key_for_context(context), "uid1")
+
+    def test_rate_limit_key_for_context_rejects_partial_api_key_identity(self):
+        context = types.SimpleNamespace(uid="uid1", app_id="app1", key_id=None)
 
         with self.assertRaises(HTTPException) as ctx:
             self.ep.rate_limit_key_for_context(context)
@@ -409,6 +414,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "dev:memories_batch",
             "mcp:read",
             "mcp:memories_read",
+            "mcp:memories_write",
             "knowledge_graph:rebuild",
             "wrapped:generate",
             "integration:conversations",
@@ -483,6 +489,7 @@ class TestRouterWiring(unittest.TestCase):
         source = open("dependencies.py", encoding='utf-8').read()
         self.assertIn("mcp:read", source, "MCP API-key UID dependency missing read rate limit")
         self.assertIn("mcp:memories_read", source, "MCP memory auth dependency missing memory read rate limit")
+        self.assertIn("mcp:memories_write", source, "MCP memory auth dependency missing memory write rate limit")
 
     def test_sensitive_read_page_caps(self):
         developer_source = open("routers/developer.py", encoding='utf-8').read()

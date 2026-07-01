@@ -34,13 +34,21 @@ except ImportError:
     sys.modules.setdefault('fastapi', _fake_fastapi)
     sys.modules.setdefault('fastapi.security', _fake_fastapi_security)
 _fake_firebase_admin = ModuleType('firebase_admin')
-setattr(_fake_firebase_admin, 'auth', SimpleNamespace(verify_id_token=lambda _token: {'uid': 'unused'}))
+_fake_firebase_auth = ModuleType('firebase_admin.auth')
+setattr(_fake_firebase_auth, 'verify_id_token', lambda _token: {'uid': 'unused'})
+setattr(_fake_firebase_auth, 'CertificateFetchError', type('CertificateFetchError', (Exception,), {}))
+setattr(_fake_firebase_auth, 'ExpiredIdTokenError', type('ExpiredIdTokenError', (Exception,), {}))
+setattr(_fake_firebase_auth, 'InvalidIdTokenError', type('InvalidIdTokenError', (Exception,), {}))
+setattr(_fake_firebase_auth, 'RevokedIdTokenError', type('RevokedIdTokenError', (Exception,), {}))
+setattr(_fake_firebase_admin, 'auth', _fake_firebase_auth)
 sys.modules.setdefault('firebase_admin', _fake_firebase_admin)
+sys.modules.setdefault('firebase_admin.auth', _fake_firebase_auth)
 
 from fastapi import HTTPException
 
 _fake_client = ModuleType('database._client')
 setattr(_fake_client, 'db', SimpleNamespace())
+setattr(_fake_client, 'document_id_from_seed', lambda seed: 'id-' + str(abs(hash(seed)) % (10**12)))
 setattr(_fake_client, 'get_firestore_client', lambda: SimpleNamespace())
 sys.modules['database._client'] = _fake_client
 

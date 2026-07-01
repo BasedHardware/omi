@@ -376,10 +376,8 @@ def rate_limit_key_for_context(auth_context) -> str:
     uid = getattr(auth_context, 'uid', None)
     if app_id and key_id:
         return f"app:{app_id}:key:{key_id}"
-    if hasattr(auth_context, 'app_id') or hasattr(auth_context, 'key_id'):
+    if app_id or key_id:
         raise HTTPException(status_code=403, detail="Missing API key identity")
-    if key_id:
-        return f"key:{key_id}"
     if uid:
         return str(uid)
     raise HTTPException(status_code=401, detail="Authenticated subject missing")

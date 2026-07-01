@@ -108,6 +108,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # MCP REST data API
     "mcp:read": (300, 3600),
     "mcp:memories_read": (120, 3600),
+    "mcp:memories_write": (120, 3600),
     # Test
     "test:prompt": (30, 3600),
     # Apps
