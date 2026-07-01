@@ -1,4 +1,5 @@
 import { app, ipcMain } from 'electron'
+import { appendFileSync, mkdirSync, renameSync, rmSync, statSync } from 'fs'
 import { appendFile, mkdir, rename, rm, stat } from 'fs/promises'
 import { dirname, join } from 'path'
 import type { IpcMainEvent } from 'electron'
@@ -16,6 +17,7 @@ import {
 const MAX_BREADCRUMBS = 60
 const OBSERVABILITY_FILE = 'observability.jsonl'
 const MAX_OBSERVABILITY_FILE_BYTES = 2 * 1024 * 1024
+const MAX_OBSERVABILITY_EVENT_BYTES = 256 * 1024
 const OBSERVABILITY_IPC_WINDOW_MS = 60_000
 const OBSERVABILITY_IPC_MAX_PER_WINDOW = 60
 
@@ -31,6 +33,10 @@ type BreadcrumbOptions = {
   level?: ObservabilityLevel
   source?: ObservabilitySource
   persist?: boolean
+}
+
+type WriteOptions = {
+  sync?: boolean
 }
 
 function eventSinkPath(): string {
@@ -63,8 +69,66 @@ async function appendEventLine(line: string): Promise<void> {
   await appendFile(path, line, 'utf8')
 }
 
-function writeEvent(event: Record<string, unknown>): void {
+function rotateSinkIfNeededSync(path: string, incomingBytes: number): void {
+  let currentSize = 0
+  try {
+    currentSize = statSync(path).size
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  if (currentSize + incomingBytes <= MAX_OBSERVABILITY_FILE_BYTES) return
+
+  const rotated = `${path}.1`
+  rmSync(rotated, { force: true })
+  try {
+    renameSync(path, rotated)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+}
+
+function appendEventLineSync(line: string): void {
+  const path = eventSinkPath()
+  mkdirSync(dirname(path), { recursive: true })
+  rotateSinkIfNeededSync(path, Buffer.byteLength(line, 'utf8'))
+  appendFileSync(path, line, 'utf8')
+}
+
+function oversizedEventLine(event: Record<string, unknown>, bytes: number): string {
+  return `${JSON.stringify({
+    source: event.source,
+    kind: 'observability-drop',
+    name: 'observability.event_too_large',
+    level: 'warning',
+    message: 'Observability event exceeded the per-event size limit and was not persisted in full.',
+    data: {
+      originalName: event.name,
+      originalKind: event.kind,
+      originalBytes: bytes,
+      maxBytes: MAX_OBSERVABILITY_EVENT_BYTES
+    },
+    ts: Date.now()
+  })}\n`
+}
+
+function serializeEventLine(event: Record<string, unknown>): string {
   const line = `${JSON.stringify(event)}\n`
+  const bytes = Buffer.byteLength(line, 'utf8')
+  if (bytes <= MAX_OBSERVABILITY_EVENT_BYTES) return line
+  return oversizedEventLine(event, bytes)
+}
+
+function writeEvent(event: Record<string, unknown>, options: WriteOptions = {}): void {
+  const line = serializeEventLine(event)
+  if (options.sync) {
+    try {
+      appendEventLineSync(line)
+    } catch (error) {
+      console.warn('[observability] failed to write event:', sanitizeObservabilityValue(error))
+    }
+    return
+  }
+
   writeChain = writeChain
     .then(() => appendEventLine(line))
     .catch((error) => {
@@ -152,9 +216,10 @@ function normalizedEvent(
 
 export function captureObservabilityEvent(
   event: ObservabilityEvent,
-  fallbackSource: ObservabilitySource = 'main'
+  fallbackSource: ObservabilitySource = 'main',
+  options: WriteOptions = {}
 ): void {
-  writeEvent(normalizedEvent(event, fallbackSource))
+  writeEvent(normalizedEvent(event, fallbackSource), options)
 }
 
 export function addObservabilityBreadcrumb(
@@ -193,15 +258,19 @@ export function captureMainException(
   data: Record<string, unknown> = {},
   level: ObservabilityLevel = 'error'
 ): void {
-  captureObservabilityEvent({
-    source: 'main',
-    kind: level === 'warning' ? 'warning' : 'exception',
-    name,
-    level,
-    message: error instanceof Error ? error.message : String(error),
-    error: errorToObservabilityPayload(error),
-    data
-  })
+  captureObservabilityEvent(
+    {
+      source: 'main',
+      kind: level === 'warning' ? 'warning' : 'exception',
+      name,
+      level,
+      message: error instanceof Error ? error.message : String(error),
+      error: errorToObservabilityPayload(error),
+      data
+    },
+    'main',
+    { sync: level === 'fatal' }
+  )
 }
 
 function registerProcessHandlers(): void {
@@ -209,14 +278,18 @@ function registerProcessHandlers(): void {
     captureMainException('main.uncaught_exception', error, { origin }, 'fatal')
   })
   process.on('unhandledRejection', (reason) => {
-    captureObservabilityEvent({
-      source: 'main',
-      kind: 'unhandled-rejection',
-      name: 'main.unhandled_rejection',
-      level: 'error',
-      message: reason instanceof Error ? reason.message : String(reason),
-      error: errorToObservabilityPayload(reason)
-    })
+    captureObservabilityEvent(
+      {
+        source: 'main',
+        kind: 'unhandled-rejection',
+        name: 'main.unhandled_rejection',
+        level: 'error',
+        message: reason instanceof Error ? reason.message : String(reason),
+        error: errorToObservabilityPayload(reason)
+      },
+      'main',
+      { sync: true }
+    )
   })
   process.on('warning', (warning) => {
     captureMainException('main.process_warning', warning, { warningName: warning.name }, 'warning')
@@ -225,34 +298,42 @@ function registerProcessHandlers(): void {
 
 function registerElectronCrashHandlers(): void {
   app.on('render-process-gone', (_event, webContents, details) => {
-    captureObservabilityEvent({
-      source: 'main',
-      kind: 'crash',
-      name: 'renderer.process_gone',
-      level: 'fatal',
-      message: details.reason,
-      data: {
-        reason: details.reason,
-        exitCode: details.exitCode,
-        url: webContents.getURL()
-      }
-    })
+    captureObservabilityEvent(
+      {
+        source: 'main',
+        kind: 'crash',
+        name: 'renderer.process_gone',
+        level: 'fatal',
+        message: details.reason,
+        data: {
+          reason: details.reason,
+          exitCode: details.exitCode,
+          url: webContents.getURL()
+        }
+      },
+      'main',
+      { sync: true }
+    )
   })
   app.on('child-process-gone', (_event, details) => {
-    captureObservabilityEvent({
-      source: 'main',
-      kind: 'crash',
-      name: 'electron.child_process_gone',
-      level: 'fatal',
-      message: details.reason,
-      data: {
-        type: details.type,
-        reason: details.reason,
-        exitCode: details.exitCode,
-        name: details.name,
-        serviceName: details.serviceName
-      }
-    })
+    captureObservabilityEvent(
+      {
+        source: 'main',
+        kind: 'crash',
+        name: 'electron.child_process_gone',
+        level: 'fatal',
+        message: details.reason,
+        data: {
+          type: details.type,
+          reason: details.reason,
+          exitCode: details.exitCode,
+          name: details.name,
+          serviceName: details.serviceName
+        }
+      },
+      'main',
+      { sync: true }
+    )
   })
 }
 
