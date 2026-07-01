@@ -77,6 +77,12 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
     attribute, installs the provided modules, and restores everything on exit —
     including deleting entries that were absent before and repairing parent attrs.
 
+    It ALSO snapshots the full set of ``sys.modules`` keys at entry and evicts any
+    keys added during the block on teardown. This is what makes a fixture hermetic:
+    modules freshly loaded/exec'd while the fakes were active (e.g. via
+    ``load_module_fresh``) are removed afterwards so subsequent test files see the
+    *real* module (or no module), never a stub-fed version left behind.
+
     Use ONLY inside a function/fixture scope (never at module scope in a test file —
     the static checker bans that). For most test seams prefer ``monkeypatch.setattr``
     on a lazy-held singleton instead (see module docstring).
@@ -88,6 +94,7 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
     """
     saved: dict[str, ModuleType | None] = {name: sys.modules.get(name) for name in mapping}
     saved_parent_attrs: dict[str, ModuleType | None] = {name: _get_parent_attr(name) for name in mapping}
+    saved_keys: set[str] = set(sys.modules)
     try:
         for name, module in mapping.items():
             if module is None:
@@ -97,18 +104,23 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
                 _set_parent_attr(name, module)
         yield
     finally:
+        # 1. Restore each explicitly-faked name + its parent attr.
         for name in mapping:
             original = saved.get(name)
             if original is None:
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
-            # restore parent attr to its prior value
             prior_parent = saved_parent_attrs.get(name)
             if prior_parent is None:
                 _set_parent_attr(name, None)
             else:
                 _set_parent_attr(name, prior_parent)
+        # 2. Evict any module keys that appeared during the block (e.g. a module
+        #    exec'd via load_module_fresh against the fakes). This prevents a
+        #    stub-fed version of a real module from leaking to later test files.
+        for extra in list(sys.modules.keys() - saved_keys):
+            sys.modules.pop(extra, None)
 
 
 def _get_parent_attr(name: str) -> ModuleType | None:
