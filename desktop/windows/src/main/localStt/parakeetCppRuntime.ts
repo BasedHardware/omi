@@ -71,7 +71,7 @@ export function resetManagedParakeetRuntimeStateForTests(): void {
 
 export function noteManagedParakeetSessionStarted(): void {
   activeSessions += 1
-  if (installState === 'installed' || installState === 'starting') installState = 'running'
+  if (installState === 'installed') installState = 'running'
 }
 
 export function noteManagedParakeetSessionStopped(): void {
