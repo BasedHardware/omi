@@ -1,15 +1,151 @@
-import { ipcMain } from 'electron'
-import type { McpKeyRecord } from '../../shared/types'
+import { clipboard, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import type {
+  McpKeyCopyRequest,
+  McpKeyMetadata,
+  McpKeyRecord,
+  McpKeyTestResult
+} from '../../shared/types'
 import { clearMcpKey, loadMcpKey, saveMcpKey } from '../integrations/mcpKeyStore'
 
+const MCP_KEY_PLACEHOLDER = 'YOUR_OMI_MCP_KEY'
+const DEFAULT_OMI_API_BASE = 'https://api.omi.me'
+const HOSTED_MCP_TIMEOUT_MS = 15_000
+
+function assertTrustedSender(event: IpcMainInvokeEvent): void {
+  const url = event.senderFrame?.url ?? ''
+  if (
+    url.startsWith('file://') ||
+    url.startsWith('http://localhost:') ||
+    url.startsWith('http://127.0.0.1:') ||
+    (process.env.ELECTRON_RENDERER_URL && url.startsWith(process.env.ELECTRON_RENDERER_URL))
+  ) {
+    return
+  }
+  throw new Error('MCP key IPC is not available from this renderer')
+}
+
+function maskMcpKey(key: string): string {
+  if (key.length <= 10) return '********'
+  return `${key.slice(0, 6)}********${key.slice(-4)}`
+}
+
+function metadataFor(record: McpKeyRecord): McpKeyMetadata {
+  return { id: record.id, name: record.name, maskedKey: maskMcpKey(record.key) }
+}
+
+function loadRequiredMcpKey(): McpKeyRecord {
+  const record = loadMcpKey()
+  if (!record) throw new Error('Generate an MCP key first')
+  return record
+}
+
+function normalizeCopyRequest(value: unknown): McpKeyCopyRequest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid MCP key copy request')
+  }
+  const request = value as Partial<McpKeyCopyRequest>
+  if (request.kind === 'key') return { kind: 'key' }
+  if (request.kind === 'text' && typeof request.text === 'string') {
+    return { kind: 'text', text: request.text }
+  }
+  throw new Error('Invalid MCP key copy request')
+}
+
+function mcpBaseURL(): string {
+  const raw = process.env.OMI_API_BASE || DEFAULT_OMI_API_BASE
+  return raw.endsWith('/') ? raw : `${raw}/`
+}
+
+function parseHostedMcpMemoryCount(payload: unknown): number {
+  const rpc = payload as {
+    error?: { message?: unknown }
+    result?: { content?: Array<{ text?: unknown }> }
+  }
+  if (rpc.error) {
+    const message = typeof rpc.error.message === 'string' ? rpc.error.message : 'Unknown error'
+    throw new Error(`Hosted MCP failed: ${message}`)
+  }
+  const text = rpc.result?.content?.find((item) => typeof item.text === 'string')?.text
+  if (typeof text !== 'string') throw new Error('Hosted MCP did not return memory data.')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error('Hosted MCP returned unreadable memory data.')
+  }
+  const memories = (parsed as { memories?: unknown }).memories
+  if (!Array.isArray(memories)) throw new Error('Hosted MCP did not return memory data.')
+  return memories.length
+}
+
+async function testHostedMcpConnection(key: string): Promise<McpKeyTestResult> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), HOSTED_MCP_TIMEOUT_MS)
+  let response: Response
+  try {
+    response = await fetch(`${mcpBaseURL()}v1/mcp/sse`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name: 'get_memories',
+          arguments: { limit: 5 }
+        }
+      })
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Hosted MCP request timed out.')
+    }
+    throw new Error(`Hosted MCP request failed: ${(error as Error).message}`)
+  } finally {
+    clearTimeout(timeout)
+  }
+  if (!response.ok) throw new Error(`Hosted MCP returned HTTP ${response.status}.`)
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    throw new Error('Hosted MCP returned invalid JSON.')
+  }
+  return { memoryCount: parseHostedMcpMemoryCount(payload) }
+}
+
 export function registerMcpKeyHandlers(): void {
-  ipcMain.handle('mcpKey:create', async (_e, record: McpKeyRecord): Promise<void> => {
+  ipcMain.handle('mcpKey:create', async (event, record: McpKeyRecord): Promise<void> => {
+    assertTrustedSender(event)
     saveMcpKey(record)
   })
 
-  ipcMain.handle('mcpKey:read', async (): Promise<McpKeyRecord | null> => loadMcpKey())
+  ipcMain.handle('mcpKey:read', async (event): Promise<McpKeyMetadata | null> => {
+    assertTrustedSender(event)
+    const record = loadMcpKey()
+    return record ? metadataFor(record) : null
+  })
 
-  ipcMain.handle('mcpKey:delete', async (): Promise<void> => {
+  ipcMain.handle('mcpKey:copy', async (event, rawRequest: unknown): Promise<void> => {
+    assertTrustedSender(event)
+    const record = loadRequiredMcpKey()
+    const request = normalizeCopyRequest(rawRequest)
+    const text =
+      request.kind === 'key' ? record.key : request.text.replaceAll(MCP_KEY_PLACEHOLDER, record.key)
+    clipboard.writeText(text)
+  })
+
+  ipcMain.handle('mcpKey:test', async (event): Promise<McpKeyTestResult> => {
+    assertTrustedSender(event)
+    return testHostedMcpConnection(loadRequiredMcpKey().key)
+  })
+
+  ipcMain.handle('mcpKey:delete', async (event): Promise<void> => {
+    assertTrustedSender(event)
     clearMcpKey()
   })
 }
