@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import yaml
 from pydantic import BaseModel, ConfigDict
@@ -25,7 +25,25 @@ class GatewayConfig(BaseModel):
     feature_bundles: dict[str, FeatureBundle]
 
 
-def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool | None = None) -> GatewayConfig:
+def load_gateway_config(
+    config_dir: str | Path | None = None,
+    *,
+    prod_mode: bool | None = None,
+    required_lane_ids: Iterable[str] | None = None,
+) -> GatewayConfig:
+    """Load the gateway config from `config_dir`.
+
+    Parameters:
+        config_dir: Directory containing lanes.yaml, route_artifacts.yaml,
+            feature_bundles.yaml. Defaults to the gateway's package config dir.
+        prod_mode: If True, reject dev-only artifacts (production readiness check).
+            If None, defer to the OMI_LLM_GATEWAY_PROD env var.
+        required_lane_ids: Optional iterable of lane ids that MUST exist in
+            lanes.yaml after load. Missing ids raise ConfigValidationError.
+            Defaults to None (no cross-validation). The gateway's startup
+            path passes SUPPORTED_AUTO_LANE_IDS here to fail fast if a
+            supported lane is missing from YAML.
+    """
     resolved_config_dir = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
     resolved_prod_mode = _resolve_prod_mode(prod_mode)
 
@@ -39,6 +57,8 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
 
     _validate_lane_routes(lanes, route_artifacts)
     _validate_feature_bundles(feature_bundles, lanes)
+    if required_lane_ids is not None:
+        _validate_required_lane_ids(required_lane_ids, lanes)
 
     return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
 
@@ -54,7 +74,10 @@ def _load_config_list(path: Path, top_level_key: str) -> list[dict[str, Any]]:
         raise ConfigValidationError(f'missing gateway config file: {path}')
 
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.safe_load(handle)
+        try:
+            loaded = yaml.safe_load(handle)
+        except yaml.YAMLError as e:
+            raise ConfigValidationError(f'malformed YAML in {path}: {e}') from e
 
     if loaded is None:
         return []
@@ -148,3 +171,23 @@ def _validate_feature_bundles(feature_bundles: dict[str, FeatureBundle], lanes: 
     for bundle in feature_bundles.values():
         if bundle.lane_id not in lanes:
             raise ConfigValidationError(f'feature bundle {bundle.feature} references unknown lane: {bundle.lane_id}')
+
+
+def _validate_required_lane_ids(
+    required_lane_ids: Iterable[str],
+    lanes: dict[str, LaneConfig],
+) -> None:
+    """Cross-check that every required lane id has a corresponding lanes.yaml entry.
+
+    Per PLAN.md §R5b + cubic-dev-ai review on PR #8744: if a lane is in
+    SUPPORTED_AUTO_LANE_IDS but missing from lanes.yaml, the config loads
+    successfully and the failure is deferred to runtime. Cross-validate
+    here so the failure surfaces at startup (or at the next reload).
+    """
+    required = set(required_lane_ids)
+    missing = sorted(required - set(lanes.keys()))
+    if missing:
+        raise ConfigValidationError(
+            f'lanes.yaml is missing required lane ids: {missing}. '
+            f'Add them to lanes.yaml or remove them from the supported allowlist.'
+        )
