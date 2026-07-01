@@ -1,5 +1,5 @@
 // Persist the hosted MCP key encrypted at rest via Electron safeStorage
-// (DPAPI on Windows). The raw key is only returned to explicit IPC callers.
+// (DPAPI on Windows). Keep the raw key in main-process callers only.
 import { app, safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -46,14 +46,10 @@ export function saveMcpKey(record: McpKeyRecord): void {
 export function loadMcpKey(): McpKeyRecord | null {
   const f = file()
   if (!existsSync(f)) return null
-  try {
-    const raw = JSON.parse(readFileSync(f, 'utf8')) as StoredMcpKeyFile
-    if (!raw.id || !raw.name || !raw.key) return null
-    const key = safeStorage.decryptString(Buffer.from(raw.key, 'base64'))
-    return { id: raw.id, name: raw.name, key }
-  } catch {
-    return null
-  }
+  const raw = JSON.parse(readFileSync(f, 'utf8')) as StoredMcpKeyFile
+  if (!raw.id || !raw.name || !raw.key) throw new Error('Stored MCP key is invalid')
+  const key = safeStorage.decryptString(Buffer.from(raw.key, 'base64'))
+  return { id: raw.id, name: raw.name, key }
 }
 
 export function clearMcpKey(): void {
