@@ -29,14 +29,39 @@ const verifyPeFile = (file) => {
 
 const tried = []
 for (const root of packageRoots) {
-  const file = join(root, 'resources', 'koffi', 'win32_x64', 'koffi.node')
-  tried.push(file)
-  try {
-    const size = verifyPeFile(file)
-    console.log(`[verify-win-koffi-native] found ${file} (${size} bytes)`)
-    process.exit(0)
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error
+  const candidates = [
+    join(root, 'resources', 'koffi', 'win32_x64', 'koffi.node'),
+    join(
+      root,
+      'resources',
+      'app.asar.unpacked',
+      'node_modules',
+      'koffi',
+      'build',
+      'koffi',
+      'win32_x64',
+      'koffi.node'
+    ),
+    join(
+      root,
+      'resources',
+      'app.asar.unpacked',
+      'node_modules',
+      '@koromix',
+      'koffi-win32-x64',
+      'win32_x64',
+      'koffi.node'
+    )
+  ]
+  for (const file of candidates) {
+    tried.push(file)
+    try {
+      const size = verifyPeFile(file)
+      console.log(`[verify-win-koffi-native] found ${file} (${size} bytes)`)
+      process.exit(0)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
   }
 }
 
