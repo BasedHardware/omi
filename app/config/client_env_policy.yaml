@@ -1,0 +1,84 @@
+{
+  "public_client_env": {
+    "allowed": [
+      "PUBLIC_API_BASE_URL",
+      "PUBLIC_STAGING_API_URL",
+      "PUBLIC_USE_WEB_AUTH",
+      "PUBLIC_USE_AUTH_CUSTOM_TOKEN",
+      "PUBLIC_GOOGLE_MAPS_API_KEY",
+      "PUBLIC_GOOGLE_CLIENT_ID",
+      "PUBLIC_POSTHOG_API_KEY",
+      "PUBLIC_INTERCOM_APP_ID",
+      "PUBLIC_INTERCOM_IOS_API_KEY",
+      "PUBLIC_INTERCOM_ANDROID_API_KEY"
+    ]
+  },
+  "legacy_public_client_env": {
+    "allowed": [
+      "FIREBASE_API_KEY",
+      "MIXPANEL_PROJECT_TOKEN",
+      "OMI_DESKTOP_API_URL",
+      "OMI_PYTHON_API_URL"
+    ]
+  },
+  "restricted_public_client_keys": {
+    "PUBLIC_GOOGLE_MAPS_API_KEY": {
+      "owner": "mobile-platform",
+      "purpose": "Google Maps rendering in the public mobile client",
+      "restriction": "Must be restricted in Google Cloud by the released iOS bundle id, Android package/certificate, and Maps APIs only.",
+      "revocation": "Rotate in Google Cloud, update the mobile_public_config CI group, and rebuild affected releases."
+    },
+    "PUBLIC_POSTHOG_API_KEY": {
+      "owner": "growth",
+      "purpose": "Public PostHog event ingestion from the mobile client",
+      "restriction": "Project ingestion token only; no admin/read capability.",
+      "revocation": "Rotate in PostHog, update the mobile_public_config CI group, and rebuild affected releases."
+    },
+    "PUBLIC_INTERCOM_IOS_API_KEY": {
+      "owner": "support",
+      "purpose": "Public Intercom iOS SDK key",
+      "restriction": "Client SDK key only; no admin/read capability.",
+      "revocation": "Rotate in Intercom, update the mobile_public_config CI group, and rebuild affected releases."
+    },
+    "PUBLIC_INTERCOM_ANDROID_API_KEY": {
+      "owner": "support",
+      "purpose": "Public Intercom Android SDK key",
+      "restriction": "Client SDK key only; no admin/read capability.",
+      "revocation": "Rotate in Intercom, update the mobile_public_config CI group, and rebuild affected releases."
+    }
+  },
+  "server_secret_env": {
+    "denied_exact": [
+      "OPENAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "CLAUDE_API_KEY",
+      "SLIDESGPT_API_KEY",
+      "GOOGLE_CLIENT_SECRET",
+      "GEMINI_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "DEEPGRAM_API_KEY",
+      "SUPABASE_KEY",
+      "FIREBASE_SERVICE_ACCOUNT_KEY",
+      "FIREBASE_SERVICE_ACCOUNT_DEV_KEY",
+      "GOOGLE_APPLICATION_CREDENTIALS",
+      "SERVICE_ACCOUNT_JSON",
+      "ADMIN_KEY",
+      "ENCRYPTION_SECRET"
+    ],
+    "denied_name_patterns": [
+      "(^|_)SECRET($|_)",
+      "(^|_)PRIVATE_KEY($|_)",
+      "(^|_)SERVICE_ACCOUNT($|_)",
+      "(^|_)ADMIN_KEY($|_)",
+      "(^|_)WEBHOOK_SECRET($|_)",
+      "(^|_)KEYSTORE($|_)",
+      "(^|_)P12($|_)"
+    ]
+  },
+  "direct_provider_domains_denied_in_app": [
+    "api.openai.com",
+    "api.anthropic.com",
+    "generativelanguage.googleapis.com",
+    "api.deepgram.com"
+  ]
+}

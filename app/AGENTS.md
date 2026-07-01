@@ -5,13 +5,20 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 ## Build Bootstrap
 
 ### Flavors
-- **dev**: `com.friend.ios.dev` — uses `.dev.env`, Firebase project `based-hardware-dev`
-- **prod**: `com.friend.ios` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **dev**: `com.friend.ios.dev` — uses `.client.dev.env`, Firebase project `based-hardware-dev`
+- **prod**: `com.friend.ios` — uses `.client.env`, Firebase project `based-hardware-prod`
+
+### Public Client Env
+- Every Envied value is compiled into public client binaries. Treat `.client.env`, `.client.dev.env`, generated Envied output, IPA/AAB contents, and bundled app resources as public.
+- Add new app config only through `app/config/client_env_policy.yaml`, then update `app/.client.env.example` and `scripts/create-public-client-env.sh`.
+- Do not add provider API keys, OAuth client secrets, service accounts, private keys, admin tokens, signing credentials, or backend-only secrets to app env files or `lib/env/**`.
+- `obfuscate: true` is not a security boundary. It only raises extraction effort.
+- Run `python3 ../scripts/check-public-client-secrets.py` from `app/` after env or release workflow changes.
 
 ### Generated Files (never edit manually)
 | Generator | Source | Output | Command |
 |-----------|--------|--------|---------|
-| envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (obfuscated secrets) | `flutter pub run build_runner build` |
+| envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (public client config) | `flutter pub run build_runner build` |
 | json_serializable | `@JsonSerializable` models | `*.g.dart` (fromJson/toJson) | `flutter pub run build_runner build` |
 | pigeon | `lib/watch_interface.dart` | `lib/gen/flutter_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
 | flutter_gen | `pubspec.yaml` assets/fonts | `lib/gen/assets.gen.dart`, `lib/gen/fonts.gen.dart` | `flutter pub run build_runner build` |
@@ -104,8 +111,8 @@ flutter test test/unit/  # specific directory
 All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash, X-App-Version, plus Bearer token.
 
 ### API Base URLs
-- Dev: configured in `.dev.env` → `Env.apiBaseUrl`
-- Prod: configured in `.prod.env` → `Env.apiBaseUrl`
+- Dev: configured in `.client.dev.env` → `Env.apiBaseUrl`
+- Prod: configured in `.client.env` → `Env.apiBaseUrl`
 - Agent proxy WS: derived from apiBaseUrl (api.omi.me → agent.omi.me)
 
 ## Codegen Rules
@@ -120,4 +127,3 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
 - agent-flutter (Marionette) for programmatic UI interaction — see root AGENTS.md for setup
-

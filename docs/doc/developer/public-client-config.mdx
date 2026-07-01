@@ -1,0 +1,66 @@
+---
+title: "Public Client Config"
+icon: "shield"
+description: "How to add client-safe app configuration without leaking server secrets."
+---
+
+## Rule
+
+Everything available to a public client build is public. Flutter Envied values,
+generated Dart, mobile artifacts, desktop app bundles, and release resources must
+never contain server-only secrets.
+
+`obfuscate: true` is not a security boundary. It only changes how a value is
+represented in generated code; users can still extract values from shipped apps.
+
+## Config Classes
+
+| Class | Ships in public clients? | Examples | Handling |
+| --- | --- | --- | --- |
+| Public client config | Yes | API base URL, non-sensitive flags | Use `PUBLIC_` names and allowlist in `app/config/client_env_policy.yaml`. |
+| Restricted public client key | Yes, intentionally | Google Maps SDK key, public analytics ingestion key | Allowlist with owner, purpose, restrictions, and revocation path. Restrict at the vendor by bundle/package/API where possible. |
+| Server-only secret | No | OpenAI, Gemini, Anthropic, Deepgram, OAuth client secrets, service accounts, admin keys | Keep in backend secret managers or server runtime only. Never expose to app env or artifacts. |
+| Build or publish secret | No | Keystores, provisioning credentials, App Store/Play publishing credentials | Use only in signing/publishing steps. Never copy into app resources. |
+
+## Adding App Config
+
+1. Add the variable to `app/config/client_env_policy.yaml`.
+2. Add a placeholder to `app/.client.env.example`.
+3. Add it to `scripts/create-public-client-env.sh`.
+4. Add the value to the Codemagic public client config group.
+5. Run:
+
+```bash
+python3 scripts/check-public-client-secrets.py
+```
+
+If the value can read private data, call a paid/provider API, bypass quotas, mint
+tokens, impersonate users, administer a vendor account, or access backend
+resources, it is not public client config.
+
+## Release Checks
+
+Public release workflows must run both checks:
+
+```bash
+python3 scripts/check-public-client-secrets.py
+python3 scripts/scan-public-artifact-secrets.py <artifact>
+```
+
+The first check validates source, policy, generated env inputs, and release
+workflow patterns. The second check extracts public artifacts and fails if
+server-only variable names, current CI secret values, service-account files,
+private keys, or signing material appear in the artifact.
+
+## Provider APIs
+
+Public clients must not use Omi-owned provider credentials directly. Features
+that need OpenAI, Gemini, Anthropic, Deepgram, or similar providers should use:
+
+```text
+public client -> Omi backend with user auth -> internal provider gateway -> vendor
+```
+
+BYOK flows require backend-owned secret storage. The app may collect a user key
+only for one-time authenticated submission, then local state should contain only
+a backend secret reference or configuration id.

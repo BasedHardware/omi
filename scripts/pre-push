@@ -224,6 +224,34 @@ check_backend_runtime_env_if_needed() {
   python3 backend/scripts/validate-backend-runtime-env.py --env prod
 }
 
+check_public_client_secret_boundary_if_needed() {
+  if ! changed_matches \
+    'app/lib/env/*' \
+    'app/lib/env/**/*' \
+    'app/config/client_env_policy.yaml' \
+    'app/.client.env.example' \
+    'app/.env.template' \
+    'app/test/security/*' \
+    'app/test/security/**/*' \
+    'codemagic.yaml' \
+    'scripts/create-public-client-env.sh' \
+    'scripts/check-public-client-secrets.py' \
+    'scripts/scan-public-artifact-secrets.py' \
+    '.github/workflows/*.yml' \
+    '.github/workflows/*.yaml' \
+    'plugins/apps-js/Dockerfile' \
+    'plugins/apps-js/Dockerfile.datadog' \
+    'web/*/Dockerfile' \
+    '.github/workflows/lint.yml' \
+    'scripts/pre-commit' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 scripts/check-public-client-secrets.py
+}
+
 check_backend_async_blockers_if_needed() {
   if [ "${PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS:-}" = "1" ]; then
     echo "Skipping backend async blocker scan because PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS=1."
@@ -448,6 +476,7 @@ else
 fi
 
 run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
+run_step check_public_client_secret_boundary_if_needed
 run_step check_backend_runtime_env_if_needed
 run_step check_backend_async_blockers_if_needed
 run_step check_backend_unit_tests_if_needed

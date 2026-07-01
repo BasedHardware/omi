@@ -11,6 +11,10 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
       release_version:
         description: 'Release version (optional)'
         required: false
@@ -30,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Google Auth
         id: auth
@@ -48,18 +52,19 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }} \
-            --build-arg OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
             --build-arg API_URL=${{ secrets.API_URL }} \
             -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f web/frontend/Dockerfile .
             
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v0
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          secrets: |
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
