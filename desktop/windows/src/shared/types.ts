@@ -100,6 +100,7 @@ export type LocalAgentStatus = {
   localUrl: string | null
   toolEndpoint: string | null
   hasToken: boolean
+  tokenError: string | null
 }
 
 export type LocalAgentToolsTestResult = {
