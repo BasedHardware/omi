@@ -1,3 +1,0 @@
-{
-  "change": "Fixed named desktop dev bundles so they no longer ask for login keychain access to the shared device ID"
-}
