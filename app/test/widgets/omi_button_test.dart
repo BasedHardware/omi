@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/ui/atoms/omi_button.dart';
@@ -191,6 +192,36 @@ void main() {
       expect((row.children[1] as SizedBox).width, 10);
       final style = tester.widget<ElevatedButton>(find.byType(ElevatedButton)).style!;
       expect(style.padding!.resolve(<WidgetState>{}), const EdgeInsets.symmetric(horizontal: 16));
+    });
+
+    // Guards against baking the enabled foreground onto the Text/Icon, which
+    // would prevent disabledForegroundColor from dimming the disabled label.
+    testWidgets('disabled label + icon render the DISABLED foreground, not the enabled one', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: OmiButton(
+              label: 'Go',
+              onPressed: null,
+              icon: Icons.add,
+              color: Colors.deepPurple,
+              textColor: Colors.white, // enabled fg
+              disabledColor: Color(0xFF333333),
+              disabledTextColor: Color(0xFF616161), // disabled fg
+            ),
+          ),
+        ),
+      );
+
+      // Effective rendered label color (after DefaultTextStyle merge), not the widget's explicit style.
+      final labelColor = tester.renderObject<RenderParagraph>(find.text('Go')).text.style!.color;
+      expect(labelColor, const Color(0xFF616161),
+          reason: 'disabled label must use disabledTextColor, not enabled white');
+
+      // Effective icon color = explicit Icon.color, else the ambient IconTheme (set by the button).
+      final iconEl = tester.element(find.byIcon(Icons.add));
+      final effectiveIconColor = tester.widget<Icon>(find.byIcon(Icons.add)).color ?? IconTheme.of(iconEl).color;
+      expect(effectiveIconColor, const Color(0xFF616161), reason: 'disabled icon must use disabledTextColor');
     });
   });
 }

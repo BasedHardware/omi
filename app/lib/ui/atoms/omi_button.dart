@@ -115,10 +115,13 @@ class OmiButton extends AdaptiveWidget {
               height: size + 4,
               child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation<Color>(fg)),
             )
+          // color: null → the label/icon inherit the ElevatedButton's resolved
+          // foreground (fg when enabled, disabledForegroundColor when disabled),
+          // instead of baking the enabled color on and defeating the disabled state.
           : _labelRow(
               size: size,
               weight: fontWeight ?? FontWeight.w600,
-              color: fg,
+              color: null,
               iconSize: iconSize ?? (size + 2),
               iconGap: iconGap ?? 8,
             ),
@@ -160,10 +163,14 @@ class OmiButton extends AdaptiveWidget {
     );
   }
 
+  /// [color] may be null so the label/icon inherit the button's own state-aware
+  /// foreground (enabled vs disabled). The [primary] variant relies on this so
+  /// disabledForegroundColor actually dims the disabled label/icon; the
+  /// [text]/[neutral] variants pass an explicit color since they drive their own.
   Widget _labelRow({
     required double size,
     required FontWeight weight,
-    required Color color,
+    Color? color,
     required double iconSize,
     double iconGap = 8,
   }) {
