@@ -163,6 +163,39 @@ pub async fn list_resources(cfg: &AppConfig) -> Result<Vec<KnowledgeResource>> {
     }
 }
 
+pub async fn get_document_chunks(resource_id: &str, cfg: &AppConfig) -> Result<Vec<String>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+
+    let mut req = client.get(format!("{MCP_BASE}/api/knowledge/resources/{resource_id}/chunks"));
+
+    if !cfg.firebase_id_token.is_empty() {
+        req = req.header(
+            "Authorization",
+            format!("Bearer {}", cfg.firebase_id_token),
+        );
+    }
+
+    let resp = req.send().await.context("Get chunks failed")?;
+
+    if resp.status().is_success() {
+        let json: serde_json::Value = resp.json().await?;
+        let chunks = json
+            .get("chunks")
+            .and_then(|c| c.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|c| c.get("content").and_then(|t| t.as_str()).map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(chunks)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 pub fn is_knowledge_query(query: &str) -> bool {
     let q = query.to_lowercase();
     let keywords = [
