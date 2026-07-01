@@ -631,6 +631,8 @@ struct DesktopHomeView: View {
       return .settings
     case "permissions":
       return .permissions
+    case "ai_clone":
+      return .aiClone
     case "help":
       return .help
     default:
@@ -1149,6 +1151,8 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
+      case 11:
+        AIClonePage()
       case 12:
         HelpPage()
       default:
