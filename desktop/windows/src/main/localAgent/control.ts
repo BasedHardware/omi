@@ -16,6 +16,10 @@ function validatePort(port: number): number {
   return port
 }
 
+function tokenStatusError(): string {
+  return 'Local agent token is unavailable. Rotate the token to repair local access.'
+}
+
 export function getLocalAgentStatus(): LocalAgentStatus {
   const settings = getLocalAgentSettings()
   const info = getLocalAgentServerInfo()
@@ -23,8 +27,8 @@ export function getLocalAgentStatus(): LocalAgentStatus {
   let tokenError: string | null = null
   try {
     hasToken = loadLocalAgentToken() !== null
-  } catch (error) {
-    tokenError = error instanceof Error ? error.message : 'Failed to load local agent token'
+  } catch {
+    tokenError = tokenStatusError()
   }
   return {
     enabled: settings.enabled,
@@ -72,6 +76,7 @@ export function copyLocalAgentToken(): LocalAgentStatus {
     }
     tokenClipboardClearTimer = null
   }, TOKEN_CLIPBOARD_TTL_MS)
+  tokenClipboardClearTimer.unref?.()
   return getLocalAgentStatus()
 }
 
