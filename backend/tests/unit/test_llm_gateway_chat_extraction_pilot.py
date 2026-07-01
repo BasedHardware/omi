@@ -5,8 +5,10 @@ import types
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
+import yaml
 
 for module_name in (
     'database.auth',
@@ -46,6 +48,12 @@ from utils.llm import conversation_processing
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
+
+GATEWAY_FEATURE_MODELS = {
+    'chat_extraction.requires_context': chat.RequiresContext,
+    'conversation_structure.extract.shadow': ConversationStructureExtraction,
+    'conversation_action_items.extract.shadow': ActionItemsExtraction,
+}
 
 
 class FakeParser:
@@ -128,6 +136,7 @@ def _mock_gateway_client(monkeypatch, fake_post):
 
 _VALUE_TRUE_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"value": true}'}}]})
 _UNEXPECTED_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"unexpected": true}'}}]})
+_UNEXPECTED_STRUCTURE_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"answer": "ok"}'}}]})
 
 
 def test_requires_context_gateway_success_returns_parsed_result(monkeypatch):
@@ -192,6 +201,30 @@ def test_requires_context_invalid_gateway_content_falls_back(monkeypatch):
     assert existing_calls == [chat.RequiresContext]
 
 
+def test_gateway_validation_rejects_conversation_structure_defaults_masking_missing_fields(monkeypatch):
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _UNEXPECTED_STRUCTURE_RESPONSE)
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'extract structure',
+        ConversationStructureExtraction,
+        feature='conversation_structure.extract.shadow',
+    )
+
+    assert result is None
+    assert counter.calls == [
+        (
+            {
+                'feature': 'conversation_structure.extract.shadow',
+                'outcome': 'fallback',
+                'reason': 'schema_validation',
+            },
+            1,
+        )
+    ]
+
+
 def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeypatch):
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway.test/')
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'service-token')
@@ -240,6 +273,9 @@ def test_strict_schema_keeps_conversation_structure_shadow_contract_narrow():
     assert set(schema['properties']) == {'title', 'overview', 'emoji', 'category'}
     assert 'action_items' not in schema['properties']
     assert 'events' not in schema['properties']
+    assert '$ref' not in schema['properties']['category']
+    assert schema['properties']['category']['type'] == 'string'
+    assert 'enum' in schema['properties']['category']
 
 
 def test_strict_schema_removes_defaults_recursively():
@@ -253,6 +289,59 @@ def test_strict_schema_removes_defaults_recursively():
         elif isinstance(node, list):
             for value in node:
                 walk(value)
+
+    walk(schema)
+
+
+@pytest.mark.parametrize(('feature', 'output_model'), sorted(GATEWAY_FEATURE_MODELS.items()))
+def test_gateway_feature_payloads_use_openai_strict_schema_subset(feature, output_model):
+    payload = gateway_client._chat_structured_payload('fixture prompt', output_model, feature=feature)
+    schema = payload['response_format']['json_schema']['schema']
+
+    assert payload['model'] == 'omi:auto:chat-structured'
+    assert payload['response_format']['json_schema']['strict'] is True
+    assert payload['metadata']['omi_feature'] == feature
+    _assert_openai_strict_schema_subset(schema)
+
+
+def test_feature_bundles_have_gateway_payload_contract_coverage():
+    config_path = Path(__file__).resolve().parents[2] / 'llm_gateway' / 'config' / 'feature_bundles.yaml'
+    configured = {bundle['feature'] for bundle in yaml.safe_load(config_path.read_text())['feature_bundles']}
+
+    assert configured <= set(GATEWAY_FEATURE_MODELS)
+
+
+def _assert_openai_strict_schema_subset(schema):
+    unsupported_keys = {
+        'allOf',
+        'oneOf',
+        'not',
+        'if',
+        'then',
+        'else',
+        'dependentRequired',
+        'dependentSchemas',
+        'patternProperties',
+    }
+
+    def walk(node, path='$'):
+        if isinstance(node, dict):
+            for key in unsupported_keys:
+                assert key not in node, f'{path} contains unsupported strict schema key: {key}'
+            if '$ref' in node:
+                siblings = set(node) - {'$ref'}
+                assert not siblings, f'{path} has $ref sibling keys: {sorted(siblings)}'
+            if node.get('type') == 'object':
+                assert node.get('additionalProperties') is False, f'{path} must set additionalProperties=false'
+                properties = node.get('properties')
+                if isinstance(properties, dict):
+                    assert node.get('required') == list(properties.keys()), f'{path} must require every property'
+            assert 'default' not in node, f'{path} must not contain default'
+            for key, value in node.items():
+                walk(value, f'{path}.{key}')
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f'{path}[{index}]')
 
     walk(schema)
 
