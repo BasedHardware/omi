@@ -32,6 +32,10 @@ describe('createWindowsMcpKey', () => {
     axiosMock.post.mockResolvedValueOnce({ data: record })
 
     await expect(createWindowsMcpKey()).resolves.toEqual(record)
-    expect(axiosMock.post).toHaveBeenCalledWith('/v1/mcp/keys', { name: 'Omi Windows' })
+    expect(axiosMock.post).toHaveBeenCalledWith(
+      '/v1/mcp/keys',
+      { name: 'Omi Windows' },
+      { __noRetry: true }
+    )
   })
 })
