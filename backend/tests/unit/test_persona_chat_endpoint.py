@@ -109,8 +109,19 @@ _full_stub("database.notifications")
 _full_stub("database.action_items")
 _full_stub("database.users")
 
-_full_stub("google.cloud.firestore")
-_full_stub("google.cloud.firestore_v1")
+# NOTE (cubic follow-up 4601668066 → rebase): do NOT stub
+# google.cloud.firestore or google.cloud.firestore_v1. The stubs are
+# bare ModuleType instances with no __path__, so they're not real
+# packages — that breaks `from google.cloud.firestore_v1 import
+# FieldFilter` because Python can't resolve firestore_v1 as a
+# submodule of the stubbed `google.cloud`. Main added canonical-
+# memory imports to utils.apps which transitively pulls in
+# database.knowledge_graph (which uses `from google.cloud import
+# firestore` and `from google.cloud.firestore_v1 import FieldFilter`)
+# when the test does `import utils.apps`. Let the real firestore
+# packages resolve so the import chain works.
+# _full_stub("google.cloud.firestore")
+# _full_stub("google.cloud.firestore_v1")
 
 # NOTE: models.integrations is NOT stubbed — the real module loads so the
 # test can exercise the real Pydantic PersonaChatRequest class.
@@ -154,7 +165,16 @@ _full_stub(
     "postprocess_executor",
 )
 
-_full_stub("utils.llm")
+# NOTE (cubic follow-up 4601668066 → rebase): do NOT stub 'utils.llm'
+# at the package level. The stub is a bare ModuleType with no real
+# submodules, so anything that does `from utils.llm.X import Y` will
+# get the stub instead of the real module. Main added canonical-
+# memory imports to utils.apps which transitively pulls in
+# database.knowledge_graph via utils.memory → database.vector_db →
+# utils.llm.clients. If 'utils.llm' is stubbed, that chain breaks.
+# Stub only the specific submodules we need to mock (the ones
+# below) and let the real utils.llm package resolve for the rest.
+# _full_stub("utils.llm")
 _full_stub(
     "utils.llm.persona",
     "initial_persona_chat_message",
@@ -163,7 +183,48 @@ _full_stub(
     "generate_persona_description",
     "condense_tweets",
 )
-_full_stub("utils.llm.usage_tracker", "track_usage", "Features")
+# utils.retrieval.hybrid is needed by utils.memory.canonical_memory_adapter
+# (added by main's canonical-memory system). Stub it so the import
+# chain from utils.apps → utils.memory → ... doesn't fail (the test
+# never exercises the canonical memory path itself; it only needs
+# the imports to succeed).
+_full_stub("utils.retrieval.hybrid", "rrf_rerank")
+_usage_tracker_stub = _full_stub(
+    "utils.llm.usage_tracker",
+    "track_usage",
+    "Features",
+)
+# Provide a real BaseCallbackHandler for utils.llm.clients' module-level
+# `_usage_callback = get_usage_callback()` so ChatOpenAI() can be
+# constructed at import time without pydantic 2's strict is_instance_of
+# check rejecting a MagicMock (PR #8682 post-rebase issue).
+# Import langchain_core.callbacks lazily: in pytest's full test suite,
+# `langchain_core` may have been stubbed as a bare ModuleType by an
+# earlier-collected test (e.g. test_persona_prompt_rewrite.py), so a
+# top-level `from langchain_core.callbacks import ...` would fail. We
+# try the real import first; if it fails, fall back to a stub class
+# defined dynamically that pydantic 2 will accept.
+try:
+    from langchain_core.callbacks import BaseCallbackHandler as _BaseCallbackHandler
+
+    class _NullCallback(_BaseCallbackHandler):
+        """No-op callback that satisfies pydantic's BaseCallbackHandler check."""
+
+        pass
+
+except ImportError:
+    # Stub fallback for the cross-test-stubbing case: a class that
+    # *looks like* a BaseCallbackHandler to pydantic without actually
+    # inheriting from it (the real one isn't available because
+    # langchain_core is stubbed).
+    class _NullCallback:  # type: ignore[no-redef]
+        """Marker class — pydantic accepts it because of the duck-typed __getattr__ below."""
+
+        def __getattr__(self, _name):
+            return lambda *a, **kw: None
+
+
+_usage_tracker_stub.get_usage_callback = lambda: _NullCallback()
 _full_stub("utils.app_integrations", "send_app_notification")
 _full_stub("utils.conversations")
 _full_stub("utils.conversations.process_conversation", "process_conversation", "retrieve_in_progress_conversation")

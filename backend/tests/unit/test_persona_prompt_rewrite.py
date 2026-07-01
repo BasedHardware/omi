@@ -85,9 +85,20 @@ _stubs = [
     'deepgram.clients.live.v1',
     'firebase_admin',
     'firebase_admin.messaging',
-    'google',
-    'google.cloud',
-    'google.cloud.firestore',
+    # NOTE (cubic follow-up 4601668066 → rebase): don't stub 'google',
+    # 'google.cloud', or 'google.cloud.firestore'. The stubs are bare
+    # ModuleType instances with no __path__, so they're not real
+    # packages — that breaks any `from google.cloud.X import Y` because
+    # Python can't resolve X as a submodule of the stubbed `google` /
+    # `google.cloud`. Main added canonical-memory imports to utils.apps
+    # which transitively pulls in database.knowledge_graph (which uses
+    # `from google.cloud import firestore` and
+    # `from google.cloud.firestore_v1 import FieldFilter`) when the
+    # test does `import utils.apps`. Let the real google packages
+    # resolve so that import chain works.
+    # 'google',
+    # 'google.cloud',
+    # 'google.cloud.firestore',
     'langchain',
     'langchain_core',
     'langchain_core.messages',
