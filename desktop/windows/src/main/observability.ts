@@ -1,6 +1,7 @@
 import { app, ipcMain } from 'electron'
-import { appendFileSync, mkdirSync } from 'fs'
+import { appendFile, mkdir, rename, rm, stat } from 'fs/promises'
 import { dirname, join } from 'path'
+import type { IpcMainEvent } from 'electron'
 import type {
   ObservabilityBreadcrumb,
   ObservabilityEvent,
@@ -14,11 +15,16 @@ import {
 
 const MAX_BREADCRUMBS = 60
 const OBSERVABILITY_FILE = 'observability.jsonl'
+const MAX_OBSERVABILITY_FILE_BYTES = 2 * 1024 * 1024
+const OBSERVABILITY_IPC_WINDOW_MS = 60_000
+const OBSERVABILITY_IPC_MAX_PER_WINDOW = 60
 
 let initialized = false
 let ipcRegistered = false
 let sinkPath: string | null = null
+let writeChain: Promise<void> = Promise.resolve()
 const breadcrumbs: ObservabilityBreadcrumb[] = []
+const ipcBuckets = new Map<number, { windowStart: number; count: number }>()
 
 type BreadcrumbOptions = {
   category?: string
@@ -32,14 +38,75 @@ function eventSinkPath(): string {
   return sinkPath
 }
 
-function writeEvent(event: Record<string, unknown>): void {
+async function rotateSinkIfNeeded(path: string, incomingBytes: number): Promise<void> {
+  let currentSize = 0
   try {
-    const path = eventSinkPath()
-    mkdirSync(dirname(path), { recursive: true })
-    appendFileSync(path, `${JSON.stringify(event)}\n`, 'utf8')
+    currentSize = (await stat(path)).size
   } catch (error) {
-    console.warn('[observability] failed to write event:', sanitizeObservabilityValue(error))
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
+  if (currentSize + incomingBytes <= MAX_OBSERVABILITY_FILE_BYTES) return
+
+  const rotated = `${path}.1`
+  await rm(rotated, { force: true })
+  try {
+    await rename(path, rotated)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+}
+
+async function appendEventLine(line: string): Promise<void> {
+  const path = eventSinkPath()
+  await mkdir(dirname(path), { recursive: true })
+  await rotateSinkIfNeeded(path, Buffer.byteLength(line, 'utf8'))
+  await appendFile(path, line, 'utf8')
+}
+
+function writeEvent(event: Record<string, unknown>): void {
+  const line = `${JSON.stringify(event)}\n`
+  writeChain = writeChain
+    .then(() => appendEventLine(line))
+    .catch((error) => {
+      console.warn('[observability] failed to write event:', sanitizeObservabilityValue(error))
+    })
+}
+
+function trustedRendererUrl(url: string | undefined): boolean {
+  if (!url) return false
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'file:' || parsed.protocol === 'app:') return true
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    return (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '[::1]'
+    )
+  } catch {
+    return false
+  }
+}
+
+function isTrustedObservabilitySender(event: IpcMainEvent): boolean {
+  const frameUrl = event.senderFrame?.url
+  if (trustedRendererUrl(frameUrl)) return true
+  return trustedRendererUrl(event.sender.getURL())
+}
+
+function allowObservabilityIpc(event: IpcMainEvent): boolean {
+  if (!isTrustedObservabilitySender(event)) return false
+
+  const id = event.sender.id
+  const now = Date.now()
+  const bucket = ipcBuckets.get(id)
+  if (!bucket || now - bucket.windowStart >= OBSERVABILITY_IPC_WINDOW_MS) {
+    ipcBuckets.set(id, { windowStart: now, count: 1 })
+    return true
+  }
+  if (bucket.count >= OBSERVABILITY_IPC_MAX_PER_WINDOW) return false
+  bucket.count += 1
+  return true
 }
 
 function safeRecord(value: unknown): Record<string, unknown> {
@@ -200,7 +267,8 @@ export function initMainObservability(): void {
 export function registerObservabilityIpc(): void {
   if (ipcRegistered) return
   ipcRegistered = true
-  ipcMain.on('observability:capture', (_event, rawEvent: unknown) => {
+  ipcMain.on('observability:capture', (ipcEvent, rawEvent: unknown) => {
+    if (!allowObservabilityIpc(ipcEvent)) return
     const event = safeRecord(rawEvent) as Partial<ObservabilityEvent>
     captureObservabilityEvent(
       {
@@ -218,7 +286,8 @@ export function registerObservabilityIpc(): void {
       'renderer'
     )
   })
-  ipcMain.on('observability:breadcrumb', (_event, rawBreadcrumb: unknown) => {
+  ipcMain.on('observability:breadcrumb', (ipcEvent, rawBreadcrumb: unknown) => {
+    if (!allowObservabilityIpc(ipcEvent)) return
     const breadcrumb = safeRecord(rawBreadcrumb) as Partial<ObservabilityBreadcrumb>
     const data = safeRecord(breadcrumb.data)
     addObservabilityBreadcrumb(safeName(breadcrumb.name, 'renderer.breadcrumb'), data, {
@@ -227,4 +296,17 @@ export function registerObservabilityIpc(): void {
       source: 'renderer'
     })
   })
+}
+
+export function flushObservabilityWritesForTests(): Promise<void> {
+  return writeChain
+}
+
+export function resetObservabilityForTests(): void {
+  initialized = false
+  ipcRegistered = false
+  sinkPath = null
+  writeChain = Promise.resolve()
+  breadcrumbs.length = 0
+  ipcBuckets.clear()
 }
