@@ -4,6 +4,14 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+if (process.platform !== 'win32') {
+  console.log(
+    '[ensure-koffi-win32-native] not Windows — skipping (Koffi native staging is Windows-only).'
+  )
+  process.exit(0)
+}
+
 const requireFromRoot = createRequire(join(projectRoot, 'package.json'))
 const koffiEntry = requireFromRoot.resolve('koffi')
 const koffiRoot = dirname(koffiEntry)
