@@ -66,4 +66,17 @@ describe('local STT upload mapping', () => {
     expect(segments[0].end).toBeGreaterThan(1)
     expect(segments[0].text).toBe('one two three next')
   })
+
+  it('fails visibly instead of truncating long transcripts', () => {
+    expect(() =>
+      buildUploadSegments(
+        Array.from({ length: 501 }, (_, index) => ({
+          text: `segment ${index}`,
+          speaker: `SPEAKER_${index}`,
+          start: index * 2,
+          end: index * 2 + 1
+        }))
+      )
+    ).toThrow('Save was stopped to avoid truncating transcript content')
+  })
 })
