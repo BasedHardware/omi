@@ -494,7 +494,7 @@ def check_docker_secret_baking(policy: dict) -> list[str]:
             for name in exact:
                 if name in line and name not in allowed_public:
                     errors.append(f"{rel}:{lineno}: server-only {name} is passed as docker build-arg")
-            for match in re.finditer(r"--build-arg(?:=|\s+)([A-Z0-9_]+)(?:=(.*?))?(?=\s+--build-arg|\s*\\?$)", line):
+            for match in re.finditer(r"--build-arg(?:=|\s+)([A-Z0-9_]+)(?:=(.*?))?(?=\s+-{1,2}[A-Za-z]|\s*\\?$)", line):
                 name = match.group(1)
                 rhs = match.group(2) or f"${name}"
                 if name not in allowed_public:

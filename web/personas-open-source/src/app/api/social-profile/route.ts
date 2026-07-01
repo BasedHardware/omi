@@ -5,12 +5,42 @@ const rapidApiHost = process.env.RAPIDAPI_HOST;
 const linkedinApiKey = process.env.LINKEDIN_API_KEY;
 const linkedinApiHost = process.env.LINKEDIN_API_HOST;
 
+const MAX_USERNAME_LENGTH = 64;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
+
 const rapidApiHeaders = (key?: string, host?: string) => {
   if (!key || !host) return null;
   return {
     'x-rapidapi-key': key,
     'x-rapidapi-host': host,
   };
+};
+
+const clientIp = (req: Request) => {
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  if (forwardedFor) return forwardedFor.split(',')[0]?.trim() || 'unknown';
+  return req.headers.get('x-real-ip') || 'unknown';
+};
+
+const isRateLimited = (key: string) => {
+  const now = Date.now();
+  if (rateLimits.size > 1000) {
+    for (const [entryKey, entry] of rateLimits) {
+      if (entry.resetAt <= now) rateLimits.delete(entryKey);
+    }
+  }
+
+  const current = rateLimits.get(key);
+
+  if (!current || current.resetAt <= now) {
+    rateLimits.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  current.count += 1;
+  return current.count > RATE_LIMIT_MAX_REQUESTS;
 };
 
 export async function GET(req: Request) {
@@ -20,6 +50,14 @@ export async function GET(req: Request) {
 
   if (!username) {
     return NextResponse.json({ error: 'Missing username' }, { status: 400 });
+  }
+
+  if (username.length > MAX_USERNAME_LENGTH) {
+    return NextResponse.json({ error: 'Invalid username' }, { status: 400 });
+  }
+
+  if (isRateLimited(clientIp(req))) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
   }
 
   let upstreamUrl: string;

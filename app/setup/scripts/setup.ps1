@@ -85,8 +85,10 @@ function SetupAppEnv {
     Copy-Item -Path ".client.dev.env" -Destination ".client.env" -Force
     if (Get-Command "python3" -ErrorAction SilentlyContinue) {
         python3 ../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     } elseif (Get-Command "py" -ErrorAction SilentlyContinue) {
         py -3 ../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     } else {
         Write-Host "Python 3 is required to validate public client env files. Install Python 3 and retry."
         exit 1

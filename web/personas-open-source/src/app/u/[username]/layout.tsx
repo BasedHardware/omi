@@ -73,7 +73,7 @@ export async function generateMetadata(
     }
 
     const profileResponse = await fetch(
-      `https://${rapidApiHost}/screenname.php?screenname=${username}`,
+      `https://${rapidApiHost}/screenname.php?screenname=${encodeURIComponent(username)}`,
       {
         headers: {
           'x-rapidapi-key': rapidApiKey,
