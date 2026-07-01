@@ -73,6 +73,7 @@ def external_secret_refresh_observed(state: dict[str, Any], min_refresh_time: da
     refresh_time = parse_optional_timestamp(status.get('refreshTime'))
     if refresh_time is None:
         return False, 'status.refreshTime missing'
+    min_refresh_time = to_kubernetes_timestamp_precision(min_refresh_time)
     if refresh_time < min_refresh_time:
         return False, f'status.refreshTime {refresh_time.isoformat()} is older than requested refresh'
 
@@ -106,6 +107,10 @@ def parse_timestamp(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def to_kubernetes_timestamp_precision(value: datetime) -> datetime:
+    return value.astimezone(timezone.utc).replace(microsecond=0)
 
 
 if __name__ == '__main__':

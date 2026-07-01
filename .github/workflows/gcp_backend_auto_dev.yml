@@ -133,7 +133,7 @@ jobs:
             --set gke.clusterLocation=${{ env.REGION }} \
             --set gke.clusterName=${{ vars.GKE_CLUSTER }} \
             --set gsa.name="${gsa_name}"
-          force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
+          force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
             ${{ vars.ENV }}-omi-backend-external-secret \
             force-sync="${force_sync_at}" --overwrite

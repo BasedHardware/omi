@@ -138,7 +138,7 @@ jobs:
             helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
               ./backend/charts/backend-secrets \
               -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
-            force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
+            force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
               ${{ vars.ENV }}-omi-backend-external-secret \
               force-sync="${force_sync_at}" --overwrite

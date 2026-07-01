@@ -115,7 +115,7 @@ jobs:
             --set gsa.name="${gsa_name}"
           # Trigger an immediate sync so newly-listed keys are pulled before the
           # listen deployment restarts (otherwise its env refs resolve empty).
-          force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
+          force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
             ${{ vars.ENV }}-omi-backend-external-secret \
             force-sync="${force_sync_at}" --overwrite
