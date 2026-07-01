@@ -833,7 +833,7 @@ def update_personas_async(uid: str):
 
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest memories and conversations."""
-# Get user info — used as the persona's first-person identity.
+    # Get user info — used as the persona's first-person identity.
     # P2 from cubic AI review (PR #8682 follow-up 4601668066): the
     # previous version also called get_user_public_memories(limit=250)
     # and built a `memories` lock-filtered list that was then DISCARDED
