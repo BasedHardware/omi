@@ -28,6 +28,11 @@ type ParakeetCppHandlers = {
 
 type RunCli = (wavPath: string) => Promise<string>
 
+export function safeSessionFilePrefix(sessionId: string): string {
+  const safe = sessionId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64)
+  return safe || 'session'
+}
+
 export function writePcm16Wav(path: string, pcm: Buffer, sampleRate = SAMPLE_RATE): Promise<void> {
   const header = Buffer.alloc(44)
   const byteRate = sampleRate * BYTES_PER_SAMPLE
@@ -161,7 +166,10 @@ export class ParakeetCppSession {
   private async drainChunk(byteCount: number): Promise<void> {
     const pcm = this.takeBytes(byteCount)
     const durationSeconds = pcm.length / BYTES_PER_SAMPLE / SAMPLE_RATE
-    const wavPath = join(this.tmpRoot, `${this.args.sessionId}-${randomUUID()}.wav`)
+    const wavPath = join(
+      this.tmpRoot,
+      `${safeSessionFilePrefix(this.args.sessionId)}-${randomUUID()}.wav`
+    )
 
     try {
       await mkdir(this.tmpRoot, { recursive: true })
