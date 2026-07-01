@@ -4,6 +4,7 @@ import { SettingsSearchProvider, useSettingsSearch } from '../components/setting
 import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
+import { AIChatTab } from '../components/settings/tabs/AIChatTab'
 import { GeneralTab } from '../components/settings/tabs/GeneralTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
 import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
@@ -15,6 +16,7 @@ import { Memories } from './Memories'
 // management UI), so it isn't a simple searchable settings panel — it's handled
 // separately below and is intentionally absent from this map.
 const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
+  'ai-chat': AIChatTab,
   general: GeneralTab,
   rewind: RewindTab,
   privacy: PrivacyTab,
