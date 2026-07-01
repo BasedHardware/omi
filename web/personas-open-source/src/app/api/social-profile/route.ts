@@ -12,7 +12,7 @@ const MAX_USERNAME_LENGTH = 64;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
 const PRE_AUTH_RATE_LIMIT_MAX_REQUESTS = 120;
-const PRE_AUTH_CREDENTIAL_RATE_LIMIT_MAX_REQUESTS = 20;
+const PRE_AUTH_CREDENTIAL_RATE_LIMIT_MAX_REQUESTS = 30;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
 
 const rapidApiHeaders = (key?: string, host?: string) => {
