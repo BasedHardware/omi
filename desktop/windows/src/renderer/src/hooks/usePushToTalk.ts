@@ -303,11 +303,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
       finalizingRef.current = false
       setFinalizing(false)
       stopAudioViz()
-      try {
-        await handleRef.current?.stop()
-      } catch {
-        /* ignore */
-      }
+      const handle = handleRef.current
       handleRef.current = null
       const text = assembleTranscript(linesRef.current, interimRef.current)
       markConsumed()
@@ -318,6 +314,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
       // quota/1008 or silence) — notify before the text-gated send.
       opts.onCaptureEnd?.()
       if (text) onCommit(text)
+      void handle?.stop().catch(() => undefined)
     }
 
     const check = (): void => {
