@@ -1,23 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bot,
   Check,
   Clipboard,
   ExternalLink,
-  Eye,
-  EyeOff,
   KeyRound,
   Loader2,
   Server,
   TestTube2
 } from 'lucide-react'
-import type { McpKeyRecord } from '../../../../shared/types'
+import type { McpKeyMetadata, McpKeyRecord } from '../../../../shared/types'
 import { createWindowsMcpKey } from '../../lib/apiClient'
-import {
-  mcpDestinations,
-  testHostedMcpConnection,
-  type McpDestination
-} from '../../lib/mcpDestinations'
+import { mcpDestinations, type McpDestination } from '../../lib/mcpDestinations'
 
 type CopyState = {
   target: string
@@ -29,27 +23,25 @@ function maskKey(key: string): string {
   return `${key.slice(0, 6)}********${key.slice(-4)}`
 }
 
+function metadataFromRecord(record: McpKeyRecord): McpKeyMetadata {
+  return { id: record.id, name: record.name, maskedKey: maskKey(record.key) }
+}
+
+const MCP_KEY_PLACEHOLDER = 'YOUR_OMI_MCP_KEY'
+
 function CodeBlock({
   title,
   value,
   copyTarget,
   disabled,
-  secure,
-  revealed,
-  onToggleReveal,
   onCopy
 }: {
   title: string
   value: string
   copyTarget: string
   disabled?: boolean
-  secure?: boolean
-  revealed?: boolean
-  onToggleReveal?: () => void
   onCopy: (value: string, label: string) => void
 }): React.JSX.Element {
-  const displayValue = secure && !revealed ? maskKey(value) : value
-
   return (
     <div
       className={`rounded-2xl border border-white/10 bg-black/25 p-3 ${disabled ? 'opacity-55' : ''}`}
@@ -57,16 +49,6 @@ function CodeBlock({
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold uppercase text-white/45">{title}</span>
         <div className="flex items-center gap-1.5">
-          {secure && onToggleReveal && (
-            <button
-              onClick={onToggleReveal}
-              className="rounded-lg p-1.5 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
-              title={revealed ? 'Hide key' : 'Show key'}
-              disabled={disabled}
-            >
-              {revealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
-          )}
           <button
             onClick={() => onCopy(copyTarget, title)}
             className="rounded-lg p-1.5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
@@ -78,7 +60,7 @@ function CodeBlock({
         </div>
       </div>
       <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-white/75">
-        {displayValue}
+        {value}
       </pre>
     </div>
   )
@@ -123,10 +105,10 @@ export function McpConnectorSetup({
   onKeyStateChange?: (hasKey: boolean) => void
 } = {}): React.JSX.Element {
   const [selectedId, setSelectedId] = useState(mcpDestinations[0].id)
-  const [storedKey, setStoredKey] = useState<McpKeyRecord | null>(null)
+  const [storedKey, setStoredKey] = useState<McpKeyMetadata | null>(null)
   const [loadingKey, setLoadingKey] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [showKey, setShowKey] = useState(false)
+  const testRunId = useRef(0)
   const [copyState, setCopyState] = useState<CopyState>(null)
   const [testState, setTestState] = useState<{
     kind: 'idle' | 'running' | 'success' | 'error'
@@ -144,7 +126,7 @@ export function McpConnectorSetup({
       .then((record) => {
         if (!cancelled) {
           setStoredKey(record)
-          onKeyStateChange?.(Boolean(record?.key))
+          onKeyStateChange?.(Boolean(record))
         }
       })
       .catch((error) => {
@@ -163,13 +145,16 @@ export function McpConnectorSetup({
       mcpDestinations.find((destination) => destination.id === selectedId) ?? mcpDestinations[0],
     [selectedId]
   )
-  const setup = useMemo(
-    () => selectedDestination.setup(storedKey?.key ?? 'YOUR_OMI_MCP_KEY'),
-    [selectedDestination, storedKey?.key]
-  )
+  const setup = useMemo(() => selectedDestination.setup(MCP_KEY_PLACEHOLDER), [selectedDestination])
 
   const copy = async (value: string, label: string): Promise<void> => {
-    await navigator.clipboard.writeText(value)
+    if (value === MCP_KEY_PLACEHOLDER) {
+      await window.omi.mcpKeyCopy({ kind: 'key' })
+    } else if (value.includes(MCP_KEY_PLACEHOLDER)) {
+      await window.omi.mcpKeyCopy({ kind: 'text', text: value })
+    } else {
+      await navigator.clipboard.writeText(value)
+    }
     setCopyState({ target: value, label })
     window.setTimeout(() => {
       setCopyState((current) => (current?.target === value ? null : current))
@@ -177,16 +162,16 @@ export function McpConnectorSetup({
   }
 
   const generateKey = async (): Promise<void> => {
-    if (generating) return
+    if (generating || testState.kind === 'running') return
+    testRunId.current += 1
     setGenerating(true)
     setKeyError(null)
     setTestState({ kind: 'idle', message: '' })
     try {
       const record = await createWindowsMcpKey()
       await window.omi.mcpKeyCreate(record)
-      setStoredKey(record)
+      setStoredKey(metadataFromRecord(record))
       onKeyStateChange?.(true)
-      setShowKey(false)
     } catch (error) {
       setKeyError((error as Error).message)
     } finally {
@@ -195,20 +180,24 @@ export function McpConnectorSetup({
   }
 
   const testConnection = async (): Promise<void> => {
-    if (!storedKey?.key || testState.kind === 'running') return
+    if (!storedKey || testState.kind === 'running') return
+    const runId = testRunId.current + 1
+    testRunId.current = runId
     setTestState({ kind: 'running', message: 'Testing hosted MCP...' })
     try {
-      const result = await testHostedMcpConnection(storedKey.key)
+      const result = await window.omi.mcpKeyTest()
+      if (runId !== testRunId.current) return
       setTestState({
         kind: 'success',
         message: `Connected. get_memories returned ${result.memoryCount} memor${result.memoryCount === 1 ? 'y' : 'ies'}.`
       })
     } catch (error) {
+      if (runId !== testRunId.current) return
       setTestState({ kind: 'error', message: (error as Error).message })
     }
   }
 
-  const hasKey = Boolean(storedKey?.key)
+  const hasKey = Boolean(storedKey)
 
   return (
     <section className="space-y-4">
@@ -227,7 +216,7 @@ export function McpConnectorSetup({
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={generateKey}
-            disabled={loadingKey || generating}
+            disabled={loadingKey || generating || testState.kind === 'running'}
             className="btn-primary inline-flex items-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
           >
             {generating ? (
@@ -324,11 +313,8 @@ export function McpConnectorSetup({
             {hasKey ? (
               <CodeBlock
                 title="Your key"
-                value={storedKey!.key}
-                copyTarget={storedKey!.key}
-                secure
-                revealed={showKey}
-                onToggleReveal={() => setShowKey((visible) => !visible)}
+                value={storedKey!.maskedKey}
+                copyTarget={MCP_KEY_PLACEHOLDER}
                 onCopy={copy}
               />
             ) : (
