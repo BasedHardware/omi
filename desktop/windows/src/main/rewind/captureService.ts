@@ -19,16 +19,9 @@ const IDLE_THRESHOLD_SECONDS = 60
 let locked = false
 let lastHash: string | null = null
 let powerListenersBound = false
-// In-memory mirror of the persisted settings. startRewindCapture() loads the
-// saved value (defaulting to capture-off) at startup; updateRewindSettings()
-// keeps this and the on-disk copy in sync. Defaults to capture-off for any
-// pre-startup getRewindSettings() read.
-let settings: RewindSettings = {
-  captureEnabled: false,
-  intervalMs: 1000,
-  retentionDays: 14,
-  excludedApps: []
-}
+// In-memory mirror of the persisted settings. It is loaded at module init so
+// early IPC reads cannot mask a saved captureEnabled=true preference.
+let settings: RewindSettings = getPersistedRewindSettings()
 
 function bindPowerListeners(): void {
   if (powerListenersBound) return
