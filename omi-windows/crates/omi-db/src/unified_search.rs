@@ -1,53 +1,144 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 use crate::Database;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SearchResultKind {
     Memory,
     Screenshot,
     Clipboard,
     File,
     Conversation,
+    KnowledgeBase,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+impl SearchResultKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Memory => "Memory",
+            Self::Screenshot => "Screenshot",
+            Self::Clipboard => "Clipboard",
+            Self::File => "File",
+            Self::Conversation => "Conversation",
+            Self::KnowledgeBase => "Knowledge",
+        }
+    }
+
+    fn priority_bonus(&self) -> f64 {
+        match self {
+            Self::Memory => 4.0,
+            Self::Conversation => 3.0,
+            Self::Clipboard => 2.0,
+            Self::KnowledgeBase => 2.5,
+            Self::File => 1.0,
+            Self::Screenshot => 0.5,
+        }
+    }
+
+    pub fn all_local() -> HashSet<Self> {
+        [Self::Memory, Self::Screenshot, Self::Clipboard, Self::File, Self::Conversation]
+            .into_iter()
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnifiedSearchResult {
     pub kind: SearchResultKind,
     pub id: String,
     pub title: String,
     pub snippet: String,
     pub timestamp: DateTime<Utc>,
+    pub score: f64,
+}
+
+impl PartialEq for UnifiedSearchResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.kind == other.kind
+    }
+}
+
+fn compute_score(
+    kind: &SearchResultKind,
+    title: &str,
+    snippet: &str,
+    query: &str,
+    timestamp: &DateTime<Utc>,
+) -> f64 {
+    let query_lower = query.to_lowercase();
+    let mut score = 0.0;
+
+    // Title match bonus
+    if title.to_lowercase().contains(&query_lower) {
+        score += 10.0;
+    }
+
+    // Match density in snippet (up to 5 occurrences)
+    let snippet_lower = snippet.to_lowercase();
+    let occurrences = snippet_lower.matches(&query_lower).count().min(5);
+    score += occurrences as f64 * 2.0;
+
+    // Recency bonus: exponential decay with 1-week half-life
+    let hours_ago = Utc::now()
+        .signed_duration_since(*timestamp)
+        .num_hours()
+        .max(0) as f64;
+    score += 5.0 * (-hours_ago / 168.0).exp();
+
+    // Source priority
+    score += kind.priority_bonus();
+
+    score
 }
 
 impl Database {
     pub fn search_all(&self, query: &str, limit: usize) -> Result<Vec<UnifiedSearchResult>> {
+        self.search_filtered(query, limit, &SearchResultKind::all_local())
+    }
+
+    pub fn search_filtered(
+        &self,
+        query: &str,
+        limit: usize,
+        sources: &HashSet<SearchResultKind>,
+    ) -> Result<Vec<UnifiedSearchResult>> {
         let mut results = Vec::new();
-        let per_source = (limit / 5).max(3);
+        let per_source = (limit / sources.len().max(1)).max(3);
 
-        if let Ok(memories) = self.search_memories_text(query, per_source) {
-            results.extend(memories);
+        if sources.contains(&SearchResultKind::Memory) {
+            if let Ok(r) = self.search_memories_text(query, per_source) {
+                results.extend(r);
+            }
+        }
+        if sources.contains(&SearchResultKind::Screenshot) {
+            if let Ok(r) = self.search_screenshots_unified(query, per_source) {
+                results.extend(r);
+            }
+        }
+        if sources.contains(&SearchResultKind::Clipboard) {
+            if let Ok(r) = self.search_clipboard_unified(query, per_source) {
+                results.extend(r);
+            }
+        }
+        if sources.contains(&SearchResultKind::File) {
+            if let Ok(r) = self.search_files_unified(query, per_source) {
+                results.extend(r);
+            }
+        }
+        if sources.contains(&SearchResultKind::Conversation) {
+            if let Ok(r) = self.search_conversations_unified(query, per_source) {
+                results.extend(r);
+            }
         }
 
-        if let Ok(screenshots) = self.search_screenshots_unified(query, per_source) {
-            results.extend(screenshots);
+        // Score and sort
+        for r in &mut results {
+            r.score = compute_score(&r.kind, &r.title, &r.snippet, query, &r.timestamp);
         }
-
-        if let Ok(clipboard) = self.search_clipboard_unified(query, per_source) {
-            results.extend(clipboard);
-        }
-
-        if let Ok(files) = self.search_files_unified(query, per_source) {
-            results.extend(files);
-        }
-
-        if let Ok(convos) = self.search_conversations_unified(query, per_source) {
-            results.extend(convos);
-        }
-
-        results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(limit);
         Ok(results)
     }
@@ -68,7 +159,7 @@ impl Database {
             let snippet = if content.len() > 150 {
                 format!("{}…", &content[..150])
             } else {
-                content.clone()
+                content
             };
             Ok(UnifiedSearchResult {
                 kind: SearchResultKind::Memory,
@@ -81,6 +172,7 @@ impl Database {
                     .get::<_, String>(3)?
                     .parse()
                     .unwrap_or_else(|_| Utc::now()),
+                score: 0.0,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -112,6 +204,7 @@ impl Database {
                     title: s.window_title.unwrap_or_else(|| "Screenshot".to_string()),
                     snippet,
                     timestamp: s.captured_at,
+                    score: 0.0,
                 }
             })
             .collect())
@@ -146,6 +239,7 @@ impl Database {
                     .get::<_, String>(3)?
                     .parse()
                     .unwrap_or_else(|_| Utc::now()),
+                score: 0.0,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -173,6 +267,7 @@ impl Database {
                     .get::<_, String>(4)?
                     .parse()
                     .unwrap_or_else(|_| Utc::now()),
+                score: 0.0,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -210,6 +305,7 @@ impl Database {
                     .get::<_, String>(3)?
                     .parse()
                     .unwrap_or_else(|_| Utc::now()),
+                score: 0.0,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
