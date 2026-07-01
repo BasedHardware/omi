@@ -593,11 +593,7 @@ export async function sendPiChat(
     }
   })
 
-  try {
-    await agent.prompt(request.messages.map(chatMessageToAgentMessage))
-  } catch (error) {
-    throw error
-  }
+  await agent.prompt(request.messages.map(chatMessageToAgentMessage))
 
   const errorMessage = agent.state.errorMessage
   if (errorMessage) {
