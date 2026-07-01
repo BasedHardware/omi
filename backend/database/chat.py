@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
+from google.api_core.exceptions import AlreadyExists, Conflict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -675,15 +676,36 @@ def update_chat_session(uid: str, session_id: str, title: str = None, starred: b
 
 
 def save_message(
-    uid: str, text: str, sender: str, app_id: str = None, session_id: str = None, metadata: str = None
+    uid: str,
+    text: str,
+    sender: str,
+    app_id: str = None,
+    session_id: str = None,
+    metadata: str = None,
+    client_message_id: str = None,
 ) -> dict:
     """Save a chat message for the desktop app.
 
     Writes all fields expected by chat.py's Message model so messages are
     visible across platforms.  Auto-acquires a session if none provided.
     """
-    msg_id = str(uuid.uuid4())
+    msg_id = client_message_id or str(uuid.uuid4())
     now = datetime.now(timezone.utc)
+
+    message_ref = db.collection('users').document(uid).collection('messages').document(msg_id)
+    if client_message_id:
+        existing_message = message_ref.get()
+        if existing_message.exists:
+            existing = existing_message.to_dict() or {}
+            existing_created_at = existing.get('created_at')
+            if hasattr(existing_created_at, 'isoformat'):
+                existing_created_at = existing_created_at.isoformat()
+            return {
+                'id': msg_id,
+                'created_at': existing_created_at or now.isoformat(),
+                'session_id': existing.get('chat_session_id') or existing.get('session_id'),
+                'created': False,
+            }
 
     # Auto-acquire session (matches Rust backend behavior)
     if not session_id:
@@ -705,10 +727,27 @@ def save_message(
         'memories_id': [],
         'metadata': metadata,
     }
-    db.collection('users').document(uid).collection('messages').document(msg_id).set(doc)
+    created = True
+    if client_message_id:
+        try:
+            message_ref.create(doc)
+        except (AlreadyExists, Conflict):
+            existing = message_ref.get().to_dict() or {}
+            existing_created_at = existing.get('created_at')
+            if hasattr(existing_created_at, 'isoformat'):
+                existing_created_at = existing_created_at.isoformat()
+            return {
+                'id': msg_id,
+                'created_at': existing_created_at or now.isoformat(),
+                'session_id': existing.get('chat_session_id') or existing.get('session_id'),
+                'created': False,
+            }
+    else:
+        message_ref.set(doc)
 
-    # Update session message_count and preview (skip if session was deleted)
-    if session_id:
+    # Update session message_count and preview (skip if session was deleted).
+    # Retried client_message_id saves are idempotent and must not bump counters.
+    if session_id and created:
         session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
         if session_ref.get().exists:
             session_ref.update(
@@ -719,7 +758,7 @@ def save_message(
                 }
             )
 
-    return {'id': msg_id, 'created_at': now.isoformat()}
+    return {'id': msg_id, 'created_at': now.isoformat(), 'session_id': session_id, 'created': created}
 
 
 def delete_messages(uid: str, app_id: str = None, session_id: str = None) -> int:

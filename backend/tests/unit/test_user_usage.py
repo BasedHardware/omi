@@ -141,21 +141,21 @@ def test_realtime_quota_breakdown_prevents_legacy_call_count_double_count():
     assert r["cost_usd"] == 0.6
 
 
-def test_falls_back_to_old_desktop_call_count_when_quota_questions_missing():
+def test_desktop_helper_only_call_count_does_not_count_as_questions():
     _setup_docs(
         {
             "2026-06-10": {
                 "desktop_chat": {"call_count": 7, "cost_usd": 0.4},
-                "desktop_chat_realtime": {"call_count": 7},
+                "desktop_chat_omi": {"call_count": 7},
             }
         }
     )
     r = user_usage.get_monthly_chat_usage("uid", now=NOW)
-    assert r["questions"] == 7
+    assert r["questions"] == 0
     assert r["cost_usd"] == 0.4
 
 
-def test_flat_old_desktop_call_count_fallback_uses_only_grand_total():
+def test_legacy_realtime_call_count_fallback_uses_realtime_breakdown_only():
     _setup_docs(
         {
             "2026-06-10": {

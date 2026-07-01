@@ -2611,7 +2611,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     text: trimmedText,
                     sender: "human",
                     appId: capturedAppId,
-                    sessionId: capturedSessionId
+                    sessionId: capturedSessionId,
+                    clientMessageId: localId
                 )
                 await MainActor.run {
                     if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
@@ -2657,7 +2658,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     text: trimmedText,
                     sender: "ai",
                     appId: capturedAppId,
-                    sessionId: capturedSessionId
+                    sessionId: capturedSessionId,
+                    clientMessageId: localId
                 )
                 await MainActor.run {
                     if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
@@ -2742,7 +2744,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     ) async {
         do {
             let response = try await APIClient.shared.saveMessage(
-                text: text, sender: sender, appId: appId, sessionId: sessionId)
+                text: text, sender: sender, appId: appId, sessionId: sessionId, clientMessageId: message.id)
             await MainActor.run {
                 if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
                     self.messages[index].id = response.id
@@ -3003,10 +3005,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         if isUsingOmiAccountProvider {
             usageLimiter.recordQuery()
-            let quotaSource = surfaceRef?.surfaceKind ?? (sessionKey == "floating" ? "floating_bar" : "main_chat")
-            Task.detached(priority: .background) {
-                await APIClient.shared.recordDesktopChatQuotaQuestion(source: quotaSource)
-            }
         }
 
         // Save user message to backend and add to UI.
@@ -3036,7 +3034,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         sender: "human",
                         appId: capturedAppId,
                         sessionId: capturedSessionId,
-                        metadata: attachmentMetadataJSON
+                        metadata: attachmentMetadataJSON,
+                        clientMessageId: userMessageId
                     )
                     // Adopt the server ID (local UUID → server ID) and mark synced.
                     // isSynced=true enables rating buttons on the message bubble.
@@ -3489,7 +3488,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         sender: "ai",
                         appId: capturedAppId,
                         sessionId: capturedSessionId,
-                        metadata: toolMetadata
+                        metadata: toolMetadata,
+                        clientMessageId: aiMessageId
                     )
                     // Adopt the server ID so future polls find this message by ID
                     // (existingIds check in pollForNewMessages). isSynced=true enables
@@ -3540,9 +3540,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             )
 
             // Skip client-side cost telemetry for piMono because /v2/chat/completions
-            // already logs Omi-account token/cost usage server-side. The question
-            // quota is recorded separately at send acceptance above, so model calls
-            // and helper calls cannot double-count messages. Local harnesses
+            // already logs Omi-account token/cost usage server-side. Question
+            // quota is recorded by the backend when the accepted human message
+            // is persisted, so model calls and helper calls cannot double-count. Local harnesses
             // (Hermes/OpenClaw) skip telemetry entirely; use the actual harness, not
             // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
             // override the harness without changing the user's global preference.
@@ -3625,7 +3625,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                                 sender: "ai",
                                 appId: capturedAppId,
                                 sessionId: capturedSessionId,
-                                metadata: partialToolMetadata
+                                metadata: partialToolMetadata,
+                                clientMessageId: aiMessageId
                             )
                             await MainActor.run {
                                 if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {

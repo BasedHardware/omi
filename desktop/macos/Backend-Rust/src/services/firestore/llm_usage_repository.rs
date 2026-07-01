@@ -64,16 +64,6 @@ impl FirestoreService {
         Ok(())
     }
 
-    /// Increment the quota-specific desktop question counter once for a user-visible
-    /// desktop chat request. Internal generation counts stay in `record_llm_usage`.
-    pub async fn record_desktop_chat_quota_question(
-        &self,
-        uid: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.record_desktop_chat_quota_question_with_account(uid, None)
-            .await
-    }
-
     /// Increment the total desktop question counter and, when provided, an
     /// account-specific quota counter for rollout-safe breakdown fallback.
     pub async fn record_desktop_chat_quota_question_with_account(

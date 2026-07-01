@@ -32,10 +32,6 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
         if not snap.exists:
             continue
         data = snap.to_dict() or {}
-        has_flat_desktop_quota_questions = 'desktop_chat.quota_questions' in data
-        has_desktop_quota_questions = has_flat_desktop_quota_questions or (
-            isinstance(data.get('desktop_chat'), dict) and 'quota_questions' in data['desktop_chat']
-        )
         has_desktop_realtime_quota_questions = 'desktop_chat_realtime.quota_questions' in data or (
             isinstance(data.get('desktop_chat_realtime'), dict) and 'quota_questions' in data['desktop_chat_realtime']
         )
@@ -51,17 +47,9 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
             # `quota_questions`, incremented once per visible desktop user turn.
             if isinstance(value, dict):
                 if key == 'desktop_chat':
-                    if 'quota_questions' in value:
-                        questions += int(value.get('quota_questions', 0) or 0)
-                    else:
-                        # Already-released desktop backends only wrote call_count.
-                        questions += int(value.get('call_count', 0) or 0)
+                    questions += int(value.get('quota_questions', 0) or 0)
                     cost_usd += float(value.get('cost_usd', 0) or 0)
-                elif (
-                    key == 'desktop_chat_realtime'
-                    and has_desktop_quota_questions
-                    and not has_desktop_realtime_quota_questions
-                ):
+                elif key == 'desktop_chat_realtime' and not has_desktop_realtime_quota_questions:
                     # Rollout bridge: old managed realtime turns only wrote
                     # call_count. New realtime writes both the grand-total
                     # desktop_chat.quota_questions counter and this breakdown's
@@ -75,13 +63,7 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
             if key.startswith('desktop_chat'):
                 if key == 'desktop_chat.quota_questions':
                     questions += int(value)
-                elif key == 'desktop_chat.call_count' and not has_flat_desktop_quota_questions:
-                    questions += int(value)
-                elif (
-                    key == 'desktop_chat_realtime.call_count'
-                    and has_desktop_quota_questions
-                    and not has_desktop_realtime_quota_questions
-                ):
+                elif key == 'desktop_chat_realtime.call_count' and not has_desktop_realtime_quota_questions:
                     questions += int(value)
                 elif key.endswith('.cost_usd'):
                     cost_usd += float(value)

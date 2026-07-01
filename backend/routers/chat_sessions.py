@@ -11,10 +11,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.chat as chat_db
+import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
 from utils.chat import initial_message_util
 from utils.llm.clients import get_llm
@@ -46,6 +47,7 @@ class SaveMessageRequest(BaseModel):
     app_id: str | None = Field(None, max_length=200)
     session_id: str | None = Field(None, max_length=200)
     metadata: str | None = None
+    client_message_id: str | None = Field(None, pattern=r'^[A-Za-z0-9_-]{1,128}$')
 
 
 class RateMessageRequest(BaseModel):
@@ -134,16 +136,31 @@ def delete_chat_session(
 @router.post('/v2/desktop/messages', tags=['chat-sessions'])
 def save_message(
     request: SaveMessageRequest,
+    x_app_platform: str | None = Header(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return chat_db.save_message(
+    saved = chat_db.save_message(
         uid,
         text=request.text,
         sender=request.sender,
         app_id=request.app_id,
         session_id=request.session_id,
         metadata=request.metadata,
+        client_message_id=request.client_message_id,
     )
+    if request.sender == 'human':
+        try:
+            llm_usage_db.record_chat_quota_question(
+                uid,
+                idempotency_key=f'desktop_messages:{saved["id"]}',
+                source='desktop_messages',
+                message_id=saved['id'],
+                chat_session_id=saved.get('session_id'),
+                platform=x_app_platform,
+            )
+        except Exception:
+            logger.exception('Failed to record desktop chat quota question uid=%s message_id=%s', uid, saved['id'])
+    return saved
 
 
 @router.get('/v2/desktop/messages', tags=['chat-sessions'])

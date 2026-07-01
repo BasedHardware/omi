@@ -292,33 +292,6 @@ actor APIClient {
     }
   }
 
-  /// Record one accepted user-visible desktop chat question. This is the
-  /// product-boundary quota counter; token/cost telemetry stays with individual
-  /// LLM calls.
-  func recordDesktopChatQuotaQuestion(source: String) async {
-    let base = rustBackendURL
-    guard !base.isEmpty else { return }
-    let normalized = base.hasSuffix("/") ? base : base + "/"
-    guard let url = URL(string: normalized + "v2/desktop-chat/quota-question") else { return }
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 10
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    do {
-      let headers = try await buildHeaders(requireAuth: true, includeBYOK: false)
-      for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-      request.httpBody = try JSONSerialization.data(withJSONObject: ["source": source])
-      let (_, response) = try await session.data(for: request)
-      guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-        log("APIClient: desktop chat quota question record failed HTTP \(code)")
-        return
-      }
-    } catch {
-      log("APIClient: desktop chat quota question record failed: \(error.localizedDescription)")
-    }
-  }
-
   func delete(
     _ endpoint: String,
     requireAuth: Bool = true,
@@ -4635,7 +4608,8 @@ extension APIClient {
     sender: String,
     appId: String? = nil,
     sessionId: String? = nil,
-    metadata: String? = nil
+    metadata: String? = nil,
+    clientMessageId: String? = nil
   ) async throws -> SaveMessageResponse {
     struct SaveRequest: Encodable {
       let text: String
@@ -4643,9 +4617,16 @@ extension APIClient {
       let app_id: String?
       let session_id: String?
       let metadata: String?
+      let client_message_id: String?
     }
     let body = SaveRequest(
-      text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
+      text: text,
+      sender: sender,
+      app_id: appId,
+      session_id: sessionId,
+      metadata: metadata,
+      client_message_id: clientMessageId
+    )
     return try await post("v2/desktop/messages", body: body)
   }
 
@@ -4937,10 +4918,14 @@ struct InitialMessageResponse: Codable {
 struct SaveMessageResponse: Codable {
   let id: String
   let createdAt: Date
+  let sessionId: String?
+  let created: Bool?
 
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
+    case sessionId = "session_id"
+    case created
   }
 }
 
