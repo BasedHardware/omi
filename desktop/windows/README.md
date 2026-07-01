@@ -23,6 +23,11 @@ npm run dev
 config, so after `cp .env.example .env` the app runs and sign-in works with no extra
 keys to obtain.
 
+`npm run dev` automatically unsets `ELECTRON_RUN_AS_NODE` for the spawned Electron
+app. Some shell/tooling sessions leave that variable set after using Electron as a
+Node runtime; if it leaks into app startup, Electron does not expose `electron.app`
+and the dev app crashes before opening.
+
 ## Authentication
 
 - **App sign-in:** each user signs in with **their own** Google/Omi account through
