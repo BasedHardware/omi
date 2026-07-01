@@ -75,6 +75,7 @@ let installState: KokoroInstallState | null = null
 let installError: string | null = null
 let activeSyntheses = 0
 let lastCleanupAt = 0
+let cleanupPromise: Promise<void> | null = null
 
 export function resetManagedKokoroRuntimeStateForTests(): void {
   loadPromise = null
@@ -83,6 +84,7 @@ export function resetManagedKokoroRuntimeStateForTests(): void {
   installError = null
   activeSyntheses = 0
   lastCleanupAt = 0
+  cleanupPromise = null
 }
 
 export async function getManagedKokoroStatus(deps: RuntimeDeps = {}): Promise<LocalTtsStatus> {
@@ -350,6 +352,15 @@ async function hasModelCache(modelCacheDir: string): Promise<boolean> {
 async function cleanupOldAudio(audioDir: string, now: () => number): Promise<void> {
   const current = now()
   if (current - lastCleanupAt < 60 * 60 * 1000) return
+  if (cleanupPromise) return cleanupPromise
+  lastCleanupAt = current
+  cleanupPromise = cleanupOldAudioInner(audioDir, current).finally(() => {
+    cleanupPromise = null
+  })
+  return cleanupPromise
+}
+
+async function cleanupOldAudioInner(audioDir: string, current: number): Promise<void> {
   const entries = await readdir(audioDir, { withFileTypes: true }).catch(() => [])
   await Promise.all(
     entries
@@ -363,7 +374,6 @@ async function cleanupOldAudio(audioDir: string, now: () => number): Promise<voi
         }
       })
   )
-  lastCleanupAt = current
 }
 
 function configureTransformersEnv(
