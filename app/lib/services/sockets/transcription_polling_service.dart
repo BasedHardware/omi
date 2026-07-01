@@ -108,7 +108,7 @@ class SchemaBasedSttProvider implements ISttProvider {
 
   factory SchemaBasedSttProvider.openAI({required String apiKey, String model = 'whisper-1', String language = 'en'}) {
     return SchemaBasedSttProvider(
-      apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
+      apiUrl: 'https://api.openai.com/v1/audio/transcriptions', // public-client-secret-boundary: legacy-direct-provider
       schema: SttResponseSchema.openAI,
       defaultHeaders: {'Authorization': 'Bearer $apiKey'},
       defaultFields: {
@@ -128,7 +128,8 @@ class SchemaBasedSttProvider implements ISttProvider {
     final queryString = queryParams.entries.map((e) => '${e.key}=${e.value}').join('&');
 
     return SchemaBasedSttProvider(
-      apiUrl: 'https://api.deepgram.com/v1/listen?$queryString',
+      apiUrl:
+          'https://api.deepgram.com/v1/listen?$queryString', // public-client-secret-boundary: legacy-direct-provider
       schema: SttResponseSchema.deepgram,
       defaultHeaders: {'Authorization': 'Token $apiKey', 'Content-Type': 'audio/wav'},
       requestBodyType: SttRequestBodyType.rawBinary,
@@ -162,7 +163,8 @@ class SchemaBasedSttProvider implements ISttProvider {
     String language = 'en',
   }) {
     return SchemaBasedSttProvider(
-      apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+      apiUrl:
+          'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey', // public-client-secret-boundary: legacy-direct-provider
       schema: SttResponseSchema.gemini,
       defaultHeaders: {'Content-Type': 'application/json'},
       requestBodyType: SttRequestBodyType.jsonBase64,
@@ -211,7 +213,7 @@ class SchemaBasedSttProvider implements ISttProvider {
   /// ref: https://platform.openai.com/docs/models/gpt-4o-transcribe-diarize
   factory SchemaBasedSttProvider.openAIDiarize({required String apiKey, String language = 'en'}) {
     return SchemaBasedSttProvider(
-      apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
+      apiUrl: 'https://api.openai.com/v1/audio/transcriptions', // public-client-secret-boundary: legacy-direct-provider
       schema: SttResponseSchema.openAIDiarize,
       defaultHeaders: {'Authorization': 'Bearer $apiKey'},
       defaultFields: {

@@ -22,6 +22,7 @@ _torch_props = MagicMock()
 _torch_props.total_memory = 16 * 1024**3
 _torch.cuda.get_device_properties.return_value = _torch_props
 _torch.cuda.empty_cache = MagicMock()
+_torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
 _torch.inference_mode = lambda: (lambda fn: fn)
 _torch.compile = lambda m: m
 _torch.backends.cudnn = MagicMock()
@@ -202,18 +203,17 @@ class TestGPUWorkerQueueFull:
 
     def test_sync_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
-        for _ in range(512):
-            try:
-                worker._queue.put_nowait(WorkItem(WorkType.BATCH_TRANSCRIBE, {}))
-            except queue.Full:
-                break
+        worker._queue = MagicMock()
+        worker._queue.put.side_effect = queue.Full
 
         with pytest.raises(RuntimeError, match="GPU queue full"):
             worker.submit_sync({"audio_paths": ["/tmp/a.wav"]}, timeout=0.1)
 
     def test_async_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
         for _ in range(512):
             try:
@@ -586,6 +586,37 @@ class TestAttentionModeConfig:
         assert worker._attn_is_local is True
         worker.stop()
 
+    def test_local_mode_recasts_bf16_after_change_attention(self):
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        mock_model.to.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        torch_mod = sys.modules["torch"]
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = True
+        torch_mod.cuda.is_bf16_supported.return_value = True
+
+        with patch.dict(
+            os.environ,
+            {
+                "PARAKEET_ATTENTION_MODE": "local",
+                "PARAKEET_LOCAL_ATTN_CONTEXT": "128,128",
+                "PARAKEET_TORCH_COMPILE": "false",
+                "PARAKEET_BF16": "1",
+            },
+        ):
+            worker = GPUWorker()
+            worker._load_model()
+
+        to_calls = mock_model.to.call_args_list
+        assert len(to_calls) >= 2
+        assert to_calls[0] == ((torch_mod.bfloat16,),)
+        assert to_calls[-1] == ((torch_mod.bfloat16,),)
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
     def test_auto_mode_skips_torch_compile(self):
         import gpu_worker as gw_mod
 
@@ -648,6 +679,39 @@ class TestSwitchAttention:
             worker._switch_attention(to_local=True)
 
             worker._model.change_attention_model.assert_not_called()
+
+    def test_recast_bf16_after_switch_to_local(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
+            worker = GPUWorker()
+            worker._model = MagicMock()
+            worker._model_dtype = _torch.bfloat16
+            worker._attn_is_local = False
+
+            worker._switch_attention(to_local=True)
+
+            worker._model.to.assert_called_once_with(_torch.bfloat16)
+
+    def test_recast_bf16_after_switch_to_full(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
+            worker = GPUWorker()
+            worker._model = MagicMock()
+            worker._model_dtype = _torch.bfloat16
+            worker._attn_is_local = True
+
+            worker._switch_attention(to_local=False)
+
+            worker._model.to.assert_called_once_with(_torch.bfloat16)
+
+    def test_no_recast_when_dtype_is_none(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
+            worker = GPUWorker()
+            worker._model = MagicMock()
+            worker._model_dtype = None
+            worker._attn_is_local = False
+
+            worker._switch_attention(to_local=True)
+
+            worker._model.to.assert_not_called()
 
 
 class TestDurationGuard:
@@ -836,4 +900,92 @@ class TestDurationGuardBoundary:
             worker._get_audio_duration_sec = MagicMock(return_value=60.01)
             with pytest.raises(AudioDurationExceededError):
                 worker._batch_transcribe({"audio_paths": ["/tmp/over.wav"], "timestamps": True, "batch_size": 1})
+            worker.stop()
+
+
+class TestMemGetInfoGuard:
+
+    def test_mem_get_info_not_called_when_cuda_unavailable(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = False
+        torch_mod.cuda.mem_get_info.reset_mock()
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        torch_mod.cuda.mem_get_info.assert_not_called()
+        assert worker._vram_total_mb == 0.0
+        assert worker._vram_baseline_mb == 0.0
+
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
+    def test_mem_get_info_called_when_cuda_available(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = True
+        torch_mod.cuda.mem_get_info.reset_mock()
+        torch_mod.cuda.mem_get_info.return_value = (10 * 1024**3, 22 * 1024**3)
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        torch_mod.cuda.mem_get_info.assert_called_once()
+        assert worker._vram_total_mb > 0
+        assert worker._vram_baseline_mb > 0
+
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
+
+class TestDurationPassthroughInGPUWorker:
+
+    def test_durations_from_batcher_used_instead_of_file_probe(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=100.0)
+
+            worker._batch_transcribe(
+                {
+                    "audio_paths": ["/tmp/a.wav"],
+                    "timestamps": True,
+                    "batch_size": 1,
+                    "durations": [100.0],
+                }
+            )
+
+            worker._get_audio_duration_sec.assert_not_called()
+            worker.stop()
+
+    def test_file_probe_fallback_when_no_durations(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=100.0)
+
+            worker._batch_transcribe(
+                {
+                    "audio_paths": ["/tmp/a.wav"],
+                    "timestamps": True,
+                    "batch_size": 1,
+                }
+            )
+
+            worker._get_audio_duration_sec.assert_called()
             worker.stop()

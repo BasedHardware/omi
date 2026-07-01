@@ -9429,6 +9429,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcribeLaterPaused => 'Σε παύση — δεν γίνεται εγγραφή ήχου';
 
   @override
+  String get memoryThisDevice => 'Αυτή η συσκευή';
+  @override
+  String get memoryThisIphone => 'Αυτό το iPhone';
+  @override
+  String get memoryThisPhone => 'Αυτό το τηλέφωνο';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Πώς να χρησιμοποιήσετε το Omi';
 
   @override
@@ -9525,6 +9536,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Περίπου 1 λεπτό';
+
   @override
   String get jumpToLatestMessage => 'Μετάβαση στο πιο πρόσφατο μήνυμα';
 

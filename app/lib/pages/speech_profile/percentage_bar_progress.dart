@@ -113,7 +113,7 @@ class ProgressBubble extends StatelessWidget {
           ),
         ),
         CustomPaint(
-          painter: TrianglePainter(color: Colors.white, shadowColor: Colors.grey.withOpacity(0.5)),
+          painter: TrianglePainter(color: Colors.white, shadowColor: Colors.grey.withValues(alpha: 0.5)),
           size: Size(10, triangleHeight),
         ),
       ],

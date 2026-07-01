@@ -8,13 +8,9 @@ class _EmptyStagingEnvFields implements EnvFields {
   String? get stagingApiUrl => ''; // STAGING_API_URL present but empty
 
   @override
-  String? get openAIAPIKey => null;
-  @override
-  String? get mixpanelProjectToken => null;
+  String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => 'https://api.prod.example.com/';
-  @override
-  String? get growthbookApiKey => null;
   @override
   String? get googleMapsApiKey => null;
   @override
@@ -25,8 +21,6 @@ class _EmptyStagingEnvFields implements EnvFields {
   String? get intercomAndroidApiKey => null;
   @override
   String? get googleClientId => null;
-  @override
-  String? get googleClientSecret => null;
   @override
   bool? get useWebAuth => false;
   @override

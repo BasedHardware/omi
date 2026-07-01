@@ -35,7 +35,7 @@ class OmiLoadMoreButton extends AdaptiveWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5), width: 1),
+          side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5), width: 1),
         ),
       ),
     );

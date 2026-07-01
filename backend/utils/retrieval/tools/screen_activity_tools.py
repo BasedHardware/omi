@@ -3,14 +3,16 @@ Tools for accessing screen/computer activity data from the desktop app.
 """
 
 import contextvars
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.screen_activity as screen_activity_db
 import database.vector_db as vector_db
+import database.notifications as notification_db
 from database._client import db as firestore_db
 from utils.llm.clients import gemini_embed_query
 import logging
@@ -35,6 +37,72 @@ def _get_uid(config: RunnableConfig) -> Optional[str]:
         return config['configurable'].get('user_id')
     except (KeyError, TypeError):
         return None
+
+
+# Bound the chat tool result so a wide-range desktop query ("what did I do last month") cannot
+# flood the chat model's context and make it freeze or refuse (issue #4927; the same fix already
+# shipped for the conversations, memories, and action items tools). The summary lists every app the
+# user touched in the range, each with up to five window titles whose length is uncapped, so a long
+# range on a busy machine can run to tens of thousands of characters. Cap the apps shown and the raw
+# character size and tell the model to summarize and narrow.
+MAX_APPS_FOR_LLM = 50
+MAX_RESULT_CHARS = 60000
+
+
+def _cap_apps_for_llm(apps: list):
+    """Keep at most ``MAX_APPS_FOR_LLM`` apps for the chat model.
+
+    Apps arrive sorted most-used first, so this keeps the ones that matter. Returns
+    ``(capped_list, truncated)`` where ``truncated`` is True when some apps were dropped.
+    """
+    if len(apps) > MAX_APPS_FOR_LLM:
+        return apps[:MAX_APPS_FOR_LLM], True
+    return list(apps), False
+
+
+def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
+    """Apply a hard character budget and, when the set was truncated, append a note telling the
+    model to summarize what it has and to offer to narrow, so it answers instead of freezing.
+
+    When clipping for size, cut back to the start of the last complete app record so a partial app
+    block is never left dangling (each record starts with "**<app>**" on its own line, matching the
+    record-boundary clipping the conversations tool uses). If the first (or only) record is itself
+    larger than the budget, keep the hard-clipped text so its data is still returned truncated rather
+    than dropping every app down to just the summary header.
+    """
+    if len(result) > MAX_RESULT_CHARS:
+        clipped = result[:MAX_RESULT_CHARS]
+        first_record = result.find("\n**")  # boundary just before the first app record
+        boundary = clipped.rfind("\n**")  # boundary just before the last record that fits
+        if boundary > first_record >= 0:
+            # A complete record precedes the cut, so drop only the partial trailing record.
+            result = clipped[:boundary]
+        else:
+            # The first (or only) record overflows the budget; keep the hard-clipped text so its
+            # data is still returned truncated rather than dropping every app to just the header.
+            result = clipped
+        truncated = True
+    if truncated:
+        result += (
+            "\n\n[Only the most-used apps are shown here to stay within limits; more may exist. "
+            "Summarize what is shown and tell the user they can ask about a specific app or a "
+            "narrower date range for the rest.]"
+        )
+    return result
+
+
+def _resolve_display_tz(uid: str):
+    # Render timestamps in the user's timezone so a chat answer shows screen-activity matches in the
+    # same timezone as conversation matches (conversation_tools renders in the user's timezone too).
+    # Fall back to UTC on any failure: no timezone set, an invalid IANA name, or a Firestore error
+    # reading it (a transient lookup error must not fail an otherwise successful search).
+    try:
+        tz_name = notification_db.get_user_time_zone(uid)
+        if tz_name:
+            return ZoneInfo(tz_name)
+    except Exception:
+        logger.warning("search_screen_activity_tool - could not resolve user timezone, using UTC")
+    return timezone.utc
 
 
 @tool
@@ -105,6 +173,13 @@ def get_screen_activity_tool(
         if not sorted_apps:
             return f"No screen activity found for app '{app_filter}' in this date range."
 
+    # Bound how many apps go to the chat model so a wide date range on a busy machine cannot
+    # overflow its context (issue #4927). Apps are already sorted most-used first.
+    total_apps = len(sorted_apps)
+    sorted_apps, apps_truncated = _cap_apps_for_llm(sorted_apps)
+    if apps_truncated:
+        result += f"(showing the {len(sorted_apps)} most-used apps of {total_apps})\n\n"
+
     for app_name, data in sorted_apps:
         count = data['count']
         minutes = (count * 3) // 60
@@ -119,7 +194,7 @@ def get_screen_activity_tool(
             result += f"  Top windows: {', '.join(titles[:5])}\n"
         result += "\n"
 
-    return result.strip()
+    return _bounded_screen_activity_result(result.strip(), apps_truncated)
 
 
 @tool
@@ -202,13 +277,14 @@ def search_screen_activity_tool(
     app_by_id = {m['screenshot_id']: m.get('appName', '') for m in matches}
     ts_by_id = {m['screenshot_id']: m.get('timestamp', 0) for m in matches}
 
+    display_tz = _resolve_display_tz(uid)
     result = f"Found {len(matches)} screen activity matches for '{query}':\n\n"
 
     for sid in screenshot_ids:
         score = scores_by_id.get(sid, 0)
         app_name = app_by_id.get(sid, 'Unknown')
         ts = ts_by_id.get(sid, 0)
-        ts_str = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else 'Unknown'
+        ts_str = datetime.fromtimestamp(ts, tz=display_tz).strftime('%Y-%m-%d %H:%M:%S') if ts else 'Unknown'
 
         # Fetch OCR text from Firestore
         ocr_text = ''

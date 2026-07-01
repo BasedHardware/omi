@@ -26,6 +26,7 @@
             "group": "Core Development",
             "pages": [
               "doc/developer/AppSetup",
+              "doc/developer/public-client-config",
               "doc/developer/Cursor",
               "doc/developer/agent-control-plane",
               {

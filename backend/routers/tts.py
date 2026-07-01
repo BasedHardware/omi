@@ -22,6 +22,7 @@ from models.tts import TtsSynthesizeRequest
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+from utils.executors import run_blocking, critical_executor
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,9 @@ async def tts_synthesize(
             detail=f"text exceeds maximum length of {_TTS_REQUEST_CHAR_LIMIT} characters",
         )
 
-    status, retry_after = redis_db.check_tts_rate_limit(
+    status, retry_after = await run_blocking(
+        critical_executor,
+        redis_db.check_tts_rate_limit,
         uid,
         char_count=char_count,
         burst_limit=_TTS_BURST_PER_MINUTE,

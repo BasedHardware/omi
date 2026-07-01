@@ -675,7 +675,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               Text(
                 step,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 18),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 18),
               ),
               const SizedBox(height: 40),
               if (pct > 0)
@@ -686,7 +686,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                       child: LinearProgressIndicator(
                         value: pct.toDouble(),
                         minHeight: 8,
-                        backgroundColor: Colors.white.withOpacity(0.3),
+                        backgroundColor: Colors.white.withValues(alpha: 0.3),
                         valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     ),
@@ -725,7 +725,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               Text(
                 _error ?? context.l10n.wrappedAnErrorOccurred,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 16),
               ),
               const Spacer(),
               GestureDetector(
@@ -777,7 +777,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             right: 12,
             top: 0,
             bottom: 0,
-            child: SafeArea(child: _buildProgressDots(Colors.white, Colors.white.withOpacity(0.3))),
+            child: SafeArea(child: _buildProgressDots(Colors.white, Colors.white.withValues(alpha: 0.3))),
           ),
       ],
     );
@@ -795,9 +795,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           height: isActive ? 10 : 6,
           margin: EdgeInsets.only(bottom: index < _totalCards - 1 ? 8 : 0),
           decoration: BoxDecoration(
-            color: isActive ? activeColor : (isPast ? activeColor.withOpacity(0.7) : inactiveColor),
+            color: isActive ? activeColor : (isPast ? activeColor.withValues(alpha: 0.7) : inactiveColor),
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 1))],
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 1)),
+            ],
           ),
         );
       }),
@@ -871,7 +873,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
             child: Text(
               context.l10n.wrappedOmiLifeRecap,
-              style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 24, fontWeight: FontWeight.w500),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 24, fontWeight: FontWeight.w500),
             ),
           ),
           const Spacer(),
@@ -881,11 +883,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                 padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
                 child: Text(
                   context.l10n.wrappedSwipeUpToBegin,
-                  style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.keyboard_arrow_up, color: Colors.white.withOpacity(0.7), size: 24),
+              Icon(Icons.keyboard_arrow_up, color: Colors.white.withValues(alpha: 0.7), size: 24),
             ],
           ),
           const SizedBox(height: 32),
@@ -1253,7 +1255,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         ),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14, fontWeight: FontWeight.w500),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -1301,7 +1303,10 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             const Spacer(),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(40)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(40),
+              ),
               child: const Text(
                 'omi.me/wrapped',
                 style: TextStyle(
@@ -1676,7 +1681,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                       painter: _CircularProgressPainter(
                         progress: _overallProgress,
                         strokeWidth: 3,
-                        backgroundColor: Colors.white.withOpacity(0.3),
+                        backgroundColor: Colors.white.withValues(alpha: 0.3),
                         progressColor: Colors.white,
                       ),
                     ),
@@ -1776,7 +1781,7 @@ class _AnimatedShareButtonState extends State<_AnimatedShareButton> with SingleT
             painter: _CircularProgressPainter(
               progress: widget.progress,
               strokeWidth: 3,
-              backgroundColor: Colors.white.withOpacity(0.3),
+              backgroundColor: Colors.white.withValues(alpha: 0.3),
               progressColor: Colors.white,
             ),
           ),
@@ -2861,7 +2866,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
           // Just date for single moments (emoji is in the badge)
           Text(
             day.dateStr,
-            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, fontWeight: FontWeight.w500),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 12),
         ] else ...[
@@ -2873,13 +2878,13 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   day.label.toUpperCase(),
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1,
@@ -2889,12 +2894,12 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
               const SizedBox(width: 8),
               Text(
                 '·',
-                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w700),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12, fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 8),
               Text(
                 day.dateStr,
-                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.w500),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -2911,7 +2916,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
           Text(
             day.description,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.85),
+              color: Colors.white.withValues(alpha: 0.85),
               fontSize: isSingle ? 18 : 14,
               fontWeight: FontWeight.w400,
               height: 1.4,
@@ -2941,9 +2946,9 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(isTargetMonth ? 0.2 : 0.1),
+              color: Colors.white.withValues(alpha: isTargetMonth ? 0.2 : 0.1),
               borderRadius: BorderRadius.circular(16),
-              border: isTargetMonth ? Border.all(color: Colors.white.withOpacity(0.3), width: 1) : null,
+              border: isTargetMonth ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1) : null,
             ),
             child: Column(
               children: [
@@ -2951,7 +2956,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                 Text(
                   _monthNames[month - 1],
                   style: TextStyle(
-                    color: Colors.white.withOpacity(isTargetMonth ? 1.0 : 0.6),
+                    color: Colors.white.withValues(alpha: isTargetMonth ? 1.0 : 0.6),
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
@@ -2968,7 +2973,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                             d,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
+                              color: Colors.white.withValues(alpha: 0.5),
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),
@@ -3020,14 +3025,14 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
-                      color: Colors.white.withOpacity(0.3),
+                      color: Colors.white.withValues(alpha: 0.3),
                     ),
                   ),
                 ),
               Text(
                 '$day',
                 style: TextStyle(
-                  color: isTarget && _circleScale > 0.5 ? Colors.white : Colors.white.withOpacity(0.7),
+                  color: isTarget && _circleScale > 0.5 ? Colors.white : Colors.white.withValues(alpha: 0.7),
                   fontSize: 11,
                   fontWeight: isTarget && _circleScale > 0.5 ? FontWeight.w800 : FontWeight.w500,
                 ),
@@ -3059,7 +3064,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
       child: Row(
         children: [
           Text(day.emoji, style: const TextStyle(fontSize: 36)),
@@ -3071,7 +3076,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                 Text(
                   day.label.toUpperCase(),
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.5,
@@ -3086,7 +3091,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                   const SizedBox(height: 4),
                   Text(
                     day.description,
-                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -3110,7 +3115,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
           height: 8,
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: isActive || isPast ? Colors.white : Colors.white.withOpacity(0.3),
+            color: isActive || isPast ? Colors.white : Colors.white.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(4),
           ),
         );
@@ -3273,7 +3278,10 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
                             Container(
                               width: 28,
                               height: 28,
-                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
@@ -3297,7 +3305,7 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
                                   Text(
                                     item.label.toUpperCase(),
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.6),
+                                      color: Colors.white.withValues(alpha: 0.6),
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                       letterSpacing: 1.0,
@@ -3465,7 +3473,10 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
                               Container(
                                 width: 32,
                                 height: 32,
-                                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
                                 child: Center(
                                   child: Text(
                                     '${index + 1}',
@@ -3660,7 +3671,10 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                             Container(
                               width: 28,
                               height: 28,
-                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
@@ -3693,7 +3707,7 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                                   Text(
                                     buddy.relationship,
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.7),
+                                      color: Colors.white.withValues(alpha: 0.7),
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -3702,7 +3716,7 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                                   Text(
                                     buddy.context,
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.6),
+                                      color: Colors.white.withValues(alpha: 0.6),
                                       fontSize: 13,
                                       fontStyle: FontStyle.italic,
                                     ),
@@ -3852,7 +3866,11 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
                   children: [
                     Text(
                       widget.headerLine1,
-                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 24, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     Text(
                       widget.headerLine2,
@@ -3891,7 +3909,7 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
               opacity: contentOpacity,
               child: Text(
                 widget.subtitle,
-                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 18, fontWeight: FontWeight.w500),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 18, fontWeight: FontWeight.w500),
               ),
             ),
             const Spacer(),
@@ -4306,7 +4324,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
         ),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.w500),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -4521,12 +4539,12 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)],
+                          colors: [Colors.white.withValues(alpha: 0.15), Colors.white.withValues(alpha: 0.05)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
                       ),
                       child: Column(
                         children: [
@@ -4534,14 +4552,14 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                           Row(
                             children: [
                               Expanded(child: _buildStatItem('${widget.totalHours.toStringAsFixed(0)}', 'hours', '⏱️')),
-                              Container(width: 1, height: 50, color: Colors.white.withOpacity(0.2)),
+                              Container(width: 1, height: 50, color: Colors.white.withValues(alpha: 0.2)),
                               Expanded(child: _buildStatItem('${widget.totalConvs}', 'convos', '💬')),
-                              Container(width: 1, height: 50, color: Colors.white.withOpacity(0.2)),
+                              Container(width: 1, height: 50, color: Colors.white.withValues(alpha: 0.2)),
                               Expanded(child: _buildStatItem('${widget.totalActions}', 'actions', '✅')),
                             ],
                           ),
                           const SizedBox(height: 20),
-                          Container(height: 1, color: Colors.white.withOpacity(0.15)),
+                          Container(height: 1, color: Colors.white.withValues(alpha: 0.15)),
                           const SizedBox(height: 20),
                           // Archetype badge
                           Row(
@@ -4564,7 +4582,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                               const SizedBox(width: 12),
                               Text(
                                 '${widget.completionRate}% done',
-                                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
                               ),
                             ],
                           ),
@@ -4578,7 +4596,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                                 child: Text(
                                   '"${widget.phrase}" × ${widget.phraseCount}',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.8),
+                                    color: Colors.white.withValues(alpha: 0.8),
                                     fontSize: 16,
                                     fontStyle: FontStyle.italic,
                                   ),
@@ -4611,7 +4629,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                           borderRadius: BorderRadius.circular(40),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF667eea).withOpacity(0.4),
+                              color: const Color(0xFF667eea).withValues(alpha: 0.4),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
@@ -4639,7 +4657,11 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                   child: Center(
                     child: Text(
                       'omi.me/wrapped',
-                      style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
@@ -4663,7 +4685,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
         ),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.w500),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.w500),
         ),
       ],
     );

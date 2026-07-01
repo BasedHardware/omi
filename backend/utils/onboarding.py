@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Optional
 from utils.executors import llm_executor, run_blocking
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
+from utils.llm.conversation_processing import _word_count
 import logging
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,7 @@ class OnboardingHandler:
             transcript = self.current_transcript.strip()
 
             # Check with AI if enough content
-            word_count = len(transcript.split())
+            word_count = _word_count(transcript)
             answered = False
 
             if word_count >= 2:

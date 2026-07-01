@@ -9368,6 +9368,17 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcribeLaterPaused => 'Pausad – inget ljud spelas in';
 
   @override
+  String get memoryThisDevice => 'Den här enheten';
+  @override
+  String get memoryThisIphone => 'Den här iPhone';
+  @override
+  String get memoryThisPhone => 'Den här telefonen';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Så använder du Omi';
 
   @override
@@ -9463,6 +9474,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
+
   @override
   String get jumpToLatestMessage => 'Hoppa till senaste meddelandet';
 

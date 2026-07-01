@@ -197,12 +197,7 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
     url += '&q=${Uri.encodeComponent(query)}';
   }
 
-  var response = await makeApiCall(
-    url: url,
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
@@ -498,13 +493,19 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   if (response.statusCode == 404 || response.statusCode == 403) {
-    DebugLogManager.logEvent(
-        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'notFound'});
+    DebugLogManager.logEvent('fetch_sync_job_status', {
+      'jobId': jobId,
+      'httpStatus': response.statusCode,
+      'outcome': 'notFound',
+    });
     return const SyncJobFetch(SyncJobFetchOutcome.notFound);
   }
   if (response.statusCode != 200) {
-    DebugLogManager.logEvent(
-        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'transient'});
+    DebugLogManager.logEvent('fetch_sync_job_status', {
+      'jobId': jobId,
+      'httpStatus': response.statusCode,
+      'outcome': 'transient',
+    });
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   try {
@@ -520,6 +521,7 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   int? page,
   int? limit,
   bool includeDiscarded = true,
+  String? speakerId,
 }) async {
   Logger.debug(Env.apiBaseUrl);
   var response = await makeApiCall(
@@ -531,6 +533,7 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       'page': page ?? 1,
       'per_page': limit ?? 10,
       'include_discarded': includeDiscarded,
+      if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
   if (response == null) return (<ServerConversation>[], 0, 0);

@@ -15,6 +15,7 @@ import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/logger.dart';
 
 export 'package:omi/utils/audio/audio_transcoder.dart';
@@ -220,7 +221,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     // Transcript segments
     if (jsonEvent is List) {
-      var segments = jsonEvent;
+      var segments = _dropSecretSegments(jsonEvent);
       if (segments.isEmpty) {
         return;
       }
@@ -241,6 +242,33 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     Logger.debug(event.toString());
     DebugLogManager.logInfo('transcription_socket_unhandled_message: ${event.toString()}');
+  }
+
+  List<dynamic> _dropSecretSegments(List<dynamic> segments) {
+    final kept = <dynamic>[];
+    final categories = <String>{};
+    var droppedCount = 0;
+    for (final segment in segments) {
+      final text = segment is Map ? segment['text']?.toString() : null;
+      if (text != null && HardSecretDetector.contains(text)) {
+        categories.addAll(HardSecretDetector.categories(text));
+        droppedCount += 1;
+        continue;
+      }
+      kept.add(segment);
+    }
+    if (droppedCount > 0) {
+      final sortedCategories = categories.toList()..sort();
+      unawaited(
+        DebugLogManager.logEvent('hard_secret_artifact_dropped', {
+          'source': 'transcription_socket',
+          'artifact_type': 'transcript_segment',
+          'dropped_count': droppedCount,
+          'categories': sortedCategories,
+        }),
+      );
+    }
+    return kept;
   }
 
   @override

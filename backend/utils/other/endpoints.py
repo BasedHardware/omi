@@ -6,17 +6,21 @@ from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
 from firebase_admin import auth
-from firebase_admin.auth import InvalidIdTokenError
+from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
-from database.users import record_user_platform
+from database.users import record_client_device, record_user_platform
+from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
 from utils.executors import critical_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
+
+WS_AUTH_CODE_TOKEN_REFRESH = 4001
+WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 
 
 def get_user(uid: str):
@@ -55,6 +59,8 @@ def verify_token(token: str) -> str:
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    x_app_version: str = Header(None, alias='X-App-Version'),
 ):
     """FastAPI dependency for HTTP endpoints with Authorization header.
 
@@ -82,6 +88,21 @@ def get_current_user_uid(
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
 
+    try:
+        device_ctx = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+            x_app_version=x_app_version,
+        )
+        record_client_device(
+            uid,
+            client_device_id=device_ctx.client_device_id,
+            platform=device_ctx.platform,
+            app_version=device_ctx.app_version,
+        )
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
+
     # Validate BYOK keys against Firestore enrollment for ALL authenticated
     # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
     # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
@@ -94,6 +115,8 @@ def get_current_user_uid(
 def get_current_user_uid_no_byok_validation(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    x_app_version: str = Header(None, alias='X-App-Version'),
 ):
     """Auth dependency that skips BYOK fingerprint validation.
 
@@ -118,14 +141,31 @@ def get_current_user_uid_no_byok_validation(
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
 
+    try:
+        device_ctx = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+            x_app_version=x_app_version,
+        )
+        record_client_device(
+            uid,
+            client_device_id=device_ctx.client_device_id,
+            platform=device_ctx.platform,
+            app_version=device_ctx.app_version,
+        )
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
+
     return uid
 
 
 def _verify_ws_auth(authorization: str) -> str:
     """Common WebSocket auth — verifies token, returns uid.
 
-    Raises WebSocketException(code=1008) instead of HTTPException(401) so the
-    ASGI server sends a proper WebSocket close frame (not a handshake crash).
+    Raises WebSocketException instead of HTTPException(401) so the ASGI server
+    sends a proper WebSocket close frame (not a handshake crash). Auth failures
+    use 1008 by default, 4001 when the client should refresh its token, and
+    4004 when it should force re-login.
     """
     if not authorization:
         raise WebSocketException(code=1008, reason="Authorization header not found")
@@ -135,12 +175,29 @@ def _verify_ws_auth(authorization: str) -> str:
     try:
         token = authorization.split(' ')[1]
         return verify_token(token)
-    except InvalidIdTokenError as e:
-        logger.error(f"WebSocket auth failed: {e}")
-        raise WebSocketException(code=1008, reason="Invalid or expired token")
+    except (InvalidIdTokenError, CertificateFetchError) as e:
+        close_code, reason = _get_ws_auth_close(e)
+        logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
+        raise WebSocketException(code=close_code, reason=reason)
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
+
+
+def _get_ws_auth_close(error: Exception) -> tuple[int, str]:
+    if isinstance(error, RevokedIdTokenError):
+        return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
+    if isinstance(error, CertificateFetchError):
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+    if isinstance(error, ExpiredIdTokenError):
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+
+    message = str(error).lower()
+    if 'revoked' in message:
+        return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
+    if 'expired' in message or 'certificate' in message:
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+    return 1008, "Invalid authorization token"
 
 
 async def get_current_user_uid_ws_listen(
@@ -283,7 +340,7 @@ def rate_limit_dependency(endpoint: str = "", requests_per_window: int = 60, win
     return rate_limit
 
 
-def _enforce_rate_limit(key: str, policy_name: str):
+def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False):
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
     One Redis round-trip per call (Lua script). Fail-open on Redis errors.
@@ -292,7 +349,9 @@ def _enforce_rate_limit(key: str, policy_name: str):
     try:
         allowed, remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
     except redis_pkg.exceptions.RedisError as e:
-        logger.error(f"Rate limit Redis error (allowing request): {e}")
+        logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
+        if fail_closed:
+            raise HTTPException(status_code=503, detail="Rate limiter unavailable")
         return
 
     if not allowed:
@@ -310,11 +369,39 @@ def _enforce_rate_limit(key: str, policy_name: str):
         )
 
 
+def rate_limit_key_for_context(auth_context) -> str:
+    """Return the narrowest stable rate-limit subject for an auth context."""
+    app_id = getattr(auth_context, 'app_id', None)
+    key_id = getattr(auth_context, 'key_id', None)
+    uid = getattr(auth_context, 'uid', None)
+    if app_id and key_id:
+        return f"app:{app_id}:key:{key_id}"
+    if app_id or key_id:
+        raise HTTPException(status_code=403, detail="Missing API key identity")
+    if uid:
+        return str(uid)
+    raise HTTPException(status_code=401, detail="Authenticated subject missing")
+
+
+def check_api_key_rate_limit(
+    *,
+    prefix: str,
+    uid: str,
+    app_id: str | None,
+    key_id: str | None,
+    policy_name: str,
+):
+    if not key_id:
+        raise HTTPException(status_code=403, detail="Missing API key identity")
+    key = f"{prefix}:{uid}:{app_id or 'unknown_app'}:{key_id}"
+    _enforce_rate_limit(key, policy_name, fail_closed=True)
+
+
 def with_rate_limit(auth_dependency, policy_name: str):
     """Wrap an auth dependency with per-UID rate limiting.
 
     After auth succeeds, checks the rate limit for that UID.
-    One Redis call per request. Fail-open on Redis errors.
+    One Redis call per request. Fail-open on Redis errors for first-party user paths.
 
     Args:
         auth_dependency: FastAPI dependency that returns a UID string.
@@ -328,6 +415,33 @@ def with_rate_limit(auth_dependency, policy_name: str):
         return uid
 
     return dependency
+
+
+def with_rate_limit_context(auth_context_dependency, policy_name: str):
+    """Wrap a context-returning auth dependency with per-subject rate limiting.
+
+    After auth succeeds, checks the rate limit for app/key identity when present,
+    falling back to UID for first-party or legacy auth contexts.
+    One Redis call per request. Fail-closed on Redis errors for API-key paths.
+
+    Args:
+        auth_context_dependency: FastAPI dependency that returns an auth context
+            object with a ``uid`` attribute (e.g. ProductAuthorizationContext).
+        policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+    """
+    if policy_name not in RATE_POLICIES:
+        raise ValueError(f"Unknown rate limit policy: {policy_name}")
+
+    async def dependency(auth_context=Depends(auth_context_dependency)):
+        _enforce_rate_limit(rate_limit_key_for_context(auth_context), policy_name, fail_closed=True)
+        return auth_context
+
+    return dependency
+
+
+def check_rate_limit_context(auth_context, policy_name: str):
+    """Check rate limit inline for an already-authenticated context."""
+    _enforce_rate_limit(rate_limit_key_for_context(auth_context), policy_name, fail_closed=True)
 
 
 def check_rate_limit_inline(key: str, policy_name: str):

@@ -154,6 +154,9 @@ class ChatToolExecutor {
     case "capture_screen":
       return await executeCaptureScreen()
 
+    case "fill_cloud_connector_form":
+      return await CloudConnectorFormAutomation.fill(toolCall.arguments)
+
     // Backend RAG tools — call Python backend /v1/tools/* endpoints
     case "get_conversations":
       return await executeBackendTool(toolCall)
@@ -168,6 +171,8 @@ class ChatToolExecutor {
     case "create_action_item":
       return await executeBackendTool(toolCall)
     case "update_action_item":
+      return await executeBackendTool(toolCall)
+    case "create_calendar_event":
       return await executeBackendTool(toolCall)
 
     default:
@@ -471,6 +476,12 @@ class ChatToolExecutor {
     case "": directedProvider = nil
     default:
       return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
+    }
+    if let directedProvider {
+      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+      guard availability.isAvailable else {
+        return availability.toolError
+      }
     }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
@@ -1670,6 +1681,34 @@ class ChatToolExecutor {
           completed: args["completed"] as? Bool,
           description: args["description"] as? String,
           dueAt: validatedUpdateDueAt
+        )
+        return resp.resultText
+
+      case "create_calendar_event":
+        guard let rawTitle = args["title"] as? String else {
+          return "Error: title is required"
+        }
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+          return "Error: title is required"
+        }
+        guard let startTime = args["start_time"] as? String, !startTime.isEmpty else {
+          return "Error: start_time is required"
+        }
+        guard let endTime = args["end_time"] as? String, !endTime.isEmpty else {
+          return "Error: end_time is required"
+        }
+        let validatedStart = validateISODate(startTime, paramName: "start_time")
+        if let error = validatedStart.error { return error }
+        let validatedEnd = validateISODate(endTime, paramName: "end_time")
+        if let error = validatedEnd.error { return error }
+        let resp = try await api.toolCreateCalendarEvent(
+          title: title,
+          startTime: validatedStart.valid ?? startTime,
+          endTime: validatedEnd.valid ?? endTime,
+          description: args["description"] as? String,
+          location: args["location"] as? String,
+          attendees: args["attendees"] as? String
         )
         return resp.resultText
 

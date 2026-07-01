@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/services/devices/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -256,7 +256,9 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
-    var walToSync = _wals.where((w) => w == wal).toList().first;
+    final matches = _wals.where((w) => w == wal).toList();
+    if (matches.isEmpty) return null;
+    final walToSync = matches.first;
 
     walToSync.isSyncing = true;
     walToSync.syncStartedAt = DateTime.now();

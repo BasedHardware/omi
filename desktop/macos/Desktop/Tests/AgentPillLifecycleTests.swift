@@ -44,6 +44,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("barWindow.state.chatHistory.reversed().compactMap"))
   }
 
+  func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directive.provider)"))
+    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
+    XCTAssertTrue(source.contains("floating-agent-provider-unavailable"))
+    XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
+    XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)"))
+  }
+
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
     let source = try floatingControlBarViewSource()
     let agentPillSource = try agentPillSource()
@@ -128,7 +139,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     let rowSource = String(source[rowRange.lowerBound..<heightRange.lowerBound])
 
     XCTAssertTrue(rowSource.contains("Text(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("onAskAI()"))
+    XCTAssertTrue(rowSource.contains("openOmiChatFromNotchRow()"))
+    XCTAssertTrue(rowSource.contains("private var notchOmiChatOverlayHitTarget: some View"))
+    XCTAssertTrue(rowSource.contains(".accessibilityLabel(\"Omi Chat\")"))
     XCTAssertTrue(rowSource.contains("notchShortcutHint(\"Ask\""))
     XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
     XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
@@ -137,8 +150,8 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testNotchSettingsHitTargetDoesNotCoverChatRows() throws {
     let source = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight)"))
-    XCTAssertFalse(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)"))
+    XCTAssertTrue(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"))
+    XCTAssertFalse(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -210,6 +223,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(": .spring(response: 0.18, dampingFraction: 0.92)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
     XCTAssertTrue(source.contains("notchOmiChatRow\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
+    XCTAssertTrue(source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
+    XCTAssertTrue(source.contains("notchOmiChatOverlayHitTarget\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
+    XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
+    XCTAssertTrue(source.contains(".zIndex(2)"))
     XCTAssertTrue(source.contains("height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
     XCTAssertTrue(source.contains("private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)"))
@@ -232,7 +249,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
     XCTAssertTrue(source.contains("Color.white.opacity(0.96 * Double(1 - progress))"))
-    XCTAssertTrue(source.contains("if shouldShowNotchHoverMenu && !showingNotchWaveform"))
+    XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
+    XCTAssertTrue(source.contains("if shouldUseOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
@@ -471,11 +489,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("private var bargeInReplacementAudioBuffer: [Data] = []"))
     XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn() -> Bool"))
     XCTAssertTrue(hubSource.contains("case .ephemeral:\n      remintReplacementSessionForBargeIn(provider: provider)"))
-    XCTAssertTrue(hubSource.contains("let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
+    XCTAssertTrue(hubSource.contains("token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
     XCTAssertTrue(hubSource.contains("startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))"))
     XCTAssertTrue(hubSource.contains("bargeInReplacementAudioBuffer.append(pcm16k)"))
     XCTAssertTrue(hubSource.contains("bargeInReplacementPendingCommit = true"))
-    XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: \"token mint failed\")"))
+    XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
     XCTAssertTrue(hubSource.contains("if provider == .gemini, let speculativeScreenshot"))
     XCTAssertTrue(hubSource.contains("session?.sendVideoFrame(speculativeScreenshot, mime: \"image/jpeg\")"))
     XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
@@ -503,6 +521,33 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("ignoring stale response.done"))
   }
 
+  func testCredentialHealthRetryAndFailoverInvariants() throws {
+    let apiSource = try apiClientSource()
+    let hubSource = try realtimeHubControllerSource()
+
+    XCTAssertTrue(
+      apiSource.contains("try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: \"Authorization\")"),
+      "Backend 401 retry paths must force-refresh Firebase auth")
+    XCTAssertTrue(
+      apiSource.contains("throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)"),
+      "Realtime mint retry transport failures must stay transient, not requires-login")
+    XCTAssertTrue(
+      apiSource.contains("} catch AuthError.notSignedIn {\n        throw CredentialHealthError.requiresLogin"),
+      "Only definitive not-signed-in refresh failures should become requires-login")
+    XCTAssertTrue(
+      hubSource.contains("self.minting = false\n        CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
+      "Mint failure must clear minting before failover starts the alternate provider")
+    XCTAssertTrue(
+      hubSource.contains("if case .providerAuthFailed = credentialFailureClass {\n      if aliveFor < 10, failoverToAlternateProvider() { return }"),
+      "Provider auth failures should try alternate provider before stopping reconnect")
+    XCTAssertTrue(
+      hubSource.contains("if case .providerQuotaExceeded = credentialFailureClass {\n      if failoverToAlternateProvider() { return }"),
+      "Provider quota failures should try alternate provider regardless of socket age")
+    XCTAssertTrue(
+      hubSource.contains("let shouldRedactProviderMessage: Bool"),
+      "Credential close logs must redact raw provider auth/quota payloads")
+  }
+
   func testSpeechSynthesizerDidCancelClearsGlow() throws {
     let source = try realtimeHubControllerSource()
 
@@ -520,6 +565,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     // size on legacy displays, not just record the boolean.
     XCTAssertTrue(source.contains("guard !self.notchModeEnabled else { return }"))
     XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
+  }
+
+  func testStartupRevalidatesDisplayMetadataForAutomaticNotchMode() throws {
+    let source = try floatingControlBarWindowSource()
+
+    // Some MacBook notch safe-area metadata can arrive after the floating bar
+    // window is created. Startup retries should use the same layout path as
+    // display changes so users do not need to change screen resolution first.
+    XCTAssertTrue(source.contains("private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]"))
+    XCTAssertTrue(source.contains("scheduleStartupDisplayRevalidation()"))
+    XCTAssertTrue(source.contains("self?.validatePositionOnScreenChange(reason: \"startup_display_revalidation\")"))
+    XCTAssertTrue(source.contains("self?.validatePositionOnScreenChange(reason: \"screen_parameters_changed\")"))
   }
 
   func testBackFromAgentUsesSharedDisplayAwarePath() throws {
@@ -658,7 +715,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("Self.ensureFailureMessage(\"Agent ended before reporting a final result\", for: pill)"))
     XCTAssertTrue(source.contains("ensureFailureMessage(message, for: pill)"))
     XCTAssertTrue(source.contains("projection.failure?.displayMessage ?? projection.errorMessage ?? \"Agent failed\""))
-    XCTAssertTrue(source.contains("ChatMessage(text: \"Failed: \\(text)\", sender: .ai)"))
+    XCTAssertTrue(source.contains("AgentFailureTranscriptFormatter.transcriptText(for: errorText)"))
+    XCTAssertTrue(source.contains("ChatMessage(text: failureText, sender: .ai)"))
   }
 
   func testLateMessageActivityCannotOverwriteTerminalPillStatus() throws {
@@ -952,6 +1010,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func apiClientSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/APIClient.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

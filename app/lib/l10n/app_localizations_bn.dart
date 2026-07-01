@@ -9365,6 +9365,17 @@ class AppLocalizationsBn extends AppLocalizations {
   String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
 
   @override
+  String get memoryThisDevice => 'এই ডিভাইস';
+  @override
+  String get memoryThisIphone => 'এই iPhone';
+  @override
+  String get memoryThisPhone => 'এই ফোন';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Omi কীভাবে ব্যবহার করবেন';
 
   @override
@@ -9459,6 +9470,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'প্রায় ১ মিনিট';
+
   @override
   String get jumpToLatestMessage => 'সর্বশেষ বার্তায় যান';
 

@@ -149,6 +149,87 @@ class SupervisorResult:
     exception: BaseException | None = None
 
 
+class WebSocketTaskSupervisor:
+    """Session-scoped task owner for long-lived WebSocket handlers.
+
+    The supervisor centralizes the invariants each handler used to maintain by
+    convention: active gauge pairing, ws:{uid}:{name} task names, finite-vs-
+    lifetime classification, FIRST_COMPLETED supervision, and bounded drain.
+    """
+
+    def __init__(self, *, uid: str, label: str, gauge: Any | None = None):
+        self.uid = uid
+        self.label = label
+        self.gauge = gauge
+        self.shutdown_event = asyncio.Event()
+        self._tracked_tasks: set[asyncio.Task] = set()
+        self._monitored_tasks: list[asyncio.Task] = []
+        self._finite_tasks: set[asyncio.Task] = set()
+        self._session_started = False
+
+    def start_session(self) -> None:
+        if self._session_started:
+            return
+        if self.gauge is not None:
+            self.gauge.inc()
+        self._session_started = True
+
+    def end_session(self) -> None:
+        if not self._session_started:
+            return
+        self.shutdown_event.set()
+        if self.gauge is not None:
+            self.gauge.dec()
+        self._session_started = False
+
+    def create_task(self, coro: Awaitable[Any], *, name: str, monitor: bool = False, finite: bool = False):
+        if name.startswith("ws:"):
+            raise ValueError("WebSocket task names must be logical names, not preformatted ws:* names")
+        task = create_named_task(coro, name=f"ws:{self.uid}:{name}", task_set=self._tracked_tasks)
+        task.add_done_callback(self._log_unhandled_exception)
+        if monitor:
+            self._monitored_tasks.append(task)
+        if finite:
+            self._finite_tasks.add(task)
+        return task
+
+    def create_lifetime_task(self, coro: Awaitable[Any], *, name: str) -> asyncio.Task:
+        return self.create_task(coro, name=name, monitor=True)
+
+    def create_finite_task(self, coro: Awaitable[Any], *, name: str) -> asyncio.Task:
+        return self.create_task(coro, name=name, monitor=True, finite=True)
+
+    async def supervise(self, *, receive_task: asyncio.Task) -> SupervisorResult:
+        return await supervise_tasks(
+            receive_task=receive_task,
+            bg_tasks=list(self._monitored_tasks),
+            finite_tasks=set(self._finite_tasks),
+            label=self.label,
+        )
+
+    async def drain_monitored(self, *, timeout: float, cancel: bool = False) -> int:
+        return await drain_tasks(self._monitored_tasks, timeout=timeout, label=f"{self.label}_bg", cancel=cancel)
+
+    async def drain_all(self, *, timeout: float, cancel: bool = True) -> int:
+        return await drain_tasks(
+            list(self._tracked_tasks), timeout=timeout, label=f"{self.label}_cleanup", cancel=cancel
+        )
+
+    @property
+    def monitored_tasks(self) -> list[asyncio.Task]:
+        return list(self._monitored_tasks)
+
+    def _log_unhandled_exception(self, task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        try:
+            exc = task.exception()
+        except asyncio.CancelledError:
+            return
+        if exc is not None:
+            logger.error("Unhandled exception in WebSocket task %s [%s]: %r", task.get_name(), self.label, exc)
+
+
 # ---------------------------------------------------------------------------
 # supervise_tasks — WebSocket task supervision
 # ---------------------------------------------------------------------------

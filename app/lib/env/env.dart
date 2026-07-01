@@ -16,8 +16,6 @@ abstract class Env {
     _agentProxyWsUrlOverride = url;
   }
 
-  static String? get openAIAPIKey => _instance.openAIAPIKey;
-
   static String? get posthogApiKey => _instance.posthogApiKey;
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
@@ -68,16 +66,12 @@ abstract class Env {
 
   static String? get googleClientId => _instance.googleClientId;
 
-  static String? get googleClientSecret => _instance.googleClientSecret;
-
   static bool get useWebAuth => _instance.useWebAuth ?? false;
 
   static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
 }
 
 abstract class EnvFields {
-  String? get openAIAPIKey;
-
   String? get posthogApiKey;
 
   String? get apiBaseUrl;
@@ -91,8 +85,6 @@ abstract class EnvFields {
   String? get intercomAndroidApiKey;
 
   String? get googleClientId;
-
-  String? get googleClientSecret;
 
   bool? get useWebAuth;
 

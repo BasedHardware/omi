@@ -101,7 +101,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
   }
 
   String get _wsUrl =>
-      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey';
+      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey'; // public-client-secret-boundary: legacy-direct-provider
 
   @override
   Future<bool> connect() async {
@@ -324,24 +324,31 @@ class GeminiStreamingSttSocket implements IPureSocket {
       _frameBuffer.clear();
       _bufferedBytes = 0;
 
-      Uint8List pcmData = combined;
+      Uint8List? pcmData = combined;
       if (transcoder != null) {
         try {
           pcmData = transcoder!.transcodeFrames([combined]);
-        } catch (_) {}
+        } catch (e) {
+          // Don't ship un-transcoded bytes tagged as PCM — that produces a corrupted stream.
+          // Skip only the tail send; teardown below must still run.
+          CustomSttLogService.instance.error('GeminiStreaming', 'Transcode error (flush): $e');
+          pcmData = null;
+        }
       }
 
-      final realtimeInput = {
-        'realtimeInput': {
-          'mediaChunks': [
-            {'mimeType': 'audio/pcm;rate=$sampleRate', 'data': base64Encode(pcmData)},
-          ],
-        },
-      };
+      if (pcmData != null) {
+        final realtimeInput = {
+          'realtimeInput': {
+            'mediaChunks': [
+              {'mimeType': 'audio/pcm;rate=$sampleRate', 'data': base64Encode(pcmData)},
+            ],
+          },
+        };
 
-      try {
-        _channel!.sink.add(jsonEncode(realtimeInput));
-      } catch (_) {}
+        try {
+          _channel!.sink.add(jsonEncode(realtimeInput));
+        } catch (_) {}
+      }
     }
 
     await Future.delayed(const Duration(milliseconds: 500));

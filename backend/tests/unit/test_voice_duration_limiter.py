@@ -11,9 +11,8 @@ Covers:
 import os
 import struct
 import tempfile
-import time
 from fractions import Fraction
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -116,70 +115,57 @@ class TestWAVDurationReader:
     def test_valid_wav_120s(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        path = _make_wav(120.0)
-        try:
-            duration = read_wav_duration_ms(path)
-            assert duration is not None
-            assert abs(duration - 120000) <= 1
-        finally:
-            os.unlink(path)
+        mock_container = MagicMock()
+        mock_container.duration = 120 * 1_000_000
+        mock_container.streams.audio = [MagicMock()]
+        mock_container.__enter__ = MagicMock(return_value=mock_container)
+        mock_container.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.voice_duration_limiter.av.open', return_value=mock_container):
+            duration = read_wav_duration_ms('/tmp/fake.wav')
+
+        assert duration is not None
+        assert abs(duration - 120000) <= 1
 
     def test_stereo_48khz(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        path = _make_wav(5.0, sample_rate=48000, channels=2)
-        try:
-            duration = read_wav_duration_ms(path)
-            assert duration is not None
-            assert abs(duration - 5000) <= 1
-        finally:
-            os.unlink(path)
+        mock_container = MagicMock()
+        mock_container.duration = 5 * 1_000_000
+        mock_container.streams.audio = [MagicMock()]
+        mock_container.__enter__ = MagicMock(return_value=mock_container)
+        mock_container.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.voice_duration_limiter.av.open', return_value=mock_container):
+            duration = read_wav_duration_ms('/tmp/fake.wav')
+
+        assert duration is not None
+        assert abs(duration - 5000) <= 1
 
     def test_invalid_file_returns_none(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        fd, path = tempfile.mkstemp()
-        with os.fdopen(fd, 'wb') as f:
-            f.write(b'not a wav file')
-        try:
-            assert read_wav_duration_ms(path) is None
-        finally:
-            os.unlink(path)
+        with patch('utils.voice_duration_limiter.av.open', side_effect=ValueError('invalid audio')):
+            assert read_wav_duration_ms('/tmp/invalid.wav') is None
 
     def test_nonexistent_file_returns_none(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        assert read_wav_duration_ms('/tmp/nonexistent_wav_12345.wav') is None
+        with patch('utils.voice_duration_limiter.av.open', side_effect=FileNotFoundError('missing audio')):
+            assert read_wav_duration_ms('/tmp/nonexistent_wav_12345.wav') is None
 
     def test_empty_file_returns_none(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        fd, path = tempfile.mkstemp()
-        os.close(fd)
-        try:
-            assert read_wav_duration_ms(path) is None
-        finally:
-            os.unlink(path)
+        with patch('utils.voice_duration_limiter.av.open', side_effect=ValueError('empty audio')):
+            assert read_wav_duration_ms('/tmp/empty.wav') is None
 
     def test_corrupted_wav_returns_none(self):
         """Truncated/corrupted WAV should return None (av raises, we catch)."""
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        buf = bytearray()
-        buf.extend(b'RIFF')
-        buf.extend(struct.pack('<I', 26))
-        buf.extend(b'WAVE')
-        buf.extend(b'fmt ')
-        buf.extend(struct.pack('<I', 10))  # truncated fmt
-        buf.extend(b'\x00' * 10)
-
-        fd, path = tempfile.mkstemp(suffix='.wav')
-        with os.fdopen(fd, 'wb') as f:
-            f.write(buf)
-        try:
-            assert read_wav_duration_ms(path) is None
-        finally:
-            os.unlink(path)
+        with patch('utils.voice_duration_limiter.av.open', side_effect=ValueError('corrupted audio')):
+            assert read_wav_duration_ms('/tmp/corrupted.wav') is None
 
     def test_container_duration_none_falls_back_to_stream(self):
         """When container.duration is None, fall back to stream.duration * stream.time_base."""

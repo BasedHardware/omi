@@ -190,7 +190,7 @@ struct OnboardingLogoMark: View {
 
   var body: some View {
     Group {
-      if let logoImage = onboardingLogoImage() {
+      if let logoImage = onboardingTextLogoImage() {
         Image(nsImage: logoImage)
           .resizable()
           .renderingMode(.template)
@@ -208,18 +208,6 @@ struct OnboardingLogoMark: View {
       onForceComplete?()
     }
     .accessibilityLabel("omi")
-  }
-
-  private func onboardingLogoImage() -> NSImage? {
-    guard
-      let logoURL = Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png"),
-      let loadedLogoImage = NSImage(contentsOf: logoURL)
-    else {
-      return nil
-    }
-    let logoImage = loadedLogoImage.copy() as? NSImage ?? loadedLogoImage
-    logoImage.isTemplate = true
-    return logoImage
   }
 }
 
@@ -262,13 +250,7 @@ private struct OnboardingSecondBrainPane: View {
     }
     .overlay(alignment: .top) {
       if case .graph = mode, !graphViewModel.isEmpty {
-        Text("This is your second brain.")
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(.white)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 6)
-          .background(Color.black.opacity(0.35))
-          .cornerRadius(8)
+        OnboardingGraphBrandMark()
           .padding(.top, 18)
       }
     }
@@ -313,13 +295,24 @@ private struct OnboardingSecondBrainPane: View {
           MemoryGraphSceneView(viewModel: graphViewModel)
             .ignoresSafeArea()
 
-          HStack(spacing: 20) {
-            graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
-            graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
-            graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
+          VStack(spacing: 10) {
+            Text("This is your 2nd brain")
+              .font(.system(size: 15, weight: .semibold))
+              .foregroundColor(.white)
+              .padding(.horizontal, 14)
+              .padding(.vertical, 7)
+              .background(Color.black.opacity(0.38))
+              .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            HStack(spacing: 20) {
+              graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
+              graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
+              graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
+            }
           }
           .padding(.horizontal, 16)
-          .padding(.vertical, 10)
+          .padding(.top, 42)
+          .padding(.bottom, 10)
           .background(
             LinearGradient(
               colors: [Color.black.opacity(0), Color.black.opacity(0.5)],
@@ -341,6 +334,47 @@ private struct OnboardingSecondBrainPane: View {
     }
     .foregroundColor(.white.opacity(0.5))
   }
+}
+
+private struct OnboardingGraphBrandMark: View {
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 0) {
+      if let logoImage = onboardingTextLogoImage() {
+        Image(nsImage: logoImage)
+          .resizable()
+          .renderingMode(.template)
+          .foregroundColor(.white)
+          .scaledToFit()
+          .frame(width: 45, height: 20)
+      } else {
+        Text("omi")
+          .font(.system(size: 20, weight: .semibold))
+          .foregroundColor(.white)
+      }
+
+      Text(".me")
+        .font(.system(size: 20, weight: .semibold))
+        .foregroundColor(.white)
+        .offset(y: -1)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 7)
+    .background(Color.black.opacity(0.28))
+    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    .accessibilityLabel("omi.me")
+  }
+}
+
+private func onboardingTextLogoImage() -> NSImage? {
+  guard
+    let logoURL = Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png"),
+    let loadedLogoImage = NSImage(contentsOf: logoURL)
+  else {
+    return nil
+  }
+  let logoImage = loadedLogoImage.copy() as? NSImage ?? loadedLogoImage
+  logoImage.isTemplate = true
+  return logoImage
 }
 
 struct OnboardingCardButtonStyle: ButtonStyle {

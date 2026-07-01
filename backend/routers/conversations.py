@@ -5,6 +5,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database._client as db_client_module
 import database.action_items as action_items_db
 import database.memories as memories_db
 import database.redis_db as redis_db
@@ -39,7 +40,11 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
-from utils.executors import postprocess_executor, submit_with_context
+from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
@@ -143,6 +148,63 @@ def process_in_progress_conversation(
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
+@router.post(
+    '/v1/conversations/{conversation_id}/finalize', response_model=CreateConversationResponse, tags=['conversations']
+)
+def finalize_conversation(
+    conversation_id: str,
+    request: ProcessConversationRequest = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+):
+    """Finalize exactly one backend conversation.
+
+    Unlike POST /v1/conversations, this does not operate on the user's Redis
+    "current in-progress" pointer, so desktop retry/rotation cannot accidentally
+    finalize a newer recording.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+
+    if conversation.status != ConversationStatus.in_progress:
+        return CreateConversationResponse(conversation=conversation, messages=[])
+
+    claim_updates = {}
+    if request and request.calendar_meeting_context:
+        if not conversation.external_data:
+            conversation.external_data = {}
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        claim_updates['external_data'] = conversation.external_data
+
+    if not conversations_db.claim_conversation_status(
+        uid,
+        conversation.id,
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=claim_updates or None,
+    ):
+        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        latest = deserialize_conversation(latest)
+        return CreateConversationResponse(conversation=latest, messages=[])
+
+    conversation.status = ConversationStatus.processing
+
+    current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+    if current_in_progress_id == conversation_id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    geolocation = redis_db.get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    if conversation.status:
+        conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
+
+    return CreateConversationResponse(conversation=conversation, messages=messages)
+
+
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
     conversation_id: str,
@@ -169,6 +231,13 @@ def reprocess_conversation(
     return processed_conversation
 
 
+def _ensure_aware(value: datetime) -> datetime:
+    # FastAPI parses a query datetime as naive or timezone-aware depending on whether the client
+    # included a UTC offset. Normalize to timezone-aware (UTC) so comparing the two ends of a date
+    # range never raises TypeError on mixed awareness (which would surface as a 500).
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 @router.get(
     '/v1/conversations',
     response_model=List[Conversation],
@@ -189,6 +258,8 @@ def get_conversations(
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
@@ -220,6 +291,8 @@ def get_conversations_count(
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
     count = conversations_db.get_conversations_count(
         uid,
@@ -305,10 +378,10 @@ async def link_calendar_event(
     Link a specific Google Calendar event to an existing conversation.
     Fetches the event details and stores the calendar_event on the conversation.
     """
-    _get_valid_conversation_by_id(uid, conversation_id)
+    await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get Google Calendar access token
-    integration = users_db.get_integration(uid, 'google_calendar')
+    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
     if not integration or not integration.get('connected'):
         raise HTTPException(status_code=400, detail="Google Calendar not connected")
 
@@ -340,8 +413,12 @@ async def link_calendar_event(
         raise HTTPException(status_code=400, detail="Could not parse calendar event times")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
@@ -361,7 +438,7 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     Uses the conversation's started_at/finished_at to find a matching event.
     Returns 404 if no overlapping event is found.
     """
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get conversation times
     started_at = conversation.get('started_at')
@@ -400,8 +477,12 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
@@ -458,6 +539,9 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
+    # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
+    # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
+    # docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -470,11 +554,15 @@ def delete_conversation(
         # Delete audio files
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-        # Delete associated memories and their vectors
-        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in memory_ids:
-            background_tasks.add_task(delete_memory_vector, uid, memory_id)
+        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        db_client = getattr(db_client_module, 'db', None)
+        memory_system = pin_memory_system(uid, db_client=db_client)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
+        else:
+            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
+            for memory_id in deletion_result.get('vector_delete_ids', []):
+                delete_memory_vector(uid, memory_id)
 
         # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
@@ -882,6 +970,11 @@ def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
 ):
+    if search_request.speaker_id and search_request.speaker_id != 'user':
+        person = users_db.get_person(uid, search_request.speaker_id)
+        if person is None:
+            raise HTTPException(status_code=404, detail="Speaker not found")
+
     # Convert ISO datetime strings to Unix timestamps if provided
     start_timestamp = None
     end_timestamp = None
@@ -906,6 +999,7 @@ def search_conversations_endpoint(
         include_discarded=search_request.include_discarded,
         start_date=start_timestamp,
         end_date=end_timestamp,
+        speaker_id=search_request.speaker_id,
     )
 
 

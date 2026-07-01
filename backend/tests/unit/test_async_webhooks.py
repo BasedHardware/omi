@@ -52,6 +52,11 @@ sys.modules["utils.notifications"].send_notification = MagicMock()
 from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
 
 
+@pytest.fixture(autouse=True)
+def _disable_webhook_retry_sleeps(monkeypatch):
+    monkeypatch.setenv("DEV_WEBHOOK_RETRY_DELAYS", "")
+
+
 class TestRealtimeTranscriptWebhook:
     """Test realtime_transcript_webhook uses httpx async."""
 
@@ -258,7 +263,7 @@ class TestConversationAndSummaryWebhooksStructural:
         func_body = source[start:next_def]
 
         assert 'await' in func_body, "conversation_created_webhook must use await for async HTTP call"
-        assert '.post(' in func_body, "conversation_created_webhook must call .post() to send the payload"
+        assert '_post_dev_webhook(' in func_body, "conversation_created_webhook must use the async webhook helper"
         assert (
             'requests.post' not in func_body
         ), "conversation_created_webhook must not use blocking requests.post — use httpx.AsyncClient"
@@ -273,7 +278,7 @@ class TestConversationAndSummaryWebhooksStructural:
         func_body = source[start:next_def]
 
         assert 'await' in func_body, "day_summary_webhook must use await for async HTTP call"
-        assert '.post(' in func_body, "day_summary_webhook must call .post() to send the payload"
+        assert '_post_dev_webhook(' in func_body, "day_summary_webhook must use the async webhook helper"
         assert (
             'requests.post' not in func_body
         ), "day_summary_webhook must not use blocking requests.post — use httpx.AsyncClient"

@@ -64,13 +64,12 @@ RUN ldconfig && \
 COPY --from=builder /opt/venv /opt/venv
 
 # Whitelist-copy only the modules pusher reaches
+COPY backend/config/ ./config/
 COPY backend/database/ ./database/
 COPY backend/models/ ./models/
 COPY backend/routers/ ./routers/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
-# CI writes google-credentials.json to backend/ before build (gcp_backend_pusher.yml)
-COPY backend/google-credentials.json ./google-credentials.json
 
 EXPOSE 8080
 CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop"]

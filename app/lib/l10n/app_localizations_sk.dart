@@ -9355,6 +9355,17 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transcribeLaterPaused => 'Pozastavené – zvuk sa nenahráva';
 
   @override
+  String get memoryThisDevice => 'Toto zariadenie';
+  @override
+  String get memoryThisIphone => 'Tento iPhone';
+  @override
+  String get memoryThisPhone => 'Tento telefón';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Ako používať Omi';
 
   @override
@@ -9449,6 +9460,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Približne 1 minúta';
+
   @override
   String get jumpToLatestMessage => 'Prejsť na najnovšiu správu';
 

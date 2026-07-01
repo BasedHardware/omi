@@ -15,6 +15,7 @@ These rules apply to every AI agent working in this repository. This file is the
 ## Setup
 
 - **Worktree setup (required before first commit/push):** `make setup` — installs the repo Git hooks using linked-worktree-safe paths.
+- **Pre-commit hook (required before first commit):** `ln -s -f ../../scripts/pre-commit "$(git rev-parse --git-path hooks)/pre-commit"` — auto-formats staged files on commit.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
 ## Safety Rules
@@ -33,6 +34,11 @@ These rules apply to every AI agent working in this repository. This file is the
 ### UI / Design (all platforms)
 
 - **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions.
+
+### Deferred Work Markers
+
+- New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
+- Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
 
 ### Backend (Python)
 
@@ -69,6 +75,7 @@ backend (main.py)
   ├── ──────► diarizer (diarizer/)
   ├── ──────► vad (modal/)
   ├── ──────► deepgram (self-hosted or cloud)
+  ├── ──────► parakeet (parakeet/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
 pusher
@@ -83,24 +90,33 @@ backend-sync (main.py, Cloud Run)
   └── ──────► Cloud Tasks queue `audio-merge` ──► POST /v2/audio-merge-jobs/run (OIDC, same service)
 
 notifications-job (modal/job.py)  [cron]
+agent-vm-reaper (backend/charts/agent-vm-reaper)  [cron]
 ```
 
-Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy,llm-gateway}/`
+Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,parakeet,pusher,vad}/`
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram for STT (`utils/stt/streaming.py`).
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram or parakeet for STT (`HOSTED_PARAKEET_API_URL`, `utils/stt/streaming.py`).
+- **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
 - **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients.
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
 - **agent-proxy** (`agent-proxy/main.py`) — GKE. WebSocket proxy at `wss://agent.omi.me/v1/agent/ws`. Validates Firebase ID token, looks up `agentVm` in Firestore, proxies bidirectionally to VM's `ws://<ip>:8080/ws`.
 - **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` and `/v1/speaker-identification`. Called by backend only.
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED`. Pre-recorded always uses Deepgram cloud. Called by backend and pusher.
+- **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and parakeet is selected.
 - **backend-sync** (`main.py`, same image as backend) — Cloud Run service for `/v2/sync-local-files`. When `SYNC_DISPATCH_MODE=cloud_tasks`: stages raw audio in GCS, enqueues to Cloud Tasks queue `sync-jobs`, which POSTs `/v2/sync-jobs/run` (OIDC-verified, `utils/cloud_tasks.py`) to run decode→VAD→STT inside a request. Inline fallback when the flag is off, env is incomplete, BYOK headers are present, or enqueue fails. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`).
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
+- **monitoring** (`backend/charts/monitoring/`) — Prometheus, Grafana, Loki, Alloy, alerts, and HPA metric adapters for backend services.
+- **agent-vm-reaper** (`backend/charts/agent-vm-reaper/`) — CronJob that deletes stale `omi-agent-*` GCE VMs left by desktop agent sandboxes.
+- **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
+
+Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `python backend/scripts/validate-backend-runtime-env.py --env <dev|prod>` after backend runtime env changes.
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section. If a PR changes audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR.
 
 ### App (Flutter)
 
+- Public app env is public: Flutter Envied values are compiled into IPA/AAB artifacts. New app config must go through `app/config/client_env_policy.yaml`, `app/.client.env.example`, and `scripts/create-public-client-env.sh`. Never add provider API keys, OAuth client secrets, service accounts, private keys, admin tokens, signing credentials, or backend-only secrets to `app/lib/env/**`, app env templates, Codemagic app build steps, generated Dart, or bundled app resources. `obfuscate: true` is not a security boundary. Run `python3 scripts/check-public-client-secrets.py` after any app env or release workflow change.
 - All user-facing strings must use l10n (`context.l10n.keyName`) — never hardcoded strings. Add keys to ARB files using `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
 - When adding new l10n keys, translate all non-English locales — never leave English text in a non-English ARB file. Don't hardcode the count; the authoritative list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`. Use the `omi-add-missing-language-keys-l10n` skill, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - **Firebase Prod Config** — never run `flutterfire configure`; it overwrites prod credentials. Prod config files live in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
@@ -220,28 +236,33 @@ Rules:
 
 ## Formatting
 
-Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
+**Install the pre-commit hook before your first commit** (see Setup). Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`.
 
-| Language | Command |
-|----------|---------|
+The **pre-commit hook** auto-formats staged files on commit (Dart, Python, ARB/JSON, web/Prettier, C/C++, Rust). You can also format manually:
+
+| Language | Manual command |
+|----------|----------------|
 | Dart (`app/`) | `dart format --line-length 120 <files>` |
 | Python (`backend/`) | `black --line-length 120 --skip-string-normalization <files>` |
+| ARB (`app/lib/l10n/`) | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
 | C/C++ (firmware) | `clang-format -i <files>` |
+| Rust (`desktop/macos/Backend-Rust/`) | `rustfmt --edition 2021 <files>` |
+| Web (`web/`) | `npx prettier --write <files>` |
 
 Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually.
 
 ## Git
 
-- **Before your first commit**, verify the pre-commit hook is installed (see Setup).
+- **Before your first commit**, install the pre-commit hook (see Setup). Commits without the hook bypass formatting and let violations land on `main`.
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 - Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
-- Make individual commits per file, not bulk commits.
+- Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
 
 ### RELEASE Command
-Create a branch from `main`, individual commits per file, push and open a PR, merge without squash, then switch back to `main` and pull.
+Create a branch from `main`, make individual commits per feature or testable surface, push and open a PR, merge without squash, then switch back to `main` and pull.
 
 ### RELEASEWITHBACKEND Command
 Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
@@ -249,13 +270,15 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 ## Testing
 
 - Run `backend/test-preflight.sh` first to verify tools, packages, and env vars.
+- OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 - Backend changes: run `backend/test.sh`. App changes: run `app/test.sh`. Run before committing.
 - Backend unit tests need `python3`, `pytest`, packages from `requirements.txt`, `ENCRYPTION_SECRET` (set by test.sh). Integration tests optionally need `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ADMIN_KEY`, Redis, `GOOGLE_APPLICATION_CREDENTIALS`.
 
 ## CI/CD & Logs
 
-- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable.
+- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable. Desktop Rust backend deploys require environment-scoped `DESKTOP_BACKEND_BASE_API_URL` so OAuth callbacks set runtime `BASE_API_URL`.
 - Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
+- Firmware release (Omi CV1): manual `.github/workflows/firmware_release.yml`. Bump `CONFIG_BT_DIS_FW_REV_STR` in `omi/firmware/omi/omi.conf` first, then `gh workflow run firmware_release.yml -f publish=publish -f changelog="..." -f minimum_app_version_code=...` (omit `publish` for a build-only QA run). It builds via Docker (NCS 2.9.0 sysbuild + MCUboot), names the OTA asset `Omi_CV1_OTA_v<ver>.zip` (the "ota" substring is required), and publishes a `Omi_CV1_v<ver>` GitHub Release with the `KEY_VALUE` body that `backend/routers/firmware.py` serves. Build logic lives in `omi/firmware/scripts/ci/`.
 
 ## Documentation Maintenance
 

@@ -1,5 +1,6 @@
 import Foundation
 import PostHog
+import FirebaseCore
 import FirebaseAuth
 
 /// Singleton manager for PostHog analytics with Session Replay
@@ -21,7 +22,7 @@ class PostHogManager {
     func initialize() {
         guard !isInitialized else { return }
 
-        let config = PostHogConfig(apiKey: apiKey, host: host)
+        let config = PostHogConfig(projectToken: apiKey, host: host)
 
         // Disable automatic lifecycle events — PostHog's observer calls setResourceValues(isExcludedFromBackupKey:)
         // synchronously on the main thread (via NSApplicationDidFinishLaunchingNotification), which XPCs to the
@@ -47,8 +48,8 @@ class PostHogManager {
         var email: String?
         var name: String?
 
-        // Try Firebase Auth first
-        if let user = Auth.auth().currentUser {
+        // Try Firebase Auth first, but only after Firebase has been configured.
+        if FirebaseApp.app() != nil, let user = Auth.auth().currentUser {
             userId = user.uid
             email = user.email
             name = user.displayName
@@ -192,6 +193,10 @@ extension PostHogManager {
         ])
     }
 
+    func authFlowEvent(_ eventName: String, properties: [String: Any]) {
+        track(eventName, properties: properties)
+    }
+
     func signedOut() {
         track("Signed Out")
     }
@@ -234,10 +239,27 @@ extension PostHogManager {
         ])
     }
 
-    func recordingError(error: String) {
-        track("Phone Mic Recording Error", properties: [
-            "error": error
-        ])
+    func recordingError(
+        error: String,
+        reason: String? = nil,
+        source: String? = nil,
+        stage: String? = nil,
+        retryCount: Int? = nil
+    ) {
+        var properties: [String: Any] = ["error": error]
+        if let reason {
+            properties["recording_error_reason"] = reason
+        }
+        if let source {
+            properties["recording_source"] = source
+        }
+        if let stage {
+            properties["recording_stage"] = stage
+        }
+        if let retryCount {
+            properties["retry_count"] = retryCount
+        }
+        track("Phone Mic Recording Error", properties: properties)
     }
 
     // MARK: - Permission Events
@@ -603,6 +625,10 @@ extension PostHogManager {
         track("Update Installed", properties: [
             "version": version
         ])
+    }
+
+    func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {
+        track("Update Check Failed", properties: diagnostics.analyticsProperties)
     }
 
     // MARK: - Notification Events

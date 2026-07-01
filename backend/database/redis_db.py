@@ -423,7 +423,7 @@ def get_proactive_noti_sent_at_ttl(uid: str, app_id: str):
 
 @try_catch_decorator
 def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily mentor notification count for a user. Returns new count."""
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
     from datetime import datetime, timezone
 
     key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
@@ -434,7 +434,7 @@ def incr_daily_notification_count(uid: str) -> int:
 
 @try_catch_decorator
 def get_daily_notification_count(uid: str) -> int:
-    """Get the current daily mentor notification count for a user."""
+    """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
     from datetime import datetime, timezone
 
     key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
@@ -484,16 +484,57 @@ def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
 
 
 @try_catch_decorator
+def cache_mcp_api_key_auth_context(
+    hashed_key: str,
+    user_id: str,
+    scopes: Optional[List[str]] = None,
+    key_id: str = None,
+    app_id: str = None,
+    memory_grant_seeded: bool = True,
+    auth_context_version: int = 2,
+    ttl: int = 3600,
+):
+    """Caches the user_id, key identity, and scopes for a given MCP API key."""
+    cache_data = {
+        "user_id": user_id,
+        "scopes": scopes,
+        "key_id": key_id,
+        "app_id": app_id,
+        "memory_grant_seeded": memory_grant_seeded,
+        "auth_context_version": auth_context_version,
+    }
+    r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
+    r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
+
+
+@try_catch_decorator
 def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
     """Retrieves the user_id for a given hashed MCP API key from cache."""
-    user_id = r.get(f'mcp_api_key:{hashed_key}')
-    return user_id.decode() if user_id else None
+    auth_context = get_cached_mcp_api_key_auth_context(hashed_key)
+    return auth_context.get("user_id") if auth_context else None
+
+
+@try_catch_decorator
+def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[dict]:
+    """Retrieves MCP API key auth context, accepting older uid-only cache values."""
+    cached = r.get(f'mcp_api_key_auth:{hashed_key}')
+    if not cached:
+        cached = r.get(f'mcp_api_key:{hashed_key}')
+    if not cached:
+        return None
+    decoded = cached.decode() if isinstance(cached, bytes) else cached
+    try:
+        cache_data = json.loads(decoded)
+    except (TypeError, ValueError):
+        return {"user_id": decoded, "scopes": None, "key_id": None, "app_id": None}
+    return cache_data if isinstance(cache_data, dict) else None
 
 
 @try_catch_decorator
 def delete_cached_mcp_api_key(hashed_key: str):
     """Deletes a cached MCP API key."""
     r.delete(f'mcp_api_key:{hashed_key}')
+    r.delete(f'mcp_api_key_auth:{hashed_key}')
 
 
 # ******************************************************
@@ -501,9 +542,16 @@ def delete_cached_mcp_api_key(hashed_key: str):
 # ******************************************************
 
 
-def cache_dev_api_key(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
-    """Caches the user_id and scopes for a given hashed Developer API key."""
-    cache_data = {"user_id": user_id, "scopes": scopes}
+def cache_dev_api_key(
+    hashed_key: str,
+    user_id: str,
+    scopes: Optional[List[str]] = None,
+    ttl: int = 3600,
+    key_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+):
+    """Caches Developer API key auth context for uid-only and memory app/key authorization."""
+    cache_data = {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
     r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
 
 
@@ -767,6 +815,15 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
     result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
+    """Throttle client_devices registry upserts to once per (uid, device) every `ttl` seconds."""
+    try:
+        result = r.set(f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
+        return True
 
 
 def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600) -> bool:

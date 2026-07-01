@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AsanaSettingsPage extends StatefulWidget {
@@ -165,9 +165,9 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
+              color: Colors.green.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green.withOpacity(0.3)),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
