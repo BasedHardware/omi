@@ -1,5 +1,5 @@
 import { createServer } from 'http'
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -160,6 +160,18 @@ describe('local agent controls', () => {
 
     vi.advanceTimersByTime(60_000)
     expect(electronState.clipboardText).toBe('')
+  })
+
+  it('does not expose raw token-store errors in status', () => {
+    writeFileSync(join(electronState.userData, 'local-agent-token.json'), '{not-json', 'utf8')
+
+    const status = getLocalAgentStatus()
+
+    expect(status.hasToken).toBe(false)
+    expect(status.tokenError).toBe(
+      'Local agent token is unavailable. Rotate the token to repair local access.'
+    )
+    expect(status.tokenError).not.toContain(electronState.userData)
   })
 
   it('rotates the bearer token and invalidates the old one', async () => {
