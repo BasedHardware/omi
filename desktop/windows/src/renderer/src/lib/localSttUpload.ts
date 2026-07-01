@@ -17,6 +17,9 @@ type UploadResponse = {
   discarded: boolean
 }
 
+const MAX_UPLOAD_SEGMENTS = 500
+const MAX_RELATIVE_TRANSCRIPT_SECONDS = 24 * 60 * 60
+
 function parseSpeakerId(speaker: string | undefined): number | undefined {
   if (!speaker) return undefined
   const match = speaker.match(/(\d+)/)
@@ -84,7 +87,13 @@ export function buildUploadSegments(lines: TranscriptLine[]): UploadSegment[] {
     merged.push({ ...segment })
   }
 
-  return merged.slice(0, 500)
+  if (merged.length > MAX_UPLOAD_SEGMENTS) {
+    throw new Error(
+      `Transcript has ${merged.length} upload segments; max is ${MAX_UPLOAD_SEGMENTS}. Save was stopped to avoid truncating transcript content.`
+    )
+  }
+
+  return merged
 }
 
 export async function uploadConversationFromSegments(args: {
@@ -97,6 +106,9 @@ export async function uploadConversationFromSegments(args: {
   if (transcript_segments.length === 0) return null
 
   const latestEnd = Math.max(...transcript_segments.map((s) => s.end))
+  if (latestEnd > MAX_RELATIVE_TRANSCRIPT_SECONDS) {
+    throw new Error('Transcript segment times must be seconds relative to recording start')
+  }
   const finishedAt = Math.max(
     args.finishedAt,
     args.startedAt + latestEnd * 1000,
