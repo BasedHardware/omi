@@ -189,6 +189,11 @@ app/lib/env/prod_env.g.dart
 
 /omi/firmware/firmware/v2.7.0/
 
+# nRF Connect SDK west workspaces (downloaded on demand, ~1.5GB) + build outputs
+/omi/firmware/v2.7.0/
+/omi/firmware/v2.9.0/
+/omi/firmware/build/
+
 
 # Additional Expo/React Native specific ignores
 .expo/*
