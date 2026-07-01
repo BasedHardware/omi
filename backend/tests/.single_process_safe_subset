@@ -77,3 +77,4 @@ tests/unit/test_proactive_notification_language.py
 tests/unit/test_mentor_notifications.py
 tests/unit/test_apps_review_reply_validation.py
 tests/unit/test_create_persona_user_none.py
+tests/unit/test_byok_security.py
