@@ -28,5 +28,14 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
+  {
+    // Plain JS cannot carry TypeScript return-type annotations. The upstream
+    // @electron-toolkit config already disables this rule for JS, but its
+    // `*.js`/`*.mjs` globs only match root-level files, not scripts/**.
+    files: ['**/*.{js,mjs,cjs}'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off'
+    }
+  },
   eslintConfigPrettier
 )
