@@ -1,7 +1,9 @@
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
+from subprocess import CompletedProcess
 
 
 def _load_module():
@@ -121,9 +123,53 @@ def test_failing_check_sets_overall_failure(monkeypatch):
 def test_llm_gateway_fake_provider_check_passes_without_real_provider_credentials(monkeypatch):
     module = _load_module()
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_SERVICE_TOKEN", raising=False)
+    monkeypatch.delenv("LLM_GATEWAY_SERVICE_TOKEN", raising=False)
 
     status, summary, details = module.llm_gateway_fake_provider_check(_config(module))
 
     assert status == "PASS"
     assert "fake provider" in summary.lower()
     assert details["network_or_provider_calls"] is False
+    assert "OMI_LLM_GATEWAY_SERVICE_TOKEN" not in os.environ
+    assert "LLM_GATEWAY_SERVICE_TOKEN" not in os.environ
+
+
+def test_llm_gateway_fake_provider_check_restores_existing_service_tokens(monkeypatch):
+    module = _load_module()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_SERVICE_TOKEN", "existing-primary-token")
+    monkeypatch.setenv("LLM_GATEWAY_SERVICE_TOKEN", "existing-legacy-token")
+
+    status, summary, details = module.llm_gateway_fake_provider_check(_config(module))
+
+    assert status == "PASS"
+    assert "fake provider" in summary.lower()
+    assert details["network_or_provider_calls"] is False
+    assert os.environ["OMI_LLM_GATEWAY_SERVICE_TOKEN"] == "existing-primary-token"
+    assert os.environ["LLM_GATEWAY_SERVICE_TOKEN"] == "existing-legacy-token"
+
+
+def test_local_fixture_check_uses_pytest_selection_supported_by_runner(monkeypatch):
+    module = _load_module()
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        return CompletedProcess(command, 0, stdout="selected fixture passed\n")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    status, summary, details = module.conversation_processing_fixture_check(
+        _config(module, run_local_fixtures=True, timeout_seconds=1.0, e2e_timeout="7s")
+    )
+
+    assert status == "PASS"
+    assert "hermetic e2e harness" in summary
+    assert captured["command"][-2:] == ["-k", "test_conversation_create_process_finalize_lifecycle"]
+    assert "testing/e2e/test_conversation_processing.py::test_conversation_create_process_finalize_lifecycle" not in (
+        captured["command"]
+    )
+    assert captured["env"]["E2E_PYTEST_TIMEOUT"] == "7s"
+    assert details["pytest_target"].endswith("::test_conversation_create_process_finalize_lifecycle")

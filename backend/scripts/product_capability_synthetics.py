@@ -20,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi.testclient import TestClient
+from llm_gateway.gateway.auth import LEGACY_SERVICE_TOKEN_ENV_VAR, PRIMARY_SERVICE_TOKEN_ENV_VAR
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import FakeChatCompletionProvider
 from llm_gateway.main import app as llm_gateway_app
@@ -182,7 +183,11 @@ def mcp_oauth_metadata_check(config: SyntheticConfig) -> tuple[str, str, dict[st
 
 
 def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, dict[str, Any]]:
-    os.environ["LLM_GATEWAY_SERVICE_TOKEN"] = "product-synthetic-sentinel-token"
+    sentinel_token = "product-synthetic-sentinel-token"
+    service_token_env_vars = (PRIMARY_SERVICE_TOKEN_ENV_VAR, LEGACY_SERVICE_TOKEN_ENV_VAR)
+    previous_service_tokens = {env_var: os.environ.get(env_var) for env_var in service_token_env_vars}
+    for env_var in service_token_env_vars:
+        os.environ[env_var] = sentinel_token
 
     provider = FakeChatCompletionProvider()
     llm_gateway_app.dependency_overrides[llm_gateway_dependencies.get_provider_registry] = lambda: ProviderRegistry(
@@ -192,7 +197,7 @@ def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, 
         response = TestClient(llm_gateway_app).post(
             "/v1/chat/completions",
             headers={
-                "authorization": "Bearer product-synthetic-sentinel-token",
+                "authorization": f"Bearer {sentinel_token}",
                 "x-omi-service-caller": "backend",
                 "x-omi-user-uid": "synthetic-product-capability-user",
             },
@@ -216,6 +221,11 @@ def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, 
         )
     finally:
         llm_gateway_app.dependency_overrides.clear()
+        for env_var, previous_value in previous_service_tokens.items():
+            if previous_value is None:
+                os.environ.pop(env_var, None)
+            else:
+                os.environ[env_var] = previous_value
 
     if response.status_code != 200:
         return (
@@ -237,6 +247,10 @@ def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, 
     )
 
 
+def _pytest_k_expression(pytest_target: str) -> str:
+    return pytest_target.rsplit("::", maxsplit=1)[-1]
+
+
 def _run_e2e_selection(config: SyntheticConfig, name: str, pytest_target: str) -> tuple[str, str, dict[str, Any]]:
     if not config.run_local_fixtures:
         return (
@@ -245,7 +259,8 @@ def _run_e2e_selection(config: SyntheticConfig, name: str, pytest_target: str) -
             {"pytest_target": pytest_target},
         )
 
-    command = ["bash", str(BACKEND_DIR / "testing" / "e2e" / "run.sh"), "-q", pytest_target]
+    pytest_k_expression = _pytest_k_expression(pytest_target)
+    command = ["bash", str(BACKEND_DIR / "testing" / "e2e" / "run.sh"), "-q", "-k", pytest_k_expression]
     env = os.environ.copy()
     env["E2E_PYTEST_TIMEOUT"] = config.e2e_timeout
     completed = subprocess.run(
@@ -263,7 +278,7 @@ def _run_e2e_selection(config: SyntheticConfig, name: str, pytest_target: str) -
         return (
             STATUS_PASS,
             f"{name} passed through the hermetic e2e harness.",
-            {"command": command, "output_tail": output},
+            {"command": command, "pytest_target": pytest_target, "output_tail": output},
         )
     if (
         "E2E test dependencies are not installed" in completed.stdout
@@ -272,12 +287,17 @@ def _run_e2e_selection(config: SyntheticConfig, name: str, pytest_target: str) -
         return (
             STATUS_NOT_RUN,
             f"{name} did not run because local harness dependencies are missing.",
-            {"command": command, "exit_code": completed.returncode, "output_tail": output},
+            {
+                "command": command,
+                "pytest_target": pytest_target,
+                "exit_code": completed.returncode,
+                "output_tail": output,
+            },
         )
     return (
         STATUS_FAIL,
         f"{name} failed through the hermetic e2e harness.",
-        {"command": command, "exit_code": completed.returncode, "output_tail": output},
+        {"command": command, "pytest_target": pytest_target, "exit_code": completed.returncode, "output_tail": output},
     )
 
 
