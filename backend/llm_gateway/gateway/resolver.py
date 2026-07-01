@@ -40,7 +40,7 @@ from llm_gateway.gateway.validator import ValidatedChatCompletionRequest, valida
 # or similar), or by setting the constant directly.
 try:
     _CATALOG = load_catalog()
-except (FileNotFoundError, ValueError, Exception) as _exc:
+except Exception as _exc:
     # Catalog file missing or unparseable. Fall back to an empty set
     # so the module can be imported (e.g., for unit tests without a
     # catalog fixture). Production callers ensure the catalog exists.

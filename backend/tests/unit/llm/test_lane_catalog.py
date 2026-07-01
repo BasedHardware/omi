@@ -113,22 +113,101 @@ class TestLoadCatalog:
 
 
 class TestValidateServingConfig:
+    """Cross-validation tests. R0.5 review fix: signature changed to take
+    the full GatewayConfig so the check is association-based (per prod_ready
+    lane), not count-based. The previous count-only check missed the
+    'serving config has artifacts for non-prod_ready lanes but not for
+    prod_ready' case.
+    """
+
+    def _minimal_serving_config(self, lane_id: str = "omi:auto:chat-structured"):
+        """Build a minimal serving config with one lane and one artifact."""
+        from llm_gateway.gateway.schemas import (
+            Capabilities,
+            CredentialPolicy,
+            Evidence,
+            FallbackPolicy,
+            LaneConfig,
+            Objective,
+            ProviderRef,
+            RetryPolicy,
+            RolloutPolicy,
+            RouteArtifact,
+            StructuredOutputMode,
+            Surface,
+            TimeoutPolicy,
+        )
+
+        lane = LaneConfig(
+            lane_id=lane_id,
+            surface=Surface.OPENAI_CHAT_COMPLETIONS,
+            capabilities=Capabilities(
+                text_input=True,
+                streaming=False,
+                structured_output=StructuredOutputMode.NONE,
+                tools=False,
+            ),
+            objective=Objective(quality=0.6, latency=0.2, cost=0.2),
+            credential_policy=CredentialPolicy(
+                mode="omi_paid",
+                allow_byok_to_omi_paid_fallback=False,
+                fallback_eligible_failure_classes=[],
+                never_fallback_failure_classes=[],
+            ),
+            active_route=f"route.test.{lane_id}.001",
+            last_known_good=f"route.test.{lane_id}.001",
+        )
+        artifact = RouteArtifact(
+            route_artifact_id="route.test.chat-structured.001",
+            artifact_digest="sha256:" + "0" * 64,
+            lane_id=lane_id,
+            surface=Surface.OPENAI_CHAT_COMPLETIONS,
+            primary=ProviderRef(provider="openai", model="gpt-4.1-mini"),
+            fallbacks=[],
+            timeouts=TimeoutPolicy(request_ms=8000),
+            retry=RetryPolicy(max_attempts=1),
+            capabilities=Capabilities(
+                text_input=True,
+                streaming=False,
+                structured_output=StructuredOutputMode.NONE,
+                tools=False,
+            ),
+            evidence=Evidence(
+                benchmark_snapshot="bench.test",
+                eval_report="eval.test",
+                benchmark_source="omi_eval",
+                dev_only=False,
+            ),
+            rollout=RolloutPolicy(stage="shadow", percent=0),
+            credential_policy=CredentialPolicy(
+                mode="omi_paid",
+                allow_byok_to_omi_paid_fallback=False,
+                fallback_eligible_failure_classes=[],
+                never_fallback_failure_classes=[],
+            ),
+            fallback_policy=FallbackPolicy(
+                fallback_on=[],
+                never_fallback_on=[],
+            ),
+        )
+        return GatewayConfig(
+            lanes={lane_id: lane},
+            route_artifacts={"route.test.chat-structured.001": artifact},
+            feature_bundles={},
+        )
+
     def test_valid_serving_config_passes(self):
         catalog = load_catalog()
-        validate_serving_config(
-            catalog,
-            serving_lane_ids={"omi:auto:chat-structured"},
-            serving_artifact_ids={"route.chat_structured.2026_06_27.001"},
-        )
+        validate_serving_config(catalog, self._minimal_serving_config())
 
     def test_serving_lane_not_in_catalog_raises(self):
         catalog = load_catalog()
-        with pytest.raises(ValueError, match="not in the catalog"):
-            validate_serving_config(
-                catalog,
-                serving_lane_ids={"omi:auto:chat-structured", "omi:auto:does-not-exist"},
-                serving_artifact_ids={"route.chat_structured.2026_06_27.001"},
-            )
+        from llm_gateway.gateway.config_loader import ConfigValidationError
+
+        # Build a config with a non-catalog lane
+        cfg = self._minimal_serving_config(lane_id="omi:auto:not-in-catalog")
+        with pytest.raises(ConfigValidationError, match="not in the catalog"):
+            validate_serving_config(catalog, cfg)
 
     def test_serving_lane_marked_dev_only_raises(self):
         """Per David: 'If a lane doesn't have the real surface / provider
@@ -136,43 +215,135 @@ class TestValidateServingConfig:
         must NOT be in the serving config.
         """
         catalog = load_catalog()
-        with pytest.raises(ValueError, match="has catalog status 'dev_only'"):
-            validate_serving_config(
-                catalog,
-                serving_lane_ids={"omi:auto:chat-structured", "omi:auto:chat-extraction"},
-                serving_artifact_ids={"route.chat_structured.2026_06_27.001"},
-            )
+        from llm_gateway.gateway.config_loader import ConfigValidationError
+
+        cfg = self._minimal_serving_config(lane_id="omi:auto:chat-extraction")
+        with pytest.raises(ConfigValidationError, match="has catalog status 'dev_only'"):
+            validate_serving_config(catalog, cfg)
 
     def test_serving_lane_marked_planned_raises(self):
-        """A planned catalog entry must NOT be in the serving config."""
         catalog = load_catalog()
-        with pytest.raises(ValueError, match="has catalog status 'planned'"):
-            validate_serving_config(
-                catalog,
-                serving_lane_ids={"omi:auto:chat-structured", "omi:auto:stt-realtime"},
-                serving_artifact_ids={"route.chat_structured.2026_06_27.001"},
-            )
+        from llm_gateway.gateway.config_loader import ConfigValidationError
 
-    def test_prod_ready_catalog_lane_without_serving_artifact_raises(self):
-        """Every prod_ready catalog lane must have at least one serving artifact."""
+        cfg = self._minimal_serving_config(lane_id="omi:auto:stt-realtime")
+        with pytest.raises(ConfigValidationError, match="has catalog status 'planned'"):
+            validate_serving_config(catalog, cfg)
+
+    def test_prod_ready_lane_missing_from_serving_config_raises(self):
+        """R0.5 review fix F2: the count-only check missed the case where
+        a prod_ready catalog lane is entirely missing from the serving
+        config. This test pins the fix.
+
+        We build a serving config with 0 lanes and 0 artifacts (no
+        dev_only triggers; the dev_only check sees an empty serving lane
+        set and passes). The prod_ready check then catches the missing
+        chat-structured.
+        """
         catalog = load_catalog()
-        with pytest.raises(ValueError, match="prod_ready lanes"):
-            validate_serving_config(
-                catalog,
-                serving_lane_ids=set(),  # 0 lanes
-                serving_artifact_ids=set(),  # 0 artifacts
-            )
+        from llm_gateway.gateway.config_loader import ConfigValidationError
+
+        empty_cfg = GatewayConfig(lanes={}, route_artifacts={}, feature_bundles={})
+        with pytest.raises(ConfigValidationError, match="no serving config entry"):
+            validate_serving_config(catalog, empty_cfg)
+
+    def test_prod_ready_lane_with_artifact_for_other_lane_raises(self):
+        """R0.5 review fix F2: the count-only check missed the case where
+        the serving config has an artifact for some other lane but NOT
+        for the prod_ready one.
+
+        Build a serving config that has a lane + artifact for the
+        prod_ready chat-structured. The artifact's lane_id is
+        chat-extraction (dev_only), so chat-structured has no artifact
+        of its own. The count check would have passed this.
+        """
+        catalog = load_catalog()
+        from llm_gateway.gateway.config_loader import ConfigValidationError
+        from llm_gateway.gateway.schemas import (
+            Capabilities,
+            CredentialPolicy,
+            Evidence,
+            FallbackPolicy,
+            LaneConfig,
+            Objective,
+            ProviderRef,
+            RetryPolicy,
+            RolloutPolicy,
+            RouteArtifact,
+            StructuredOutputMode,
+            Surface,
+            TimeoutPolicy,
+        )
+
+        # Lane: chat-structured (prod_ready in the catalog)
+        lane = LaneConfig(
+            lane_id="omi:auto:chat-structured",
+            surface=Surface.OPENAI_CHAT_COMPLETIONS,
+            capabilities=Capabilities(
+                text_input=True,
+                streaming=False,
+                structured_output=StructuredOutputMode.NONE,
+                tools=False,
+            ),
+            objective=Objective(quality=0.6, latency=0.2, cost=0.2),
+            credential_policy=CredentialPolicy(
+                mode="omi_paid",
+                allow_byok_to_omi_paid_fallback=False,
+                fallback_eligible_failure_classes=[],
+                never_fallback_failure_classes=[],
+            ),
+            active_route="route.test.chat-extraction.001",
+            last_known_good="route.test.chat-extraction.001",
+        )
+        # Artifact: lane_id is chat-extraction (NOT chat-structured)
+        # So chat-structured has 1 lane but 0 artifacts of its own.
+        artifact = RouteArtifact(
+            route_artifact_id="route.test.chat-extraction.001",
+            artifact_digest="sha256:" + "0" * 64,
+            lane_id="omi:auto:chat-extraction",
+            surface=Surface.OPENAI_CHAT_COMPLETIONS,
+            primary=ProviderRef(provider="openai", model="gpt-4.1-mini"),
+            fallbacks=[],
+            timeouts=TimeoutPolicy(request_ms=8000),
+            retry=RetryPolicy(max_attempts=1),
+            capabilities=Capabilities(
+                text_input=True,
+                streaming=False,
+                structured_output=StructuredOutputMode.NONE,
+                tools=False,
+            ),
+            evidence=Evidence(
+                benchmark_snapshot="bench.test",
+                eval_report="eval.test",
+                benchmark_source="omi_eval",
+                dev_only=False,
+            ),
+            rollout=RolloutPolicy(stage="shadow", percent=0),
+            credential_policy=CredentialPolicy(
+                mode="omi_paid",
+                allow_byok_to_omi_paid_fallback=False,
+                fallback_eligible_failure_classes=[],
+                never_fallback_failure_classes=[],
+            ),
+            fallback_policy=FallbackPolicy(
+                fallback_on=[],
+                never_fallback_on=[],
+            ),
+        )
+        cfg = GatewayConfig(
+            lanes={"omi:auto:chat-structured": lane},
+            route_artifacts={"route.test.chat-extraction.001": artifact},
+            feature_bundles={},
+        )
+        with pytest.raises(ConfigValidationError, match="no serving route artifact"):
+            validate_serving_config(catalog, cfg)
 
     def test_empty_catalog_with_no_serving_lanes_passes(self):
         """If the catalog has no prod_ready lanes, the serving config
         can be empty (no lanes to promote yet).
         """
         catalog = LaneCatalog(lanes=[])
-        validate_serving_config(
-            catalog,
-            serving_lane_ids=set(),
-            serving_artifact_ids=set(),
-        )
+        cfg = GatewayConfig(lanes={}, route_artifacts={}, feature_bundles={})
+        validate_serving_config(catalog, cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -283,13 +454,57 @@ class TestLoadGatewayConfigWithCatalog:
 
 
 # ---------------------------------------------------------------------------
+# Resolver derivation (F7: pin the post-R0.5 invariant)
+# ---------------------------------------------------------------------------
+
+
+class TestResolverDerivation:
+    def test_resolver_supported_lane_ids_is_just_chat_structured(self):
+        """R0.5 review fix F7: pin that SUPPORTED_AUTO_LANE_IDS is the
+        single prod_ready entry from the catalog. When R3.2 promotes more
+        lanes, this test is updated in the same PR.
+        """
+        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
+
+        assert SUPPORTED_AUTO_LANE_IDS == frozenset({"omi:auto:chat-structured"})
+
+    def test_resolver_supported_lane_ids_excludes_placeholder_lanes(self):
+        """Per David: 'No prod-loadable placeholder route artifacts'.
+        The 3 R0 placeholders must NOT be in the allowlist.
+        """
+        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
+
+        assert "omi:auto:stt-realtime" not in SUPPORTED_AUTO_LANE_IDS
+        assert "omi:auto:transcription" not in SUPPORTED_AUTO_LANE_IDS
+        assert "omi:auto:screenshot-embedding" not in SUPPORTED_AUTO_LANE_IDS
+
+    def test_resolver_supported_lane_ids_excludes_dev_only_lanes(self):
+        """Per David: 'If a lane doesn't have the real surface / provider
+        support / eval yet, keep it catalog-only'. The 12 R0 dev_only
+        lanes must NOT be in the allowlist.
+        """
+        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
+
+        for dev_only_lane in [
+            "omi:auto:chat-extraction",
+            "omi:auto:daily-summary",
+            "omi:auto:realtime-ptt",  # this one is special: anthropic
+            "omi:auto:persona-chat",
+        ]:
+            assert (
+                dev_only_lane not in SUPPORTED_AUTO_LANE_IDS
+            ), f"{dev_only_lane} is dev_only in the catalog but in the allowlist"
+
+
+# ---------------------------------------------------------------------------
 # CatalogEntry Pydantic validation
 # ---------------------------------------------------------------------------
 
 
 class TestCatalogEntry:
     def test_lane_id_must_start_with_omi_auto(self):
-        with pytest.raises(ValueError, match="must start with 'omi:auto:'"):
+        # Pydantic's LaneId regex (reused from schemas.py) rejects non-omi prefixes.
+        with pytest.raises(ValueError, match="should match pattern"):
             CatalogEntry(
                 lane_id="not-omi",
                 description="x",
@@ -300,7 +515,8 @@ class TestCatalogEntry:
             )
 
     def test_lane_id_must_have_capability(self):
-        with pytest.raises(ValueError, match="non-empty capability"):
+        # Pydantic's LaneId regex rejects empty capability (omi:auto: doesn't match).
+        with pytest.raises(ValueError, match="should match pattern"):
             CatalogEntry(
                 lane_id="omi:auto:",
                 description="x",

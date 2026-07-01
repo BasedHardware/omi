@@ -66,24 +66,24 @@ def load_gateway_config(
     _validate_feature_bundles(feature_bundles, lanes)
     if required_lane_ids is not None:
         _validate_required_lane_ids(required_lane_ids, lanes)
+    # Build the GatewayConfig early so we can pass it to validate_serving_config
+    # (which now takes the full config, not just id sets, for association-based
+    # cross-validation).
+    gateway_cfg = GatewayConfig(
+        lanes=lanes,
+        route_artifacts=route_artifacts,
+        feature_bundles=feature_bundles,
+    )
     if catalog is not None:
-        validate_serving_config(
-            catalog,
-            set(lanes.keys()),
-            set(route_artifacts.keys()),
-        )
+        validate_serving_config(catalog, gateway_cfg)
     elif (resolved_config_dir / "lanes_catalog.yaml").exists():
         # R0.5: cross-check the serving config against the catalog if
         # the catalog file is present. A missing catalog file is
         # tolerated (pre-R0.5 deployments).
         _catalog = load_catalog(resolved_config_dir / "lanes_catalog.yaml")
-        validate_serving_config(
-            _catalog,
-            set(lanes.keys()),
-            set(route_artifacts.keys()),
-        )
+        validate_serving_config(_catalog, gateway_cfg)
 
-    return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
+    return gateway_cfg
 
 
 def _resolve_prod_mode(prod_mode: bool | None) -> bool:

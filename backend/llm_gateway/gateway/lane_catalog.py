@@ -25,10 +25,15 @@ import logging
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from llm_gateway.gateway.schemas import LaneId
+
+if TYPE_CHECKING:
+    from llm_gateway.gateway.config_loader import GatewayConfig
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +69,7 @@ class CatalogEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    lane_id: str
+    lane_id: LaneId
     description: str
     surface: str
     provider: str
@@ -73,15 +78,6 @@ class CatalogEntry(BaseModel):
     eval_suite: Optional[str] = None
     notes: str = ""
     promoted_at: Optional[datetime] = None
-
-    @field_validator("lane_id")
-    @classmethod
-    def _validate_lane_id(cls, v: str) -> str:
-        if not v.startswith("omi:auto:"):
-            raise ValueError(f"lane_id must start with 'omi:auto:', got {v!r}")
-        if len(v.split(":")) != 3 or not v.split(":")[2]:
-            raise ValueError(f"lane_id must be 'omi:auto:<capability>' (non-empty capability), got {v!r}")
-        return v
 
     @field_validator("promoted_at")
     @classmethod
@@ -124,32 +120,49 @@ def load_catalog(catalog_path: Path | None = None) -> LaneCatalog:
         raise FileNotFoundError(f"lanes catalog not found at {path}")
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or "lanes" not in data:
-        raise ValueError(f"{path} must contain a top-level 'lanes' key (got {type(data).__name__})")
+        # Lazy import to avoid a circular dependency: config_loader imports
+        # from this module (for validate_serving_config), so we can't
+        # import config_loader at module-load time.
+        from llm_gateway.gateway.config_loader import ConfigValidationError
+
+        raise ConfigValidationError(f"{path} must contain a top-level 'lanes' key (got {type(data).__name__})")
     return LaneCatalog.model_validate(data)
 
 
 def validate_serving_config(
     catalog: LaneCatalog,
-    serving_lane_ids: set[str],
-    serving_artifact_ids: set[str],
+    serving_cfg: "GatewayConfig",
 ) -> None:
     """Cross-check: every serving lane must be in the catalog with prod_ready
-    status. Every prod_ready catalog entry must have a serving artifact.
+    status. Every prod_ready catalog entry must have at least one serving
+    artifact (associated by lane_id, not just by total count).
 
-    Raises ValueError on any mismatch.
+    Raises ConfigValidationError on any mismatch (consistent with the rest
+    of config_loader.py; not a plain ValueError). The mismatch detail
+    names the lane so the operator can fix the catalog or the serving
+    config.
     """
+    # Lazy import to avoid a circular dependency: config_loader imports
+    # from this module (for validate_serving_config), so we can't
+    # import config_loader at module-load time.
+    from llm_gateway.gateway.config_loader import ConfigValidationError
+
     prod_ready = catalog.prod_ready_lane_ids()
+    serving_lane_ids = set(serving_cfg.lanes.keys())
+    serving_lane_to_artifacts: dict[str, list[str]] = {}
+    for art_id, art in serving_cfg.route_artifacts.items():
+        serving_lane_to_artifacts.setdefault(art.lane_id, []).append(art_id)
 
     # 1. Every serving lane must be in the catalog with prod_ready status
     for lane_id in serving_lane_ids:
         entry = catalog.get(lane_id)
         if entry is None:
-            raise ValueError(
+            raise ConfigValidationError(
                 f"serving lane {lane_id!r} is not in the catalog. "
                 f"Add it to lanes_catalog.yaml before adding to lanes.yaml."
             )
         if entry.provider_support_status != ProviderSupportStatus.PROD_READY:
-            raise ValueError(
+            raise ConfigValidationError(
                 f"serving lane {lane_id!r} has catalog status "
                 f"{entry.provider_support_status.value!r} (not prod_ready). "
                 f"Per David's feedback, only prod_ready lanes belong in the "
@@ -157,16 +170,20 @@ def validate_serving_config(
                 f"promotion PR before adding to lanes.yaml."
             )
 
-    # 2. Every prod_ready catalog entry must have a serving artifact.
-    # The serving artifact id convention is route.<capability>.<date>.<seq>;
-    # we check that AT LEAST ONE serving artifact exists for each
-    # prod_ready lane by inspecting the catalog entry's lane_id.
-    # (We don't enforce a specific artifact-id naming convention here; we
-    # just check that the count of serving artifacts is at least the count
-    # of prod_ready lanes.)
-    if len(serving_artifact_ids) < len(prod_ready):
-        raise ValueError(
-            f"serving config has {len(serving_artifact_ids)} artifacts but "
-            f"catalog has {len(prod_ready)} prod_ready lanes. "
-            f"Every prod_ready lane must have at least one serving artifact."
-        )
+    # 2. Every prod_ready catalog entry must have at least one serving
+    # artifact (ASSOCIATED by lane_id, not just by count). This catches the
+    # case where the serving config has artifacts for some non-prod_ready
+    # lanes but not for the prod_ready ones (the count-only check missed
+    # this; see R0.5 review finding F2).
+    for prod_ready_lane_id in sorted(prod_ready):
+        if prod_ready_lane_id not in serving_lane_ids:
+            raise ConfigValidationError(
+                f"prod_ready catalog lane {prod_ready_lane_id!r} has no "
+                f"serving config entry. Add it to lanes.yaml + route_artifacts.yaml."
+            )
+        if not serving_lane_to_artifacts.get(prod_ready_lane_id):
+            raise ConfigValidationError(
+                f"prod_ready catalog lane {prod_ready_lane_id!r} has no serving "
+                f"route artifact. Add an artifact to route_artifacts.yaml with "
+                f"lane_id={prod_ready_lane_id!r}."
+            )

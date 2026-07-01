@@ -1,10 +1,10 @@
-# R0.5 Migration Plan — for the 4 open PRs
+# R0.5 Migration Plan — for the 5 open PRs
 
 ## Context
 
-R0.5 separates the lane catalog from the serving config. The 4 open PRs were built on the OLD architecture (lanes.yaml + route_artifacts.yaml as a single source of truth, with placeholders in serving). R0.5 changes that architecture.
+R0.5 separates the lane catalog from the serving config. The 5 open PRs were built on the OLD architecture (lanes.yaml + route_artifacts.yaml as a single source of truth, with placeholders in serving). R0.5 changes that architecture.
 
-After R0.5 merges to main, the 4 open PRs need to be re-based + re-migrated to use the new architecture. This document describes the migration strategy for each.
+After R0.5 merges to main, the 5 open PRs need to be re-based + re-migrated to use the new architecture. This document describes the migration strategy for each.
 
 ## Migration strategy: re-base + re-migrate
 
