@@ -5551,6 +5551,20 @@ extension APIClient {
   func xDisconnect() async throws {
     let _: XSimpleOK = try await post("v1/x/disconnect")
   }
+
+  // MARK: - iMessage connector
+
+  @discardableResult
+  func imessageIngest(threads: [IMessageThreadPayload], lastRowID: Int64?) async throws
+    -> IMessageIngestResponsePayload
+  {
+    let body = IMessageIngestRequestPayload(threads: threads, language: "en", lastRowid: lastRowID)
+    return try await post("v1/imessage/threads", body: body)
+  }
+
+  func imessageConnectionStatus() async throws -> IMessageStatusPayload {
+    try await get("v1/imessage/connection-status")
+  }
 }
 
 struct XOAuthURLResponse: Decodable {

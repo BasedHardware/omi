@@ -608,6 +608,17 @@ struct ImportConnector: Identifiable {
             isConnected: false
         ),
         ImportConnector(
+            id: "imessage",
+            title: "iMessage",
+            subtitle: "Messages on this Mac",
+            description: "Read your conversations locally so Omi learns the people you talk to and can suggest replies.",
+            brand: .imessage,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
             id: "chatgpt",
             title: "ChatGPT",
             subtitle: "Memory import",
@@ -885,6 +896,8 @@ final class ImportConnectorStatusStore: ObservableObject {
             return count == 1 ? "note" : "notes"
         case "x":
             return count == 1 ? "post" : "posts"
+        case "imessage":
+            return count == 1 ? "message" : "messages"
         default:
             return count == 1 ? "item" : "items"
         }
@@ -1218,6 +1231,47 @@ private final class ImportConnectorSheetModel: ObservableObject {
         }
     }
 
+    func connectIMessage() async -> SyncResult? {
+        beginRun(
+            title: "Connecting to iMessage",
+            detail: "Checking access to Messages on this Mac."
+        )
+        defer { finishRun() }
+
+        guard IMessagePermissionPolicy.fullDiskAccessGranted() else {
+            IMessagePermissionPolicy.openFullDiskAccessSettings()
+            errorMessage =
+                "Omi needs Full Disk Access to read Messages. Turn it on in System Settings → "
+                + "Privacy & Security → Full Disk Access, then quit and reopen Omi and try again."
+            return nil
+        }
+
+        updateProgress(
+            title: "Reading your messages",
+            detail: "Importing recent conversations and the people you talk to."
+        )
+
+        do {
+            let outcome = try await IMessageSyncCoordinator.shared.sync()
+            if outcome.messagesIngested > 0 {
+                statusMessage =
+                    "Imported \(outcome.messagesIngested.formatted()) messages across "
+                    + "\(outcome.conversationsCreated.formatted()) conversations. "
+                    + "Omi is learning the people you talk to."
+            } else {
+                statusMessage = "No new messages to import — Omi is up to date."
+            }
+            return SyncResult(
+                sourceCount: outcome.messagesIngested,
+                memoryCount: nil,
+                newItems: outcome.messagesIngested
+            )
+        } catch {
+            errorMessage = "Couldn't read Messages: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
     static func appURLScheme() -> String {
         if let urlTypes = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]],
             let first = urlTypes.first,
@@ -1503,6 +1557,16 @@ struct ImportConnectorSheet: View {
                                 availabilityText: "Private notes accessible"
                             )
                         }
+                    case "imessage":
+                        if let result = await model.connectIMessage() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "Messages on this Mac"
+                            )
+                        }
                     case "local-files":
                         if let result = await model.rescanLocalFiles(appState: appState) {
                             statusStore.markSynced(
@@ -1596,6 +1660,8 @@ struct ImportConnectorSheet: View {
             return model.isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Apple Notes")
         case "x":
             return model.isRunning ? "Connecting…" : (snapshot.isConnected ? "Sync now" : "Connect X")
+        case "imessage":
+            return model.isRunning ? "Reading…" : (snapshot.isConnected ? "Sync now" : "Connect iMessage")
         case "local-files":
             return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:
