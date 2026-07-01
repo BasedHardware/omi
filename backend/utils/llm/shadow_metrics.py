@@ -101,6 +101,9 @@ class ShadowMetrics:
 
     DEFAULT_WINDOW_SECONDS = 86400  # 24h
     DEFAULT_THRESHOLD = 0.01  # 1%
+    # Memory safety: cap per-lane record count even if the window hasn't
+    # naturally dropped entries. P2 #4: unbounded memory growth.
+    DEFAULT_MAX_RECORDS_PER_LANE = 10_000
 
     def __init__(
         self,
@@ -110,12 +113,14 @@ class ShadowMetrics:
         clock: Callable[[], float] = time.time,
         window_seconds: float = DEFAULT_WINDOW_SECONDS,
         threshold: float = DEFAULT_THRESHOLD,
+        max_records_per_lane: int = DEFAULT_MAX_RECORDS_PER_LANE,
     ) -> None:
         self._alert_sink = alert_sink
         self._metrics_sink = metrics_sink
         self._clock = clock
         self._window_seconds = window_seconds
         self._threshold = threshold
+        self._max_records_per_lane = max_records_per_lane
         # Per-lane record ring buffers
         self._records: dict[str, Deque[PerCallRecord]] = {}
         # Track which lanes have already alerted (suppress duplicate alerts)
@@ -127,26 +132,37 @@ class ShadowMetrics:
 
         On Alert: also calls AlertSink.fire() (if configured) and updates
         MetricsSink counters.
+
+        P1 #2 + P1 #3 (cubic review): metrics and alert sink failures are
+        SAFELY CONTAINED — a sink exception is logged but does not break the
+        call site. Observability is best-effort.
         """
         # Append to the lane's ring buffer
         bucket = self._records.setdefault(record.lane_id, deque())
         bucket.append(record)
-        # Drop records older than the window
+        # Drop records older than the window (time-based eviction)
         cutoff = record.timestamp - self._window_seconds
         while bucket and bucket[0].timestamp < cutoff:
             bucket.popleft()
-        # Update metrics sink (per-call)
+        # P2 #4: cap deque size as a memory safety net (in case the time-based
+        # window somehow doesn't trigger eviction, e.g., clock stuck)
+        while len(bucket) > self._max_records_per_lane:
+            bucket.popleft()
+        # Update metrics sink (per-call) — safely contained
         if self._metrics_sink is not None:
-            self._metrics_sink.increment(
-                metric="gateway_shadow_calls_total",
-                value=1.0,
-                labels={"lane": record.lane_id, "gateway_success": str(record.gateway_success).lower()},
-            )
-            self._metrics_sink.gauge(
-                metric="gateway_shadow_divergence_score",
-                value=record.divergence_score,
-                labels={"lane": record.lane_id},
-            )
+            try:
+                self._metrics_sink.increment(
+                    metric="gateway_shadow_calls_total",
+                    value=1.0,
+                    labels={"lane": record.lane_id, "gateway_success": str(record.gateway_success).lower()},
+                )
+                self._metrics_sink.gauge(
+                    metric="gateway_shadow_divergence_score",
+                    value=record.divergence_score,
+                    labels={"lane": record.lane_id},
+                )
+            except Exception as e:
+                logger.warning("metrics sink failed (swallowed): %s: %s", type(e).__name__, e)
         # Compute the rolling aggregate
         aggregate = self._aggregate(bucket)
         if aggregate > self._threshold:
@@ -162,7 +178,17 @@ class ShadowMetrics:
             )
             if record.lane_id not in self._alerted_lanes:
                 self._alerted_lanes.add(record.lane_id)
-                self._fire_alert(alert)
+                # P2 #5: don't mark as alerted-until-fire-completes. We
+                # optimistically mark it before (so a burst of N alerts
+                # doesn't fire N times in a row) but clear the flag if the
+                # fire fails — so the next divergence re-fires correctly.
+                # Wrap in try/except so a sink failure doesn't break record().
+                try:
+                    self._fire_alert(alert)
+                except Exception as e:
+                    logger.warning("alert sink failed (swallowed): %s: %s", type(e).__name__, e)
+                    # Clear the flag so the next divergence re-fires.
+                    self._alerted_lanes.discard(record.lane_id)
             return alert
         # Below threshold: clear the alerted state (next time we cross, we'll alert again)
         self._alerted_lanes.discard(record.lane_id)
@@ -184,22 +210,34 @@ class ShadowMetrics:
 
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(
-                self._alert_sink.fire(
-                    lane_id=alert.lane_id,
-                    message=alert.message,
-                    metadata={
-                        "aggregate_score": alert.aggregate_score,
-                        "window_seconds": alert.window_seconds,
-                        "sample_count": alert.sample_count,
-                    },
-                )
-            )
         except RuntimeError:
-            # No running loop (sync context). Fall back to sync fire.
-            asyncio.run(
-                self._alert_sink.fire(
-                    lane_id=alert.lane_id,
+            # No running loop (sync context). Fire synchronously.
+            try:
+                asyncio.run(
+                    self._alert_sink.fire(
+                        lane_id=alert.lane_id,
+                        message=alert.message,
+                        metadata={
+                            "aggregate_score": alert.aggregate_score,
+                            "window_seconds": alert.window_seconds,
+                            "sample_count": alert.sample_count,
+                        },
+                    )
+                )
+            except Exception as e:
+                logger.warning("alert sink failed (swallowed): %s: %s", type(e).__name__, e)
+                # P2 #5: clear the flag so the next divergence re-fires.
+                self._alerted_lanes.discard(alert.lane_id)
+            return
+        # Async context: schedule the fire as a task. P2 #5: the inner
+        # coroutine catches its own exception and clears the alerted state
+        # if the fire fails — so the next divergence re-fires correctly.
+        lane_id = alert.lane_id
+
+        async def _fire() -> None:
+            try:
+                await self._alert_sink.fire(
+                    lane_id=lane_id,
                     message=alert.message,
                     metadata={
                         "aggregate_score": alert.aggregate_score,
@@ -207,7 +245,11 @@ class ShadowMetrics:
                         "sample_count": alert.sample_count,
                     },
                 )
-            )
+            except Exception as e:
+                logger.warning("alert sink failed (swallowed): %s: %s", type(e).__name__, e)
+                self._alerted_lanes.discard(lane_id)
+
+        loop.create_task(_fire())
 
     def clear(self) -> None:
         """Drop all per-lane records and alert state. Test helper."""

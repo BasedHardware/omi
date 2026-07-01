@@ -217,3 +217,83 @@ class TestNoOpSinks:
         # Below threshold, no MetricsSink configured
         result = metrics.record(_record(clock=clock, divergence=0.005))
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# P1 #2 + P2 #5: Sink and alert failure containment
+# ---------------------------------------------------------------------------
+
+
+class TestSinkFailureContainment:
+    def test_metrics_sink_failure_does_not_break_record(self):
+        """P1 #2: a metrics sink exception is contained — record() still returns."""
+        clock = FakeClock()
+        bad_sink = FakeMetricsSink()
+
+        # Make increment raise
+        def boom(*, metric, value=1.0, labels=None):
+            raise ConnectionError("metrics backend down")
+
+        bad_sink.increment = boom
+        metrics = ShadowMetrics(clock=clock, metrics_sink=bad_sink, threshold=0.01)
+        # Should not raise. With divergence 0.5 > threshold 0.01, an Alert IS
+        # returned (correctly). The test point is: no exception propagates.
+        result = metrics.record(_record(clock=clock, divergence=0.5))
+        assert result is not None
+        assert result.aggregate_score == 0.5
+
+    @pytest.mark.asyncio
+    async def test_alert_sink_failure_clears_alerted_state(self):
+        """P2 #5: if the alert sink fails, the lane is NOT marked as alerted
+        (so the next divergence re-fires correctly)."""
+        import asyncio
+
+        clock = FakeClock()
+        # Use a tiny window so the rolling aggregate drops between records
+        metrics = ShadowMetrics(clock=clock, window_seconds=0.1, threshold=0.01)
+
+        class FailingAlertSink:
+            def __init__(self):
+                self.calls = 0
+
+            async def fire(self, **kwargs):
+                self.calls += 1
+                raise ConnectionError("alert backend down")
+
+        sink = FailingAlertSink()
+        metrics._alert_sink = sink
+
+        # First: above threshold; alert fires, sink fails, state NOT marked
+        # (because the inner coroutine catches the exception and discards)
+        metrics.record(_record(clock=clock, divergence=0.5, advance=1.0))
+        # Yield so the scheduled fire task can run
+        await asyncio.sleep(0)
+        # The fire was attempted (sink called once)
+        assert sink.calls == 1
+        # But the lane should NOT be in _alerted_lanes (failure cleared it)
+        assert "omi:auto:chat-extraction" not in metrics._alerted_lanes
+
+        # Second: above threshold again (after window has elapsed)
+        metrics.record(_record(clock=clock, divergence=0.5, advance=1.0))
+        await asyncio.sleep(0)
+        # The fire was attempted again (because state was cleared after the first failure)
+        assert sink.calls == 2
+
+
+# ---------------------------------------------------------------------------
+# P2 #4: Unbounded memory growth safety net
+# ---------------------------------------------------------------------------
+
+
+class TestMaxRecordsPerLane:
+    def test_max_records_per_lane_caps_deque(self):
+        """P2 #4: even if the time-based window doesn't trigger eviction
+        (e.g., clock stuck), the deque is capped by max_records_per_lane.
+        """
+        clock = FakeClock()
+        metrics = ShadowMetrics(clock=clock, max_records_per_lane=5)
+        # Record 10 records, all at the same time (no time-based eviction)
+        for _ in range(10):
+            metrics.record(_record(clock=clock, divergence=0.0))
+        bucket = metrics._records["omi:auto:chat-extraction"]
+        assert len(bucket) == 5  # capped

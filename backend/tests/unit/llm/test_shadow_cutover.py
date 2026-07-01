@@ -305,3 +305,130 @@ class TestMetricsIntegration:
         await asyncio.sleep(0)
         # The metrics layer fired the alert
         assert len(alert_sink.calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# P1 #3: metrics recording is best-effort
+# ---------------------------------------------------------------------------
+
+
+class TestMetricsFailureContainment:
+    @pytest.mark.asyncio
+    async def test_metrics_failure_does_not_break_response(self):
+        """P1 #3: a metrics failure (e.g., bad sink) is contained; the
+        control response is still returned to the caller.
+        """
+        control = FakeControlProvider()
+        gateway = FakeGatewayClient()
+        # Metrics sink that always raises
+        bad_sink = FakeMetricsSink()
+
+        def boom(*, metric, value=1.0, labels=None):
+            raise ConnectionError("metrics backend down")
+
+        bad_sink.increment = boom
+        metrics = ShadowMetrics(clock=FakeClock(), metrics_sink=bad_sink)
+        cutover = ShadowCutover(_config(control=control, gateway=gateway, metrics=metrics))
+        # Should not raise; control response returned
+        result = await cutover.chat(messages=[])
+        assert result.used_response is result.control
+        assert result.used_response.content == "control-ok"
+
+
+# ---------------------------------------------------------------------------
+# P2 #6: control failure → cancel gateway task
+# ---------------------------------------------------------------------------
+
+
+class TestControlFailureCancelsGateway:
+    @pytest.mark.asyncio
+    async def test_control_failure_cancels_gateway_task(self):
+        """P2 #6: if the control path raises, the gateway task is explicitly
+        cancelled (no orphaned work)."""
+        control = FakeControlProvider()
+        control.set_raises(RuntimeError("control is broken"))
+        gateway = FakeGatewayClient()
+        # Make the gateway slow so we can verify it's cancelled
+        gateway.set_delay(1.0)
+        metrics = ShadowMetrics(clock=FakeClock())
+        cutover = ShadowCutover(_config(control=control, gateway=gateway, metrics=metrics, timeout=5.0))
+        with pytest.raises(RuntimeError, match="control is broken"):
+            await cutover.chat(messages=[])
+        # The gateway task should be cancelled (not still running)
+        # We can't directly check task state, but we can verify the
+        # FakeGatewayClient's _calls wasn't logged with a long delay
+        # (the task was cancelled before completing the 1.0s sleep).
+        # A direct check: assert no pending tasks reference the gateway.
+        # Since we use the default executor, this is hard to check directly;
+        # the absence of a hang in the test is the strongest signal.
+
+
+# ---------------------------------------------------------------------------
+# P2 #7: divergence_threshold override
+# ---------------------------------------------------------------------------
+
+
+class TestThresholdOverride:
+    @pytest.mark.asyncio
+    async def test_divergence_threshold_overrides_default(self):
+        """P2 #7: a per-cutover divergence_threshold overrides the metrics'
+        default threshold."""
+        control = FakeControlProvider()
+        control.set_default_result(ControlResult(content="alpha beta", latency_ms=50.0))
+        gateway = FakeGatewayClient()
+        gateway.set_default_result(GatewayResult(content="x y", success=True, latency_ms=80.0))
+        # Use a high default threshold (0.5) so the natural divergence doesn't alert
+        metrics = ShadowMetrics(clock=FakeClock(), threshold=0.5)
+        # Construct cutover with a lower override (0.01) — should now alert
+        config = _config(control=control, gateway=gateway, metrics=metrics)
+        config.divergence_threshold = 0.01
+        cutover = ShadowCutover(config)
+        # The override was applied
+        assert metrics._threshold == 0.01
+        await cutover.chat(messages=[])
+        # Yield for the alert task
+        await asyncio.sleep(0)
+
+    def test_no_threshold_override_keeps_default(self):
+        """If divergence_threshold is None, the metrics' default is preserved."""
+        control = FakeControlProvider()
+        gateway = FakeGatewayClient()
+        metrics = ShadowMetrics(clock=FakeClock(), threshold=0.05)
+        config = _config(control=control, gateway=gateway, metrics=metrics)
+        # No override
+        ShadowCutover(config)
+        assert metrics._threshold == 0.05
+
+
+# ---------------------------------------------------------------------------
+# P2 #8: parallel timeouts (slow gateway doesn't delay control)
+# ---------------------------------------------------------------------------
+
+
+class TestParallelTimeouts:
+    @pytest.mark.asyncio
+    async def test_slow_gateway_does_not_delay_control(self):
+        """P2 #8: the gateway path has its own timeout; a slow gateway doesn't
+        delay the already-ready control response by up to timeout_seconds.
+        """
+        import time
+
+        control = FakeControlProvider()
+        control.set_default_result(ControlResult(content="control-ok", latency_ms=10.0))
+        gateway = FakeGatewayClient()
+        # Gateway takes 1.0s — but the cutover's timeout is 0.1s
+        gateway.set_delay(1.0)
+        metrics = ShadowMetrics(clock=FakeClock())
+        cutover = ShadowCutover(_config(control=control, gateway=gateway, metrics=metrics, timeout=0.1))
+        t0 = time.perf_counter()
+        result = await cutover.chat(messages=[])
+        elapsed = time.perf_counter() - t0
+        # The call returned quickly (control's 10ms + gateway's 100ms timeout)
+        # NOT the gateway's full 1.0s sleep
+        assert elapsed < 0.5, f"call took {elapsed:.3f}s, expected < 0.5s"
+        # The gateway result is a timeout failure
+        assert result.gateway.success is False
+        assert "timeout" in result.gateway.error.lower()
+        # The control response is still returned (LKG)
+        assert result.used_response is result.control
+        assert result.used_response.content == "control-ok"

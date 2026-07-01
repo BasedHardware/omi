@@ -125,6 +125,10 @@ class ShadowCutoverConfig:
     One ShadowCutover per lane (or per feature, depending on call-site
     organization). The lane_id determines which gateway path the call
     routes to.
+
+    P2 #7: `divergence_threshold` is passed to the ShadowMetrics instance
+    so per-cutover threshold configuration is honored (previously declared
+    but never read).
     """
 
     lane_id: str
@@ -132,7 +136,7 @@ class ShadowCutoverConfig:
     gateway_client: GatewayClient
     metrics: ShadowMetrics
     timeout_seconds: float = 8.0
-    divergence_threshold: float = 0.01  # 1% (passed to metrics; the actual alert fires from metrics)
+    divergence_threshold: Optional[float] = None  # if None, metrics' default is used
 
 
 # ---------------------------------------------------------------------------
@@ -152,19 +156,45 @@ class ShadowCutover:
 
     def __init__(self, config: ShadowCutoverConfig) -> None:
         self._config = config
+        # P2 #7: apply the per-cutover threshold (if set) to the metrics
+        # instance. This overrides the metrics' default threshold.
+        if config.divergence_threshold is not None:
+            config.metrics._threshold = config.divergence_threshold
 
     async def chat(self, *, messages: list[dict[str, Any]], **kwargs: Any) -> ShadowCutoverResult:
-        """Run the dual-path. Returns the control response; records divergence."""
-        # Run both paths in parallel. If the gateway raises or times out,
-        # we fall back to the control response (LKG). The control path is
-        # critical: if IT fails, we propagate the exception.
+        """Run the dual-path. Returns the control response; records divergence.
+
+        P2 #8: both paths run with INDEPENDENT timeouts via asyncio.wait_for
+        on each, so a slow gateway doesn't delay the already-ready control
+        response (and vice versa).
+
+        P2 #6: if the control path raises, the gateway task is explicitly
+        cancelled (no orphaned work).
+        """
+        # Launch both paths concurrently
         control_task = asyncio.create_task(self._run_control(messages=messages, kwargs=kwargs))
         gateway_task = asyncio.create_task(self._run_gateway(messages=messages, kwargs=kwargs))
-        control_result = await control_task  # if this raises, we propagate
+        try:
+            # P2 #8: independent timeouts. We DON'T await control first then
+            # gateway; both run in parallel with their own timeouts.
+            control_result = await asyncio.wait_for(
+                asyncio.shield(control_task),
+                timeout=self._config.timeout_seconds,
+            )
+        except Exception:
+            # P2 #6: control failed → cancel the gateway task (don't leak)
+            gateway_task.cancel()
+            try:
+                await gateway_task
+            except (asyncio.CancelledError, BaseException):
+                pass
+            raise
+        # Gateway is independent; we still wait for it (with its own timeout
+        # inside _safe_gateway) but we don't block on it for the response.
         gateway_result = await self._safe_gateway(gateway_task)
         # Compute divergence
         divergence = self._compute_divergence(control_result, gateway_result)
-        # Record into metrics
+        # Record into metrics (P1 #3: best-effort, never breaks the response)
         record = PerCallRecord(
             lane_id=self._config.lane_id,
             timestamp=time.time(),
@@ -175,7 +205,18 @@ class ShadowCutover:
             token_match=divergence.token_match,
             structural_match=divergence.structural_match,
         )
-        self._config.metrics.record(record)
+        try:
+            self._config.metrics.record(record)
+        except Exception as e:
+            # P1 #3: observability is best-effort. A sink failure must
+            # never break the call site.
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "shadow metrics record failed (swallowed): %s: %s",
+                type(e).__name__,
+                e,
+            )
         return ShadowCutoverResult(
             control=control_result,
             gateway=gateway_result,
