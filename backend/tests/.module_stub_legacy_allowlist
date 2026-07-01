@@ -7,7 +7,7 @@
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 # This list exists ONLY as a transitional bridge while the migration in
 # it is blocked by the pre-push hook and CI (see DECISIONS.md D4).
-# Total: 59 entries.
+# Total: 51 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
@@ -18,7 +18,6 @@ backend/tests/unit/test_conversation_events_bounds.py
 backend/tests/unit/test_conversations_date_range_validation.py
 backend/tests/unit/test_delete_account_purge_storage.py
 backend/tests/unit/test_desktop_transcribe.py
-backend/tests/unit/test_desktop_updates.py
 backend/tests/unit/test_dg_start_guard.py
 backend/tests/unit/test_fair_use_async.py
 backend/tests/unit/test_fair_use_classifier.py
@@ -32,10 +31,6 @@ backend/tests/unit/test_kg_edge_id_sanitization.py
 backend/tests/unit/test_kg_user_type_mismatch.py
 backend/tests/unit/test_l2_promotion_agent_v2.py
 backend/tests/unit/test_llm_gateway_chat_extraction_pilot.py
-backend/tests/unit/test_memory_apply_store.py
-backend/tests/unit/test_memory_entities.py
-backend/tests/unit/test_memory_evidence_persistence.py
-backend/tests/unit/test_memory_ledger.py
 backend/tests/unit/test_memory_tools.py
 backend/tests/unit/test_memorydb_memory_id_alias.py
 backend/tests/unit/test_modulate_stt.py
@@ -53,14 +48,11 @@ backend/tests/unit/test_parakeet_stream_session.py
 backend/tests/unit/test_patch_adapter.py
 backend/tests/unit/test_process_conversation_usage_context.py
 backend/tests/unit/test_prompt_caching.py
-backend/tests/unit/test_review_queue_non_active_routes.py
 backend/tests/unit/test_short_audio_embedding.py
-backend/tests/unit/test_short_term_memory.py
 backend/tests/unit/test_skip_classifier_restrict.py
 backend/tests/unit/test_streaming_deepgram_backoff.py
 backend/tests/unit/test_sync_fair_use_gate.py
 backend/tests/unit/test_sync_playback_service.py
-backend/tests/unit/test_sync_transcription_prefs.py
 backend/tests/unit/test_vad_gate.py
 backend/tests/unit/test_vad_onnx.py
 backend/tests/unit/test_voice_message_language.py

@@ -51,3 +51,11 @@ tests/unit/test_mcp_oauth.py
 tests/unit/test_async_webhooks.py
 tests/unit/test_people_conversations_500s.py
 tests/unit/test_v3_account_generation_source.py
+tests/unit/test_memory_apply_store.py
+tests/unit/test_memory_evidence_persistence.py
+tests/unit/test_memory_ledger.py
+tests/unit/test_memory_entities.py
+tests/unit/test_short_term_memory.py
+tests/unit/test_sync_transcription_prefs.py
+tests/unit/test_desktop_updates.py
+tests/unit/test_review_queue_non_active_routes.py
