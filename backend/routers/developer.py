@@ -37,6 +37,10 @@ from utils.conversations.render import populate_speaker_names, populate_folder_n
 from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
+    ApiKeyAuth,
+    check_conversation_transcript_read_limit,
+    get_auth_with_conversation_detail_read,
+    get_auth_with_conversations_read,
     get_current_user_id,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
@@ -49,6 +53,7 @@ from dependencies import (
     get_uid_with_goals_write,
 )
 from utils.apps import update_personas_async
+from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
@@ -85,6 +90,51 @@ router = APIRouter()
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
+
+
+def _developer_read_auth(auth_or_uid) -> ApiKeyAuth:
+    if isinstance(auth_or_uid, ApiKeyAuth):
+        return auth_or_uid
+    return ApiKeyAuth(uid=str(auth_or_uid), scopes=None)
+
+
+def _developer_request_ip(request: Optional[Request]) -> Optional[str]:
+    if not request or not request.client:
+        return None
+    return request.client.host
+
+
+def _audit_developer_read(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    operation: str,
+    status: int,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    include_transcript: Optional[bool] = None,
+    returned_count: Optional[int] = None,
+    resource_id: Optional[str] = None,
+):
+    if request is None:
+        return
+    logger.info(
+        "developer_api_read operation=%s path=%s status=%s uid=%s app_id=%s key_id=%s remote_ip=%s "
+        "user_agent=%s limit=%s offset=%s include_transcript=%s returned_count=%s resource_id=%s",
+        operation,
+        request.url.path,
+        status,
+        auth.uid,
+        auth.app_id or 'unknown_app',
+        auth.key_id or 'unknown_key',
+        _developer_request_ip(request),
+        sanitize(request.headers.get('user-agent')),
+        limit,
+        offset,
+        include_transcript,
+        returned_count,
+        sanitize(resource_id) if resource_id else None,
+    )
 
 
 # ******************************************************
@@ -1291,6 +1341,7 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     operation_id="listConversations",
 )
 def get_conversations(
+    request: Request = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[str] = None,
@@ -1299,7 +1350,7 @@ def get_conversations(
     include_transcript: bool = False,
     folder_id: Optional[str] = Query(default=None, min_length=1),
     starred: Optional[bool] = None,
-    uid: str = Depends(get_uid_with_conversations_read),
+    uid=Depends(get_auth_with_conversations_read),
 ):
     """
     Get conversations with optional transcript inclusion.
@@ -1308,6 +1359,12 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
+    should_check_transcript_limit = isinstance(uid, ApiKeyAuth)
+    auth = _developer_read_auth(uid)
+    uid = auth.uid
+    if include_transcript and should_check_transcript_limit:
+        check_conversation_transcript_read_limit(auth)
+
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset = max(0, offset)
@@ -1358,6 +1415,16 @@ def get_conversations(
                 f"missing/invalid fields {invalid_fields}"
             )
             continue
+    _audit_developer_read(
+        request=request,
+        auth=auth,
+        operation='list_conversations',
+        status=200,
+        limit=limit,
+        offset=offset,
+        include_transcript=include_transcript,
+        returned_count=len(valid_conversations),
+    )
     return valid_conversations
 
 
@@ -1452,8 +1519,9 @@ def create_conversation(
 )
 def get_conversation_endpoint(
     conversation_id: str,
+    request: Request = None,
     include_transcript: bool = False,
-    uid: str = Depends(get_uid_with_conversations_read),
+    uid=Depends(get_auth_with_conversation_detail_read),
 ):
     """
     Get a single conversation by ID.
@@ -1461,12 +1529,36 @@ def get_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to retrieve
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
+    should_check_transcript_limit = isinstance(uid, ApiKeyAuth)
+    auth = _developer_read_auth(uid)
+    uid = auth.uid
+    if include_transcript and should_check_transcript_limit:
+        check_conversation_transcript_read_limit(auth)
+
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='get_conversation',
+            status=404,
+            include_transcript=include_transcript,
+            returned_count=0,
+            resource_id=conversation_id,
+        )
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Filter out locked conversations
     if conversation.get('is_locked', False):
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='get_conversation',
+            status=404,
+            include_transcript=include_transcript,
+            returned_count=0,
+            resource_id=conversation_id,
+        )
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Remove transcript_segments if not requested
@@ -1477,6 +1569,15 @@ def get_conversation_endpoint(
 
     populate_folder_names(uid, [conversation])
 
+    _audit_developer_read(
+        request=request,
+        auth=auth,
+        operation='get_conversation',
+        status=200,
+        include_transcript=include_transcript,
+        returned_count=1,
+        resource_id=conversation_id,
+    )
     return conversation
 
 
