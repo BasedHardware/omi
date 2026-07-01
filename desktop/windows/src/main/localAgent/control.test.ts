@@ -163,6 +163,7 @@ describe('local agent controls', () => {
   })
 
   it('does not expose raw token-store errors in status', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     writeFileSync(join(electronState.userData, 'local-agent-token.json'), '{not-json', 'utf8')
 
     const status = getLocalAgentStatus()
@@ -172,6 +173,8 @@ describe('local agent controls', () => {
       'Local agent token is unavailable. Check secure storage and rotate the token if needed.'
     )
     expect(status.tokenError).not.toContain(electronState.userData)
+    expect(warnSpy).toHaveBeenCalledWith('[local-agent] failed to load token:', expect.anything())
+    warnSpy.mockRestore()
   })
 
   it('rotates the bearer token and invalidates the old one', async () => {
