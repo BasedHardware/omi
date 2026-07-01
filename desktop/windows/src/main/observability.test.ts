@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IpcMainEvent } from 'electron'
 
 type IpcHandler = (event: IpcMainEvent, payload: unknown) => void
@@ -62,6 +62,10 @@ describe('main observability IPC', () => {
     mocks.ipcMain.on.mockClear()
   })
 
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
   it('accepts observability IPC only from trusted renderer origins', async () => {
     registerObservabilityIpc()
     const capture = mocks.ipcHandlers.get('observability:capture')
@@ -74,8 +78,6 @@ describe('main observability IPC', () => {
     const log = readLog(root)
     expect(log).not.toContain('evil.event')
     expect(log).toContain('trusted.event')
-
-    rmSync(root, { recursive: true, force: true })
   })
 
   it('rate-limits renderer observability floods', async () => {
@@ -94,7 +96,21 @@ describe('main observability IPC', () => {
     const lines = readLog(root).trim().split('\n').filter(Boolean)
     expect(lines).toHaveLength(60)
     expect(readLog(root)).not.toContain('event.60')
+  })
 
-    rmSync(root, { recursive: true, force: true })
+  it('replaces oversized events before writing them', async () => {
+    registerObservabilityIpc()
+    const capture = mocks.ipcHandlers.get('observability:capture')
+    expect(capture).toBeDefined()
+    const largeData = Object.fromEntries(
+      Array.from({ length: 20_000 }, (_value, index) => [`key_${index}`, 'value'])
+    )
+
+    capture?.(eventFor('file:///app/index.html'), { name: 'large.event', data: largeData })
+    await flushObservabilityWritesForTests()
+
+    const log = readLog(root)
+    expect(log).toContain('observability.event_too_large')
+    expect(log).not.toContain('key_19999')
   })
 })
