@@ -4,12 +4,15 @@ type FetchLike = typeof fetch
 
 export type ByokValidationOptions = {
   fetchImpl?: FetchLike
+  timeoutMs?: number
 }
 
 type ValidationRequest = {
   url: string
   init: RequestInit
 }
+
+const VALIDATION_TIMEOUT_MS = 10_000
 
 function keyFormatError(provider: ByokProvider): string {
   switch (provider) {
@@ -128,8 +131,13 @@ export async function validateByokKey(
 
   const fetchImpl = options.fetchImpl ?? fetch
   const request = buildByokValidationRequest(provider, trimmed)
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    Math.max(1, options.timeoutMs ?? VALIDATION_TIMEOUT_MS)
+  )
   try {
-    const response = await fetchImpl(request.url, request.init)
+    const response = await fetchImpl(request.url, { ...request.init, signal: controller.signal })
     if (response.ok) {
       return { ok: true, status: response.status }
     }
@@ -142,9 +150,14 @@ export async function validateByokKey(
           : `Provider validation failed with HTTP ${response.status}`
     }
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { ok: false, error: 'Provider validation timed out' }
+    }
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Provider validation failed'
     }
+  } finally {
+    clearTimeout(timeout)
   }
 }
