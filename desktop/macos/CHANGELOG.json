@@ -1,5 +1,10 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added AI Clone screen in Settings \u2014 connect and configure Telegram and WhatsApp plugins (v0.1, single global auto-reply toggle; per-chat toggles ship once the plugins expose a global-toggle endpoint)",
+    "AI Clone: moved the plugin bearer token and the `omi_dev_...` API key from UserDefaults into the macOS Keychain (encrypted at rest). The plugin URL stays in UserDefaults. Existing users get a one-time migration on first launch under this build.",
+    "AI Clone: zero-config plugin auto-discovery + improved settings page UI with health-check, auto-reply toggle, and step-by-step guide",
+    "AI Clone: clipboard auto-detect for Telegram bot tokens, real-time token validation, QR code alongside the deep link, and a two-step handshake progress indicator with countdown"
+  ],
   "releases": [
     {
       "version": "0.11.582",

@@ -129,7 +129,8 @@ actor APIClient {
     customBaseURL: String? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    let sep = base.hasSuffix("/") || endpoint.hasPrefix("/") ? "" : "/"
+    guard let url = URL(string: base + sep + endpoint) else { throw URLError(.badURL) }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -145,7 +146,8 @@ actor APIClient {
     includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    let sep = base.hasSuffix("/") || endpoint.hasPrefix("/") ? "" : "/"
+    guard let url = URL(string: base + sep + endpoint) else { throw URLError(.badURL) }
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -162,7 +164,11 @@ actor APIClient {
     includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    // Ensure exactly one slash between base and endpoint
+    let sep = base.hasSuffix("/") || endpoint.hasPrefix("/") ? "" : "/"
+    guard let url = URL(string: base + sep + endpoint) else {
+      throw URLError(.badURL)
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
@@ -299,7 +305,8 @@ actor APIClient {
     includeBYOK: Bool = true
   ) async throws {
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    let sep = base.hasSuffix("/") || endpoint.hasPrefix("/") ? "" : "/"
+    guard let url = URL(string: base + sep + endpoint) else { throw URLError(.badURL) }
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
@@ -1946,7 +1953,8 @@ extension APIClient {
     customBaseURL: String? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    let sep = base.hasSuffix("/") || endpoint.hasPrefix("/") ? "" : "/"
+    guard let url = URL(string: base + sep + endpoint) else { throw URLError(.badURL) }
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -3694,6 +3702,19 @@ extension APIClient {
     return try await get("v1/personas")
   }
 
+  /// Auto-create a developer API key for the user's persona app.
+  /// Calls POST /v1/apps/{app_id}/keys using the user's Firebase auth.
+  /// Uses the default `baseURL` (api.omi.me in production).
+  func createAppKey(appId: String) async throws -> String {
+    struct KeyResponse: Decodable {
+      let id: String
+      let secret: String
+      let label: String
+    }
+    let response: KeyResponse = try await post("v1/apps/\(appId)/keys")
+    return response.secret
+  }
+
   /// Creates a new persona
   func createPersona(name: String, username: String? = nil) async throws -> Persona {
     struct CreateRequest: Encodable {
@@ -3702,6 +3723,15 @@ extension APIClient {
     }
     let body = CreateRequest(name: name, username: username)
     return try await post("v1/personas", body: body)
+  }
+
+  /// Get or create the user's persona via POST /v1/user/persona.
+  /// Uses the default `baseURL` (resolves via DesktopBackendEnvironment,
+  /// which is api.omi.me in production). The backendURL override was
+  /// removed to prevent auth header leakage to untrusted URLs.
+  /// Identified by cubic + maintainer review.
+  func getOrCreatePersona() async throws -> Persona {
+    return try await post("v1/user/persona")
   }
 
   /// Updates an existing persona
@@ -3762,8 +3792,8 @@ struct Persona: Codable, Identifiable {
   let isPrivate: Bool
   let author: String
   let email: String?
-  let createdAt: Date
-  let updatedAt: Date
+  let createdAt: Date?
+  let updatedAt: Date?
   let publicMemoriesCount: Int?
 
   enum CodingKeys: String, CodingKey {
@@ -3793,8 +3823,8 @@ struct Persona: Codable, Identifiable {
     isPrivate = try container.decodeIfPresent(Bool.self, forKey: .isPrivate) ?? false
     author = try container.decodeIfPresent(String.self, forKey: .author) ?? ""
     email = try container.decodeIfPresent(String.self, forKey: .email)
-    createdAt = try container.decode(Date.self, forKey: .createdAt)
-    updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     publicMemoriesCount = try container.decodeIfPresent(Int.self, forKey: .publicMemoriesCount)
   }
 
