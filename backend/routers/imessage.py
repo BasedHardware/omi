@@ -15,8 +15,17 @@ import logging
 
 from fastapi import APIRouter, Depends
 
-from models.imessage import IMessageIngestRequest, IMessageIngestResponse, IMessageSettings, IMessageStatus
+from models.imessage import (
+    IMessageDraftRequest,
+    IMessageDraftResponse,
+    IMessageIngestRequest,
+    IMessageIngestResponse,
+    IMessageSettings,
+    IMessageStatus,
+)
 from utils import imessage_connector
+from utils.executors import llm_executor, run_blocking
+from utils.llm import reply_draft
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -47,3 +56,10 @@ def imessage_update_settings(settings: IMessageSettings, uid: str = Depends(auth
 def imessage_disconnect(uid: str = Depends(auth.get_current_user_uid)):
     imessage_connector.disconnect(uid)
     return {'success': True}
+
+
+@router.post('/v1/imessage/draft-reply', response_model=IMessageDraftResponse, tags=['imessage'])
+async def imessage_draft_reply(req: IMessageDraftRequest, uid: str = Depends(auth.get_current_user_uid)):
+    thread = [m.dict() for m in req.thread]
+    result = await run_blocking(llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent)
+    return IMessageDraftResponse(draft=result['draft'])

@@ -46,3 +46,18 @@ class IMessageStatus(BaseModel):
     last_synced_at: Optional[datetime] = None
     last_rowid: Optional[int] = None
     conversations_ingested: int = 0
+
+
+class IMessageDraftMessage(BaseModel):
+    text: str
+    is_from_me: bool = False
+
+
+class IMessageDraftRequest(BaseModel):
+    person: str  # name, person id, or handle
+    thread: List[IMessageDraftMessage] = []
+    intent: Optional[str] = None  # optional steer, e.g. "politely decline"
+
+
+class IMessageDraftResponse(BaseModel):
+    draft: str
