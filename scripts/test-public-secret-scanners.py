@@ -153,6 +153,33 @@ export OPENAI_API_KEY="$OPENAI_API_KEY"
 
         self.assertIn("set -x traces nearby server-only refs OPENAI_API_KEY", "\n".join(errors))
 
+    def test_release_hygiene_flags_long_xtrace_option(self) -> None:
+        self.track(
+            "mcp/release.sh",
+            """
+set -o xtrace
+export OPENAI_API_KEY="$OPENAI_API_KEY"
+""",
+        )
+
+        errors = CHECKER.check_release_log_secret_hygiene(CHECKER.load_policy())
+
+        self.assertIn("set -x traces nearby server-only refs OPENAI_API_KEY", "\n".join(errors))
+
+    def test_release_hygiene_flags_secret_echo_with_stderr_only_redirect(self) -> None:
+        self.track("mcp/release.sh", 'echo "$OPENAI_API_KEY" 2>/dev/null\n')
+
+        errors = CHECKER.check_release_log_secret_hygiene(CHECKER.load_policy())
+
+        self.assertIn("shell output command references server-only OPENAI_API_KEY", "\n".join(errors))
+
+    def test_release_hygiene_allows_secret_echo_with_stdout_redirect(self) -> None:
+        self.track("mcp/release.sh", 'echo "$OPENAI_API_KEY" >/tmp/private-build-input\n')
+
+        errors = CHECKER.check_release_log_secret_hygiene(CHECKER.load_policy())
+
+        self.assertNotIn("shell output command references server-only OPENAI_API_KEY", "\n".join(errors))
+
     def test_public_dockerfiles_reject_server_only_build_args(self) -> None:
         self.track("web/app/Dockerfile", "FROM node:20\nARG OPENAI_API_KEY\nENV OPENAI_API_KEY=$OPENAI_API_KEY\n")
 

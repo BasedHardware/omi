@@ -322,8 +322,9 @@ PUBLIC_ENV_TARGET_RE = re.compile(
     r"(?:^|[\s/\"'])(?:\.client(?:\.dev)?\.env|\.env|\.env\.production|\.env\.local)(?:[\"']|\s|$)"
 )
 SENSITIVE_ECHO_RE = re.compile(r"\b(?:echo|printf)\b")
-SHELL_TRACE_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+-[A-Za-z]*x[A-Za-z]*(\s|$|[;&|])")
+SHELL_TRACE_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+(?:-[A-Za-z]*x[A-Za-z]*|-o\s+xtrace)(\s|$|[;&|])")
 SHELL_TRACE_OFF_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+\+x(\s|$)")
+STDOUT_REDIRECT_RE = re.compile(r"(^|\s|[;&|]\s*)(?:1?>|1?>>|&>|&>>)\s*\S")
 SAFE_STDIN_SECRET_SINK_RE = re.compile(
     r"\|\s*(?:\"[^\"]*sign_update\"|\S*sign_update)\b[^|]*--ed-key-file\s+-"
     r"|\|\s*docker\s+login\b[^|]*--password-stdin"
@@ -471,6 +472,10 @@ def logical_shell_line(lines: list[str], line_index: int) -> str:
     return " ".join(part.strip() for part in command_parts)
 
 
+def redirects_stdout(line: str) -> bool:
+    return bool(STDOUT_REDIRECT_RE.search(line))
+
+
 def check_release_log_secret_hygiene(policy: dict) -> list[str]:
     errors: list[str] = []
     exact = denied_names(policy)
@@ -488,9 +493,8 @@ def check_release_log_secret_hygiene(policy: dict) -> list[str]:
                 errors.append(
                     f"{rel}:{lineno}: public env file write references server-only {', '.join(sorted(denied_refs))}"
                 )
-            writes_to_stdout = ">" not in line and not SAFE_STDIN_SECRET_SINK_RE.search(
-                logical_shell_line(lines, line_index)
-            )
+            logical_line = logical_shell_line(lines, line_index)
+            writes_to_stdout = not redirects_stdout(logical_line) and not SAFE_STDIN_SECRET_SINK_RE.search(logical_line)
             if (
                 SENSITIVE_ECHO_RE.search(line)
                 and denied_refs
