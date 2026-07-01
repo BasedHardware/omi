@@ -70,3 +70,10 @@ tests/unit/test_process_conversation_usage_context.py
 tests/unit/test_batch_upload_storage.py
 tests/unit/test_memory_tools.py
 tests/unit/test_memorydb_memory_id_alias.py
+tests/unit/test_geocoding_cache.py
+tests/unit/test_tts.py
+tests/unit/test_notification_token_cleanup.py
+tests/unit/test_proactive_notification_language.py
+tests/unit/test_mentor_notifications.py
+tests/unit/test_apps_review_reply_validation.py
+tests/unit/test_create_persona_user_none.py
