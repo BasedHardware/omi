@@ -263,16 +263,18 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const byokStatus = await window.omi.byokStatus().catch(() => null)
       const chatModelId = prefs.defaultModelByPurpose?.chat
       const selectedProvider = byokProviderFromModelId(chatModelId)
-      const shouldUseByok = selectedProvider
-        ? byokStatus?.providers[selectedProvider]?.configured
-        : !!(
-            byokStatus?.activeChatProvider &&
-            byokStatus.providers[byokStatus.activeChatProvider]?.configured
-          )
+      const activeProvider = byokStatus?.activeChatProvider ?? null
+      const selectedProviderConfigured = selectedProvider
+        ? byokStatus?.providers[selectedProvider]?.configured === true
+        : false
+      const activeProviderConfigured = activeProvider
+        ? byokStatus?.providers[activeProvider]?.configured === true
+        : false
+      const shouldUseByok = selectedProviderConfigured || activeProviderConfigured
       if (shouldUseByok) {
         const result = await window.omi.byokChatSend({
           messages: [...baseHistory, { ...userMsg, content: textToSend }],
-          modelId: chatModelId
+          modelId: selectedProviderConfigured ? chatModelId : undefined
         })
         assistantText = result.text
         setHistory((h) => {
