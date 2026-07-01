@@ -89,3 +89,11 @@ tests/unit/test_parakeet_diarization.py
 tests/unit/test_parakeet_endpoints.py
 tests/unit/test_parakeet_gpu_worker.py
 tests/unit/test_parakeet_nim.py
+tests/unit/test_fair_use_async.py
+tests/unit/test_fair_use_classifier.py
+tests/unit/test_fair_use_engine.py
+tests/unit/test_fair_use_free_tier.py
+tests/unit/test_fair_use_upgrade.py
+tests/unit/test_sync_fair_use_gate.py
+tests/unit/test_vad_onnx.py
+tests/unit/test_patch_adapter.py
