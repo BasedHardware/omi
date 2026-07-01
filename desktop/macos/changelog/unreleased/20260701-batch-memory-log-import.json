@@ -1,0 +1,3 @@
+{
+  "change": "Fixed ChatGPT/Claude memory imports failing partway through by saving extracted memories in a single batched request instead of many individual writes that could hit rate limits"
+}
