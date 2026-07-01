@@ -316,7 +316,7 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
     expected_vector_id = neutral_vector_id_for_memory(memory_id)
     assert expected_vector_id in result["vector_ids"]
     assert expected_vector_id in deleted_vector_ids
-    delete_graph.assert_called_once_with(uid)
+    delete_graph.assert_called_once_with(uid, db_client=canonical_db)
 
     outbox_paths = [path for path in canonical_db.docs if f"users/{uid}/memory_outbox/" in path]
     assert outbox_paths, "account delete should enqueue durable vector purge outbox records"

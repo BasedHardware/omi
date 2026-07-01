@@ -65,7 +65,7 @@ def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str], *, db_c
     client = db_client if db_client is not None else default_db_client
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return
-    pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids)
+    pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids, db_client=client)
     logger.info(
         "kg_citations_pruned uid=%s retracted_memory_count=%d pruned_entities=%d",
         uid,
@@ -219,7 +219,7 @@ def search_canonical_memories(
             for memory in memories[:capped_limit]
         ]
 
-    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit)
+    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
     if vector_query is None:
         from database.vector_db import query_memory_vector_candidates
 
@@ -629,7 +629,8 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
         client.document(item_path).set({"kg_extracted": False, "updated_at": now}, merge=True)
         from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 
-        if extract_kg_for_promoted_memory(uid, updated, db_client=client):
+        kg_result = extract_kg_for_promoted_memory(uid, updated, db_client=client)
+        if kg_result.success:
             updated = updated.model_copy(update={"kg_extracted": True})
     sync_atom_keyword_index_for_item(updated, db_client=client)
     sync_canonical_memory_vector(updated)
@@ -739,7 +740,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
     for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
         db_client.document(record["outbox_path"]).set(record)
 
-    delete_atom_keyword_doc(uid, item.memory_id)
+    delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
     purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason, db_client=db_client)
 
 
@@ -811,8 +812,8 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
 
         delete_pinecone_memory_vectors_by_id(vector_ids)
 
-    keyword_deleted = purge_user_atom_keyword_index(uid)
-    kg_db.delete_knowledge_graph(uid)
+    keyword_deleted = purge_user_atom_keyword_index(uid, db_client=client, force=True)
+    kg_db.delete_knowledge_graph(uid, db_client=client)
 
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
