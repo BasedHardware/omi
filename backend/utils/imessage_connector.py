@@ -13,7 +13,7 @@ the consent signal. All ingested content is gated behind stored consent
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from database import users as users_db
 from models.conversation import CreateConversation
@@ -153,16 +153,26 @@ def _build_conversation(
 
 
 async def _process_conversations(
-    uid: str, language: Optional[str], conversations: List[CreateConversation], person_ids: List[str]
+    uid: str,
+    language: Optional[str],
+    conversations: List[Tuple[CreateConversation, List[str]]],
+    person_ids: List[str],
 ) -> None:
     """Background coordinator: run the full post-processing pipeline per conversation,
     then refresh each involved person's profile (now that their conversations are
-    stored and indexed)."""
+    stored and indexed).
+
+    Each conversation carries the message GUIDs that produced it. GUIDs are only
+    promoted into ``processed_guids`` after their conversation succeeds, so a
+    failed conversation stays retryable on the next sync instead of being silently
+    dropped forever."""
     processed = 0
-    for create in conversations:
+    succeeded_guids: List[str] = []
+    for create, guids in conversations:
         try:
             await run_blocking(postprocess_executor, process_conversation, uid, language or 'en', create)
             processed += 1
+            succeeded_guids.extend(guids)
         except Exception as e:
             logger.error(f'imessage: process_conversation failed uid={uid}: {sanitize(str(e))}')
 
@@ -172,14 +182,25 @@ async def _process_conversations(
         except Exception as e:
             logger.warning(f'imessage: profile generation failed uid={uid} person={person_id}: {sanitize(str(e))}')
 
+    if not processed and not succeeded_guids:
+        return
+
+    doc = await run_blocking(db_executor, _get_doc, uid)
+    patch: dict = {}
+    if succeeded_guids:
+        # Keep the stored list in insertion order for the cap slice (so the newest
+        # GUIDs survive trimming); use a set only for O(1) dedup membership.
+        merged = list(doc.get('processed_guids') or [])
+        seen = set(merged)
+        for guid in succeeded_guids:
+            if guid not in seen:
+                merged.append(guid)
+                seen.add(guid)
+        patch['processed_guids'] = merged[-MAX_PROCESSED_GUIDS:]
     if processed:
-        doc = await run_blocking(db_executor, _get_doc, uid)
-        await run_blocking(
-            db_executor,
-            _save_doc,
-            uid,
-            {'conversations_ingested': int(doc.get('conversations_ingested', 0)) + processed},
-        )
+        patch['conversations_ingested'] = int(doc.get('conversations_ingested', 0)) + processed
+    if patch:
+        await run_blocking(db_executor, _save_doc, uid, patch)
 
 
 async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngestResponse:
@@ -189,10 +210,12 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
     opted_out = set(settings.opted_out_handles)
 
     doc = await run_blocking(db_executor, _get_doc, uid)
+    # Set only for O(1) dedup membership; the stored ordered list is trimmed later.
     processed_guids = set(doc.get('processed_guids') or [])
 
-    conversations: List[CreateConversation] = []
-    new_guids: List[str] = []
+    # Each entry pairs a conversation with the GUIDs that produced it, so the
+    # background pipeline can promote GUIDs to processed only after success.
+    conversations: List[Tuple[CreateConversation, List[str]]] = []
     people_ids = set()
     messages_ingested = 0
     skipped = 0
@@ -221,16 +244,16 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
         create = _build_conversation(thread, new_messages, handle_to_person, req.language)
         if create is None:
             continue
-        conversations.append(create)
-        new_guids.extend(m.guid for m in new_messages)
+        conversations.append((create, [m.guid for m in new_messages]))
         messages_ingested += len(new_messages)
 
-    # Persist state: mark connected/consented, advance cursor, remember processed guids.
-    merged_guids = (list(processed_guids) + new_guids)[-MAX_PROCESSED_GUIDS:]
+    # Persist state: mark connected/consented and advance cursor. GUIDs are NOT
+    # recorded here — the background pipeline promotes them into processed_guids
+    # only after each conversation succeeds, so a failed conversation stays
+    # retryable on the next sync instead of being dropped forever.
     patch = {
         'connected': True,
         'enabled': True,  # clicking Connect + sending data is the consent signal
-        'processed_guids': merged_guids,
         'last_synced_at': datetime.now(timezone.utc).isoformat(),
     }
     if req.last_rowid is not None:
