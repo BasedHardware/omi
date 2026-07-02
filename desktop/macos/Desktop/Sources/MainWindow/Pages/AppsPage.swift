@@ -1073,6 +1073,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var draftText = ""
 
+    // iMessage contact sync (separate from the main import run so the primary
+    // action stays usable while contacts upload).
+    @Published var isSyncingContacts = false
+    @Published var contactSyncStatus: String?
+
     private func beginRun(title: String, detail: String) {
         errorMessage = nil
         statusMessage = nil
@@ -1265,6 +1270,26 @@ private final class ImportConnectorSheetModel: ObservableObject {
         } catch {
             errorMessage = "Couldn't read Messages: \(error.localizedDescription)"
             return nil
+        }
+    }
+
+    /// Reads the full macOS address book and uploads it so the backend can resolve
+    /// inbound message handles to People. Independent of the main import run.
+    func syncContacts() async {
+        isSyncingContacts = true
+        contactSyncStatus = nil
+        defer { isSyncingContacts = false }
+
+        let contacts = await IMessageContactResolver.shared.allContacts()
+        guard !contacts.isEmpty else {
+            contactSyncStatus = "No contacts to sync"
+            return
+        }
+        do {
+            let upserted = try await APIClient.shared.imessageSyncContacts(contacts)
+            contactSyncStatus = "Synced \(upserted) contact\(upserted == 1 ? "" : "s")"
+        } catch {
+            contactSyncStatus = "Sync failed"
         }
     }
 
@@ -1576,6 +1601,35 @@ struct ImportConnectorSheet: View {
                 Text("Local files are indexed on-device and used to build your memory graph.")
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
+            }
+
+            if connector.id == "imessage" {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        Task { await model.syncContacts() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if model.isSyncingContacts {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                            }
+                            Text("Sync Contacts")
+                        }
+                    }
+                    .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+                    .disabled(model.isSyncingContacts)
+
+                    if let contactSyncStatus = model.contactSyncStatus {
+                        Text(contactSyncStatus)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else {
+                        Text("Upload your contacts so Omi can match incoming messages to names.")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
             }
         }
     }

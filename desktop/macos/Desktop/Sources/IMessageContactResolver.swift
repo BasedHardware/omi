@@ -1,170 +1,67 @@
-import Contacts
 import Foundation
+import GRDB
 
 /// Resolves an iMessage handle (phone/email) to a contact name and photo.
 ///
-/// Uses Apple's Contacts framework (`CNContactStore`) so the OS shows a scoped
-/// Contacts permission prompt (`NSContactsUsageDescription`) instead of reading the
-/// AddressBook SQLite database directly. Best-effort: if access is denied/restricted,
-/// or a handle has no matching contact, resolution degrades to nil and callers fall
-/// back to the raw handle / initials.
-///
-/// Note: on self-signed local dev builds the Contacts TCC prompt may not fire, in
-/// which case lookups simply return nil; production signed/notarized builds get the
-/// prompt and full resolution.
+/// Reads the macOS AddressBook database directly (via Full Disk Access, which the
+/// app already holds for reading Messages) instead of the Contacts framework —
+/// the Contacts TCC prompt does not fire for self-signed dev builds, and reading
+/// the DB works identically in production. Best-effort: unknown handles fall back
+/// to the raw handle / initials.
 actor IMessageContactResolver {
   static let shared = IMessageContactResolver()
 
-  private let store = CNContactStore()
-
-  // Cached authorization state so we only prompt / check once per session.
-  private var authChecked = false
-  private var authorized = false
-
-  // Per-handle resolved cache (name/image), including negative results, to avoid
-  // repeated store queries for the same handle.
-  private var cache: [String: (name: String?, image: Data?)] = [:]
-
-  // Contacts has no email predicate, so email resolution enumerates the store once
-  // and builds an index lazily. Keyed by lowercased email address.
-  private var emailIndexBuilt = false
-  private var nameByEmail: [String: String] = [:]
+  private var loaded = false
+  private var nameByPhone: [String: String] = [:]  // normalized phone digits -> name
+  private var imageByPhone: [String: Data] = [:]
+  private var nameByEmail: [String: String] = [:]  // lowercased email -> name
   private var imageByEmail: [String: Data] = [:]
 
-  private static let keysToFetch: [CNKeyDescriptor] = [
-    CNContactGivenNameKey as CNKeyDescriptor,
-    CNContactFamilyNameKey as CNKeyDescriptor,
-    CNContactNicknameKey as CNKeyDescriptor,
-    CNContactOrganizationNameKey as CNKeyDescriptor,
-    CNContactPhoneNumbersKey as CNKeyDescriptor,
-    CNContactEmailAddressesKey as CNKeyDescriptor,
-    CNContactThumbnailImageDataKey as CNKeyDescriptor,
-  ]
-
   func displayName(for handle: String) async -> String? {
-    await resolve(handle).name
+    await ensureLoaded()
+    return resolve(handle).name
   }
 
   func imageData(for handle: String) async -> Data? {
-    await resolve(handle).image
+    await ensureLoaded()
+    return resolve(handle).image
   }
 
-  /// Enumerates every unified contact and returns a sync payload per contact for
-  /// upload to the backend. Handles are the raw phone `stringValue`s plus lowercased
-  /// emails — the backend canonicalizes them. Contacts with no usable name AND no
-  /// handles are skipped. Degrades to `[]` if Contacts access isn't granted.
+  /// Reads the full macOS address book and returns one sync payload per contact
+  /// record — the contact's display name plus every phone/email handle. Built from
+  /// the same AddressBook DBs the resolver loads. Handles are raw (phone strings
+  /// as-is, emails lowercased); the backend canonicalizes them. Records with no
+  /// name AND no handles are skipped; handles are de-duped within a contact.
+  /// Degrades to `[]` if the DB can't be opened.
   func allContacts() async -> [IMessageContactSyncPayload] {
-    guard await ensureAuthorized() else { return [] }
-    let request = CNContactFetchRequest(keysToFetch: Self.keysToFetch)
-    request.sortOrder = .none
     var payloads: [IMessageContactSyncPayload] = []
-    let ok = (try? store.enumerateContacts(with: request) { contact, _ in
-      var handles: [String] = []
-      for phone in contact.phoneNumbers {
-        let value = phone.value.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !value.isEmpty { handles.append(value) }
-      }
-      for email in contact.emailAddresses {
-        let addr = (email.value as String).lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if !addr.isEmpty { handles.append(addr) }
-      }
-      let name = Self.composeName(contact)
-      // Skip contacts we can't key on at all (no name and no handles).
-      guard name != nil || !handles.isEmpty else { return }
-      payloads.append(IMessageContactSyncPayload(name: name ?? "", handles: handles))
-    }) != nil
-    return ok ? payloads : []
+    for url in addressBookDatabaseURLs() {
+      payloads.append(contentsOf: contacts(in: url))
+    }
+    return payloads
   }
 
-  /// Force a re-check on next lookup (e.g. after contacts or authorization change).
+  /// Force a reload on next lookup (e.g. after contacts change).
   func resetAuth() {
-    authChecked = false
-    authorized = false
-    cache.removeAll()
-    emailIndexBuilt = false
+    loaded = false
+    nameByPhone.removeAll()
+    imageByPhone.removeAll()
     nameByEmail.removeAll()
     imageByEmail.removeAll()
   }
 
   // MARK: - lookup
 
-  private func resolve(_ handle: String) async -> (name: String?, image: Data?) {
+  private func resolve(_ handle: String) -> (name: String?, image: Data?) {
     let h = handle.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !h.isEmpty else { return (nil, nil) }
-    if let cached = cache[h] { return cached }
-    // Don't cache while unauthorized — access may be granted later this session.
-    guard await ensureAuthorized() else { return (nil, nil) }
-
-    let result = h.contains("@") ? resolveEmail(h) : resolvePhone(h)
-    cache[h] = result
-    return result
-  }
-
-  /// Resolves a phone handle via a Contacts predicate, then verifies the match by
-  /// normalized digits so international numbers sharing a suffix don't collide.
-  private func resolvePhone(_ handle: String) -> (name: String?, image: Data?) {
-    guard let wantKey = Self.normalizedPhoneKey(handle) else { return (nil, nil) }
-    let predicate = CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: handle))
-    guard let matches = try? store.unifiedContacts(matching: predicate, keysToFetch: Self.keysToFetch) else {
-      return (nil, nil)
+    if h.contains("@") {
+      let key = h.lowercased()
+      return (nameByEmail[key], imageByEmail[key])
     }
-    // Require an exact normalized-digit match (predicate matching is looser and can
-    // match on a shared suffix); if none match, treat the handle as unknown.
-    guard
-      let contact = matches.first(where: { contact in
-        contact.phoneNumbers.contains { Self.normalizedPhoneKey($0.value.stringValue) == wantKey }
-      })
-    else { return (nil, nil) }
-    return (Self.composeName(contact), Self.imageData(from: contact))
+    guard let key = Self.normalizedPhoneKey(h) else { return (nil, nil) }
+    return (nameByPhone[key], imageByPhone[key])
   }
-
-  private func resolveEmail(_ handle: String) -> (name: String?, image: Data?) {
-    buildEmailIndexIfNeeded()
-    let key = handle.lowercased()
-    return (nameByEmail[key], imageByEmail[key])
-  }
-
-  private func buildEmailIndexIfNeeded() {
-    if emailIndexBuilt { return }
-    let request = CNContactFetchRequest(keysToFetch: Self.keysToFetch)
-    request.sortOrder = .none
-    do {
-      try store.enumerateContacts(with: request) { contact, _ in
-        guard !contact.emailAddresses.isEmpty else { return }
-        let name = Self.composeName(contact)
-        let image = Self.imageData(from: contact)
-        for email in contact.emailAddresses {
-          let addr = (email.value as String).lowercased()
-          guard !addr.isEmpty else { continue }
-          if let name, nameByEmail[addr] == nil { nameByEmail[addr] = name }
-          if let image, imageByEmail[addr] == nil { imageByEmail[addr] = image }
-        }
-      }
-      // Mark built only after a successful enumeration, so a transient store
-      // failure doesn't permanently disable email resolution for the session.
-      emailIndexBuilt = true
-    } catch {
-      NSLog("IMessageContactResolver: contact enumeration failed, will retry: \(error.localizedDescription)")
-    }
-  }
-
-  // MARK: - authorization
-
-  private func ensureAuthorized() async -> Bool {
-    if authChecked { return authorized }
-    switch CNContactStore.authorizationStatus(for: .contacts) {
-    case .authorized:
-      authorized = true
-    case .notDetermined:
-      authorized = (try? await store.requestAccess(for: .contacts)) ?? false
-    default:  // .denied, .restricted (and any future non-granting states)
-      authorized = false
-    }
-    authChecked = true
-    return authorized
-  }
-
-  // MARK: - helpers
 
   /// Normalizes a phone number to a lookup key by keeping the full digit string,
   /// only stripping a leading `1` from 11-digit US numbers. Matches
@@ -178,16 +75,177 @@ actor IMessageContactResolver {
     return digits
   }
 
-  private static func composeName(_ contact: CNContact) -> String? {
-    let full = "\(contact.givenName) \(contact.familyName)".trimmingCharacters(in: .whitespaces)
-    if !full.isEmpty { return full }
-    if !contact.nickname.isEmpty { return contact.nickname }
-    if !contact.organizationName.isEmpty { return contact.organizationName }
-    return nil
+  private func ensureLoaded() async {
+    if loaded { return }
+    loaded = true
+    for url in addressBookDatabaseURLs() {
+      loadDatabase(url)
+    }
   }
 
-  private static func imageData(from contact: CNContact) -> Data? {
-    guard let data = contact.thumbnailImageData, !data.isEmpty else { return nil }
-    return data
+  private func addressBookDatabaseURLs() -> [URL] {
+    let fm = FileManager.default
+    let base = fm.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/Application Support/AddressBook", isDirectory: true)
+    var urls: [URL] = []
+
+    let top = base.appendingPathComponent("AddressBook-v22.abcddb", isDirectory: false)
+    if fm.fileExists(atPath: top.path) { urls.append(top) }
+
+    let sources = base.appendingPathComponent("Sources", isDirectory: true)
+    if let items = try? fm.contentsOfDirectory(at: sources, includingPropertiesForKeys: nil) {
+      for dir in items {
+        let db = dir.appendingPathComponent("AddressBook-v22.abcddb", isDirectory: false)
+        if fm.fileExists(atPath: db.path) { urls.append(db) }
+      }
+    }
+    return urls
+  }
+
+  private func loadDatabase(_ url: URL) {
+    var config = Configuration()
+    config.readonly = true
+    guard let queue = try? DatabaseQueue(path: url.path, configuration: config) else { return }
+
+    try? queue.read { db in
+      // Phone numbers -> name. Kept separate from image so a missing image column
+      // never breaks name resolution.
+      if let rows = try? Row.fetchAll(
+        db,
+        sql: """
+            SELECT r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS org,
+                   r.ZNICKNAME AS nick, p.ZFULLNUMBER AS num
+            FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r ON p.ZOWNER = r.Z_PK
+          """)
+      {
+        for row in rows {
+          guard let num = row["num"] as? String, let key = Self.normalizedPhoneKey(num) else { continue }
+          if nameByPhone[key] == nil, let name = Self.composeName(row) { nameByPhone[key] = name }
+        }
+      }
+
+      // Emails -> name.
+      if let rows = try? Row.fetchAll(
+        db,
+        sql: """
+            SELECT r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS org,
+                   r.ZNICKNAME AS nick, e.ZADDRESS AS addr
+            FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r ON e.ZOWNER = r.Z_PK
+          """)
+      {
+        for row in rows {
+          guard let addr = (row["addr"] as? String)?.lowercased() else { continue }
+          if nameByEmail[addr] == nil, let name = Self.composeName(row) { nameByEmail[addr] = name }
+        }
+      }
+
+      // Photos (optional — column may not exist on all macOS versions).
+      if let rows = try? Row.fetchAll(
+        db,
+        sql: """
+            SELECT p.ZFULLNUMBER AS num, r.ZTHUMBNAILIMAGEDATA AS img
+            FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r ON p.ZOWNER = r.Z_PK
+            WHERE r.ZTHUMBNAILIMAGEDATA IS NOT NULL
+          """)
+      {
+        for row in rows {
+          guard let num = row["num"] as? String, let img = row["img"] as? Data, !img.isEmpty,
+            let key = Self.normalizedPhoneKey(num)
+          else { continue }
+          if imageByPhone[key] == nil { imageByPhone[key] = img }
+        }
+      }
+      if let rows = try? Row.fetchAll(
+        db,
+        sql: """
+            SELECT e.ZADDRESS AS addr, r.ZTHUMBNAILIMAGEDATA AS img
+            FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r ON e.ZOWNER = r.Z_PK
+            WHERE r.ZTHUMBNAILIMAGEDATA IS NOT NULL
+          """)
+      {
+        for row in rows {
+          guard let addr = (row["addr"] as? String)?.lowercased(), let img = row["img"] as? Data, !img.isEmpty
+          else { continue }
+          if imageByEmail[addr] == nil { imageByEmail[addr] = img }
+        }
+      }
+    }
+  }
+
+  /// Reads one AddressBook DB and returns a sync payload per record, grouping each
+  /// record's phone numbers and email addresses (joined via `ZOWNER = Z_PK`) under
+  /// its composed display name. Records are keyed by `Z_PK`, which is unique within
+  /// a single DB file. Returns `[]` if the DB can't be opened.
+  private func contacts(in url: URL) -> [IMessageContactSyncPayload] {
+    var config = Configuration()
+    config.readonly = true
+    guard let queue = try? DatabaseQueue(path: url.path, configuration: config) else { return [] }
+
+    var nameByPK: [Int64: String] = [:]
+    var handlesByPK: [Int64: [String]] = [:]
+    var seenByPK: [Int64: Set<String>] = [:]
+
+    // Appends a handle to a record, de-duping (case-insensitively) within the record.
+    func add(_ handle: String, to pk: Int64) {
+      let h = handle.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !h.isEmpty else { return }
+      let key = h.lowercased()
+      var seen = seenByPK[pk] ?? []
+      guard !seen.contains(key) else { return }
+      seen.insert(key)
+      seenByPK[pk] = seen
+      handlesByPK[pk, default: []].append(h)
+    }
+
+    try? queue.read { db in
+      if let rows = try? Row.fetchAll(
+        db,
+        sql: """
+            SELECT r.Z_PK AS pk, r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS org,
+                   r.ZNICKNAME AS nick, p.ZFULLNUMBER AS num
+            FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r ON p.ZOWNER = r.Z_PK
+          """)
+      {
+        for row in rows {
+          guard let pk = row["pk"] as? Int64 else { continue }
+          if nameByPK[pk] == nil, let name = Self.composeName(row) { nameByPK[pk] = name }
+          if let num = row["num"] as? String { add(num, to: pk) }
+        }
+      }
+
+      if let rows = try? Row.fetchAll(
+        db,
+        sql: """
+            SELECT r.Z_PK AS pk, r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS org,
+                   r.ZNICKNAME AS nick, e.ZADDRESS AS addr
+            FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r ON e.ZOWNER = r.Z_PK
+          """)
+      {
+        for row in rows {
+          guard let pk = row["pk"] as? Int64 else { continue }
+          if nameByPK[pk] == nil, let name = Self.composeName(row) { nameByPK[pk] = name }
+          if let addr = (row["addr"] as? String)?.lowercased() { add(addr, to: pk) }
+        }
+      }
+    }
+
+    var payloads: [IMessageContactSyncPayload] = []
+    for pk in Set(nameByPK.keys).union(handlesByPK.keys) {
+      let name = nameByPK[pk]
+      let handles = handlesByPK[pk] ?? []
+      guard name != nil || !handles.isEmpty else { continue }
+      payloads.append(IMessageContactSyncPayload(name: name ?? "", handles: handles))
+    }
+    return payloads
+  }
+
+  private static func composeName(_ row: Row) -> String? {
+    let first = (row["f"] as? String) ?? ""
+    let last = (row["l"] as? String) ?? ""
+    let full = "\(first) \(last)".trimmingCharacters(in: .whitespaces)
+    if !full.isEmpty { return full }
+    if let nick = row["nick"] as? String, !nick.isEmpty { return nick }
+    if let org = row["org"] as? String, !org.isEmpty { return org }
+    return nil
   }
 }
