@@ -211,6 +211,7 @@ struct ConversationListView: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   ConversationListView(
     conversations: [],
@@ -225,3 +226,4 @@ struct ConversationListView: View {
   .frame(width: 400, height: 600)
   .background(OmiColors.backgroundSecondary)
 }
+#endif

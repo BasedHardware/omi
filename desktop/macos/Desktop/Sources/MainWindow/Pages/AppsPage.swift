@@ -3383,7 +3383,9 @@ struct CreateAppCard: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     AppsPage(appProvider: AppProvider())
         .frame(width: 900, height: 700)
 }
+#endif

@@ -605,6 +605,7 @@ struct TaskAgentDetailView: View {
 
 // MARK: - Preview
 
+#if canImport(PreviewsMacros)
 #Preview("Classification Badge") {
     VStack(spacing: 8) {
         ForEach(["feature", "bug", "code", "work", "personal", "research"], id: \.self) { category in
@@ -613,10 +614,13 @@ struct TaskAgentDetailView: View {
     }
     .padding()
 }
+#endif
 
+#if canImport(PreviewsMacros)
 #Preview("Agent Status") {
     VStack(spacing: 16) {
         AgentStatusIndicator(task: TaskActionItem(id: "test-1", description: "Test task", completed: false, createdAt: Date()))
     }
     .padding()
 }
+#endif

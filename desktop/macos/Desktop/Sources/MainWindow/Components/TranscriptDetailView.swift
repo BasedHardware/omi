@@ -23,8 +23,10 @@ struct TranscriptDetailView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     TranscriptDetailView(segments: [])
         .frame(width: 400, height: 400)
         .background(OmiColors.backgroundSecondary)
 }
+#endif

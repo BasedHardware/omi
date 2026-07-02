@@ -152,8 +152,9 @@ struct DailyTaskCreationSheet: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     DailyTaskCreationSheet { description, priority in
         print("Create daily task: \(description) with priority: \(priority)")
     }
-}
+}#endif
