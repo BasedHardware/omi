@@ -133,7 +133,7 @@ class ActionItemsResponse {
   factory ActionItemsResponse.fromGenerated(wire.GeneratedActionItemsResponse generated) {
     return ActionItemsResponse(
       actionItems: generated.actionItems.map(ActionItemWithMetadata.fromGenerated).toList(),
-      hasMore: generated.hasMore,
+      hasMore: generated.hasMore ?? false,
     );
   }
 }

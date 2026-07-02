@@ -71,6 +71,14 @@ class PhoneNumberResponse(BaseModel):
     is_primary: bool
 
 
+class PhoneNumbersResponse(BaseModel):
+    numbers: list[PhoneNumberResponse]
+
+
+class PhoneMutationResponse(BaseModel):
+    success: bool
+
+
 class TokenResponse(BaseModel):
     access_token: str
     ttl: int
@@ -172,7 +180,7 @@ def check_phone_verification(
     return CheckVerificationResponse(verified=True, phone_number_id=phone_number_id)
 
 
-@router.get("/v1/phone/numbers", tags=['phone-calls'])
+@router.get("/v1/phone/numbers", response_model=PhoneNumbersResponse, tags=['phone-calls'])
 def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
     """List all verified phone numbers for the user."""
     check_call_access(uid)
@@ -180,7 +188,7 @@ def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
     return {'numbers': numbers}
 
 
-@router.delete("/v1/phone/numbers/{phone_number_id}", tags=['phone-calls'])
+@router.delete("/v1/phone/numbers/{phone_number_id}", response_model=PhoneMutationResponse, tags=['phone-calls'])
 def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Remove a verified phone number."""
     check_call_access(uid)

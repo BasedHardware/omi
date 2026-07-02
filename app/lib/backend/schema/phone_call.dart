@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/gen/phone_calls_wire.g.dart' as wire;
+
 enum PhoneCallDirection { incoming, outgoing }
 
 enum PhoneCallState { idle, connecting, ringing, active, ended, failed }
@@ -18,12 +20,26 @@ class VerifiedPhoneNumber {
   });
 
   factory VerifiedPhoneNumber.fromJson(Map<String, dynamic> json) {
+    return VerifiedPhoneNumber.fromGenerated(wire.GeneratedPhoneNumberResponse.fromJson(json));
+  }
+
+  factory VerifiedPhoneNumber.fromGenerated(wire.GeneratedPhoneNumberResponse generated) {
     return VerifiedPhoneNumber(
-      id: json['id'] as String,
-      phoneNumber: json['phone_number'] as String,
-      friendlyName: json['friendly_name'] as String?,
-      verifiedAt: json['verified_at'] as String,
-      isPrimary: (json['is_primary'] ?? false) as bool,
+      id: generated.id,
+      phoneNumber: generated.phoneNumber,
+      friendlyName: generated.friendlyName,
+      verifiedAt: generated.verifiedAt,
+      isPrimary: generated.isPrimary,
+    );
+  }
+
+  wire.GeneratedPhoneNumberResponse toGenerated() {
+    return wire.GeneratedPhoneNumberResponse(
+      id: id,
+      phoneNumber: phoneNumber,
+      friendlyName: friendlyName,
+      verifiedAt: verifiedAt,
+      isPrimary: isPrimary,
     );
   }
 }
@@ -35,14 +51,18 @@ class PhoneCallToken {
   final DateTime expiresAt;
 
   PhoneCallToken({required this.accessToken, required this.ttl, required this.identity})
-      : expiresAt = DateTime.now().add(Duration(seconds: ttl));
+    : expiresAt = DateTime.now().add(Duration(seconds: ttl));
 
   factory PhoneCallToken.fromJson(Map<String, dynamic> json) {
-    return PhoneCallToken(
-      accessToken: json['access_token'] as String,
-      ttl: json['ttl'] as int,
-      identity: json['identity'] as String,
-    );
+    return PhoneCallToken.fromGenerated(wire.GeneratedTokenResponse.fromJson(json));
+  }
+
+  factory PhoneCallToken.fromGenerated(wire.GeneratedTokenResponse generated) {
+    return PhoneCallToken(accessToken: generated.accessToken, ttl: generated.ttl, identity: generated.identity);
+  }
+
+  wire.GeneratedTokenResponse toGenerated() {
+    return wire.GeneratedTokenResponse(accessToken: accessToken, ttl: ttl, identity: identity);
   }
 }
 

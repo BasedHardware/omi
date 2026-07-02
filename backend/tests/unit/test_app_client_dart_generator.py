@@ -14,6 +14,7 @@ ACTION_ITEMS_FOLDERS_DART_PATH = (
 )
 API_KEYS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'api_keys_wire.g.dart'
 AGENT_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'agent_wire.g.dart'
+PHONE_CALLS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'phone_calls_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -42,6 +43,12 @@ def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
     assert 'color: _readString(_readAny(json, const ["color"])) ?? "#6B7280"' in generated
 
 
+def test_action_items_adapter_coalesces_optional_envelope_defaults():
+    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'action_item.dart').read_text()
+
+    assert 'hasMore: generated.hasMore ?? false' in adapter
+
+
 def test_api_keys_wire_dart_is_generated_from_app_client_openapi():
     spec = json.loads(SPEC_PATH.read_text())
     generated = generate_dart_models.build_output(spec, 'api_keys')
@@ -63,6 +70,17 @@ def test_agent_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAgentVmInfo' in generated
     assert 'class GeneratedAgentKeepaliveResponse' in generated
     assert 'hasVm: _readBool(_readAny(json, const ["has_vm"])) ?? false' in generated
+
+
+def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'phone_calls')
+
+    assert PHONE_CALLS_DART_PATH.read_text() == generated
+    assert 'class GeneratedPhoneNumberResponse' in generated
+    assert 'class GeneratedPhoneNumbersResponse' in generated
+    assert 'class GeneratedTokenResponse' in generated
+    assert 'accessToken: _readString(_readAny(json, const ["access_token"])) ??' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

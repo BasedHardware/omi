@@ -60,6 +60,17 @@ SCHEMA_GROUPS = {
             'AgentKeepaliveResponse',
         ),
     },
+    'phone_calls': {
+        'output': DEFAULT_OUTPUT_DIR / 'phone_calls_wire.g.dart',
+        'schemas': (
+            'VerifyPhoneNumberResponse',
+            'CheckVerificationResponse',
+            'PhoneNumberResponse',
+            'PhoneNumbersResponse',
+            'PhoneMutationResponse',
+            'TokenResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},

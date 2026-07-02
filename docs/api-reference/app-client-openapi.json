@@ -7023,6 +7023,74 @@
         "title": "PhoneCallQuota",
         "type": "object"
       },
+      "PhoneMutationResponse": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "PhoneMutationResponse",
+        "type": "object"
+      },
+      "PhoneNumberResponse": {
+        "properties": {
+          "friendly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Friendly Name"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_primary": {
+            "title": "Is Primary",
+            "type": "boolean"
+          },
+          "phone_number": {
+            "title": "Phone Number",
+            "type": "string"
+          },
+          "verified_at": {
+            "title": "Verified At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "phone_number",
+          "verified_at",
+          "is_primary"
+        ],
+        "title": "PhoneNumberResponse",
+        "type": "object"
+      },
+      "PhoneNumbersResponse": {
+        "properties": {
+          "numbers": {
+            "items": {
+              "$ref": "#/components/schemas/PhoneNumberResponse"
+            },
+            "title": "Numbers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "numbers"
+        ],
+        "title": "PhoneNumbersResponse",
+        "type": "object"
+      },
       "PlanLimits": {
         "properties": {
           "chat_cost_usd_per_month": {
@@ -28201,7 +28269,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneNumbersResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -28462,7 +28532,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
