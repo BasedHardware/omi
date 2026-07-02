@@ -1015,14 +1015,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
       let directedProvider: AgentPillsManager.DirectedProvider?
-      switch providerName {
-      case "openclaw": directedProvider = .openclaw
-      case "hermes": directedProvider = .hermes
-      case "": directedProvider = nil
-      default:
+      if providerName.isEmpty {
+        directedProvider = nil
+      } else if let named = AgentPillsManager.DirectedProvider(rawValue: providerName) {
+        directedProvider = named
+      } else {
+        let supported = AgentPillsManager.DirectedProvider.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
         session?.sendToolResult(
           callId: callId, name: name,
-          output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
+          output: "Unsupported agent provider '\(providerName)'. Use one of: \(supported).")
         return
       }
       if let directedProvider {
@@ -1048,11 +1049,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       // own ChatProvider/AgentBridge. We don't await it on the voice loop.
       // fromVoice:false — the hub model speaks its own natural acknowledgment, so the pill
       // must NOT also speak its canned randomAck ("on it") or we double up.
+      // Resolve the harness: an explicitly named agent wins; otherwise pick the best CONNECTED
+      // agent for the task and fall back through the ranked chain. nil keeps the Omi AI default.
+      let selectedHarness: AgentHarnessMode?
+      if let directedProvider {
+        selectedHarness = directedProvider.harnessMode
+      } else {
+        let chain = AgentSelector.rank(brief: brief, available: AgentRuntimeRouting.connectedHarnesses())
+        selectedHarness = chain.first.flatMap { $0 == .piMono ? nil : $0 }
+      }
       let pill = AgentPillsManager.shared.spawnFromUserQuery(
         brief, model: model, fromVoice: false,
         preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
-        bridgeHarnessOverride: directedProvider?.harnessMode)
-      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
+        bridgeHarnessOverride: selectedHarness)
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? selectedHarness?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
       if !audioReceivedThisTurn {
         let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck

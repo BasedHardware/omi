@@ -70,6 +70,24 @@ enum AgentRuntimeRouting {
             return .codex
         }
     }
+
+    /// Harnesses currently connected/available on this machine. Omi AI (pi-mono) is always
+    /// available; Hermes/OpenClaw/Codex are detected locally; Claude Code (acp) counts when the
+    /// user has selected it as their provider.
+    static func connectedHarnesses(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bridgeMode: String? = UserDefaults.standard.string(forKey: "chatBridgeMode")
+    ) -> [AgentHarnessMode] {
+        var harnesses: [AgentHarnessMode] = [.piMono]
+        for provider in AgentPillsManager.DirectedProvider.allCases
+        where LocalAgentProviderDetector.isAvailable(provider, environment: environment) {
+            harnesses.append(provider.harnessMode)
+        }
+        if bridgeMode == ChatProvider.BridgeMode.userClaude.rawValue {
+            harnesses.append(.acp)
+        }
+        return harnesses
+    }
 }
 
 struct LocalAgentProviderAvailability: Equatable {
