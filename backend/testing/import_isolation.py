@@ -77,11 +77,12 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
     attribute, installs the provided modules, and restores everything on exit —
     including deleting entries that were absent before and repairing parent attrs.
 
-    It ALSO snapshots the full set of ``sys.modules`` keys at entry and evicts any
-    keys added during the block on teardown. This is what makes a fixture hermetic:
-    modules freshly loaded/exec'd while the fakes were active (e.g. via
-    ``load_module_fresh``) are removed afterwards so subsequent test files see the
-    *real* module (or no module), never a stub-fed version left behind.
+    It ALSO snapshots the FULL ``sys.modules`` mapping (key -> object) at entry and
+    restores it on teardown: newly-added keys are evicted AND existing keys whose
+    object was swapped (e.g. by ``load_module_fresh`` re-exec'ing a module against
+    the fakes) are restored to the original object. This is what makes a fixture
+    hermetic: subsequent test files always see the *real* module, never a stub-fed
+    fresh copy left behind.
 
     Use ONLY inside a function/fixture scope (never at module scope in a test file —
     the static checker bans that). For most test seams prefer ``monkeypatch.setattr``
@@ -92,13 +93,25 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         with stub_modules({"database.vector_db": AutoMockModule("database.vector_db")}):
             from routers.memories import router  # picks up the fake
     """
+    # Explicit per-name state for the requested fakes (presence + parent attr).
     saved: dict[str, ModuleType | None] = {name: sys.modules.get(name) for name in mapping}
     saved_parent_attrs: dict[str, ModuleType | None] = {name: _get_parent_attr(name) for name in mapping}
-    saved_keys: set[str] = set(sys.modules)
+    # Full-process snapshot so we can also restore *objects* that were swapped in
+    # place (load_module_fresh) — not just absent keys.
+    saved_modules: dict[str, ModuleType] = dict(sys.modules)
+    saved_keys: set[str] = set(saved_modules)
+    # Parent-attr values for every submodule present at entry, so that attrs added
+    # during the block (for keys absent at entry) can be distinguished and cleared.
+    saved_submodule_attrs: dict[str, ModuleType | None] = {
+        name: _get_parent_attr(name) for name in saved_keys if "." in name
+    }
     try:
         for name, module in mapping.items():
             if module is None:
                 sys.modules.pop(name, None)
+                # Also drop the parent-package attribute so ``pkg.child`` does not
+                # resolve to the original module via attribute access.
+                _set_parent_attr(name, None)
             else:
                 sys.modules[name] = module
                 _set_parent_attr(name, module)
@@ -117,10 +130,17 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
             else:
                 _set_parent_attr(name, prior_parent)
         # 2. Evict any module keys that appeared during the block (e.g. a module
-        #    exec'd via load_module_fresh against the fakes). This prevents a
-        #    stub-fed version of a real module from leaking to later test files.
+        #    exec'd via load_module_fresh against the fakes) and clear the parent
+        #    attribute each one set, so a stub-fed version never leaks to later files.
         for extra in list(sys.modules.keys() - saved_keys):
+            _clear_parent_attr_if_added(extra, saved_submodule_attrs)
             sys.modules.pop(extra, None)
+        # 3. Restore existing keys whose object was swapped in place (load_module_fresh
+        #    overwrites sys.modules[name] for a key that already existed at entry).
+        for name, original in saved_modules.items():
+            current = sys.modules.get(name)
+            if current is not None and current is not original:
+                sys.modules[name] = original
 
 
 def _get_parent_attr(name: str) -> ModuleType | None:
@@ -131,6 +151,31 @@ def _get_parent_attr(name: str) -> ModuleType | None:
     if isinstance(parent, ModuleType):
         return getattr(parent, child_name, None)
     return None
+
+
+def _clear_parent_attr_if_added(name: str, saved_submodule_attrs: dict[str, ModuleType | None]) -> None:
+    """Delete a parent-package child attribute that was added during a stub block.
+
+    ``name`` is a module key that was absent at entry (being evicted), so its parent
+    attribute was absent too under normal Python import semantics. Clear it so the
+    submodule does not leak via attribute access. ``saved_submodule_attrs`` records
+    per-submodule parent attrs at entry; absent entries mean "was not present" → safe
+    to delete.
+    """
+    if "." not in name:
+        return
+    parent_name, child_name = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if not isinstance(parent, ModuleType):
+        return
+    entry_attr = saved_submodule_attrs.get(name)
+    current = getattr(parent, child_name, None)
+    if current is None or current is entry_attr:
+        return
+    try:
+        delattr(parent, child_name)
+    except AttributeError:
+        pass
 
 
 def load_module_fresh(name: str, path: str) -> ModuleType:

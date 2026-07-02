@@ -96,6 +96,53 @@ def _attr_chain(node: ast.AST) -> list[str]:
     return parts
 
 
+def _collect_import_aliases(tree: ast.Module) -> dict[str, str]:
+    """Map locally-bound names to their fully-qualified dotted source.
+
+    Tracks ``import a.b.c as x`` and ``from a.b import c as d`` so that an
+    unqualified call like ``OpenAI()`` (from ``from openai import OpenAI``) is
+    recognised as a side-effecting constructor.
+    """
+    aliases: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bound = alias.asname or (alias.name.split(".")[0] if alias.name else alias.name)
+                full = alias.name
+                if bound and full:
+                    aliases[bound] = full
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                bound = alias.asname or alias.name
+                full = f"{module}.{alias.name}" if module else alias.name
+                aliases[bound] = full
+    return aliases
+
+
+def _has_future_annotations(tree: ast.Module) -> bool:
+    for node in tree.body:
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "__future__"
+            and any(a.name == "annotations" for a in node.names)
+        ):
+            return True
+    return False
+
+
+def _resolve_chain(chain: list[str], aliases: dict[str, str]) -> list[str]:
+    """Resolve the head of a dotted chain through import aliases."""
+    if not chain:
+        return chain
+    head = chain[0]
+    if head in aliases:
+        return aliases[head].split(".") + chain[1:]
+    return chain
+
+
 def _ctor_matches(chain: list[str]) -> bool:
     if not chain:
         return False
@@ -105,7 +152,7 @@ def _ctor_matches(chain: list[str]) -> bool:
         pref_parts = prefix.split(".")
         if len(chain) >= len(pref_parts) + 1 and chain[: len(pref_parts)] == pref_parts:
             return True
-        # allow bare name match when only the attr is importable unqualified (rare)
+        # bare name matching a known constructor attr called unqualified
         if len(chain) == 1 and prefix == attr:
             return True
     return False
@@ -131,30 +178,72 @@ def _is_network_call(node: ast.Call) -> bool:
     return False
 
 
+def _record_offenders_in_expr(node: ast.AST, aliases: dict[str, str], out: list[tuple[int, str]]) -> None:
+    """Walk an expression subtree, appending (lineno, reason) for any offender."""
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Call):
+            chain = _attr_chain(sub.func)
+            resolved = _resolve_chain(chain, aliases)
+            if _ctor_matches(resolved):
+                out.append((sub.lineno, f"import-time constructor: {'.'.join(chain)}"))
+                continue
+            if _is_network_call(sub):
+                out.append((sub.lineno, f"top-level network call: {'.'.join(chain)}"))
+                continue
+            if isinstance(sub.func, ast.Name) and sub.func.id == "open":
+                out.append((sub.lineno, "top-level open() call"))
+                continue
+        if _is_os_environ_subscript(sub):
+            out.append((sub.lineno, "os.environ[] subscript at module scope"))
+
+
+def _function_annotation_exprs(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.AST]:
+    exprs: list[ast.AST] = []
+    if node.returns is not None:
+        exprs.append(node.returns)
+    a = node.args
+    for arg in list(getattr(a, "posonlyargs", [])) + list(a.args) + list(a.kwonlyargs):
+        if arg.annotation is not None:
+            exprs.append(arg.annotation)
+    for arg in (a.vararg, a.kwarg):
+        if arg is not None and arg.annotation is not None:
+            exprs.append(arg.annotation)
+    return exprs
+
+
 def _module_level_offenders(tree: ast.Module, source_lines: list[str]) -> list[tuple[int, str]]:
-    """Return (lineno, reason) for module-scope import-time side effects."""
+    """Return (lineno, reason) for module-scope import-time side effects.
+
+    Decorator lists, default values, class bases/keywords and (when PEP 563 is not
+    active) annotations all evaluate at import time, so they are scanned too —
+    while function/class *bodies* are skipped.
+    """
     out: list[tuple[int, str]] = []
+    aliases = _collect_import_aliases(tree)
+    eval_annotations = not _has_future_annotations(tree)
 
     for node in tree.body:
-        # Function/class bodies are NOT module scope — skip their internals.
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for expr in node.decorator_list:
+                _record_offenders_in_expr(expr, aliases, out)
+            a = node.args
+            default_exprs = list(a.defaults) + [d for d in (a.kw_defaults or []) if d is not None]
+            for expr in default_exprs:
+                _record_offenders_in_expr(expr, aliases, out)
+            if eval_annotations:
+                for expr in _function_annotation_exprs(node):
+                    _record_offenders_in_expr(expr, aliases, out)
             continue
-        for sub in ast.walk(node):
-            # curated constructor calls
-            if isinstance(sub, ast.Call):
-                chain = _attr_chain(sub.func)
-                if _ctor_matches(chain):
-                    out.append((sub.lineno, f"import-time constructor: {'.'.join(chain)}"))
-                    continue
-                if _is_network_call(sub):
-                    out.append((sub.lineno, f"top-level network call: {'.'.join(chain)}"))
-                    continue
-                if isinstance(sub.func, ast.Name) and sub.func.id == "open":
-                    out.append((sub.lineno, "top-level open() call"))
-                    continue
-            if _is_os_environ_subscript(sub):
-                out.append((sub.lineno, "os.environ[] subscript at module scope"))
-                continue
+        if isinstance(node, ast.ClassDef):
+            for expr in node.decorator_list:
+                _record_offenders_in_expr(expr, aliases, out)
+            for expr in node.bases:
+                _record_offenders_in_expr(expr, aliases, out)
+            for kw in node.keywords:
+                _record_offenders_in_expr(kw.value, aliases, out)
+            continue
+        # Any other module-scope statement (incl. module-level if/for/try bodies).
+        _record_offenders_in_expr(node, aliases, out)
 
     # Deduplicate by (lineno, reason); collapse multiple hits on same line.
     seen: set[tuple[int, str]] = set()
@@ -189,11 +278,41 @@ def _load_allowlist(path: Path) -> set[str]:
     return entries
 
 
+# Directory names that must never be scanned: virtualenvs, vendored/built
+# third-party code, caches, and dot-directories. The scanner polices backend
+# production code only; site-packages (e.g. a local .openapi-venv) are full of
+# import-time side effects that are irrelevant here and would drown the signal.
+_EXCLUDED_DIR_NAMES = frozenset(
+    {
+        "__pycache__",
+        ".venv",
+        "venv",
+        "env",
+        ".env",
+        "site-packages",
+        ".openapi-venv",
+        "node_modules",
+        "build",
+        "dist",
+    }
+)
+
+
+def _is_under_excluded_dir(rel: str) -> bool:
+    parts = rel.split("/")
+    for part in parts:
+        if part in _EXCLUDED_DIR_NAMES or part.startswith("."):
+            return True
+    return False
+
+
 def _candidate_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for p in sorted(root.rglob("*.py")):
         rel = p.relative_to(root).as_posix()
         if rel.startswith("tests/") or rel.startswith("testing/"):
+            continue
+        if _is_under_excluded_dir(rel):
             continue
         files.append(p)
     return files
