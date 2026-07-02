@@ -161,7 +161,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
       name: "ChatGPT Atlas",
       bundleIdentifier: "com.openai.atlas",
       appPath: "/Applications/ChatGPT Atlas.app",
-      profileDirectoryRelativePath: "Library/Application Support/com.openai.atlas/browser-data/host",
+      profileDirectoryRelativePath:
+        "Library/Application Support/com.openai.atlas/browser-data/host",
       installURL: nil,
       supportsChromeWebStore: true
     )
@@ -207,9 +208,13 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertTrue(
       task?.body.contains("OAuth Client ID: \(MemoryExportDestination.chatgptOAuthClientID)")
         == true)
-    XCTAssertTrue(task?.body.contains("OAuth Client Secret: leave blank") == true)
+    XCTAssertTrue(task?.body.contains("Token auth method: none") == true)
+    XCTAssertTrue(
+      task?.body.contains("\"oauth_client_id\":\"\(MemoryExportDestination.chatgptOAuthClientID)\"")
+        == true)
+    XCTAssertTrue(task?.body.contains("\"token_auth_method\":\"none\"") == true)
+    XCTAssertFalse(task?.body.contains("\"oauth_client_secret\"") == true)
     XCTAssertFalse(task?.body.contains("OAuth Client Secret: test-key") == true)
-    XCTAssertTrue(task?.body.contains("\"oauth_client_secret\":\"\"") == true)
     XCTAssertTrue(task?.body.contains(MemoryExportDestination.mcpServerURL) == true)
   }
 
@@ -223,7 +228,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertTrue(
       task?.body.contains("FIRST ACTION: call the `fill_cloud_connector_form` tool") == true)
     XCTAssertTrue(task?.body.contains("\"provider\":\"claude\"") == true)
-    XCTAssertTrue(task?.body.contains("\"oauth_client_secret\":\"test-key\"") == true)
+    XCTAssertTrue(task?.body.contains("\"oauth_client_id\":\"omi-claude-prod\"") == true)
+    XCTAssertFalse(task?.body.contains("\"oauth_client_secret\"") == true)
     XCTAssertTrue(task?.body.contains("\"submit\":true") == true)
     XCTAssertTrue(task?.body.contains("Only fall back to bash") == true)
     XCTAssertTrue(
@@ -641,10 +647,11 @@ final class BrowserAutomationTargetTests: XCTestCase {
       explicitTargetFrames: [explicitFrame]
     )
 
-    let result = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: candidates
-    ))
+    let result = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: windowFrame,
+        candidates: candidates
+      ))
 
     XCTAssertTrue(candidates[0].evidence.contains { $0.source == .accessibility })
     XCTAssertTrue(candidates[0].allowedUses.contains(.performClick))
@@ -660,10 +667,11 @@ final class BrowserAutomationTargetTests: XCTestCase {
       explicitTargetFrames: [explicitFrame]
     )
 
-    let result = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: candidates
-    ))
+    let result = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: windowFrame,
+        candidates: candidates
+      ))
 
     XCTAssertTrue(candidates[0].evidence.contains { $0.source == .accessibility })
     XCTAssertTrue(candidates[0].allowedUses.contains(.performClick))
@@ -687,7 +695,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
     )
     let heuristic = SpatialOverlayAnchorCandidate(
       id: "heuristic-add",
-      targetRect: CGRect(x: explicitFrame.midX + 120, y: explicitFrame.midY + 80, width: 2, height: 2),
+      targetRect: CGRect(
+        x: explicitFrame.midX + 120, y: explicitFrame.midY + 80, width: 2, height: 2),
       screen: screen,
       evidence: [
         SpatialOverlayTargetEvidence(source: .layoutHeuristic, confidence: 0.99, label: "estimate")
@@ -696,10 +705,11 @@ final class BrowserAutomationTargetTests: XCTestCase {
       allowedUses: [.displayGuidance]
     )
 
-    let result = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: [heuristic, explicit]
-    ))
+    let result = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: windowFrame,
+        candidates: [heuristic, explicit]
+      ))
 
     assertGuidancePlacement(result, pointsAt: explicitFrame, doesNotCover: explicitFrame)
   }
@@ -719,10 +729,11 @@ final class BrowserAutomationTargetTests: XCTestCase {
       allowedUses: [.performClick]
     )
 
-    XCTAssertNil(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: [clickOnly]
-    ))
+    XCTAssertNil(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: windowFrame,
+        candidates: [clickOnly]
+      ))
   }
 
   @MainActor
@@ -737,14 +748,16 @@ final class BrowserAutomationTargetTests: XCTestCase {
       explicitTargetFrames: []
     )
 
-    let connectResult = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: connectCandidates
-    ))
-    let addResult = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: addCandidates
-    ))
+    let connectResult = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: windowFrame,
+        candidates: connectCandidates
+      ))
+    let addResult = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: windowFrame,
+        candidates: addCandidates
+      ))
 
     XCTAssertTrue(connectCandidates[0].evidence.contains { $0.source == .layoutHeuristic })
     XCTAssertTrue(addCandidates[0].evidence.contains { $0.source == .layoutHeuristic })
@@ -838,8 +851,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
   }
 }
 
-private extension Result {
-  var failure: Failure? {
+extension Result {
+  fileprivate var failure: Failure? {
     if case .failure(let failure) = self {
       return failure
     }

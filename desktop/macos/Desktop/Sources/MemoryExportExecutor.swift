@@ -88,7 +88,7 @@ enum MemoryExportExecutor {
     }
 
     if destination == .claude {
-      return try await runClaudeNativeCloudSetup(setup: setup, openURL: openURL, key: key)
+      return try await runClaudeNativeCloudSetup(setup: setup, openURL: openURL)
     }
 
     let browser = BrowserAutomationTargetResolver.defaultTarget(for: openURL)
@@ -114,8 +114,7 @@ enum MemoryExportExecutor {
 
   private static func runClaudeNativeCloudSetup(
     setup: MCPSetup,
-    openURL: URL,
-    key: String
+    openURL: URL
   ) async throws -> Outcome {
     CloudConnectorFormAutomation.dismissGuidanceOverlay()
 
@@ -123,14 +122,13 @@ enum MemoryExportExecutor {
       "provider": "claude",
       "name": "Omi Memory",
       "server_url": setup.serverURL,
-      "oauth_client_id": "omi",
-      "oauth_client_secret": key,
+      "oauth_client_id": "omi-claude-prod",
       "submit": true,
     ]
 
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(
-      "Name: Omi Memory\nRemote MCP server URL: \(setup.serverURL)\nOAuth Client ID: omi\nOAuth Client Secret: \(key)",
+      "Name: Omi Memory\nRemote MCP server URL: \(setup.serverURL)\nOAuth Client ID: omi-claude-prod\nOAuth Client Secret: leave blank",
       forType: .string)
 
     // For cloud setup, use the user's system default browser. Do not reuse the
@@ -143,14 +141,17 @@ enum MemoryExportExecutor {
     for attempt in 1...12 {
       try? await Task.sleep(nanoseconds: attempt == 1 ? 1_500_000_000 : 750_000_000)
       lastResult = await CloudConnectorFormAutomation.fill(args)
-      log("Claude cloud setup: native automation attempt \(attempt) result=\(cloudFormFillResultSummary(lastResult))")
+      log(
+        "Claude cloud setup: native automation attempt \(attempt) result=\(cloudFormFillResultSummary(lastResult))"
+      )
       if cloudFormFillSucceeded(lastResult) {
         CloudConnectorFormAutomation.dismissGuidanceOverlay()
         if lastResult.contains("Claude connector connected.") {
           await MemoryExportService.shared.markConnected(.claude)
         }
         return Outcome(
-          taskTitle: "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
+          taskTitle:
+            "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
           mode: .completed)
       }
       if cloudFormFillRequiresAccessibilityApproval(lastResult) {
@@ -169,7 +170,8 @@ enum MemoryExportExecutor {
           // We could not anchor to Claude. Send the user to grant Screen Recording, but
           // never leave them on a bare settings pane: show an instruction card too.
           requestScreenRecordingApprovalForCloudSetup()
-          await CloudConnectorFormAutomation.showScreenRecordingSettingsInstructionOverlay(actionLabel: "Connect")
+          await CloudConnectorFormAutomation.showScreenRecordingSettingsInstructionOverlay(
+            actionLabel: "Connect")
           throw ExecutorError.browserSetupRequired(cloudSetupScreenRecordingPermissionMessage)
         }
       }
@@ -178,12 +180,15 @@ enum MemoryExportExecutor {
       }
     }
 
-    log("Claude cloud setup: stopping without agent fallback result=\(cloudFormFillResultSummary(lastResult))")
+    log(
+      "Claude cloud setup: stopping without agent fallback result=\(cloudFormFillResultSummary(lastResult))"
+    )
     throw ExecutorError.browserSetupRequired(cloudSetupNativeAutomationBlockedMessage)
   }
 
   nonisolated static func cloudFormFillSucceeded(_ result: String) -> Bool {
-    let cleanResult = !result.contains("Missing:")
+    let cleanResult =
+      !result.contains("Missing:")
       && !result.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Error:")
     return cleanResult
       && (result.contains("Submitted with button: Connect")
@@ -208,7 +213,8 @@ enum MemoryExportExecutor {
   }
 
   private static func cloudFormFillResultSummary(_ result: String) -> String {
-    let sanitized = result
+    let sanitized =
+      result
       .split(separator: "\n")
       .filter { !$0.lowercased().contains("oauth client secret") }
       .joined(separator: " | ")
@@ -266,7 +272,8 @@ enum MemoryExportExecutor {
   }
 
   private static func requestAccessibilityApprovalForCloudSetup() {
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    let options =
+      [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     let trusted = AXIsProcessTrustedWithOptions(options)
     guard !trusted,
       let url = URL(
@@ -282,8 +289,9 @@ enum MemoryExportExecutor {
     // Settings alone left the user with nothing to turn on.
     ScreenCaptureService.requestAllScreenCapturePermissions()
 
-    guard let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     else { return }
     NSWorkspace.shared.open(url)
   }
