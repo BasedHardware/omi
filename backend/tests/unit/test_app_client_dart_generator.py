@@ -25,6 +25,7 @@ WRAPPED_TASK_INTEGRATIONS_DART_PATH = (
 SUBSCRIPTION_USAGE_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'subscription_usage_wire.g.dart'
 )
+PRIVACY_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'privacy_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -145,6 +146,17 @@ def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
     assert 'limits: _readObject(_readAny(json, const ["limits"]), GeneratedPlanLimits.fromJson)' in generated
     assert 'GeneratedPlanLimits.fromJson(const {})' in generated
     assert 'transcriptionSeconds: _readInt(_readAny(json, const ["transcription_seconds"])) ?? 0' in generated
+
+
+def test_privacy_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'privacy')
+
+    assert PRIVACY_DART_PATH.read_text() == generated
+    assert 'class GeneratedMigrationRequest' in generated
+    assert 'class GeneratedBatchMigrationRequest' in generated
+    assert 'class GeneratedMigrationTargetRequest' in generated
+    assert 'targetLevel: _required(_readString(_readAny(json, const ["target_level"])), "target_level")' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

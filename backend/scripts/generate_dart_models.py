@@ -105,6 +105,14 @@ SCHEMA_GROUPS = {
             'UserUsageResponse',
         ),
     },
+    'privacy': {
+        'output': DEFAULT_OUTPUT_DIR / 'privacy_wire.g.dart',
+        'schemas': (
+            'MigrationRequest',
+            'BatchMigrationRequest',
+            'MigrationTargetRequest',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},

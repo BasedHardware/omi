@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/privacy_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -11,8 +12,16 @@ class MigrationRequest {
 
   MigrationRequest({required this.id, required this.type, required this.targetLevel});
 
+  factory MigrationRequest.fromGenerated(wire.GeneratedMigrationRequest generated) {
+    return MigrationRequest(id: generated.id, type: generated.type, targetLevel: generated.targetLevel);
+  }
+
+  wire.GeneratedMigrationRequest toGenerated() {
+    return wire.GeneratedMigrationRequest(id: id, type: type, targetLevel: targetLevel);
+  }
+
   Map<String, dynamic> toJson() {
-    return {'id': id, 'type': type, 'target_level': targetLevel};
+    return toGenerated().toJson();
   }
 }
 
@@ -48,7 +57,7 @@ class PrivacyApi {
         url: '${Env.apiBaseUrl}v1/users/migration/requests',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'target_level': targetLevel}),
+        body: jsonEncode(wire.GeneratedMigrationTargetRequest(targetLevel: targetLevel).toJson()),
       );
       if (response == null || response.statusCode != 200) {
         Logger.error('Failed to start migration: ${response?.statusCode} ${response?.body}');
@@ -72,7 +81,14 @@ class PrivacyApi {
         final body = jsonDecode(response.body);
         final List<dynamic> objects = body['needs_migration'];
         return objects
-            .map((obj) => MigrationRequest(id: obj['id'], type: obj['type'], targetLevel: targetLevel))
+            .map(
+              (obj) => MigrationRequest.fromGenerated(
+                wire.GeneratedMigrationRequest.fromJson({
+                  ...Map<String, dynamic>.from(obj),
+                  'target_level': targetLevel,
+                }),
+              ),
+            )
             .toList();
       } else {
         Logger.error('Failed to check migration status: ${response?.statusCode} ${response?.body}');
@@ -108,7 +124,11 @@ class PrivacyApi {
         url: '${Env.apiBaseUrl}v1/users/migration/batch-requests',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'requests': requests.map((r) => r.toJson()).toList()}),
+        body: jsonEncode(
+          wire.GeneratedBatchMigrationRequest(
+            requests: requests.map((request) => request.toGenerated()).toList(),
+          ).toJson(),
+        ),
       );
       if (response == null || response.statusCode != 200) {
         Logger.error('Failed to migrate batch: ${response?.statusCode} ${response?.body}');
@@ -126,7 +146,7 @@ class PrivacyApi {
         url: '${Env.apiBaseUrl}v1/users/migration/requests/data-protection-level/finalize',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'target_level': targetLevel}),
+        body: jsonEncode(wire.GeneratedMigrationTargetRequest(targetLevel: targetLevel).toJson()),
       );
       if (response == null || response.statusCode != 200) {
         Logger.error('Failed to finalize migration: ${response?.statusCode} ${response?.body}');
