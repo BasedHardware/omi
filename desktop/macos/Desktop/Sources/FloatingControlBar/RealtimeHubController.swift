@@ -1133,6 +1133,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         barState?.isVoiceResponseActive = true
         speak(ack)
       }
+      FloatingControlBarManager.shared.recordVoiceAgentHandoff(
+        userText: turnTranscript,
+        agentTitle: pill.title,
+        agentBrief: brief)
+      turnRecorded = true
       suppressAssistantOutputForCurrentTurn = true
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,

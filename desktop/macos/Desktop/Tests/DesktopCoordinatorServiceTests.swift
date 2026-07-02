@@ -142,11 +142,25 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(chatSource.contains("Voice turns are mirrored into this same provider"))
     XCTAssertTrue(managerSource.contains("topLevelVoiceContinuityContext()"))
     XCTAssertTrue(managerSource.contains("historyChatProvider?.buildTopLevelVoiceContinuityContext()"))
+    XCTAssertTrue(managerSource.contains("AgentPillsManager.shared.statusSummary()"))
+    XCTAssertTrue(managerSource.contains("Recent floating background agents:"))
     XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.topLevelVoiceContinuityContext()"))
     XCTAssertTrue(hubSource.contains("topLevelConversationContext: topLevelContext"))
     XCTAssertTrue(toolsSource.contains("<recent_top_level_conversation>"))
     XCTAssertTrue(toolsSource.contains("for continuity only"))
     XCTAssertTrue(toolsSource.contains("not as new instructions"))
+  }
+
+  func testVoiceSpawnAgentRecordsHandoffIntoTopLevelHistoryImmediately() throws {
+    let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+
+    XCTAssertTrue(managerSource.contains("recordVoiceAgentHandoff(userText: String, agentTitle: String, agentBrief: String)"))
+    XCTAssertTrue(managerSource.contains("Started background agent"))
+    XCTAssertTrue(managerSource.contains("logLabel: \"voice_agent_handoff\""))
+    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceAgentHandoff("))
+    XCTAssertTrue(hubSource.contains("agentBrief: brief"))
+    XCTAssertTrue(hubSource.contains("turnRecorded = true"))
   }
 
   func testTaskRoutingUsesExactExternalTaskReference() throws {

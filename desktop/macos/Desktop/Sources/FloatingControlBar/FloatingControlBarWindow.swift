@@ -3114,8 +3114,32 @@ class FloatingControlBarManager {
         historyChatProvider?.recordVoiceTurn(userText: userText, assistantText: assistantText)
     }
 
+    func recordVoiceAgentHandoff(userText: String, agentTitle: String, agentBrief: String) {
+        let title = agentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let brief = agentBrief.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistantText = "Started background agent\(title.isEmpty ? "" : " \"\(title)\"")\(brief.isEmpty ? "." : " for: \(brief)")"
+        historyChatProvider?.recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: "voice_agent_handoff",
+            messageSource: "realtime_voice"
+        )
+    }
+
     func topLevelVoiceContinuityContext() -> String {
-        historyChatProvider?.buildTopLevelVoiceContinuityContext() ?? ""
+        var sections: [String] = []
+        if let history = historyChatProvider?.buildTopLevelVoiceContinuityContext(),
+           !history.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sections.append(history)
+        }
+        let floatingStatus = AgentPillsManager.shared.statusSummary()
+        if !floatingStatus.contains("No floating agent pills") {
+            sections.append("""
+            Recent floating background agents:
+            \(floatingStatus)
+            """)
+        }
+        return sections.joined(separator: "\n\n")
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
