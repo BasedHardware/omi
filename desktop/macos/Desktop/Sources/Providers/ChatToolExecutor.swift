@@ -482,7 +482,8 @@ class ChatToolExecutor {
       brief: brief,
       requestedProvider: requestedProvider,
       userRequestText: nil,
-      title: title
+      title: title,
+      treatRequestedAsExplicit: true
     )
     switch resolution {
     case .setupRequired(_, let setupPrompt, _):

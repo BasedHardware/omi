@@ -302,6 +302,22 @@ enum LocalAgentProviderRouting {
         }
     }
 
+    /// Whether the provider name is preceded by a negation word, so a bare
+    /// mention like "don't use Hermes" does not count as an explicit request.
+    private static func isNegated(
+        _ provider: AgentPillsManager.DirectedProvider,
+        in text: String
+    ) -> Bool {
+        let lower = text.lowercased()
+        let name = provider.rawValue
+        let negationPhrases = [
+            "don't use \(name)", "dont use \(name)", "don't ask \(name)",
+            "dont ask \(name)", "not \(name)", "no \(name)",
+            "without \(name)", "instead of \(name)",
+        ]
+        return negationPhrases.contains { lower.contains($0) }
+    }
+
     static func isRetriableSpawnFailure(_ message: String) -> Bool {
         let lower = message.lowercased()
         return lower.contains("not available")
@@ -317,6 +333,7 @@ enum LocalAgentProviderRouting {
         requestedProvider: AgentPillsManager.DirectedProvider?,
         userRequestText: String?,
         title: String?,
+        treatRequestedAsExplicit: Bool = false,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default,
         homeDirectory: String = NSHomeDirectory()
@@ -328,39 +345,43 @@ enum LocalAgentProviderRouting {
         // Prefer a verb-based match ("use codex") over a bare mention so negated
         // phrases like "don't use Hermes, use Codex" route to the positively-
         // requested provider, not the first one that appears as a substring.
+        // Negated mentions ("don't use X") are excluded from the bare fallback.
         let userText = userRequestText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let explicit = userText.isEmpty ? nil : (explicitProvider(in: userText)
             ?? AgentPillsManager.DirectedProvider.allCases.first {
-                isExplicitProviderRequest($0, in: userText)
+                isExplicitProviderRequest($0, in: userText) && !isNegated($0, in: userText)
             })
+        // For the chat tool (no user transcript), the model's `provider` argument
+        // is deliberate explicit intent — treat it like a user-directive.
+        let effectiveExplicit = explicit ?? (treatRequestedAsExplicit ? requestedProvider : nil)
 
-        if let explicit {
+        if let effectiveExplicit {
             let availability = LocalAgentProviderDetector.availability(
-                for: explicit,
+                for: effectiveExplicit,
                 environment: environment,
                 fileManager: fileManager,
                 homeDirectory: homeDirectory
             )
             guard availability.isAvailable else {
                 return .setupRequired(
-                    provider: explicit,
+                    provider: effectiveExplicit,
                     prompt: availability.setupPrompt,
                     spokenStatus: availability.spokenInstallGuide
                 )
             }
-            let resolvedTitle = normalizedTitle(title, provider: explicit)
+            let resolvedTitle = normalizedTitle(title, provider: effectiveExplicit)
             return .spawn(
                 AgentSpawnPlan(
-                    harnessOverride: explicit.harnessMode,
+                    harnessOverride: effectiveExplicit.harnessMode,
                     title: resolvedTitle,
-                    ack: "Asking \(explicit.displayName).",
-                    selectedProvider: explicit,
+                    ack: "Asking \(effectiveExplicit.displayName).",
+                    selectedProvider: effectiveExplicit,
                     usedFallback: false,
                     fallbackNote: nil,
                     context: spawnContext(
                         taskKind: taskKind,
-                        explicitProvider: explicit,
-                        selectedHarness: explicit.harnessMode,
+                        explicitProvider: effectiveExplicit,
+                        selectedHarness: effectiveExplicit.harnessMode,
                         environment: environment,
                         fileManager: fileManager,
                         homeDirectory: homeDirectory
@@ -613,6 +634,7 @@ extension LocalAgentProviderRouting {
         requestedProvider: AgentPillsManager.DirectedProvider?,
         userRequestText: String?,
         title: String?,
+        treatRequestedAsExplicit: Bool = false,
         onInstallStart: ((AgentPillsManager.DirectedProvider) -> Void)? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default,
@@ -623,6 +645,7 @@ extension LocalAgentProviderRouting {
             requestedProvider: requestedProvider,
             userRequestText: userRequestText,
             title: title,
+            treatRequestedAsExplicit: treatRequestedAsExplicit,
             environment: environment,
             fileManager: fileManager,
             homeDirectory: homeDirectory
@@ -647,6 +670,7 @@ extension LocalAgentProviderRouting {
             requestedProvider: requestedProvider,
             userRequestText: userRequestText,
             title: title,
+            treatRequestedAsExplicit: treatRequestedAsExplicit,
             environment: environment,
             fileManager: fileManager,
             homeDirectory: homeDirectory

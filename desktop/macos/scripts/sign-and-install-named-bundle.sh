@@ -21,7 +21,7 @@ CLEAN_BUNDLE="$CLEAN_DIR/${APP_NAME}.app"
 
 cleanup() {
   rm -f "$ENTITLEMENTS"
-  rm -rf "$CLEAN_DIR" "$STAGING_BUNDLE" "$OLD_BUNDLE"
+  rm -rf "$CLEAN_DIR" "${STAGING_BUNDLE:-}" "${OLD_BUNDLE:-}"
 }
 trap cleanup EXIT
 

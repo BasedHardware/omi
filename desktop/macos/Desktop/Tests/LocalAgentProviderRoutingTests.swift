@@ -116,4 +116,58 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
         XCTAssertFalse(LocalAgentProviderRouting.isRetriableSpawnFailure("Could not find the email thread"))
         XCTAssertFalse(LocalAgentProviderRouting.isRetriableSpawnFailure("Could not parse adapter response: invalid JSON"))
     }
+
+    func testNegatedProviderMentionDoesNotRouteToThatProvider() {
+        let resolution = LocalAgentProviderRouting.resolveSpawn(
+            brief: "write a script",
+            requestedProvider: nil,
+            userRequestText: "don't use hermes, use codex",
+            title: nil,
+            environment: [:],
+            fileManager: FileManager(),
+            homeDirectory: "/tmp/omi-routing-test"
+        )
+
+        guard case .setupRequired(let provider, _, _) = resolution else {
+            return XCTFail("Expected setupRequired for codex (not installed), got \(resolution)")
+        }
+        XCTAssertEqual(provider, .codex, "should route to the positively-requested provider, not the negated one")
+    }
+
+    func testChatToolProviderArgTreatedAsExplicit() {
+        let resolution = LocalAgentProviderRouting.resolveSpawn(
+            brief: "write a script",
+            requestedProvider: .hermes,
+            userRequestText: nil,
+            title: nil,
+            treatRequestedAsExplicit: true,
+            environment: [:],
+            fileManager: FileManager(),
+            homeDirectory: "/tmp/omi-routing-test"
+        )
+
+        guard case .setupRequired(let provider, _, _) = resolution else {
+            return XCTFail("Expected setupRequired for hermes (not installed), got \(resolution)")
+        }
+        XCTAssertEqual(provider, .hermes, "chat tool's provider arg should be treated as explicit")
+    }
+
+    func testChatToolProviderArgIgnoredWhenNotExplicit() {
+        let env = ["OMI_CODEX_ADAPTER_COMMAND": "/tmp/codex"]
+        let resolution = LocalAgentProviderRouting.resolveSpawn(
+            brief: "write a python script",
+            requestedProvider: .openclaw,
+            userRequestText: nil,
+            title: nil,
+            treatRequestedAsExplicit: false,
+            environment: env,
+            fileManager: FileManager(),
+            homeDirectory: "/tmp/omi-routing-test"
+        )
+
+        guard case .spawn(let plan) = resolution else {
+            return XCTFail("Expected spawn via task-based ranking, got \(resolution)")
+        }
+        XCTAssertEqual(plan.selectedProvider, .codex, "without explicit intent, task-based ranking should pick codex for coding, not the model's openclaw")
+    }
 }
