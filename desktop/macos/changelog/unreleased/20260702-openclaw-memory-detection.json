@@ -1,0 +1,3 @@
+{
+  "change": "Fixed OpenClaw and Hermes memory-bank setup so local installs are detected safely and Omi MCP wiring is updated deterministically."
+}
