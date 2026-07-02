@@ -96,7 +96,15 @@ def _desktop_transcribe_isolation():
     everything loaded here on exit."""
     import sys as _sys
 
-    _saved_keys = set(_sys.modules)
+    # Full object snapshot, not just a key set: a prior test file may have
+    # imported the real ``utils.stt.speaker_embedding`` / ``utils.conversations.factory``
+    # which this fixture replaces with ModuleType stubs. Evicting only *new* keys
+    # (the original ``_saved_keys = set(_sys.modules)`` approach) leaves those stubs
+    # in place — the real module object is never restored and the hermeticity guard
+    # flags them as leaked stubs shadowing real source. Mirroring the sanctioned
+    # ``stub_modules`` teardown: evict new keys AND restore swapped values.
+    _saved_modules = dict(_sys.modules)
+    _saved_keys = set(_saved_modules)
     try:
 
         _restore_package_paths()
@@ -399,6 +407,13 @@ def _desktop_transcribe_isolation():
         # evict modules added during the block, restoring process state
         for _k in list(_sys2.modules.keys() - _saved_keys):
             _sys2.modules.pop(_k, None)
+
+        # restore existing keys whose object was swapped in place by this fixture
+        # (e.g. ``utils.stt.speaker_embedding`` replaced with a ModuleType stub)
+        for _k, _orig in _saved_modules.items():
+            _cur = _sys2.modules.get(_k)
+            if _cur is not None and _cur is not _orig:
+                _sys2.modules[_k] = _orig
 
 
 # ---------------------------------------------------------------------------
