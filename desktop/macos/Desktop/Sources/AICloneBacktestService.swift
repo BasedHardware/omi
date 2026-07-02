@@ -172,6 +172,16 @@ actor AICloneBacktestService {
     return result
   }
 
+  /// Score one (them, actual, predicted) triple with the standard judge — exposed for the
+  /// harness so stored predictions can be re-judged (variance measurement) without
+  /// re-predicting. Returns the 0–1 normalized score.
+  func judgeOnce(
+    them: String, actual: String, predicted: String, context: [ConversationTurn]
+  ) async throws -> (score: Double, reasoning: String, topicMatch: Bool) {
+    let verdict = try await judge(them: them, actual: actual, predicted: predicted, context: context)
+    return (verdict.score / 100.0, verdict.reasoning, verdict.topicMatch)
+  }
+
   /// Ask the model to rate VOICE plausibility (not topic match) 0–100, plus whether the
   /// prediction matched the real reply's topic and a one-sentence justification.
   private func judge(

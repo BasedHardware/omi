@@ -57,6 +57,23 @@ enum AICloneHarness {
     }
 
     registry.register(
+      name: "ai_clone_rejudge",
+      summary: "Re-score an existing run report's predictions N times each (judge variance)",
+      params: ["report", "samples", "out"]
+    ) { params in
+      guard !runInFlight else { return ["error": "a run is already in flight"] }
+      guard let report = params["report"] else { return ["error": "missing 'report'"] }
+      let samples = Int(params["samples"] ?? "") ?? 3
+      let out = params["out"] ?? (report + ".rejudged.json")
+      runInFlight = true
+      Task.detached(priority: .userInitiated) {
+        defer { Task { @MainActor in runInFlight = false } }
+        await Self.executeRejudge(report: report, samples: samples, out: out)
+      }
+      return ["started": "true", "out": out]
+    }
+
+    registry.register(
       name: "ai_clone_respond",
       summary: "Predict a reply to 'message' using the trained persona for contact 'rank'",
       params: ["rank", "message"]
@@ -190,6 +207,58 @@ enum AICloneHarness {
       progress("report written to \(out)")
     } catch {
       progress("FAILED: \(error.localizedDescription)")
+      try? writeJSON(["error": error.localizedDescription], to: out)
+    }
+  }
+
+  /// Re-judge every pair in a stored report `samples` times and write per-pair mean
+  /// scores plus the overall mean — same predictions, tighter measurement.
+  private static func executeRejudge(report: String, samples: Int, out: String) async {
+    let progressPath = out + ".progress"
+    FileManager.default.createFile(atPath: progressPath, contents: nil)
+    do {
+      guard let data = FileManager.default.contents(atPath: report),
+        let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let pairs = parsed["pairs"] as? [[String: Any]]
+      else {
+        try writeJSON(["error": "unreadable report \(report)"], to: out)
+        return
+      }
+
+      var rejudged: [[String: Any]] = []
+      var means: [Double] = []
+      for (index, pair) in pairs.enumerated() {
+        guard let them = pair["them"] as? String,
+          let actual = pair["actual"] as? String,
+          let predicted = pair["predicted"] as? String, !predicted.isEmpty
+        else { continue }
+        let context: [ConversationTurn] = (pair["context"] as? [String] ?? []).compactMap { line in
+          if line.hasPrefix("me: ") { return ConversationTurn(isFromMe: true, text: String(line.dropFirst(4))) }
+          if line.hasPrefix("them: ") { return ConversationTurn(isFromMe: false, text: String(line.dropFirst(6))) }
+          return nil
+        }
+        var scores: [Double] = []
+        for _ in 0..<samples {
+          if let verdict = try? await AICloneBacktestService.shared.judgeOnce(
+            them: them, actual: actual, predicted: predicted, context: context)
+          {
+            scores.append(verdict.score)
+          }
+        }
+        guard !scores.isEmpty else { continue }
+        let mean = scores.reduce(0, +) / Double(scores.count)
+        means.append(mean)
+        rejudged.append(["them": them, "predicted": predicted, "scores": scores, "mean": mean])
+        appendLine("pair \(index + 1)/\(pairs.count) mean=\(String(format: "%.3f", mean))", to: progressPath)
+      }
+
+      let overall = means.isEmpty ? 0 : means.reduce(0, +) / Double(means.count)
+      try writeJSON(
+        ["report": report, "samples": samples, "averageScore": overall, "pairs": rejudged],
+        to: out)
+      appendLine(String(format: "done overall=%.3f", overall), to: progressPath)
+    } catch {
+      appendLine("FAILED: \(error.localizedDescription)", to: progressPath)
       try? writeJSON(["error": error.localizedDescription], to: out)
     }
   }
