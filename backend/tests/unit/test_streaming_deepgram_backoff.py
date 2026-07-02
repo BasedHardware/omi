@@ -510,12 +510,18 @@ def test_concurrent_send_and_keepalive():
     mock_conn.keep_alive.return_value = True
     mock_conn.send.return_value = True
 
+    # Auto-advancing clock: each call jumps forward past keepalive_interval so
+    # elapsed always exceeds the threshold even when sends reset _last_activity.
+    # This simulates real monotonic time where gaps between lock acquisitions
+    # allow enough time to pass for keepalive to fire.
     fake_time = [0.0]
     lock = threading.Lock()
 
     def clock():
         with lock:
-            return fake_time[0]
+            v = fake_time[0]
+            fake_time[0] += 3.0
+            return v
 
     cfg = KeepaliveConfig(keepalive_interval_sec=2.0, check_period_sec=0.01)
     safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
@@ -530,13 +536,9 @@ def test_concurrent_send_and_keepalive():
                 except Exception as e:
                     errors.append(e)
 
-        # Advance clock past keepalive interval FIRST so keepalive fires
-        with lock:
-            fake_time[0] = 3.0
-
         import time
 
-        time.sleep(0.3)  # Let keepalive thread fire (generous under CI load)
+        time.sleep(0.2)  # Let keepalive thread fire during idle
 
         # Verify keepalive actually fired during this idle window
         assert mock_conn.keep_alive.call_count >= 1, "keepalive must fire before concurrent sends start"
@@ -546,10 +548,7 @@ def test_concurrent_send_and_keepalive():
         threads = [threading.Thread(target=sender) for _ in range(3)]
         for t in threads:
             t.start()
-        # Advance clock again so keepalive fires during contention
-        with lock:
-            fake_time[0] = 6.0
-        time.sleep(0.3)  # Let keepalive thread fire during send contention
+        time.sleep(0.2)  # Let keepalive thread fire during send contention
         for t in threads:
             t.join(timeout=5.0)
 
