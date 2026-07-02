@@ -17,11 +17,12 @@ from utils.executors import db_executor, run_blocking
 import google.auth
 import google.auth.transport.requests
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from database.users import get_agent_vm
-from utils.other.endpoints import get_current_user_uid, with_rate_limit
+from utils.auth_middleware import require_firebase
+from utils.other.endpoints import rate_limit_dep
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tools.app_tools import load_app_tools
@@ -29,7 +30,7 @@ from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 GCE_PROJECT = "based-hardware"
 
@@ -145,8 +146,8 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
 
 
 @router.get("/v1/agent/vm-status")
-def get_vm_status(uid: str = Depends(get_current_user_uid)):
-    """Return the user's agent VM info from Firestore."""
+def get_vm_status(request: Request):
+    uid = request.state.uid
     vm = get_agent_vm(uid)
     logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
     if not vm or vm.get("status") != "ready":
@@ -158,8 +159,8 @@ def get_vm_status(uid: str = Depends(get_current_user_uid)):
 
 
 @router.post("/v1/agent/vm-ensure")
-async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
-    """Check VM status; if stopped/terminated, restart it in the background."""
+async def ensure_vm(request: Request, background_tasks: BackgroundTasks):
+    uid = request.state.uid
     vm = await run_blocking(db_executor, get_agent_vm, uid)
     if not vm:
         return {"has_vm": False}
@@ -194,8 +195,8 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
 
 
 @router.post("/v1/agent/keepalive")
-async def keepalive(uid: str = Depends(get_current_user_uid)):
-    """Ping the VM's /ping endpoint to reset its idle auto-stop timer."""
+async def keepalive(request: Request):
+    uid = request.state.uid
     vm = await run_blocking(db_executor, get_agent_vm, uid)
     if not vm or vm.get("status") != "ready":
         return {"ok": False, "reason": "no_vm"}
@@ -240,8 +241,8 @@ def _tool_schema(t) -> dict:
 
 
 @router.get("/v1/agent/tools")
-def list_tools(uid: str = Depends(get_current_user_uid)):
-    """Return all available tool definitions for a user."""
+def list_tools(request: Request):
+    uid = request.state.uid
     tools = []
 
     for t in CORE_TOOLS:
@@ -267,12 +268,16 @@ class ExecuteToolResponse(BaseModel):
     error: str | None = None
 
 
-@router.post("/v1/agent/execute-tool", response_model=ExecuteToolResponse)
+@router.post(
+    "/v1/agent/execute-tool",
+    response_model=ExecuteToolResponse,
+    dependencies=[Depends(rate_limit_dep("agent:execute_tool"))],
+)
 async def execute_tool(
+    request: Request,
     body: ExecuteToolRequest,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
 ):
-    """Execute a named tool and return its result."""
+    uid = request.state.uid
     # Set up agent_config_context so tools can resolve the UID
     config = {
         "configurable": {

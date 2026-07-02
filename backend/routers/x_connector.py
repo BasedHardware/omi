@@ -21,10 +21,12 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from utils import x_connector
+from utils.auth_middleware import require_firebase
 from utils.executors import start_background_task
-from utils.other import endpoints as auth
 
 router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_public_router = APIRouter()
 logger = logging.getLogger(__name__)
 
 DEFAULT_DEEP_LINK = 'omi://x/callback'
@@ -36,11 +38,12 @@ class OAuthUrlResponse(BaseModel):
     error: Optional[str] = None
 
 
-@router.get('/v1/x/oauth-url', response_model=OAuthUrlResponse, tags=['x'])
+@_firebase_router.get('/v1/x/oauth-url', response_model=OAuthUrlResponse, tags=['x'])
 def x_oauth_url(
+    request: Request,
     success_redirect_url: Optional[str] = Query(None),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     if not x_connector.is_oauth_configured():
         return OAuthUrlResponse(success=False, error='x_oauth_not_configured')
     try:
@@ -67,7 +70,7 @@ display:flex;height:100vh;margin:0;align-items:center;justify-content:center;tex
     return HTMLResponse(content=html)
 
 
-@router.get('/v1/x/oauth/callback', response_class=HTMLResponse, tags=['x'])
+@_public_router.get('/v1/x/oauth/callback', response_class=HTMLResponse, tags=['x'])
 async def x_oauth_callback(
     request: Request,
     code: Optional[str] = Query(None),
@@ -103,17 +106,24 @@ async def x_oauth_callback(
         return _redirect_html(f'{deep_link}?error=exchange_failed', False, 'Connection failed')
 
 
-@router.get('/v1/x/connection-status', tags=['x'])
-def x_connection_status(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/x/connection-status', tags=['x'])
+def x_connection_status(request: Request):
+    uid = request.state.uid
     return x_connector.connection_status(uid)
 
 
-@router.post('/v1/x/sync', tags=['x'])
-async def x_sync(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/x/sync', tags=['x'])
+async def x_sync(request: Request):
+    uid = request.state.uid
     return await x_connector.sync_x_for_user(uid)
 
 
-@router.post('/v1/x/disconnect', tags=['x'])
-def x_disconnect(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/x/disconnect', tags=['x'])
+def x_disconnect(request: Request):
+    uid = request.state.uid
     x_connector.disconnect(uid)
     return {'success': True}
+
+
+router.include_router(_firebase_router)
+router.include_router(_public_router)

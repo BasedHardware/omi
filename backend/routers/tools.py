@@ -20,11 +20,12 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 import database.vector_db as vector_db
-from utils.other.endpoints import get_current_user_uid, with_rate_limit
+from utils.auth_middleware import require_firebase
+from utils.other.endpoints import rate_limit_dep
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
@@ -38,7 +39,7 @@ from utils.retrieval.tools.calendar_tools import create_calendar_event_tool
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 # --------------- response envelope ---------------
@@ -103,13 +104,14 @@ class CreateCalendarEventRequest(BaseModel):
 
 @router.get("/v1/tools/conversations", response_model=ToolResponse)
 def get_conversations(
+    request: Request,
     start_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     limit: int = Query(default=20, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     include_transcript: bool = Query(default=True),
-    uid: str = Depends(get_current_user_uid),
 ):
+    uid = request.state.uid
     result = get_conversations_text(
         uid=uid,
         start_date=start_date,
@@ -121,11 +123,16 @@ def get_conversations(
     return _ok("get_conversations", result)
 
 
-@router.post("/v1/tools/conversations/search", response_model=ToolResponse)
+@router.post(
+    "/v1/tools/conversations/search",
+    response_model=ToolResponse,
+    dependencies=[Depends(rate_limit_dep("tools:search"))],
+)
 def search_conversations(
+    request: Request,
     body: SearchConversationsRequest,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
+    uid = request.state.uid
     result = search_conversations_text(
         uid=uid,
         query=body.query,
@@ -142,11 +149,16 @@ class SearchChunksRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=30)
 
 
-@router.post("/v1/tools/conversations/search-chunks", response_model=ToolResponse)
+@router.post(
+    "/v1/tools/conversations/search-chunks",
+    response_model=ToolResponse,
+    dependencies=[Depends(rate_limit_dep("tools:search"))],
+)
 def search_conversation_chunks(
+    request: Request,
     body: SearchChunksRequest,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
+    uid = request.state.uid
     """Semantic search over RAW transcript chunks (verbatim evidence with dates).
 
     Complements /conversations/search, which matches against conversation summaries:
@@ -168,12 +180,13 @@ def search_conversation_chunks(
 
 @router.get("/v1/tools/memories", response_model=ToolResponse)
 def get_memories(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     start_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
-    uid: str = Depends(get_current_user_uid),
 ):
+    uid = request.state.uid
     result = get_memories_text(
         uid=uid,
         limit=limit,
@@ -185,11 +198,14 @@ def get_memories(
     return _ok("get_memories", result)
 
 
-@router.post("/v1/tools/memories/search", response_model=ToolResponse)
+@router.post(
+    "/v1/tools/memories/search", response_model=ToolResponse, dependencies=[Depends(rate_limit_dep("tools:search"))]
+)
 def search_memories(
+    request: Request,
     body: SearchMemoriesRequest,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
+    uid = request.state.uid
     result = search_memories_text(
         uid=uid,
         query=body.query,
@@ -204,6 +220,7 @@ def search_memories(
 
 @router.get("/v1/tools/action-items", response_model=ToolResponse)
 def get_action_items(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     completed: Optional[bool] = Query(default=None),
@@ -212,8 +229,8 @@ def get_action_items(
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     due_start_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     due_end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
-    uid: str = Depends(get_current_user_uid),
 ):
+    uid = request.state.uid
     result = get_action_items_text(
         uid=uid,
         limit=limit,
@@ -228,11 +245,14 @@ def get_action_items(
     return _ok("get_action_items", result)
 
 
-@router.post("/v1/tools/action-items", response_model=ToolResponse)
+@router.post(
+    "/v1/tools/action-items", response_model=ToolResponse, dependencies=[Depends(rate_limit_dep("tools:mutate"))]
+)
 def create_action_item(
+    request: Request,
     body: CreateActionItemRequest,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
 ):
+    uid = request.state.uid
     result = create_action_item_text(
         uid=uid,
         description=body.description,
@@ -242,12 +262,17 @@ def create_action_item(
     return _ok("create_action_item", result)
 
 
-@router.patch("/v1/tools/action-items/{action_item_id}", response_model=ToolResponse)
+@router.patch(
+    "/v1/tools/action-items/{action_item_id}",
+    response_model=ToolResponse,
+    dependencies=[Depends(rate_limit_dep("tools:mutate"))],
+)
 def update_action_item(
+    request: Request,
     action_item_id: str,
     body: UpdateActionItemRequest,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
 ):
+    uid = request.state.uid
     result = update_action_item_text(
         uid=uid,
         action_item_id=action_item_id,
@@ -261,11 +286,14 @@ def update_action_item(
 # --------------- calendar endpoints ---------------
 
 
-@router.post("/v1/tools/calendar-events", response_model=ToolResponse)
+@router.post(
+    "/v1/tools/calendar-events", response_model=ToolResponse, dependencies=[Depends(rate_limit_dep("tools:mutate"))]
+)
 async def create_calendar_event(
+    request: Request,
     body: CreateCalendarEventRequest,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
 ):
+    uid = request.state.uid
     result = await create_calendar_event_tool.ainvoke(
         {
             "title": body.title,

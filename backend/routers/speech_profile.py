@@ -3,12 +3,12 @@ from typing import Optional
 
 import av
 
-from fastapi import APIRouter, UploadFile, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from pydub import AudioSegment
 
 from database.redis_db import set_speech_profile_duration
 from database.users import set_user_speaker_embedding
-from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
 from utils.other.storage import (
     upload_profile_audio,
     get_profile_audio_if_exists,
@@ -24,16 +24,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 @router.get('/v3/speech-profile', tags=['v3'])
-def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
+def has_speech_profile(request: Request):
+    uid = request.state.uid
     return {'has_profile': get_user_has_speech_profile(uid)}
 
 
 @router.get('/v4/speech-profile', tags=['v3'])
-def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
+def get_speech_profile(request: Request):
+    uid = request.state.uid
     return {'url': get_profile_audio_if_exists(uid, download=False)}
 
 
@@ -46,7 +48,8 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v3/upload-audio', tags=['v3'])
-def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
+def upload_profile(request: Request, file: UploadFile):
+    uid = request.state.uid
     os.makedirs(f'_temp/{uid}', exist_ok=True)
     file_path = f"_temp/{uid}/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -89,8 +92,9 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 
 @router.delete('/v3/speech-profile/expand', tags=['v3'])
 def delete_extra_speech_profile_sample(
-    memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    request: Request, memory_id: str, segment_idx: int, person_id: Optional[str] = None
 ):
+    uid = request.state.uid
     logger.info(f'delete_extra_speech_profile_sample {memory_id} {segment_idx} {person_id} {uid}')
     file_name = f'{memory_id}_segment_{segment_idx}.wav'
     if person_id == 'null':
@@ -105,7 +109,8 @@ def delete_extra_speech_profile_sample(
 
 
 @router.get('/v3/speech-profile/expand', tags=['v3'])
-def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+def get_extra_speech_profile_samples(request: Request, person_id: Optional[str] = None):
+    uid = request.state.uid
     if person_id:
         return get_user_person_speech_samples(uid, person_id)
     return get_additional_profile_recordings(uid)

@@ -7,17 +7,17 @@ Provides endpoints for listing Google Calendar events for the event picker UI.
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 import database.users as users_db
 from models.conversation import CalendarEventLink
+from utils.auth_middleware import require_firebase
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
-from utils.other import endpoints as auth
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events
 from utils.retrieval.tools.google_utils import refresh_google_token
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 class GoogleCalendarEvent(BaseModel):
@@ -72,16 +72,17 @@ def _event_to_response(event: dict) -> Optional[GoogleCalendarEvent]:
     tags=['google_calendar'],
 )
 async def list_google_calendar_events(
+    request: Request,
     time_min: Optional[datetime] = Query(None, description="Minimum time for events (ISO format)"),
     time_max: Optional[datetime] = Query(None, description="Maximum time for events (ISO format)"),
     q: Optional[str] = Query(None, description="Search query to filter events"),
     max_results: int = Query(20, ge=1, le=100, description="Maximum number of events to return"),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """List Google Calendar events within a time range.
 
     Used by the event picker UI when manually linking a conversation to a calendar event.
     """
+    uid = request.state.uid
     access_token, integration = _get_google_calendar_token(uid)
 
     if time_min and time_min.tzinfo is None:

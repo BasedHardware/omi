@@ -10,7 +10,7 @@ from utils.llm.knowledge_graph import extract_knowledge_from_memory, rebuild_kno
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
-from utils.other import endpoints as auth
+from utils.other.endpoints import rate_limit_dep
 from utils.auth_middleware import require_firebase
 
 router = APIRouter(dependencies=[Depends(require_firebase)])
@@ -69,7 +69,7 @@ def _rebuild_graph_task(uid: str, user_name: str):
     '/v1/knowledge-graph/rebuild',
     tags=['knowledge_graph'],
     response_model=RebuildResponse,
-    dependencies=[Depends(auth.with_rate_limit("knowledge_graph:rebuild"))],
+    dependencies=[Depends(rate_limit_dep("knowledge_graph:rebuild"))],
 )
 def rebuild_graph(request: Request, background_tasks: BackgroundTasks):
     uid = request.state.uid

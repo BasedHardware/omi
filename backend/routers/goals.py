@@ -8,11 +8,12 @@ from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from database import goals as goals_db
-from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
+from utils.other.endpoints import rate_limit_dep
 from utils.request_validation import HistoryDays
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
@@ -20,7 +21,7 @@ from utils.llm.goals import (
     extract_and_update_goal_progress,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 class GoalType(str, Enum):
@@ -87,7 +88,8 @@ class AdviceResponse(BaseModel):
 
 
 @router.get('/v1/goals', tags=['goals'])
-def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
+def get_current_goal(http_request: Request) -> Optional[dict]:
+    uid = http_request.state.uid
     """Get the current active goal for the user (backward compatibility)."""
     goal = goals_db.get_user_goal(uid)
     if goal:
@@ -100,7 +102,8 @@ def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[
 
 
 @router.get('/v1/goals/all', tags=['goals'])
-def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
+def get_all_goals(http_request: Request) -> List[dict]:
+    uid = http_request.state.uid
     """Get all active goals for the user (up to 4)."""
     goals = goals_db.get_user_goals(uid, limit=4)
 
@@ -115,7 +118,8 @@ def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
 
 
 @router.post('/v1/goals', tags=['goals'])
-def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+def create_goal(http_request: Request, goal: GoalCreate) -> dict:
+    uid = http_request.state.uid
     """Create a new goal. This will deactivate any existing active goal."""
     goal_data = {
         'id': f"goal_{uuid.uuid4().hex[:12]}",
@@ -140,7 +144,8 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
 
 
 @router.patch('/v1/goals/{goal_id}', tags=['goals'])
-def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+def update_goal(http_request: Request, goal_id: str, updates: GoalUpdate) -> dict:
+    uid = http_request.state.uid
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
 
@@ -163,10 +168,11 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
 
 @router.patch('/v1/goals/{goal_id}/progress', tags=['goals'])
 def update_goal_progress(
+    http_request: Request,
     goal_id: str,
     current_value: float = Query(..., description="New progress value"),
-    uid: str = Depends(auth.get_current_user_uid),
 ) -> dict:
+    uid = http_request.state.uid
     """Update the progress value of a goal."""
     updated_goal = goals_db.update_goal_progress(uid, goal_id, current_value)
 
@@ -183,7 +189,8 @@ def update_goal_progress(
 
 
 @router.get('/v1/goals/{goal_id}/history', tags=['goals'])
-def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
+def get_goal_history(http_request: Request, goal_id: str, days: HistoryDays = 30) -> List[dict]:
+    uid = http_request.state.uid
     """Get progress history for a goal."""
     history = goals_db.get_goal_history(uid, goal_id, days)
 
@@ -196,7 +203,8 @@ def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(au
 
 
 @router.delete('/v1/goals/{goal_id}', tags=['goals'])
-def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+def delete_goal(http_request: Request, goal_id: str) -> dict:
+    uid = http_request.state.uid
     """Delete a goal."""
     success = goals_db.delete_goal(uid, goal_id)
 
@@ -206,16 +214,16 @@ def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> 
     return {"success": True, "deleted_id": goal_id}
 
 
-@router.get('/v1/goals/suggest', tags=['goals'])
-def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> dict:
+@router.get('/v1/goals/suggest', tags=['goals'], dependencies=[Depends(rate_limit_dep("goals:suggest"))])
+def suggest_goal(http_request: Request) -> dict:
+    uid = http_request.state.uid
     """Generate an AI-suggested goal based on user's memories and conversations."""
     return suggest_goal_llm(uid)
 
 
-@router.get('/v1/goals/{goal_id}/advice', tags=['goals'])
-def get_goal_advice(
-    goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
-) -> dict:
+@router.get('/v1/goals/{goal_id}/advice', tags=['goals'], dependencies=[Depends(rate_limit_dep("goals:advice"))])
+def get_goal_advice(http_request: Request, goal_id: str) -> dict:
+    uid = http_request.state.uid
     """Get AI-generated actionable advice for achieving a goal."""
     try:
         advice = get_goal_advice_llm(uid, goal_id)
@@ -224,16 +232,15 @@ def get_goal_advice(
         raise HTTPException(status_code=404, detail="Goal not found")
 
 
-@router.get('/v1/goals/advice', tags=['goals'])
-def get_current_goal_advice(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
-) -> dict:
+@router.get('/v1/goals/advice', tags=['goals'], dependencies=[Depends(rate_limit_dep("goals:advice"))])
+def get_current_goal_advice(http_request: Request) -> dict:
+    uid = http_request.state.uid
     """Get AI-generated advice for the current active goal."""
     goal = goals_db.get_user_goal(uid)
     if not goal:
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return get_goal_advice(goal['id'], uid)
+    return get_goal_advice(http_request, goal['id'])
 
 
 class ProgressExtractRequest(BaseModel):
@@ -242,16 +249,14 @@ class ProgressExtractRequest(BaseModel):
     text: str
 
 
-@router.post('/v1/goals/extract-progress', tags=['goals'])
-def extract_and_update_progress(
-    request: ProgressExtractRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),
-) -> dict:
+@router.post('/v1/goals/extract-progress', tags=['goals'], dependencies=[Depends(rate_limit_dep("goals:extract"))])
+def extract_and_update_progress(http_request: Request, body: ProgressExtractRequest) -> dict:
+    uid = http_request.state.uid
     """
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
-    result = extract_and_update_goal_progress(uid, request.text)
+    result = extract_and_update_goal_progress(uid, body.text)
     if result is None:
         return {'updated': False, 'reason': 'No active goal'}
 

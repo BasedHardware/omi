@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 import database.wrapped as wrapped_db
 from database.wrapped import WrappedStatus
-from utils.other import endpoints as auth
+from utils.other.endpoints import rate_limit_dep
 from utils.wrapped.generate_2025 import generate_wrapped_2025
 import logging
 from utils.auth_middleware import require_firebase
@@ -81,7 +81,7 @@ def get_wrapped_status(request: Request, year: int):
     '/v1/wrapped/{year}/generate',
     response_model=GenerateWrappedResponse,
     tags=['wrapped'],
-    dependencies=[Depends(auth.with_rate_limit("wrapped:generate"))],
+    dependencies=[Depends(rate_limit_dep("wrapped:generate"))],
 )
 def generate_wrapped(request: Request, year: int):
     uid = request.state.uid

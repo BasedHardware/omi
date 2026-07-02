@@ -49,7 +49,8 @@ from dependencies import (
     get_uid_with_goals_write,
 )
 from utils.apps import update_personas_async
-from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.auth_middleware import require_firebase
+from utils.other.endpoints import rate_limit_dep
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
@@ -81,7 +82,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_api_key_router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 router = APIRouter()
+router.include_router(_api_key_router)
+router.include_router(_firebase_router)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -92,12 +97,12 @@ _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6f
 # ******************************************************
 
 
-@router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["API Keys"], operation_id="listApiKeys")
+@_api_key_router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["API Keys"], operation_id="listApiKeys")
 def get_keys(uid: str = Depends(get_current_user_id)):
     return dev_api_key_db.get_dev_keys_for_user(uid)
 
 
-@router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["API Keys"], operation_id="createApiKey")
+@_api_key_router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["API Keys"], operation_id="createApiKey")
 def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
     """
     Create a new Developer API key with optional scopes.
@@ -129,7 +134,7 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
-@router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["API Keys"], operation_id="revokeApiKey")
+@_api_key_router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["API Keys"], operation_id="revokeApiKey")
 def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     dev_api_key_db.delete_dev_key(uid, key_id)
     invalidate_developer_cache(uid)
@@ -278,7 +283,7 @@ class BatchMemoriesResponse(BaseModel):
     created_count: int
 
 
-@router.get(
+@_api_key_router.get(
     "/v1/dev/user/memories",
     tags=["Memories"],
     response_model=List[DeveloperMemory],
@@ -390,7 +395,7 @@ def get_memories(
     return valid_memories
 
 
-@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
+@_api_key_router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
 def search_memories_vector(
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
     query: str = Query(..., min_length=1),
@@ -495,7 +500,9 @@ def search_memories_vector(
     }
 
 
-@router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
+@_api_key_router.post(
+    "/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory"
+)
 def create_memory(
     request: CreateMemoryRequest,
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
@@ -587,7 +594,7 @@ def create_memory(
     )
 
 
-@router.post(
+@_api_key_router.post(
     "/v1/dev/user/memories/batch",
     response_model=BatchMemoriesResponse,
     tags=["Memories"],
@@ -666,7 +673,7 @@ def create_memories_batch(
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
-@router.delete("/v1/dev/user/memories/{memory_id}", tags=["Memories"], operation_id="deleteMemory")
+@_api_key_router.delete("/v1/dev/user/memories/{memory_id}", tags=["Memories"], operation_id="deleteMemory")
 def delete_memory(
     memory_id: str,
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
@@ -698,7 +705,7 @@ def delete_memory(
     return {"success": True}
 
 
-@router.patch(
+@_api_key_router.patch(
     "/v1/dev/user/memories/{memory_id}",
     response_model=DeveloperMemory,
     tags=["Memories"],
@@ -842,7 +849,7 @@ class BatchActionItemsResponse(BaseModel):
     created_count: int
 
 
-@router.get(
+@_api_key_router.get(
     "/v1/dev/user/action-items",
     tags=["Action Items"],
     response_model=List[ActionItemResponse],
@@ -903,7 +910,7 @@ def get_action_items(
     return valid_action_items
 
 
-@router.post(
+@_api_key_router.post(
     "/v1/dev/user/action-items",
     response_model=ActionItemResponse,
     tags=["Action Items"],
@@ -948,7 +955,7 @@ def create_action_item(
     return ActionItemResponse(**action_item)
 
 
-@router.post(
+@_api_key_router.post(
     "/v1/dev/user/action-items/batch",
     response_model=BatchActionItemsResponse,
     tags=["Action Items"],
@@ -1005,7 +1012,7 @@ def create_action_items_batch(
     return BatchActionItemsResponse(action_items=created_items, created_count=len(created_items))
 
 
-@router.delete(
+@_api_key_router.delete(
     "/v1/dev/user/action-items/{action_item_id}",
     tags=["Action Items"],
     operation_id="deleteActionItem",
@@ -1029,7 +1036,7 @@ def delete_action_item(
     return {"success": True}
 
 
-@router.patch(
+@_api_key_router.patch(
     "/v1/dev/user/action-items/{action_item_id}",
     response_model=ActionItemResponse,
     tags=["Action Items"],
@@ -1259,7 +1266,9 @@ class DeveloperFolder(BaseModel):
     conversation_count: int = 0
 
 
-@router.get("/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders")
+@_api_key_router.get(
+    "/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders"
+)
 def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     """
     Get all folders for the authenticated user.
@@ -1284,7 +1293,7 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     return folders_db.get_folders(uid)
 
 
-@router.get(
+@_api_key_router.get(
     "/v1/dev/user/conversations",
     response_model=List[Conversation],
     tags=["Conversations"],
@@ -1361,7 +1370,7 @@ def get_conversations(
     return valid_conversations
 
 
-@router.post(
+@_api_key_router.post(
     "/v1/dev/user/conversations",
     response_model=ConversationResponse,
     tags=["Conversations"],
@@ -1444,7 +1453,7 @@ def create_conversation(
     )
 
 
-@router.get(
+@_api_key_router.get(
     "/v1/dev/user/conversations/{conversation_id}",
     response_model=Conversation,
     tags=["Conversations"],
@@ -1675,17 +1684,22 @@ def _create_conversation_from_segments(
     )
 
 
-@router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
+@_firebase_router.post(
+    "/v1/conversations/from-segments",
+    response_model=ConversationResponse,
+    tags=["conversations"],
+    dependencies=[Depends(rate_limit_dep("conversations:from-segments"))],
+)
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).
 
     Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
     the conversation persisted, processed (memories/summaries), and synced across devices — exactly
     like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
+    uid = http_request.state.uid
     device_ctx = resolve_client_device_from_request(http_request)
     return _create_conversation_from_segments(
         uid,
@@ -1695,7 +1709,7 @@ def create_conversation_from_segments_user(
     )
 
 
-@router.post(
+@_api_key_router.post(
     "/v1/dev/user/conversations/from-segments",
     response_model=ConversationResponse,
     tags=["Conversations"],
@@ -1762,7 +1776,7 @@ def create_conversation_from_segments(
     )
 
 
-@router.delete(
+@_api_key_router.delete(
     "/v1/dev/user/conversations/{conversation_id}",
     tags=["Conversations"],
     operation_id="deleteConversation",
@@ -1788,7 +1802,7 @@ def delete_conversation_endpoint(
     return {"success": True}
 
 
-@router.patch(
+@_api_key_router.patch(
     "/v1/dev/user/conversations/{conversation_id}",
     response_model=Conversation,
     tags=["Conversations"],
@@ -1889,7 +1903,7 @@ def _serialize_goal_datetimes(goal: dict) -> dict:
     return goal
 
 
-@router.get("/v1/dev/user/goals", tags=["Goals"], response_model=List[GoalResponse], operation_id="listGoals")
+@_api_key_router.get("/v1/dev/user/goals", tags=["Goals"], response_model=List[GoalResponse], operation_id="listGoals")
 def get_goals(
     uid: str = Depends(get_uid_with_goals_read),
     limit: int = 10,
@@ -1909,7 +1923,9 @@ def get_goals(
     return [_serialize_goal_datetimes(g) for g in goals]
 
 
-@router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
+@_api_key_router.get(
+    "/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal"
+)
 def get_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_read),
@@ -1928,7 +1944,7 @@ def get_goal(
     return _serialize_goal_datetimes(goal)
 
 
-@router.post("/v1/dev/user/goals", tags=["Goals"], response_model=GoalResponse, operation_id="createGoal")
+@_api_key_router.post("/v1/dev/user/goals", tags=["Goals"], response_model=GoalResponse, operation_id="createGoal")
 def create_goal(
     request: CreateGoalRequest,
     uid: str = Depends(get_uid_with_goals_write),
@@ -1962,7 +1978,9 @@ def create_goal(
     return _serialize_goal_datetimes(created_goal)
 
 
-@router.patch("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="updateGoal")
+@_api_key_router.patch(
+    "/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="updateGoal"
+)
 def update_goal(
     goal_id: str,
     request: UpdateGoalRequest,
@@ -1995,7 +2013,7 @@ def update_goal(
     return _serialize_goal_datetimes(updated_goal)
 
 
-@router.patch(
+@_api_key_router.patch(
     "/v1/dev/user/goals/{goal_id}/progress",
     tags=["Goals"],
     response_model=GoalResponse,
@@ -2020,7 +2038,7 @@ def update_goal_progress(
     return _serialize_goal_datetimes(updated_goal)
 
 
-@router.get("/v1/dev/user/goals/{goal_id}/history", tags=["Goals"], operation_id="listGoalHistory")
+@_api_key_router.get("/v1/dev/user/goals/{goal_id}/history", tags=["Goals"], operation_id="listGoalHistory")
 def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
@@ -2041,7 +2059,7 @@ def get_goal_history(
     return history
 
 
-@router.delete("/v1/dev/user/goals/{goal_id}", tags=["Goals"], operation_id="deleteGoal")
+@_api_key_router.delete("/v1/dev/user/goals/{goal_id}", tags=["Goals"], operation_id="deleteGoal")
 def delete_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_write),

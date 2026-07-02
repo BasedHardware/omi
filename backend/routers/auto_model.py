@@ -4,11 +4,11 @@ import os
 import time
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
-from utils.other.endpoints import get_current_user_uid
+from utils.auth_middleware import require_firebase
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 logger = logging.getLogger(__name__)
 
 # "Auto" realtime-voice model selection.
@@ -77,13 +77,12 @@ async def _fetch_and_score():
 
 
 @router.get("/v1/auto/model-pick")
-async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
+async def auto_model_pick(request: Request):
     """Current best realtime-voice provider for 'Auto' users (daily-cached)."""
     now = time.time()
     if _cache["provider"] is None or (now - _cache["ts"]) > TTL_SECONDS:
-        # Serialize concurrent refreshes so a cache miss fires only one AA fetch.
         async with _cache_lock:
-            now = time.time()  # re-check after acquiring the lock
+            now = time.time()
             if _cache["provider"] is None or (now - _cache["ts"]) > TTL_SECONDS:
                 try:
                     provider, detail = await _fetch_and_score()

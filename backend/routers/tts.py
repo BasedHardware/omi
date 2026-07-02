@@ -14,19 +14,20 @@ import logging
 import os
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from database import redis_db
 from models.tts import TtsSynthesizeRequest
+from utils.auth_middleware import require_firebase
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
-from utils.other import endpoints as auth
+from utils.other.endpoints import rate_limit_dep
 from utils.executors import run_blocking, critical_executor
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 # Limits mirror desktop/macos/Backend-Rust/src/routes/tts.rs
 _TTS_BURST_PER_MINUTE = 50
@@ -44,12 +45,14 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
-@router.post('/v2/tts/synthesize', tags=['tts'])
-async def tts_synthesize(
-    req: TtsSynthesizeRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "tts:synthesize")),
-):
+@router.post(
+    '/v2/tts/synthesize',
+    tags=['tts'],
+    dependencies=[Depends(rate_limit_dep("tts:synthesize"))],
+)
+async def tts_synthesize(req: TtsSynthesizeRequest, request: Request):
     """Proxy a TTS request to ElevenLabs. Per-user rate limited."""
+    uid = request.state.uid
     api_key = os.getenv('ELEVENLABS_API_KEY')
     if not api_key:
         logger.error("tts_synthesize: ELEVENLABS_API_KEY not configured")
