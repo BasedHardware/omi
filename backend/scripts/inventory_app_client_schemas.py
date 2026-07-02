@@ -43,6 +43,10 @@ GENERATED_MARKERS = (
     'JsonSerializableGenerator',
     'DO NOT EDIT',
 )
+RAW_DECODE_RE = re.compile(
+    r'\bjsonDecode\s*\(|\bas\s+(?:Map|List)<[^>]+>|\b[A-Za-z_][A-Za-z0-9_]*\.fromJson\s*\(|\[[\'"][A-Za-z_][A-Za-z0-9_]*[\'"]\]'
+)
+WIRE_DECODE_RE = re.compile(r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(')
 
 
 @dataclass(frozen=True)
@@ -99,6 +103,24 @@ class OpenApiOperation:
         }
 
 
+@dataclass(frozen=True)
+class DartDecodeSite:
+    path: Path
+    line: int
+    kind: str
+    snippet: str
+    generated_backed: bool
+
+    def to_report(self) -> dict[str, Any]:
+        return {
+            'path': str(self.path.relative_to(ROOT_DIR)),
+            'line': self.line,
+            'kind': self.kind,
+            'snippet': self.snippet,
+            'generated_backed': self.generated_backed,
+        }
+
+
 def scan_dart_schema_file(path: Path) -> DartSchemaFile:
     text = path.read_text()
     return DartSchemaFile(
@@ -134,6 +156,41 @@ def scan_rest_dto_files() -> list[DartSchemaFile]:
 
 def scan_local_non_rest_schema_files() -> list[DartSchemaFile]:
     return [scan_dart_schema_file(path) for path in sorted(LOCAL_NON_REST_SCHEMA_FILES) if path.exists()]
+
+
+def decode_site_kind(line: str) -> str:
+    if 'jsonDecode' in line:
+        return 'jsonDecode'
+    if '.fromJson' in line:
+        return 'fromJson'
+    if ' as Map<' in line or ' as List<' in line:
+        return 'cast'
+    return 'field_access'
+
+
+def scan_dart_decode_sites() -> list[DartDecodeSite]:
+    paths = [*sorted(APP_SCHEMA_DIR.rglob('*.dart')), *sorted(APP_API_DIR.glob('*.dart'))]
+    paths.extend(path for path in MODEL_REST_DTO_FILES if path.exists())
+    sites: list[DartDecodeSite] = []
+    for path in paths:
+        if path.name.endswith('.gen.dart') or path.name.endswith('.g.dart') or path in LOCAL_NON_REST_SCHEMA_FILES:
+            continue
+        lines = path.read_text().splitlines()
+        for index, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('//') or not RAW_DECODE_RE.search(line):
+                continue
+            window = '\n'.join(lines[max(0, index - 3) : min(len(lines), index + 3)])
+            sites.append(
+                DartDecodeSite(
+                    path=path,
+                    line=index,
+                    kind=decode_site_kind(line),
+                    snippet=stripped[:220],
+                    generated_backed=bool(WIRE_DECODE_RE.search(window)),
+                )
+            )
+    return sites
 
 
 def normalize_app_route(route: str) -> str:
@@ -388,6 +445,8 @@ def build_report(spec_path: Path) -> dict[str, Any]:
     generated_backed_files = [item for item in manual_files if item.generated_backed]
     remaining_manual_files = [item for item in manual_files if not item.generated_backed]
     app_routes = scan_app_routes()
+    decode_sites = scan_dart_decode_sites()
+    raw_decode_sites = [site for site in decode_sites if not site.generated_backed]
     openapi_paths = load_openapi_paths(spec_path)
     openapi_operations = load_openapi_operations(spec_path)
     openapi_prefixes = sorted({route_prefix(path) for path in openapi_paths})
@@ -418,6 +477,10 @@ def build_report(spec_path: Path) -> dict[str, Any]:
         'app_used_unmodeled_success_responses': [operation.to_report() for operation in app_used_unmodeled_operations],
         'app_route_count': len(app_routes),
         'app_routes': [route.to_report() for route in app_routes],
+        'dart_decode_site_count': len(decode_sites),
+        'dart_decode_sites': [site.to_report() for site in decode_sites],
+        'raw_dart_decode_site_count': len(raw_decode_sites),
+        'raw_dart_decode_sites': [site.to_report() for site in raw_decode_sites],
         'app_route_prefixes': app_route_prefixes,
         'openapi_prefixes': openapi_prefixes,
         'uncovered_app_route_prefixes': uncovered_prefixes,
@@ -461,6 +524,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='fail when any app-client OpenAPI operation exposes an untyped object/empty JSON success response',
     )
+    parser.add_argument(
+        '--fail-on-raw-dart-decode-sites',
+        action='store_true',
+        help='fail when Dart app-client files contain raw JSON decode/cast/access sites not backed by generated wire parsing',
+    )
     return parser.parse_args()
 
 
@@ -491,6 +559,10 @@ def main() -> int:
         ]
         print('Unmodeled OpenAPI success responses: ' + ', '.join(operations), flush=True)
         return 1
+    if args.fail_on_raw_dart_decode_sites and report['raw_dart_decode_sites']:
+        sites = [f"{item['path']}:{item['line']} ({item['kind']})" for item in report['raw_dart_decode_sites'][:50]]
+        print('Raw Dart decode sites: ' + ', '.join(sites), flush=True)
+        return 1
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
@@ -505,6 +577,8 @@ def main() -> int:
     print(f"Unmodeled OpenAPI success responses: {report['unmodeled_success_response_count']}")
     print(f"App-used unmodeled OpenAPI success responses: {report['app_used_unmodeled_success_response_count']}")
     print(f"Flutter REST routes found: {report['app_route_count']}")
+    print(f"Dart decode sites found: {report['dart_decode_site_count']}")
+    print(f"Raw Dart decode sites: {report['raw_dart_decode_site_count']}")
     if report['uncovered_app_route_prefixes']:
         print('Uncovered Flutter REST route prefixes: ' + ', '.join(report['uncovered_app_route_prefixes']))
     for item in report['unmodeled_success_responses']:
@@ -515,6 +589,8 @@ def main() -> int:
     for item in report['local_non_rest_schema_files']:
         classes = ', '.join(item['classes']) or '(no classes found)'
         print(f"- local {item['path']}: {classes} (fromJson={item['fromJson']}, toJson={item['toJson']})")
+    for item in report['raw_dart_decode_sites'][:50]:
+        print(f"- raw {item['path']}:{item['line']} {item['kind']}: {item['snippet']}")
     return 0
 
 

@@ -57,22 +57,22 @@ dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   return null;
 }
 
-String? _readString(dynamic value) => value?.toString();
+String? _readString(dynamic value) => value is String ? value : null;
 
 int? _readInt(dynamic value) {
   if (value is int) return value;
-  if (value is num) return value.toInt();
-  return int.tryParse(value?.toString() ?? '');
+  if (value is String) return int.tryParse(value);
+  return null;
 }
 
 double? _readDouble(dynamic value) {
   if (value is num) return value.toDouble();
-  return double.tryParse(value?.toString() ?? '');
+  if (value is String) return double.tryParse(value);
+  return null;
 }
 
 bool? _readBool(dynamic value) {
   if (value is bool) return value;
-  if (value is String) return value.toLowerCase() == 'true';
   return null;
 }
 
@@ -85,9 +85,8 @@ T _required<T>(T? value, String name) {
 
 DateTime? _readDateTime(dynamic value) {
   if (value == null) return null;
-  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value * 1000).toLocal();
-  if (value is num) return DateTime.fromMillisecondsSinceEpoch((value * 1000).round()).toLocal();
-  return DateTime.tryParse(value.toString())?.toLocal();
+  if (value is String) return DateTime.tryParse(value)?.toLocal();
+  return null;
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -103,27 +102,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return value.map(_readMap).whereType<Map<String, dynamic>>().map(fromJson).toList();
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return value.map((item) => item.toString()).toList();
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return value.map(_readDouble).whereType<double>().toList();
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return value.map(_readInt).whereType<int>().toList();
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return value.map(_readMap).whereType<Map<String, dynamic>>().toList();
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

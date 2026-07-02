@@ -66,6 +66,8 @@ def test_messages_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedFileChat' in generated
     assert 'class GeneratedChartData' in generated
     assert 'class GeneratedVoiceMessageTranscriptionResponse' in generated
+    assert 'final Map<String, dynamic>? chartData;' in generated
+    assert 'chartData: _readMap(_readAny(json, const ["chart_data"]))' in generated
     assert (
         'files: _readObjectList(_readAny(json, const ["files"]), GeneratedFileChat.fromJson) ?? const []' in generated
     )
@@ -402,11 +404,47 @@ def test_conversation_wire_dart_preserves_known_client_aliases():
     assert 'category: _readString(_readAny(json, const ["category"])) ?? "other"' in generated
     assert 'source: _readString(_readAny(json, const ["source"])) ?? "omi"' in generated
     assert 'visibility: _readString(_readAny(json, const ["visibility"])) ?? "private"' in generated
-    assert 'DateTime.fromMillisecondsSinceEpoch(value * 1000).toLocal()' in generated
+    assert 'if (value is String) return DateTime.tryParse(value)?.toLocal();' in generated
     assert 'final List<GeneratedTranslation>? translations;' in generated
     assert 'translations: _readAny(json, const ["translations"]) == null ? null : _readObjectList' in generated
     assert 'List<T>? _readObjectList<T>' in generated
-    assert 'if (value is! List) return null;' in generated
+    assert "for (final item in value) fromJson(_required(_readMap(item), 'list item'))" in generated
+
+
+def test_generator_rejects_unsupported_schema_shapes_without_string_fallback():
+    spec = {
+        'components': {
+            'schemas': {
+                'UnsupportedUnion': {
+                    'type': 'object',
+                    'properties': {
+                        'value': {
+                            'anyOf': [
+                                {'type': 'string'},
+                                {'type': 'integer'},
+                                {'type': 'null'},
+                            ]
+                        }
+                    },
+                }
+            }
+        }
+    }
+
+    original = generate_dart_models.SCHEMA_GROUPS['messages']
+    generate_dart_models.SCHEMA_GROUPS['messages'] = {
+        **original,
+        'schemas': ('UnsupportedUnion',),
+    }
+    try:
+        try:
+            generate_dart_models.build_output(spec, 'messages')
+        except ValueError as exc:
+            assert 'unsupported anyOf schema' in str(exc)
+        else:
+            raise AssertionError('expected unsupported anyOf to fail generation')
+    finally:
+        generate_dart_models.SCHEMA_GROUPS['messages'] = original
 
 
 def test_conversation_fixtures_validate_against_python_schema_authority():

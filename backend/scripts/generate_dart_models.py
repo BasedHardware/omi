@@ -339,13 +339,41 @@ def unwrap_nullable(schema: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     return schema, False
 
 
+def schema_debug_name(schema: dict[str, Any]) -> str:
+    title = schema.get('title')
+    if isinstance(title, str) and title:
+        return title
+    ref = schema.get('$ref')
+    if isinstance(ref, str):
+        return ref.rsplit('/', 1)[-1]
+    return json.dumps(schema, sort_keys=True)[:200]
+
+
+def is_untyped_object_schema(schema: dict[str, Any]) -> bool:
+    return schema.get('type') == 'object' or schema.get('additionalProperties') is not None
+
+
 def dart_type_for(
     schema: dict[str, Any],
     required: bool,
     target_schemas: tuple[str, ...],
     all_schemas: dict[str, Any],
 ) -> DartType:
-    unwrapped, nullable = unwrap_nullable(schema)
+    if 'oneOf' in schema or 'allOf' in schema:
+        raise ValueError(f'unsupported composed schema: {schema_debug_name(schema)}')
+    any_of = schema.get('anyOf')
+    if isinstance(any_of, list):
+        non_null = [item for item in any_of if item.get('type') != 'null']
+        if len(non_null) == 1 and len(non_null) != len(any_of):
+            unwrapped = non_null[0]
+            nullable = True
+        elif non_null and all(item.get('$ref') or is_untyped_object_schema(item) for item in non_null):
+            nullable = any(item.get('type') == 'null' for item in any_of) or not required
+            return DartType('Map<String, dynamic>', nullable=nullable, is_map=True)
+        else:
+            raise ValueError(f'unsupported anyOf schema: {schema_debug_name(schema)}')
+    else:
+        unwrapped, nullable = unwrap_nullable(schema)
     nullable = nullable or not required
     ref = unwrapped.get('$ref')
     if isinstance(ref, str):
@@ -371,7 +399,9 @@ def dart_type_for(
         return DartType('bool', nullable=nullable)
     if schema_type == 'object' or unwrapped.get('additionalProperties') is not None:
         return DartType('Map<String, dynamic>', nullable=nullable, is_map=True)
-    return DartType('String', nullable=nullable)
+    if schema_type == 'string' or 'enum' in unwrapped or 'const' in unwrapped:
+        return DartType('String', nullable=nullable)
+    raise ValueError(f'unsupported schema shape: {schema_debug_name(schema)}')
 
 
 def default_for(field: Field) -> str:
@@ -521,12 +551,13 @@ def fields_for_schema(
     required = set(schema.get('required', []))
     fields: list[Field] = []
     for wire_name, prop_schema in schema.get('properties', {}).items():
-        is_required = wire_name in required or prop_schema.get('default') is not None
+        is_required = wire_name in required
+        is_non_null_default = prop_schema.get('default') is not None
         fields.append(
             Field(
                 wire_name=wire_name,
                 dart_name=dart_field_name(wire_name),
-                dart_type=dart_type_for(prop_schema, is_required, target_schemas, all_schemas),
+                dart_type=dart_type_for(prop_schema, is_required or is_non_null_default, target_schemas, all_schemas),
                 required=is_required,
                 default=prop_schema.get('default'),
                 aliases=ALIASES.get(schema_name, {}).get(wire_name, ()),
@@ -576,22 +607,22 @@ dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   return null;
 }
 
-String? _readString(dynamic value) => value?.toString();
+String? _readString(dynamic value) => value is String ? value : null;
 
 int? _readInt(dynamic value) {
   if (value is int) return value;
-  if (value is num) return value.toInt();
-  return int.tryParse(value?.toString() ?? '');
+  if (value is String) return int.tryParse(value);
+  return null;
 }
 
 double? _readDouble(dynamic value) {
   if (value is num) return value.toDouble();
-  return double.tryParse(value?.toString() ?? '');
+  if (value is String) return double.tryParse(value);
+  return null;
 }
 
 bool? _readBool(dynamic value) {
   if (value is bool) return value;
-  if (value is String) return value.toLowerCase() == 'true';
   return null;
 }
 
@@ -604,9 +635,8 @@ T _required<T>(T? value, String name) {
 
 DateTime? _readDateTime(dynamic value) {
   if (value == null) return null;
-  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value * 1000).toLocal();
-  if (value is num) return DateTime.fromMillisecondsSinceEpoch((value * 1000).round()).toLocal();
-  return DateTime.tryParse(value.toString())?.toLocal();
+  if (value is String) return DateTime.tryParse(value)?.toLocal();
+  return null;
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -622,27 +652,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return value.map(_readMap).whereType<Map<String, dynamic>>().map(fromJson).toList();
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return value.map((item) => item.toString()).toList();
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return value.map(_readDouble).whereType<double>().toList();
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return value.map(_readInt).whereType<int>().toList();
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return value.map(_readMap).whereType<Map<String, dynamic>>().toList();
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

@@ -231,14 +231,10 @@ class ServerMessage {
   static ServerMessage fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedMessage.fromJson(json);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
-    final chartData = json['chart_data'] is Map<String, dynamic>
-        ? ChartData.fromJson(json['chart_data'] as Map<String, dynamic>)
-        : null;
     return ServerMessage.fromGenerated(
       generated,
       fromIntegration: fromIntegration,
       askForNps: json['ask_for_nps'] as bool? ?? true,
-      chartData: chartData,
     );
   }
 
@@ -261,7 +257,7 @@ class ServerMessage {
       generated.memories.map(MessageConversation.fromGenerated).toList(),
       askForNps: askForNps,
       rating: generated.rating,
-      chartData: chartData,
+      chartData: chartData ?? ChartData.fromJson(generated.chartData),
     );
   }
 

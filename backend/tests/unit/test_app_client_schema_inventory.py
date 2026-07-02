@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 from scripts import inventory_app_client_schemas
@@ -147,6 +149,21 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )
+    assert report['raw_dart_decode_site_count'] > 0
+
+    raw_sites = {(item['path'], item['line'], item['kind']) for item in report['raw_dart_decode_sites']}
+    assert ('app/lib/backend/schema/app.dart', 26, 'fromJson') in raw_sites
+    assert any(
+        item['path'] == 'app/lib/backend/schema/conversation.dart'
+        and item['kind'] == 'fromJson'
+        and 'CreateConversationResponse.fromJson' in item['snippet']
+        for item in report['raw_dart_decode_sites']
+    )
+    assert any(
+        item['path'] == 'app/lib/backend/http/api/conversations.dart'
+        and item['kind'] in {'jsonDecode', 'field_access', 'cast'}
+        for item in report['raw_dart_decode_sites']
+    )
 
 
 def test_inventory_normalizes_interpolated_dart_route_segments():
@@ -186,3 +203,22 @@ final onlyBase = _baseUrl;
         )
         == '/v1/conversations/{param}/reprocess'
     )
+
+
+def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
+    result = subprocess.run(
+        [
+            sys.executable,
+            'scripts/inventory_app_client_schemas.py',
+            '--fail-on-raw-dart-decode-sites',
+        ],
+        cwd=ROOT_DIR / 'backend',
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert 'Raw Dart decode sites:' in result.stdout
+    assert 'app/lib/backend/schema/app.dart:26' in result.stdout
