@@ -36,6 +36,7 @@ from routers.updates import (
     _xml_attr,
     router as updates_router,
 )
+from database.desktop_update_policy import get_desktop_update_policy
 
 # Minimal test app mounting only the updates router
 _test_app = FastAPI()
@@ -603,3 +604,101 @@ class TestClearCacheEndpoint:
         async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
             resp = await client.post("/v2/desktop/clear-cache")
         assert resp.status_code == 422
+
+
+# --- Update policy endpoint ---
+
+
+class TestDesktopUpdatePolicyEndpoint:
+    @pytest.mark.asyncio
+    async def test_returns_policy_for_current_build(self):
+        policy = {
+            "id": "force-legacy-4xx",
+            "active": True,
+            "severity": "required",
+            "maximum_build_number": 11507,
+            "latest_build_number": 11590,
+            "title": "Update required",
+            "message": "Install the latest Omi desktop app.",
+            "cta_text": "Download latest",
+            "download_url": "https://example.com/Omi.dmg",
+            "can_dismiss": False,
+        }
+        with patch("routers.updates.get_desktop_update_policy", return_value=policy) as mock_policy:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-policy?platform=macos&current_build=11400")
+
+        assert resp.status_code == 200
+        assert resp.json()["id"] == "force-legacy-4xx"
+        mock_policy.assert_called_once_with(current_build=11400, platform="macos")
+
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_platform(self):
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            resp = await client.get("/v2/desktop/update-policy?platform=ios")
+        assert resp.status_code == 422
+
+
+class TestDesktopUpdatePolicyDatabase:
+    def _mock_doc(self, exists=True, data=None):
+        doc = MagicMock()
+        doc.exists = exists
+        doc.to_dict.return_value = data or {}
+        return doc
+
+    def test_missing_doc_returns_inactive_default(self):
+        doc = self._mock_doc(exists=False)
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+        policy = get_desktop_update_policy(current_build=11400, firestore_client=mock_db)
+
+        assert policy["active"] is False
+        assert policy["severity"] == "none"
+        assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
+
+    def test_required_policy_applies_through_maximum_build(self):
+        doc = self._mock_doc(
+            data={
+                "id": "force-old-desktop",
+                "active": True,
+                "severity": "required",
+                "maximum_build_number": 11507,
+                "title": "Update required",
+                "can_dismiss": False,
+            }
+        )
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+        policy = get_desktop_update_policy(current_build=11507, firestore_client=mock_db)
+
+        assert policy["id"] == "force-old-desktop"
+        assert policy["active"] is True
+        assert policy["severity"] == "required"
+        assert policy["can_dismiss"] is False
+
+    def test_policy_suppressed_above_maximum_build(self):
+        doc = self._mock_doc(data={"active": True, "severity": "required", "maximum_build_number": 11507})
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+        policy = get_desktop_update_policy(current_build=11508, firestore_client=mock_db)
+
+        assert policy["active"] is False
+        assert policy["severity"] == "none"
+
+    def test_policy_accepts_legacy_minimum_build_alias(self):
+        doc = self._mock_doc(data={"active": True, "severity": "required", "minimum_build_number": 11507})
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+        policy = get_desktop_update_policy(current_build=11507, firestore_client=mock_db)
+
+        assert policy["active"] is True
+        assert policy["maximum_build_number"] == 11507
+        assert "minimum_build_number" not in policy
+
+    def test_policy_suppressed_for_other_platforms(self):
+        doc = self._mock_doc(data={"active": True, "severity": "banner", "platforms": ["windows"]})
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+        policy = get_desktop_update_policy(current_build=11400, platform="macos", firestore_client=mock_db)
+
+        assert policy["active"] is False
