@@ -50,8 +50,8 @@ Future<String> getUserWebhookUrl({required String type}) async {
   );
   if (response == null) return '';
   if (response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
-    return (jsonResponse['url'] as String?) ?? '';
+    final data = wire.GeneratedUserWebhookUrlResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.url ?? '';
   }
   return '';
 }

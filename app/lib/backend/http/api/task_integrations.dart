@@ -112,8 +112,8 @@ Future<String?> getOAuthUrl(String appKey) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return data['auth_url'] as String?;
+    final data = wire.GeneratedOAuthUrlResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return data.authUrl;
   } else {
     Logger.debug('getOAuthUrl error ${response.statusCode}');
     return null;
@@ -144,7 +144,7 @@ Future<Map<String, dynamic>?> createTaskViaIntegration(
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedCreateTaskResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('createTaskViaIntegration error ${response.statusCode}');
     return null;

@@ -70,6 +70,26 @@ class GeneratedIntegrationResponse {
   }
 }
 
+class GeneratedOAuthUrlResponse {
+  final String authUrl;
+
+  const GeneratedOAuthUrlResponse({
+    required this.authUrl,
+  });
+
+  factory GeneratedOAuthUrlResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedOAuthUrlResponse(
+      authUrl: _required(_readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: true, nullable: false), "auth_url"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'auth_url': authUrl,
+    };
+  }
+}
+
 class GeneratedDeleteLimitlessConversationsResponse {
   final int deletedCount;
   final String message;

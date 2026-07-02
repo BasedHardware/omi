@@ -86,6 +86,54 @@ class GeneratedTaskIntegrationsResponse {
   }
 }
 
+class GeneratedOAuthUrlResponse {
+  final String authUrl;
+
+  const GeneratedOAuthUrlResponse({
+    required this.authUrl,
+  });
+
+  factory GeneratedOAuthUrlResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedOAuthUrlResponse(
+      authUrl: _required(_readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: true, nullable: false), "auth_url"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'auth_url': authUrl,
+    };
+  }
+}
+
+class GeneratedCreateTaskResponse {
+  final String? error;
+  final String? externalTaskId;
+  final bool success;
+
+  const GeneratedCreateTaskResponse({
+    this.error,
+    this.externalTaskId,
+    required this.success,
+  });
+
+  factory GeneratedCreateTaskResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedCreateTaskResponse(
+      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
+      externalTaskId: _readFieldValue<String>(_readField(json, const ["external_task_id"]), "external_task_id", _readString, requiredField: false, nullable: true),
+      success: _required(_readFieldValue<bool>(_readField(json, const ["success"]), "success", _readBool, requiredField: true, nullable: false), "success"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'error': error,
+      'external_task_id': externalTaskId,
+      'success': success,
+    };
+  }
+}
+
 class GeneratedDefaultTaskIntegrationResponse {
   final String? defaultApp;
 

@@ -258,6 +258,26 @@ class GeneratedTranscriptionPreferencesResponse {
   }
 }
 
+class GeneratedUserWebhookUrlResponse {
+  final String? url;
+
+  const GeneratedUserWebhookUrlResponse({
+    this.url,
+  });
+
+  factory GeneratedUserWebhookUrlResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedUserWebhookUrlResponse(
+      url: _readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'url': url,
+    };
+  }
+}
+
 class GeneratedDailySummarySettingsResponse {
   final bool enabled;
   final int hour;

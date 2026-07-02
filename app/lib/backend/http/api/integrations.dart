@@ -98,8 +98,8 @@ Future<String?> getIntegrationOAuthUrl(String appKey) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return data['auth_url'] as String?;
+    final data = wire.GeneratedOAuthUrlResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return data.authUrl;
   } else {
     Logger.debug('getIntegrationOAuthUrl error ${response.statusCode}');
     return null;

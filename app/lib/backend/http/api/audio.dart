@@ -107,8 +107,8 @@ Future<AudioUrlsResponse> getConversationAudioSignedUrls(String conversationId) 
       return AudioUrlsResponse(files: []);
     }
 
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    return AudioUrlsResponse.fromJson(decoded);
+    final decoded = wire.GeneratedAudioUrlsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return AudioUrlsResponse.fromGenerated(decoded);
   } catch (e) {
     Logger.debug('Error getting audio signed URLs: $e');
     return AudioUrlsResponse(files: []);

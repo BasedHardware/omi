@@ -172,6 +172,7 @@ def test_imports_integrations_wire_dart_is_generated_from_app_client_openapi():
     assert IMPORTS_INTEGRATIONS_DART_PATH.read_text() == generated
     assert 'class GeneratedImportJobResponse' in generated
     assert 'class GeneratedIntegrationResponse' in generated
+    assert 'class GeneratedOAuthUrlResponse' in generated
     assert 'class GeneratedDeleteLimitlessConversationsResponse' in generated
     assert 'class GeneratedAppleHealthSyncResponse' in generated
     assert 'jobId: _required(_readFieldValue<String>' in generated
@@ -215,6 +216,8 @@ def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openap
     assert 'class GeneratedWrappedStatusResponse' in generated
     assert 'class GeneratedGenerateWrappedResponse' in generated
     assert 'class GeneratedTaskIntegrationsResponse' in generated
+    assert 'class GeneratedOAuthUrlResponse' in generated
+    assert 'class GeneratedCreateTaskResponse' in generated
     assert 'class GeneratedDefaultTaskIntegrationResponse' in generated
     assert 'class GeneratedAsanaWorkspacesResponse' in generated
     assert 'class GeneratedAsanaProjectsResponse' in generated
@@ -272,6 +275,7 @@ def test_users_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedMemorySummaryRatingResponse' in generated
     assert 'class GeneratedTrainingDataOptInResponse' in generated
     assert 'class GeneratedTranscriptionPreferencesResponse' in generated
+    assert 'class GeneratedUserWebhookUrlResponse' in generated
     assert 'class GeneratedDailySummarySettingsResponse' in generated
     assert 'class GeneratedDailySummaryTestResponse' in generated
     assert 'class GeneratedMentorNotificationSettingsResponse' in generated
