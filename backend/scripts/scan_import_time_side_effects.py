@@ -169,6 +169,11 @@ def _is_os_environ_subscript(node: ast.AST) -> bool:
 
 
 def _is_network_call(chain: list[str]) -> bool:
+    """True if ``chain`` is a top-level network call (module or alias-resolved).
+
+    Accepts the (already alias-resolved) dotted chain so ``from requests import get;
+    get(url)`` — where ``get`` resolves to ``requests.get`` — is also caught.
+    """
     if len(chain) >= 2 and chain[0] in NETWORK_MODULES and chain[-1] in NETWORK_VERBS:
         return True
     # urllib.request.urlopen(...)
@@ -187,7 +192,7 @@ def _record_offenders_in_expr(node: ast.AST, aliases: dict[str, str], out: list[
                 out.append((sub.lineno, f"import-time constructor: {'.'.join(chain)}"))
                 continue
             if _is_network_call(resolved):
-                out.append((sub.lineno, f"top-level network call: {'.'.join(chain)}"))
+                out.append((sub.lineno, f"top-level network call: {'.'.join(resolved)}"))
                 continue
             if isinstance(sub.func, ast.Name) and sub.func.id == "open":
                 out.append((sub.lineno, "top-level open() call"))
@@ -261,8 +266,10 @@ def _module_level_offenders(tree: ast.Module, source_lines: list[str]) -> list[t
     """Return (lineno, reason) for module-scope import-time side effects.
 
     Decorator lists, default values, class bases/keywords and (when PEP 563 is not
-    active) annotations all evaluate at import time, so they are scanned too —
-    while function/class *bodies* are skipped.
+    active) annotations all evaluate at import time, so they are scanned too.
+    Class *bodies* also execute at import time (the class statement runs them when
+    it defines the class), so class-level assignments/expressions are scanned as
+    well — only function/method bodies are skipped (they run at call time).
     """
     out: list[tuple[int, str]] = []
     aliases = _collect_import_aliases(tree)
@@ -280,6 +287,51 @@ def _module_level_offenders(tree: ast.Module, source_lines: list[str]) -> list[t
             seen.add(key)
             deduped.append((ln, reason))
     return deduped
+
+
+def _scan_function_def_import_time(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, aliases, out, eval_annotations: bool
+) -> None:
+    """Scan the import-time expressions attached to a function/method definition.
+
+    Decorator lists and default values run when the def executes (at import time
+    for module-level and class-level defs). Annotations run too, unless PEP 563
+    deferred them. The function *body* is NOT scanned (it runs at call time).
+    """
+    for expr in node.decorator_list:
+        _record_offenders_in_expr(expr, aliases, out)
+    a = node.args
+    default_exprs = list(a.defaults) + [d for d in (a.kw_defaults or []) if d is not None]
+    for expr in default_exprs:
+        _record_offenders_in_expr(expr, aliases, out)
+    if eval_annotations:
+        for expr in _function_annotation_exprs(node):
+            _record_offenders_in_expr(expr, aliases, out)
+
+
+def _scan_statements(body: list[ast.stmt], aliases, out, eval_annotations: bool) -> None:
+    """Scan a list of statements that execute at import time.
+
+    Used for the module body and for class bodies (class-level statements run when
+    the class is defined). Recurses into nested class bodies; skips function/method
+    bodies while still scanning their decorators/defaults/annotations.
+    """
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _scan_function_def_import_time(node, aliases, out, eval_annotations)
+            continue
+        if isinstance(node, ast.ClassDef):
+            for expr in node.decorator_list:
+                _record_offenders_in_expr(expr, aliases, out)
+            for expr in node.bases:
+                _record_offenders_in_expr(expr, aliases, out)
+            for kw in node.keywords:
+                _record_offenders_in_expr(kw.value, aliases, out)
+            # Class-body statements execute at import time; recurse, skipping method bodies.
+            _scan_statements(node.body, aliases, out, eval_annotations)
+            continue
+        # Any other statement (incl. module-level if/for/try bodies).
+        _record_offenders_in_expr(node, aliases, out)
 
 
 def _has_pragma_with_reason(source_lines: list[str], lineno: int) -> bool:
