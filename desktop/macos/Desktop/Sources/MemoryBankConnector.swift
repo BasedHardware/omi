@@ -48,13 +48,18 @@ enum MemoryBankConnector {
       throw ConnectError.notInstalled(
         "OpenClaw not found locally (looked for ~/.openclaw/openclaw.json). Install OpenClaw, then try again.")
     }
-    let workspace = openClawConfiguredWorkspace(configURL: config) ?? home.appendingPathComponent(".openclaw/workspace")
+    guard let cliPath = openClawCLIPath() else {
+      throw ConnectError.notInstalled(
+        "OpenClaw CLI not found locally. Install OpenClaw or add the openclaw command to PATH, then try again.")
+    }
+    let workspace = openClawConfiguredWorkspace(configURL: config, cliPath: cliPath)
+      ?? home.appendingPathComponent(".openclaw/workspace")
     guard fm.fileExists(atPath: workspace.path) else {
       throw ConnectError.notInstalled(
         "OpenClaw workspace not found (looked for \(displayPath(for: workspace))). Run OpenClaw setup, then try again.")
     }
 
-    let alreadyWired = try ensureOpenClawMCPConfig(configURL: config, key: key)
+    let alreadyWired = try ensureOpenClawMCPConfig(configURL: config, key: key, cliPath: cliPath)
     let noteAdded = try ensureOpenClawSoulNote(workspace: workspace)
 
     if alreadyWired {
@@ -65,7 +70,18 @@ enum MemoryBankConnector {
     return "Connected OpenClaw — added the Omi MCP to openclaw.json and a 'search Omi first' note to SOUL.md."
   }
 
-  private static func openClawConfiguredWorkspace(configURL: URL) -> URL? {
+  private static func openClawConfiguredWorkspace(configURL: URL, cliPath: String) -> URL? {
+    if
+      let output = try? runOpenClawCLI(
+        cliPath: cliPath,
+        configURL: configURL,
+        arguments: ["config", "get", "agents.defaults.workspace"]
+      ),
+      let workspace = normalizedPath(output.stdout)
+    {
+      return workspace
+    }
+
     guard
       let data = try? Data(contentsOf: configURL),
       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -76,20 +92,11 @@ enum MemoryBankConnector {
     else {
       return nil
     }
-    let expanded = workspace.replacingOccurrences(of: "~", with: home.path, options: .anchored)
-    return URL(fileURLWithPath: expanded)
+    return normalizedPath(workspace)
   }
 
   @discardableResult
-  private static func ensureOpenClawMCPConfig(configURL: URL, key: String) throws -> Bool {
-    if let cli = openClawCLIPath() {
-      return try ensureOpenClawMCPConfigWithCLI(configURL: configURL, key: key, cliPath: cli)
-    }
-    return try ensureOpenClawMCPConfigByStrictJSON(configURL: configURL, key: key)
-  }
-
-  @discardableResult
-  private static func ensureOpenClawMCPConfigWithCLI(configURL: URL, key: String, cliPath: String) throws -> Bool {
+  private static func ensureOpenClawMCPConfig(configURL: URL, key: String, cliPath: String) throws -> Bool {
     let server = openClawMCPServer(key: key)
     let existing = try? runOpenClawCLI(
       cliPath: cliPath,
@@ -120,46 +127,6 @@ enum MemoryBankConnector {
       throw ConnectError.invalidConfig(
         "OpenClaw rejected MCP config update for \(displayPath(for: configURL)): \(error.localizedDescription)")
     }
-  }
-
-  @discardableResult
-  private static func ensureOpenClawMCPConfigByStrictJSON(configURL: URL, key: String) throws -> Bool {
-    let data = try Data(contentsOf: configURL)
-    guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-      throw ConnectError.invalidConfig(
-        "OpenClaw config is not strict JSON and the openclaw CLI was not found. Install the OpenClaw CLI, then try again.")
-    }
-
-    let server = openClawMCPServer(key: key)
-    var mcp: [String: Any]
-    if let existingMCP = json["mcp"] {
-      guard let existingMCP = existingMCP as? [String: Any] else {
-        throw ConnectError.invalidConfig("OpenClaw config has non-object mcp value in \(displayPath(for: configURL)).")
-      }
-      mcp = existingMCP
-    } else {
-      mcp = [:]
-    }
-    var servers: [String: Any]
-    if let existingServers = mcp["servers"] {
-      guard let existingServers = existingServers as? [String: Any] else {
-        throw ConnectError.invalidConfig("OpenClaw config has non-object mcp.servers value in \(displayPath(for: configURL)).")
-      }
-      servers = existingServers
-    } else {
-      servers = [:]
-    }
-    let existing = servers["omi-memory"] as? [String: Any]
-    if NSDictionary(dictionary: existing ?? [:]).isEqual(to: server) {
-      return true
-    }
-    servers["omi-memory"] = server
-    mcp["servers"] = servers
-    json["mcp"] = mcp
-
-    let output = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .withoutEscapingSlashes])
-    try output.write(to: configURL, options: .atomic)
-    return false
   }
 
   private struct CommandOutput {
@@ -236,6 +203,13 @@ enum MemoryBankConnector {
         "Authorization": "Bearer \(key)"
       ],
     ]
+  }
+
+  private static func normalizedPath(_ raw: String) -> URL? {
+    let path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !path.isEmpty else { return nil }
+    let expanded = path.replacingOccurrences(of: "~", with: home.path, options: .anchored)
+    return URL(fileURLWithPath: expanded)
   }
 
   @discardableResult

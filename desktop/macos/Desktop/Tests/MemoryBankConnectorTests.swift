@@ -11,7 +11,7 @@ final class MemoryBankConnectorTests: XCTestCase {
       .appendingPathComponent("memory-bank-connector-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
     MemoryBankConnector.homeOverrideForTesting = tempHome
-    MemoryBankConnector.openClawCLIPathOverrideForTesting = ""
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = try writeFakeOpenClawCLI().path
   }
 
   override func tearDownWithError() throws {
@@ -40,8 +40,8 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertTrue(soulContent.contains("The `omi-memory` MCP server is configured for you"))
     XCTAssertFalse(soulContent.contains("test-key"))
     XCTAssertTrue(configContent.contains(#""omi-memory""#))
-    XCTAssertTrue(configContent.contains(#""transport" : "sse""#))
-    XCTAssertTrue(configContent.contains(#""Authorization" : "Bearer test-key""#))
+    XCTAssertTrue(configContent.contains(#""transport":"sse""#))
+    XCTAssertTrue(configContent.contains(#""Authorization":"Bearer test-key""#))
   }
 
   func testOpenClawConnectUsesCLIForJSON5Config() throws {
@@ -55,9 +55,6 @@ final class MemoryBankConnectorTests: XCTestCase {
         agents: { defaults: { workspace: "\(workspace.path)" } },
       }
       """.write(to: config, atomically: true, encoding: .utf8)
-    let cli = try writeFakeOpenClawCLI()
-    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
-
     _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
 
     let configContent = try String(contentsOf: config, encoding: .utf8)
@@ -86,7 +83,8 @@ final class MemoryBankConnectorTests: XCTestCase {
     let config = try writeOpenClawConfig(workspace: workspace, extra: #","mcp":[]"#)
 
     XCTAssertThrowsError(try MemoryBankConnector.connect(.openclaw, key: "test-key")) { error in
-      XCTAssertTrue(error.localizedDescription.contains("non-object mcp value"))
+      XCTAssertTrue(error.localizedDescription.contains("OpenClaw rejected MCP config update"))
+      XCTAssertTrue(error.localizedDescription.contains("expected object"))
     }
     let configContent = try String(contentsOf: config, encoding: .utf8)
     XCTAssertTrue(configContent.contains(#""mcp":[]"#))
@@ -198,6 +196,10 @@ final class MemoryBankConnectorTests: XCTestCase {
         exit 1
       fi
       if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+        if grep -Fq '"mcp":[]' "$OPENCLAW_CONFIG_PATH"; then
+          echo "mcp: Invalid input: expected object, received array" >&2
+          exit 1
+        fi
         printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
         exit 0
       fi
