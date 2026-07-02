@@ -46,6 +46,25 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
 
 
 @pytest.mark.asyncio
+async def test_executor_forwards_prompt_parser_request_without_response_format():
+    config = config_with_active_route(active_route_with_fallbacks([]))
+    request = valid_request()
+    request.pop('response_format')
+    resolved = resolve_chat_completion_route(config, request)
+    active_primary = resolved.active_route.primary
+    provider = FakeChatCompletionProvider([fake_success_response(active_primary, content='{"answer":"primary"}')])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    assert 'response_format' not in provider.calls[0].request
+
+
+@pytest.mark.asyncio
 async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
     config = config_with_active_route(active_route_with_fallbacks([fallback_ref]))

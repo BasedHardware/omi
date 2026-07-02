@@ -256,9 +256,10 @@ def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) 
     provider_request = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),
-        'response_format': dict(resolved_route.validated_request.response_format),
         'stream': False,
     }
+    if resolved_route.validated_request.response_format is not None:
+        provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
     return provider_request
 
