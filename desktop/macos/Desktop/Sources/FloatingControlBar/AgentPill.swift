@@ -130,6 +130,7 @@ final class AgentPillsManager: ObservableObject {
     private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
+    private var spawnContextByPill: [UUID: AgentSpawnContext] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
     private static let backgroundAgentSystemPromptSuffix = """
@@ -173,14 +174,16 @@ final class AgentPillsManager: ObservableObject {
         let ack: String?
     }
 
-    enum DirectedProvider: String, Equatable {
+    enum DirectedProvider: String, Equatable, CaseIterable {
         case hermes
         case openclaw
+        case codex
 
         var displayName: String {
             switch self {
             case .hermes: return "Hermes"
             case .openclaw: return "OpenClaw"
+            case .codex: return "Codex"
             }
         }
 
@@ -188,6 +191,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return .hermes
             case .openclaw: return .openclaw
+            case .codex: return .codex
             }
         }
 
@@ -195,6 +199,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "hermes"
             case .openclaw: return "openclaw"
+            case .codex: return "codex"
             }
         }
 
@@ -202,6 +207,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
             case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+            case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
             }
         }
 
@@ -381,7 +387,7 @@ final class AgentPillsManager: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let providerPattern = "(open\\s*claw|openclaw|hermes)"
+        let providerPattern = "(open\\s*claw|openclaw|hermes|codex)"
         let patterns = [
             #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
             #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
@@ -399,6 +405,7 @@ final class AgentPillsManager: ObservableObject {
             switch providerToken {
             case "openclaw": provider = .openclaw
             case "hermes": provider = .hermes
+            case "codex": provider = .codex
             default: continue
             }
 
@@ -562,7 +569,8 @@ final class AgentPillsManager: ObservableObject {
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
-        bridgeHarnessOverride: AgentHarnessMode? = nil
+        bridgeHarnessOverride: AgentHarnessMode? = nil,
+        spawnContext: AgentSpawnContext? = nil
     ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: query)
         if count <= 1 {
@@ -572,7 +580,8 @@ final class AgentPillsManager: ObservableObject {
                 fromVoice: fromVoice,
                 preFetchedTitle: preFetchedTitle,
                 preFetchedAck: preFetchedAck,
-                bridgeHarnessOverride: bridgeHarnessOverride
+                bridgeHarnessOverride: bridgeHarnessOverride,
+                spawnContext: spawnContext
             )
         }
         var first: AgentPill?
@@ -589,7 +598,8 @@ final class AgentPillsManager: ObservableObject {
                 fromVoice: fromVoice && first == nil,
                 preFetchedTitle: first == nil ? preFetchedTitle : nil,
                 preFetchedAck: first == nil ? preFetchedAck : nil,
-                bridgeHarnessOverride: bridgeHarnessOverride
+                bridgeHarnessOverride: bridgeHarnessOverride,
+                spawnContext: spawnContext
             )
             if first == nil { first = pill }
         }
@@ -649,11 +659,15 @@ final class AgentPillsManager: ObservableObject {
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
         systemPromptSuffix: String? = nil,
-        bridgeHarnessOverride: AgentHarnessMode? = nil
+        bridgeHarnessOverride: AgentHarnessMode? = nil,
+        spawnContext: AgentSpawnContext? = nil
     ) -> AgentPill {
         let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
             pill.title = preFetchedTitle
+        }
+        if let spawnContext {
+            spawnContextByPill[pill.id] = spawnContext
         }
 
         trimForNewPillIfNeeded()
@@ -997,6 +1011,7 @@ final class AgentPillsManager: ObservableObject {
         projectionStreamsByPill[pillID] = nil
         providersByPill[pillID] = nil
         messageCountByPill[pillID] = nil
+        spawnContextByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
     }
 
@@ -1148,6 +1163,44 @@ final class AgentPillsManager: ObservableObject {
         return "Working…"
     }
 
+    private func maybeRetryWithFallback(
+        failedPill: AgentPill,
+        model: String,
+        errorText: String
+    ) -> Bool {
+        guard LocalAgentProviderRouting.isRetriableSpawnFailure(errorText) else { return false }
+        guard var context = spawnContextByPill[failedPill.id] else { return false }
+        guard context.explicitProvider == nil else { return false }
+        guard let nextWrapped = context.nextFallback(after: failedPill.bridgeHarnessOverride) else { return false }
+
+        let query = failedPill.query
+        let failedName = failedPill.bridgeHarnessOverride.flatMap { harness in
+            AgentPillsManager.DirectedProvider.allCases.first { $0.harnessMode == harness }?.displayName
+        } ?? "That agent"
+        let nextProvider = nextWrapped.flatMap { harness in
+            AgentPillsManager.DirectedProvider.allCases.first { $0.harnessMode == harness }
+        }
+        let ack: String
+        if let nextProvider {
+            ack = "\(failedName) failed; trying \(nextProvider.displayName) instead."
+        } else {
+            ack = "\(failedName) failed; trying the default agent instead."
+        }
+
+        context.recordAttempt(failedPill.bridgeHarnessOverride)
+        context.recordAttempt(nextWrapped)
+        cleanup(pillID: failedPill.id)
+        _ = spawn(
+            query: query,
+            model: model,
+            preFetchedTitle: nextProvider?.displayName ?? failedPill.title,
+            preFetchedAck: ack,
+            bridgeHarnessOverride: nextWrapped,
+            spawnContext: context
+        )
+        return true
+    }
+
     private func complete(pill: AgentPill, provider: ChatProvider, finalText: String?) {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
@@ -1181,6 +1234,13 @@ final class AgentPillsManager: ObservableObject {
             }
         }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
+            if maybeRetryWithFallback(
+                failedPill: pill,
+                model: pill.model,
+                errorText: errorText
+            ) {
+                return
+            }
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
@@ -1254,6 +1314,13 @@ final class AgentPillsManager: ObservableObject {
             }
         case .failed, .timedOut, .orphaned:
             let message = projection.failure?.displayMessage ?? projection.errorMessage ?? "Agent failed"
+            if AgentPillsManager.shared.maybeRetryWithFallback(
+                failedPill: pill,
+                model: pill.model,
+                errorText: message
+            ) {
+                return
+            }
             pill.status = .failed(message)
             pill.latestActivity = message
             pill.completedAt = projection.completedAt ?? Date()

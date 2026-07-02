@@ -47,12 +47,12 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
     let source = try floatingControlBarWindowSource()
 
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directive.provider)"))
-    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
+    XCTAssertTrue(source.contains("LocalAgentProviderRouting.resolveSpawnWithAutoInstall("))
+    XCTAssertTrue(source.contains("requestedProvider: directive.provider"))
     XCTAssertTrue(source.contains("floating-agent-provider-unavailable"))
     XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
     XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
-    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(spokenStatus)"))
   }
 
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
@@ -310,7 +310,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("let handoff = AgentPillsManager.floatingAgentHandoff(for: message)"))
     XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnFromHandoff("))
     XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    handoff,\n                    pill: pill"))
-    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    .init(originalRequest: message, agentTask: message),\n                    pill: pill"))
+    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                        .init(originalRequest: message, agentTask: message),\n                        pill: pill"))
     XCTAssertTrue(source.contains("let toolUseId = \"floating-agent-\\(pill.id.uuidString)\""))
     XCTAssertTrue(source.contains("name: \"spawn_agent\""))
     XCTAssertTrue(source.contains("status: .completed"))

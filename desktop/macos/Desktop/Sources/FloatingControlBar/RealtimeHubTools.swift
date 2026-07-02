@@ -70,30 +70,55 @@ enum HubTool: String {
 
 enum RealtimeHubTools {
   private static func localAgentProviderInstruction() -> String {
-    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes]
+    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
     let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
     let available = availability.filter(\.isAvailable).map(\.provider)
-    let unavailable = availability.filter { !$0.isAvailable }
+    let unavailable = availability.filter { !$0.isAvailable && !LocalAgentProviderInstaller.canAutoInstall($0.provider) }
+    let autoInstallable = availability.filter { !$0.isAvailable && LocalAgentProviderInstaller.canAutoInstall($0.provider) }.map(\.provider)
 
-    if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \"openclaw\" or \"hermes\". Treat those as available local providers, not as sessions to inspect."
+    if unavailable.isEmpty && autoInstallable.isEmpty {
+      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect."
     }
 
     var parts: [String] = []
     if !available.isEmpty {
-      let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
-      parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+      parts.append("Installed local providers: \(available.map(\.displayName).joined(separator: ", ")). Prefer these in spawn_agent's provider argument.")
+      parts.append("If the user explicitly asks to use/ask one of them by name, pass that provider. Otherwise pick the best fit from the installed list above — Omi will fall back automatically if your pick is missing.")
+      parts.append("Never tell the user to install a provider they did not ask for by name.")
     }
-    let missingText = unavailable
-      .map { "\($0.provider.displayName): \($0.setupPrompt)" }
-      .joined(separator: " ")
-    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    if !autoInstallable.isEmpty {
+      parts.append("\(autoInstallable.map(\.displayName).joined(separator: ", ")) is not installed yet but Omi will auto-install it when you pass provider=\"\(autoInstallable.map(\.rawValue).joined(separator: "\" or \""))\". Do not tell the user to install it themselves.")
+    }
+    if !unavailable.isEmpty {
+      let missingText = unavailable
+        .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+        .joined(separator: " ")
+      parts.append("Only mention install guidance when the user explicitly asked for that provider by name: \(missingText)")
+    }
     return parts.joined(separator: " ")
   }
 
+  /// Derives agent-routing guidance from the runtime `preferredProviders(for:)` table
+  /// so the system prompt stays in sync with `LocalAgentProviderRouting.resolveSpawn`.
+  private static func smartAgentRoutingGuidance() -> String {
+    let taskDescriptions: [(AgentTaskKind, String)] = [
+      (.coding, "writing new code/scripts, debugging, or code review"),
+      (.automation, "general-purpose automation or structured tasks"),
+      (.general, "codebase exploration or multi-file refactors"),
+    ]
+    var lines: [String] = []
+    for (task, description) in taskDescriptions {
+      let preferred = LocalAgentProviderRouting.preferredProviders(for: task)
+      if let first = preferred.first {
+        lines.append("- Choose \"\(first.rawValue)\" for \(description).")
+      }
+    }
+    return lines.joined(separator: " \\\n      ")
+  }
+
   private static func availableDirectedProviderRawValues() -> [String] {
-    [AgentPillsManager.DirectedProvider.openclaw, .hermes]
-      .filter { LocalAgentProviderDetector.isAvailable($0) }
+    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
+      .filter { LocalAgentProviderDetector.isAvailable($0) || LocalAgentProviderInstaller.canAutoInstall($0) }
       .map(\.rawValue)
   }
 
@@ -212,6 +237,10 @@ enum RealtimeHubTools {
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
+    - Smart agent routing: When calling spawn_agent, pass the best installed local provider in `provider` when you know one fits. Omi also picks and falls back automatically in code. When the user explicitly requests an agent by name (e.g. \"use codex\"), always pass that provider. If the user doesn't specify one, prefer an installed provider from the list above — do NOT pick or mention providers that are not installed: \
+      \(smartAgentRoutingGuidance()) \
+      - Omit the provider (default) to let Omi automatically select the best installed local provider, falling back to Claude Code when no local provider is installed.
+    - Auto-install: if the user asks for Codex by name and it is not installed, Omi will install it automatically (npm install -g @openai/codex) and then spawn it. You do not need to tell the user to install it themselves. For Hermes and OpenClaw, Omi will give install guidance if they are missing.
     - \(localAgentProviderInstruction())
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
     and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \

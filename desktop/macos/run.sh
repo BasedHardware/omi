@@ -149,7 +149,10 @@ derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
 
-BUILD_DIR="build"
+# Allow overriding the build staging dir. Useful when the workspace lives in an
+# iCloud-synced folder (~/Documents/Desktop), where the file provider re-adds
+# com.apple.FinderInfo xattrs after `xattr -cr` and races `codesign`.
+BUILD_DIR="${BUILD_DIR:-build}"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
 # Agent runtime source (staged into the app bundle at Resources/agent below).
@@ -752,6 +755,10 @@ if [ -n "$SIGN_IDENTITY" ]; then
         rm -f "$PROFILE_PATH"
         EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
     fi
+    # Per-component signing can re-add com.apple.provenance xattrs on newer macOS;
+    # strip them again before sealing the top-level bundle.
+    chmod -R u+w "$APP_BUNDLE"
+    xattr -cr "$APP_BUNDLE"
     substep "Signing app bundle"
     codesign --force --options runtime --entitlements "$EFFECTIVE_ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 else
