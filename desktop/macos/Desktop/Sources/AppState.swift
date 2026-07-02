@@ -194,7 +194,9 @@ class AppState: ObservableObject {
   // People (speaker voice profiles)
   @Published var people: [Person] = []
   var peopleById: [String: Person] {
-    Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+    // Last-write-wins: the API can return duplicate person ids; uniqueKeysWithValues
+    // would trap on a collision and crash the render path (same class as the fixed #6506).
+    Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
   }
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a crash that could occur when loading conversations or copying a transcript if the account had duplicate speaker profiles"
+}
