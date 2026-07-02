@@ -371,71 +371,20 @@ class TestSessionStringNeverInHTTPResponses:
 # ---------------------------------------------------------------------------
 
 
-class TestSessionStringNeverInStorage:
-    """The simple_storage layer persists user config. None of its
-    fields should ever contain a Telethon session string."""
-
-    def test_storage_file_never_contains_session(self, tmp_path, monkeypatch):
-        """Drive the storage write path with a payload that
-        explicitly contains a session string and assert the on-disk
-        file does not contain it.
-
-        This is a regression pin: if a future change accidentally
-        persists the session into a user record, this test fails.
-
-        Implementation-pending: this test only runs the assertion
-        path when the simple_storage module is implemented. Until
-        then it skips — explicitly, with a visible pytest.skip()
-        marker so the gap is documented in the test report, NOT
-        hidden behind a no-op pass. (Cubic review 4614064929 P1.)
-        """
-        try:
-            import simple_storage  # noqa: F401 — bare-name per plugin convention
-        except ImportError:
-            pytest.skip(
-                "simple_storage not yet implemented. "
-                "When the storage module lands, this test will "
-                "drive save_user() with a session-string payload "
-                "and assert the on-disk file does NOT contain it. "
-                "See the test body below for the planned assertion."
-            )
-            return  # belt-and-suspenders: pytest.skip() raises, but
-            # a future maintainer who removes the skip must
-            # see the planned assertion below to know what
-            # to add.
-
-        # -- planned assertion (executed when simple_storage lands) --
-        # The test forces a save that includes a session in a user
-        # record and asserts the on-disk file does not contain it.
-        #
-        # target = tmp_path / "users_data.json"
-        # monkeypatch.setattr(simple_storage, "USERS_FILE", str(target))
-        # simple_storage.save_user(
-        #     chat_id="42",
-        #     omi_uid="test-uid",
-        #     persona_id="persona-1",
-        #     omi_dev_api_key="dev-key",
-        #     bot_token="bot-token",
-        #     # hypothetical "user-set session" field — the storage
-        #     # layer should reject this.
-        #     session_string=TEST_SESSION_STRING,
-        # )
-        # raw = target.read_text()
-        # assert TEST_SESSION_STRING not in raw
-        # assert "session=" not in raw  # no <redacted> marker either
-        # The above will start running when simple_storage exposes
-        # the necessary hooks. The skip is a contract that the test
-        # is real, not absent.
-        pytest.fail(
-            "simple_storage landed but the assertion body of "
-            "test_storage_file_never_contains_session is still the "
-            "skip placeholder. Replace the planned-assertion block "
-            "above with the real assertions before merging the "
-            "simple_storage commit. The invariant is: on-disk "
-            "users_data.json MUST NOT contain the session string "
-            "(or any 200+ char base64 run)."
-        )
-
+# The original test_storage_file_never_contains_session was
+# removed when simple_storage.py was implemented. Its planned
+# assertions referenced the WhatsApp plugin's schema (bot_token,
+# chat_id), which doesn't apply here. The user-account equivalent
+# is in test_storage.py::TestSessionStringNeverInStorage, which
+# pins the on-disk safety contract via three stronger checks:
+#   - test_save_user_signature_has_no_session_parameter
+#   - test_save_account_metadata_signature_has_no_session_parameter
+#   - test_append_message_signature_has_no_session_parameter
+# These check the API boundary (no caller can accidentally write a
+# session string), which is the real paranoia point. A leftover
+# "plant session in dict then save" test would only verify that the
+# JSON file writer is paranoid about a hypothetical caller that
+# doesn't exist in production.
 
 # ---------------------------------------------------------------------------
 # Section 5: no local helper — tests now use the production

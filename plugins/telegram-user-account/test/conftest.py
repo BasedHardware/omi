@@ -138,3 +138,30 @@ _HEAVY_STUB_NAMES = [
 ]
 for _name in _HEAVY_STUB_NAMES:
     sys.modules.setdefault(_name, _AutoMockModule(_name))
+
+
+@pytest.fixture(autouse=True)
+def _clear_storage_state():
+    """Reset simple_storage's module-level state at the start of every
+    test so entries from one test don't leak into the next.
+
+    Resets:
+    - users (Telegram user id → config)
+    - chats (chat id → ring buffer)
+    - account (account metadata from Telethon's get_me())
+
+    Pattern is consistent with the cubic P3 review 4614271733 fix
+    applied to the WhatsApp plugin's conftest. The user-account plugin
+    adds `chats` and `account` to the clear list because the WhatsApp
+    plugin doesn't have those (it uses a single users dict keyed by
+    phone number, not separate chats + account dicts).
+    """
+    import simple_storage
+
+    if hasattr(simple_storage, "users"):
+        simple_storage.users.clear()
+    if hasattr(simple_storage, "chats"):
+        simple_storage.chats.clear()
+    if hasattr(simple_storage, "account"):
+        simple_storage.account.clear()
+    yield
