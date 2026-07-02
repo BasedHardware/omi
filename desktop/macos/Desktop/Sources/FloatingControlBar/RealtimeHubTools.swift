@@ -70,13 +70,15 @@ enum HubTool: String {
 
 enum RealtimeHubTools {
   private static func localAgentProviderInstruction() -> String {
-    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes]
+    let providers = AgentPillsManager.DirectedProvider.allCases
     let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
     let available = availability.filter(\.isAvailable).map(\.provider)
     let unavailable = availability.filter { !$0.isAvailable }
 
     if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \"openclaw\" or \"hermes\". Treat those as available local providers, not as sessions to inspect."
+      let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: ", ")
+      let display = available.map(\.displayName).joined(separator: ", ")
+      return "If the user asks to use/ask one of \(display), call spawn_agent with provider set to the matching value (\(names)). Treat those as available local providers, not as sessions to inspect."
     }
 
     var parts: [String] = []
@@ -92,7 +94,7 @@ enum RealtimeHubTools {
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
-    [AgentPillsManager.DirectedProvider.openclaw, .hermes]
+    AgentPillsManager.DirectedProvider.allCases
       .filter { LocalAgentProviderDetector.isAvailable($0) }
       .map(\.rawValue)
   }

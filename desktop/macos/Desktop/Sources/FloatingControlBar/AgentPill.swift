@@ -173,14 +173,16 @@ final class AgentPillsManager: ObservableObject {
         let ack: String?
     }
 
-    enum DirectedProvider: String, Equatable {
+    enum DirectedProvider: String, Equatable, CaseIterable {
         case hermes
         case openclaw
+        case codex
 
         var displayName: String {
             switch self {
             case .hermes: return "Hermes"
             case .openclaw: return "OpenClaw"
+            case .codex: return "Codex"
             }
         }
 
@@ -188,6 +190,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return .hermes
             case .openclaw: return .openclaw
+            case .codex: return .codex
             }
         }
 
@@ -195,6 +198,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "hermes"
             case .openclaw: return "openclaw"
+            case .codex: return "codex"
             }
         }
 
@@ -202,6 +206,34 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
             case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+            case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+            }
+        }
+
+        /// Shell command that installs this agent's CLI on macOS. Surfaced by the
+        /// install helper so a user can connect a named-but-missing agent in one tap.
+        var installCommand: String {
+            switch self {
+            case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+            case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash"
+            case .codex: return "npm install -g @openai/codex"
+            }
+        }
+
+        var docsURL: String {
+            switch self {
+            case .hermes: return "https://hermes-agent.nousresearch.com"
+            case .openclaw: return "https://docs.openclaw.ai/install"
+            case .codex: return "https://developers.openai.com/codex/cli"
+            }
+        }
+
+        /// Spoken/typed forms that select this agent by name in a voice/chat request.
+        var aliases: [String] {
+            switch self {
+            case .hermes: return ["hermes", "nous"]
+            case .openclaw: return ["openclaw", "open claw"]
+            case .codex: return ["codex"]
             }
         }
 
@@ -381,7 +413,7 @@ final class AgentPillsManager: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let providerPattern = "(open\\s*claw|openclaw|hermes)"
+        let providerPattern = "(open\\s*claw|openclaw|hermes|codex)"
         let patterns = [
             #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
             #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
@@ -399,6 +431,7 @@ final class AgentPillsManager: ObservableObject {
             switch providerToken {
             case "openclaw": provider = .openclaw
             case "hermes": provider = .hermes
+            case "codex": provider = .codex
             default: continue
             }
 
