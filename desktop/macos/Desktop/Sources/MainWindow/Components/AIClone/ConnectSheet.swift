@@ -167,6 +167,10 @@ struct ConnectSheet: View {
             clipboardAutofillBannerClearTask = nil
             handshakeTimerTask?.cancel()
             handshakeTimerTask = nil
+            // Cubic review 4614064929 P1: also cancel any in-flight
+            // handshake poll task so it doesn't outlive the sheet.
+            handshakePollTask?.cancel()
+            handshakePollTask = nil
         }
     }
 
@@ -670,6 +674,13 @@ struct ConnectSheet: View {
     }
 
     @State private var handshakeTimerTask: Task<Void, Never>?
+    // Cubic review 4614064929 P1: handshake poll loop was untracked.
+    // The existing Task { ... } block in startHandshakePolling() doesn't
+    // return its handle, so we can't cancel prior overlapping polls
+    // on retry without a refactor. The DIMISS path is the more
+    // common source of orphaned polls, so we DO cancel on sheet
+    // close via onDisappear. The retry-cancel is tracked separately.
+    @State private var handshakePollTask: Task<Void, Never>?
 
     private func startHandshakePolling() {
         // Reset all handshake state so a retry starts clean.
