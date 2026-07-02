@@ -1,7 +1,7 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
 import xml.etree.ElementTree as ET
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
