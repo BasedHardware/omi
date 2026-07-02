@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.596",
+      "date": "2026-07-02",
+      "changes": [
+        "Home: moved Ask Omi to the top of the memory export list"
+      ]
+    },
+    {
       "version": "0.11.595",
       "date": "2026-07-02",
       "changes": [
