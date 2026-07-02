@@ -125,12 +125,25 @@ def _save(path: str, payload: dict) -> None:
         except OSError:
             pass
     except Exception as e:
-        print(f"⚠️  Could not save {path}: {e}", flush=True)
+        # Cubic review 4614064929 P1: the previous behavior was to
+        # print a warning and swallow the error, so callers (and
+        # ultimately API endpoints) reported success even when the
+        # disk write failed. For credential-bearing records that's
+        # a silent data-loss bug: a /setup that "succeeded" but
+        # didn't persist leaves the user with no recoverable
+        # session. Fix: log the error AND re-raise so callers can
+        # surface a 5xx and the caller knows persistence failed.
+        logger.error(
+            "Could not save %s (raised to caller so the failure is visible): %s",
+            path,
+            e,
+        )
         try:
             if os.path.exists(tmp):
                 os.remove(tmp)
         except Exception:
             pass
+        raise
 
 
 load_storage()
@@ -255,16 +268,34 @@ def pop_pending_setup(token: str) -> Optional[dict]:
     Also purges stale entries older than PENDING_SETUP_TTL_SECONDS.
     Identified by maintainer review: setup records contain credentials.
     """
-    now = datetime.utcnow()
+    # Cubic review 4614064929 P1: `datetime.utcnow()` is naive
+    # (no tzinfo). In Python 3.11+, `datetime.fromisoformat("...Z")`
+    # parses trailing `Z` as timezone-aware. Subtracting an aware
+    # datetime from a naive one raises `TypeError`, which was caught
+    # with `pass` below — so a `created_at` ending in `Z` would
+    # silently NEVER be purged, persisting credential-bearing
+    # setup records indefinitely. Fix: use
+    # `datetime.now(timezone.utc).replace(tzinfo=None)` for `now`
+    # (still naive, so the subtraction works) and strip tzinfo
+    # from `created_dt` before comparison.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     stale_tokens = []
     for t, payload in pending_setups.items():
         created = payload.get("created_at")
         if created:
             try:
                 created_dt = datetime.fromisoformat(created)
+                # Normalize: strip tzinfo if present so the
+                # subtraction with `now` (naive) doesn't TypeError.
+                if created_dt.tzinfo is not None:
+                    created_dt = created_dt.replace(tzinfo=None)
                 if (now - created_dt).total_seconds() > PENDING_SETUP_TTL_SECONDS:
                     stale_tokens.append(t)
             except (TypeError, ValueError):
+                # Malformed timestamp: don't purge (conservative —
+                # we don't know how stale it is). Same as the
+                # previous behavior; the P1 fix only addresses
+                # the aware-datetime path.
                 pass
     for t in stale_tokens:
         pending_setups.pop(t, None)
