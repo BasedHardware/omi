@@ -66,6 +66,26 @@ enum AgentSpeechMatcher {
         return best
     }
 
+    /// Resolve a provider named at the START of a directive (the words right after
+    /// "ask" / "run" / "use" ...). Tries the shortest phrase first so a two-word
+    /// provider ("open claw") is caught without a one-word provider ("codecs")
+    /// swallowing the following objective word. Returns the matched harness and how
+    /// many leading words it consumed, or nil if nothing matches confidently.
+    static func resolveLeadingProvider(
+        _ words: [String],
+        minConfidence: Double = 0.8
+    ) -> (harness: AgentHarnessMode, consumed: Int)? {
+        guard !words.isEmpty else { return nil }
+        let maxTake = min(2, words.count)
+        for take in 1...maxTake {
+            let phrase = words.prefix(take).joined(separator: " ")
+            if let match = resolve(phrase, minConfidence: minConfidence) {
+                return (match.harness, take)
+            }
+        }
+        return nil
+    }
+
     private static func similarity(_ a: String, _ b: String) -> Double {
         if a == b { return 1 }
         let maxLen = max(a.count, b.count)
