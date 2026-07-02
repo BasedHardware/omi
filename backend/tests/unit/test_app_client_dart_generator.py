@@ -208,9 +208,15 @@ def test_payments_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedStripeSupportedCountryResponse' in generated
     assert 'class GeneratedPayPalPaymentDetailsResponse' in generated
     assert 'class GeneratedPaymentMethodStatusResponse' in generated
+    assert 'class GeneratedPaymentCheckoutSessionResponse' in generated
+    assert 'class GeneratedPaymentUpgradeSubscriptionResponse' in generated
+    assert 'class GeneratedCustomerPortalSessionResponse' in generated
+    assert 'class GeneratedPaymentStatusMessageResponse' in generated
+    assert 'class GeneratedPaymentSubscriptionResponse' in generated
     assert 'final String? defaultValue;' in generated
     assert 'defaultValue: _readString(_readAny(json, const ["default"]))' in generated
     assert "'default': defaultValue" in generated
+    assert 'nextBillingDate: _readInt(_readAny(json, const ["next_billing_date"]))' in generated
 
 
 def test_memories_wire_dart_is_generated_from_app_client_openapi():

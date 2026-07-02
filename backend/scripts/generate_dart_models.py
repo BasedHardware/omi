@@ -145,6 +145,11 @@ SCHEMA_GROUPS = {
             'StripeSupportedCountryResponse',
             'PayPalPaymentDetailsResponse',
             'PaymentMethodStatusResponse',
+            'PaymentSubscriptionResponse',
+            'PaymentStatusMessageResponse',
+            'PaymentCheckoutSessionResponse',
+            'PaymentUpgradeSubscriptionResponse',
+            'CustomerPortalSessionResponse',
         ),
     },
     'memories': {

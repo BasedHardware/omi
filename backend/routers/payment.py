@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 import time
@@ -77,6 +77,45 @@ class UpgradeSubscriptionRequest(BaseModel):
 
 class PaymentMutationResponse(BaseModel):
     status: str
+
+
+class PaymentStatusMessageResponse(BaseModel):
+    status: str
+    message: str
+
+
+class PaymentCheckoutSessionResponse(BaseModel):
+    url: Optional[str] = None
+    session_id: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    next_billing_date: Optional[int] = None
+
+
+class PaymentSubscriptionResponse(BaseModel):
+    plan: str = 'basic'
+    status: str = 'active'
+    stripe_subscription_id: Optional[str] = None
+    current_period_start: Optional[int] = None
+    current_period_end: Optional[int] = None
+    cancel_at_period_end: bool = False
+    current_price_id: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
+    limits: dict = Field(default_factory=dict)
+    deprecated: bool = False
+    deprecation_message: Optional[str] = None
+
+
+class PaymentUpgradeSubscriptionResponse(BaseModel):
+    status: str
+    message: str
+    subscription: PaymentSubscriptionResponse
+    days_remaining: int
+    schedule_id: Optional[str] = None
+
+
+class CustomerPortalSessionResponse(BaseModel):
+    url: str
 
 
 class StripeConnectAccountResponse(BaseModel):
@@ -437,7 +476,7 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     )
 
 
-@router.post('/v1/payments/checkout-session')
+@router.post('/v1/payments/checkout-session', response_model=PaymentCheckoutSessionResponse)
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
@@ -505,7 +544,7 @@ def _release_attached_schedules(stripe_sub: dict) -> None:
                 logger.error(f"Error releasing subscription schedule {schedule.id}: {sanitize(str(e))}")
 
 
-@router.post('/v1/payments/upgrade-subscription')
+@router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
 
@@ -653,7 +692,7 @@ class CancelSubscriptionRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-@router.delete('/v1/payments/subscription')
+@router.delete('/v1/payments/subscription', response_model=PaymentStatusMessageResponse)
 def cancel_subscription_endpoint(
     request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -1232,7 +1271,7 @@ def stripe_cancel():
     """)
 
 
-@router.post('/v1/payments/customer-portal')
+@router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
 

@@ -142,6 +142,182 @@ class GeneratedPaymentMethodStatusResponse {
   }
 }
 
+class GeneratedPaymentSubscriptionResponse {
+  final bool cancelAtPeriodEnd;
+  final int? currentPeriodEnd;
+  final int? currentPeriodStart;
+  final String? currentPriceId;
+  final bool deprecated;
+  final String? deprecationMessage;
+  final List<String>? features;
+  final Map<String, dynamic>? limits;
+  final String plan;
+  final String status;
+  final String? stripeSubscriptionId;
+
+  const GeneratedPaymentSubscriptionResponse({
+    required this.cancelAtPeriodEnd,
+    this.currentPeriodEnd,
+    this.currentPeriodStart,
+    this.currentPriceId,
+    required this.deprecated,
+    this.deprecationMessage,
+    this.features,
+    this.limits,
+    required this.plan,
+    required this.status,
+    this.stripeSubscriptionId,
+  });
+
+  factory GeneratedPaymentSubscriptionResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedPaymentSubscriptionResponse(
+      cancelAtPeriodEnd: _readBool(_readAny(json, const ["cancel_at_period_end"])) ?? false,
+      currentPeriodEnd: _readInt(_readAny(json, const ["current_period_end"])),
+      currentPeriodStart: _readInt(_readAny(json, const ["current_period_start"])),
+      currentPriceId: _readString(_readAny(json, const ["current_price_id"])),
+      deprecated: _readBool(_readAny(json, const ["deprecated"])) ?? false,
+      deprecationMessage: _readString(_readAny(json, const ["deprecation_message"])),
+      features: _readAny(json, const ["features"]) == null ? null : _readStringList(_readAny(json, const ["features"])),
+      limits: _readMap(_readAny(json, const ["limits"])),
+      plan: _readString(_readAny(json, const ["plan"])) ?? "basic",
+      status: _readString(_readAny(json, const ["status"])) ?? "active",
+      stripeSubscriptionId: _readString(_readAny(json, const ["stripe_subscription_id"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'cancel_at_period_end': cancelAtPeriodEnd,
+      'current_period_end': currentPeriodEnd,
+      'current_period_start': currentPeriodStart,
+      'current_price_id': currentPriceId,
+      'deprecated': deprecated,
+      'deprecation_message': deprecationMessage,
+      'features': features,
+      'limits': limits,
+      'plan': plan,
+      'status': status,
+      'stripe_subscription_id': stripeSubscriptionId,
+    };
+  }
+}
+
+class GeneratedPaymentStatusMessageResponse {
+  final String message;
+  final String status;
+
+  const GeneratedPaymentStatusMessageResponse({
+    required this.message,
+    required this.status,
+  });
+
+  factory GeneratedPaymentStatusMessageResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedPaymentStatusMessageResponse(
+      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'status': status,
+    };
+  }
+}
+
+class GeneratedPaymentCheckoutSessionResponse {
+  final String? message;
+  final int? nextBillingDate;
+  final String? sessionId;
+  final String? status;
+  final String? url;
+
+  const GeneratedPaymentCheckoutSessionResponse({
+    this.message,
+    this.nextBillingDate,
+    this.sessionId,
+    this.status,
+    this.url,
+  });
+
+  factory GeneratedPaymentCheckoutSessionResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedPaymentCheckoutSessionResponse(
+      message: _readString(_readAny(json, const ["message"])),
+      nextBillingDate: _readInt(_readAny(json, const ["next_billing_date"])),
+      sessionId: _readString(_readAny(json, const ["session_id"])),
+      status: _readString(_readAny(json, const ["status"])),
+      url: _readString(_readAny(json, const ["url"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'next_billing_date': nextBillingDate,
+      'session_id': sessionId,
+      'status': status,
+      'url': url,
+    };
+  }
+}
+
+class GeneratedPaymentUpgradeSubscriptionResponse {
+  final int daysRemaining;
+  final String message;
+  final String? scheduleId;
+  final String status;
+  final GeneratedPaymentSubscriptionResponse subscription;
+
+  const GeneratedPaymentUpgradeSubscriptionResponse({
+    required this.daysRemaining,
+    required this.message,
+    this.scheduleId,
+    required this.status,
+    required this.subscription,
+  });
+
+  factory GeneratedPaymentUpgradeSubscriptionResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedPaymentUpgradeSubscriptionResponse(
+      daysRemaining: _required(_readInt(_readAny(json, const ["days_remaining"])), "days_remaining"),
+      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+      scheduleId: _readString(_readAny(json, const ["schedule_id"])),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      subscription: _required(_readObject(_readAny(json, const ["subscription"]), GeneratedPaymentSubscriptionResponse.fromJson), "subscription"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'days_remaining': daysRemaining,
+      'message': message,
+      'schedule_id': scheduleId,
+      'status': status,
+      'subscription': subscription.toJson(),
+    };
+  }
+}
+
+class GeneratedCustomerPortalSessionResponse {
+  final String url;
+
+  const GeneratedCustomerPortalSessionResponse({
+    required this.url,
+  });
+
+  factory GeneratedCustomerPortalSessionResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedCustomerPortalSessionResponse(
+      url: _required(_readString(_readAny(json, const ["url"])), "url"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'url': url,
+    };
+  }
+}
+
 dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
     if (json.containsKey(name)) return json[name];

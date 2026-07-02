@@ -3598,6 +3598,19 @@
         "title": "CreateTaskResponse",
         "type": "object"
       },
+      "CustomerPortalSessionResponse": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "CustomerPortalSessionResponse",
+        "type": "object"
+      },
       "DailySummarySettingsResponse": {
         "properties": {
           "enabled": {
@@ -7281,6 +7294,67 @@
         "title": "PayPalPaymentDetailsResponse",
         "type": "object"
       },
+      "PaymentCheckoutSessionResponse": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "next_billing_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Billing Date"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "PaymentCheckoutSessionResponse",
+        "type": "object"
+      },
       "PaymentMethodStatusResponse": {
         "properties": {
           "default": {
@@ -7321,6 +7395,155 @@
           "status"
         ],
         "title": "PaymentMutationResponse",
+        "type": "object"
+      },
+      "PaymentStatusMessageResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "PaymentStatusMessageResponse",
+        "type": "object"
+      },
+      "PaymentSubscriptionResponse": {
+        "properties": {
+          "cancel_at_period_end": {
+            "default": false,
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "current_period_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period Start"
+          },
+          "current_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Price Id"
+          },
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
+          "deprecation_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Message"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "limits": {
+            "additionalProperties": true,
+            "title": "Limits",
+            "type": "object"
+          },
+          "plan": {
+            "default": "basic",
+            "title": "Plan",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "stripe_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Subscription Id"
+          }
+        },
+        "title": "PaymentSubscriptionResponse",
+        "type": "object"
+      },
+      "PaymentUpgradeSubscriptionResponse": {
+        "properties": {
+          "days_remaining": {
+            "title": "Days Remaining",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "schedule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/PaymentSubscriptionResponse"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "subscription",
+          "days_remaining"
+        ],
+        "title": "PaymentUpgradeSubscriptionResponse",
         "type": "object"
       },
       "PaywallStatusResponse": {
@@ -28255,7 +28478,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentCheckoutSessionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -28328,7 +28553,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPortalSessionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -28511,7 +28738,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentStatusMessageResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -28641,7 +28870,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentUpgradeSubscriptionResponse"
+                }
               }
             },
             "description": "Successful Response"

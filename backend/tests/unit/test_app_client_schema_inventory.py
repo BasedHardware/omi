@@ -25,8 +25,8 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert ('GET', '/v1/app-categories', 'get_app_categories_v1_app_categories_get') in unmodeled_operations
     assert (
         'POST',
-        '/v1/payments/checkout-session',
-        'create_checkout_session_endpoint_v1_payments_checkout_session_post',
+        '/v1/app/generate',
+        'generate_app_endpoint_v1_app_generate_post',
     ) in unmodeled_operations
     assert report['app_used_unmodeled_success_response_count'] == len(report['app_used_unmodeled_success_responses'])
     assert report['manual_dart_json_schema_file_count'] == (
