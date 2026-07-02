@@ -56,6 +56,7 @@ class ConversationSource(str, Enum):
     sdcard = 'sdcard'
     external_integration = 'external_integration'
     imessage = 'imessage'
+    whatsapp = 'whatsapp'
     limitless = 'limitless'
     onboarding = 'onboarding'
     unknown = 'unknown'

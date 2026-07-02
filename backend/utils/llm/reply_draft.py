@@ -93,17 +93,23 @@ def _dedupe_recent(samples: List[str]) -> List[str]:
     return unique[-MAX_STYLE_SAMPLES:]
 
 
+# Conversation sources that represent the user *texting* (not voice-captured
+# speech, a different register). Cold-start voice-matching samples the user's own
+# outgoing messages from these sources only.
+_TEXTING_SOURCES = frozenset({ConversationSource.imessage.value, ConversationSource.whatsapp.value})
+
+
 def _general_style_samples(uid: str) -> List[str]:
     """The user's GENERAL texting voice — their own outgoing messages across ALL
     contacts — used only as a cold-start fallback when there's no history with the
-    specific person being replied to. Restricted to iMessage-sourced conversations
-    so we mirror how the user *texts*, never how they speak in voice-captured
-    conversations (a different register)."""
+    specific person being replied to. Restricted to text-messaging sources
+    (iMessage/WhatsApp) so we mirror how the user *texts*, never how they speak in
+    voice-captured conversations (a different register)."""
     samples: List[str] = []
     try:
         convos = conversations_db.get_conversations(uid, limit=30)
         for convo in convos:
-            if convo.get('source') != ConversationSource.imessage.value:
+            if convo.get('source') not in _TEXTING_SOURCES:
                 continue
             for seg in convo.get('transcript_segments') or []:
                 if seg.get('is_user') and (seg.get('text') or '').strip():

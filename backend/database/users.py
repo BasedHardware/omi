@@ -661,13 +661,16 @@ def get_person_by_handle(uid: str, handle: str):
     return None
 
 
-def get_or_create_person_by_handle(uid: str, handle: str, display_name: str):
+def get_or_create_person_by_handle(uid: str, handle: str, display_name: str, source: str = 'imessage'):
     """Idempotently resolve a chat-app contact to a Person.
 
-    Contacts are identified by a normalized handle (e.g. an iMessage phone/email).
-    Resolution is by handle IDENTITY only: existing handle → create a new person.
-    The person id is seeded from the handle so concurrent ingests converge on the
-    same document.
+    Contacts are identified by a normalized handle (e.g. an iMessage phone/email or
+    a WhatsApp phone number). Resolution is by handle IDENTITY only: existing handle
+    → return it; otherwise create a new person. The person id is seeded from
+    ``{uid}:{source}:{handle}`` so concurrent ingests converge on the same document.
+
+    ``source`` (``'imessage'`` / ``'whatsapp'``) namespaces the id seed and is stored
+    on the person, so the same raw handle under different platforms can't collide.
 
     We deliberately do NOT merge by display name. Distinct people can share a saved
     name, so a name-based merge would silently fold a handle-discovered contact into
@@ -680,12 +683,12 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str):
     if existing:
         return existing
 
-    person_id = document_id_from_seed(f'{uid}:imessage:{handle}')
+    person_id = document_id_from_seed(f'{uid}:{source}:{handle}')
     person_data = {
         'id': person_id,
         'name': display_name or handle,
         'handles': [handle] if handle else [],
-        'source': 'imessage',
+        'source': source,
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
