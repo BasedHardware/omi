@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Gmail import getting stuck while reading large email histories"
+}

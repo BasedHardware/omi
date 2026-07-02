@@ -14,6 +14,8 @@ struct GmailEmail: Identifiable {
 enum GmailReaderError: LocalizedError {
   case noBrowserFound
   case noGmailCookies
+  case notSignedIn
+  case sessionExpired
   case cookieDecryptionFailed(String)
   case networkError(String)
   case authFailed
@@ -25,6 +27,10 @@ enum GmailReaderError: LocalizedError {
       return "No browser with Gmail session found. Log into Gmail in Chrome, Arc, Brave, or Edge."
     case .noGmailCookies:
       return "No Gmail session cookies found. Make sure you're logged into Gmail."
+    case .notSignedIn:
+      return "Not signed into Gmail in any browser. Open mail.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+    case .sessionExpired:
+      return "Your Gmail session expired. Reload mail.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
       return "Cookie decryption failed: \(msg)"
     case .networkError(let msg):
@@ -34,6 +40,58 @@ enum GmailReaderError: LocalizedError {
     case .pythonNotFound:
       return "Python 3 not found. Install it via Homebrew: brew install python3"
     }
+  }
+}
+
+// MARK: - Fetch outcome diagnostics
+
+struct GmailAttempt: Equatable {
+  let browser: String
+  let stage: String
+  let reason: String
+  let hadAuthCookies: Bool
+}
+
+enum GmailFailureClass: String, Equatable {
+  case noBrowser = "no_browser"
+  case notSignedIn = "not_signed_in"
+  case sessionExpired = "session_expired"
+  case decryptFailed = "decrypt_failed"
+  case network = "network"
+  case unknown = "unknown"
+
+  var asError: GmailReaderError {
+    switch self {
+    case .noBrowser: return .noBrowserFound
+    case .notSignedIn: return .notSignedIn
+    case .sessionExpired: return .sessionExpired
+    case .decryptFailed: return .cookieDecryptionFailed("browser session could not be decrypted")
+    case .network: return .networkError("please check your connection and try again")
+    case .unknown: return .networkError("unexpected error")
+    }
+  }
+}
+
+enum GmailOutcomeParser {
+  static func failure(from json: [String: Any]) -> (GmailFailureClass, String, [GmailAttempt]) {
+    let attempts = (json["attempts"] as? [[String: Any]] ?? []).map { dict in
+      GmailAttempt(
+        browser: dict["browser"] as? String ?? "unknown",
+        stage: dict["stage"] as? String ?? "unknown",
+        reason: dict["reason"] as? String ?? "",
+        hadAuthCookies: dict["had_auth"] as? Bool ?? false
+      )
+    }
+    let cls = GmailFailureClass(rawValue: json["error_class"] as? String ?? "") ?? .unknown
+    let summary =
+      (json["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+      ?? cls.asError.errorDescription ?? "Unknown error"
+    return (cls, summary, attempts)
+  }
+
+  static func diagnosticsLine(_ attempts: [GmailAttempt]) -> String {
+    guard !attempts.isEmpty else { return "no browsers scanned" }
+    return attempts.map { "\($0.browser)[\($0.stage):\($0.reason)]" }.joined(separator: ", ")
   }
 }
 
@@ -428,7 +486,7 @@ actor GmailReaderService {
     }
 
     let pythonScript = """
-      import sys, json, sqlite3, hashlib, xml.etree.ElementTree as ET
+      import sys, json, os, sqlite3, tempfile, hashlib, xml.etree.ElementTree as ET
       from http.cookiejar import MozillaCookieJar, Cookie
       from urllib.parse import quote
       from urllib.request import Request, build_opener, HTTPCookieProcessor
@@ -456,6 +514,41 @@ actor GmailReaderService {
       query = sys.argv[3] if len(sys.argv) > 3 else 'newer_than:1d'
       use_bootstrap = (sys.argv[4] if len(sys.argv) > 4 else '1') == '1'
       feed_path = sys.argv[5] if len(sys.argv) > 5 else ''
+
+      def write_result(result):
+          tmp = tempfile.NamedTemporaryFile(
+              mode='w',
+              encoding='utf-8',
+              suffix='.json',
+              prefix='omi_gmail_',
+              delete=False,
+          )
+          try:
+              json.dump(result, tmp)
+              tmp.write('\\n')
+              tmp.close()
+              os.chmod(tmp.name, 0o600)
+              print(tmp.name)
+          except Exception:
+              path = tmp.name
+              tmp.close()
+              try:
+                  os.unlink(path)
+              except OSError:
+                  pass
+              raise
+
+      def classify(attempts):
+          if not attempts:
+              return 'no_browser', 'No supported browser with a readable session was found.'
+          if any(a['stage'] == 'fetch' and a.get('http') in (401, 403) for a in attempts):
+              return 'session_expired', 'Your Gmail session expired. Reload mail.google.com to refresh it.'
+          if any(a['stage'] == 'fetch' for a in attempts):
+              detail = next(a['reason'] for a in attempts if a['stage'] == 'fetch')
+              return 'network', f'Could not reach Gmail ({detail}).'
+          if any(a['stage'] == 'auth' for a in attempts):
+              return 'not_signed_in', 'No browser is signed into Gmail. Sign into mail.google.com and try again.'
+          return 'decrypt_failed', 'Your browser session could not be read.'
 
       def decrypt_cookies_with_domains(db_path, password):
           key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
@@ -716,14 +809,19 @@ actor GmailReaderService {
           return emails, None
 
       # Try each browser
+      attempts = []
       for browser in browsers:
           cookies, err = decrypt_cookies_with_domains(browser['db_path'], browser['password'])
           if err or not cookies:
+              attempts.append({'browser': browser['name'], 'stage': 'decrypt',
+                               'reason': (err or 'no cookies'), 'had_auth': False})
               continue
 
           auth_names = {'SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'}
           found_auth = [c for c in cookies if c['name'] in auth_names]
           if not found_auth:
+              attempts.append({'browser': browser['name'], 'stage': 'auth',
+                               'reason': 'no Google auth cookies', 'had_auth': False})
               continue
 
           jar = make_cookie_jar(cookies)
@@ -731,17 +829,27 @@ actor GmailReaderService {
           if use_bootstrap and status == 200:
               emails, parse_err = parse_bootstrap_page(body, max_results)
               if not parse_err and emails:
-                  print(json.dumps({'ok': True, 'browser': browser['name'], 'source': 'bootstrap', 'emails': emails, 'count': len(emails)}))
+                  attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'bootstrap', 'had_auth': True})
+                  write_result({'ok': True, 'browser': browser['name'], 'source': 'bootstrap', 'emails': emails, 'count': len(emails), 'attempts': attempts})
                   sys.exit(0)
+          elif status is not None:
+              attempts.append({'browser': browser['name'], 'stage': 'fetch',
+                               'reason': f'home HTTP {status}', 'had_auth': True, 'http': status})
 
           status, body = fetch_atom_feed(jar)
           if status == 200:
               emails, parse_err = parse_atom(body, max_results)
               if not parse_err and emails is not None:
-                  print(json.dumps({'ok': True, 'browser': browser['name'], 'source': 'atom', 'emails': emails, 'count': len(emails)}))
+                  attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'atom', 'had_auth': True})
+                  write_result({'ok': True, 'browser': browser['name'], 'source': 'atom', 'emails': emails, 'count': len(emails), 'attempts': attempts})
                   sys.exit(0)
+          else:
+              attempts.append({'browser': browser['name'], 'stage': 'fetch',
+                               'reason': (f'atom HTTP {status}' if status is not None else str(body)[:120]),
+                               'had_auth': True, 'http': status})
 
-      print(json.dumps({'ok': False, 'error': 'No browser with valid Gmail session found'}))
+      error_class, summary = classify(attempts)
+      write_result({'ok': False, 'error_class': error_class, 'summary': summary, 'attempts': attempts})
       sys.exit(0)
       """
 
@@ -752,78 +860,65 @@ actor GmailReaderService {
       throw GmailReaderError.pythonNotFound
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: pythonPath)
-    process.arguments = [
-      "-c", pythonScript, configJSON, String(maxResults), query,
-      shouldUseBootstrapPage ? "1" : "0",
-      feedPath ?? "",
-    ]
-    let pipe = Pipe()
-    let errPipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = errPipe
+    let queryLogDescription =
+      Self.parseNewerThanDays(query).map { "newer_than:\($0)d" }
+      ?? "custom(length:\(query.count))"
+    let feedPathLogDescription = feedPath == nil ? "default" : "custom"
+    log(
+      "GmailReaderService: Helper starting maxResults=\(maxResults), query=\(queryLogDescription), feedPath=\(feedPathLogDescription), bootstrap=\(shouldUseBootstrapPage)"
+    )
 
-    // Drain pipes asynchronously to avoid deadlock: the helper prints the full
-    // JSON payload for up to 300 emails to stdout, which can exceed the pipe
-    // buffer. waitUntilExit() blocks if the child blocks in write() on a full
-    // buffer, so read concurrently instead of after exit. (mirrors CalendarReaderService)
-    var outputData = Data()
-    var errData = Data()
-    let outputSem = DispatchSemaphore(value: 0)
-    let errSem = DispatchSemaphore(value: 0)
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-      let d = handle.availableData
-      if d.isEmpty {
-        pipe.fileHandleForReading.readabilityHandler = nil
-        outputSem.signal()
-      } else {
-        outputData.append(d)
-      }
-    }
-    errPipe.fileHandleForReading.readabilityHandler = { handle in
-      let d = handle.availableData
-      if d.isEmpty {
-        errPipe.fileHandleForReading.readabilityHandler = nil
-        errSem.signal()
-      } else {
-        errData.append(d)
-      }
-    }
-
+    let result: PipeProcessResult
     do {
-      try process.run()
-      // Timeout so the import surfaces an actionable error instead of spinning forever.
-      DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(60)) {
-        if process.isRunning { process.terminate() }
-      }
-      process.waitUntilExit()
+      result = try PipeProcessRunner.run(
+        executableURL: URL(fileURLWithPath: pythonPath),
+        arguments: [
+          "-c", pythonScript, configJSON, String(maxResults), query,
+          shouldUseBootstrapPage ? "1" : "0",
+          feedPath ?? "",
+        ],
+        timeoutSeconds: 60
+      )
     } catch {
-      throw GmailReaderError.networkError("Failed to run Python: \(error.localizedDescription)")
+      log("GmailReaderService: Helper failed before parse: \(error.localizedDescription)")
+      throw GmailReaderError.networkError(error.localizedDescription)
     }
 
-    // Wait for pipe reads to finish (max 5s after process exit)
-    _ = outputSem.wait(timeout: .now() + .seconds(5))
-    _ = errSem.wait(timeout: .now() + .seconds(5))
-
-    let output = outputData
-    let errOutput = String(data: errData, encoding: .utf8) ?? ""
+    let errOutput =
+      String(data: result.stderr, encoding: .utf8) ?? ""
     if !errOutput.isEmpty {
       log("GmailReaderService: Python stderr: \(errOutput.prefix(500))")
     }
-    if output.isEmpty {
+    log(
+      "GmailReaderService: Helper exited status=\(result.terminationStatus), durationMs=\(Int(result.duration * 1000)), stdoutBytes=\(result.stdout.count)"
+    )
+
+    guard result.terminationStatus == 0 else {
       throw GmailReaderError.networkError(
-        "Gmail helper produced no output (timed out or exited early)")
+        "Python exited with status \(result.terminationStatus): \(errOutput.prefix(300))")
     }
 
+    let outputPath =
+      String(data: result.stdout, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      ?? ""
+    guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
+      throw GmailReaderError.networkError(
+        "Python did not produce output file (stdout: \(outputPath.prefix(200)))")
+    }
+    defer { try? FileManager.default.removeItem(atPath: outputPath) }
+
+    let output = try Data(contentsOf: URL(fileURLWithPath: outputPath))
     guard let json = try? JSONSerialization.jsonObject(with: output) as? [String: Any] else {
       let raw = String(data: output, encoding: .utf8) ?? "(empty)"
       throw GmailReaderError.networkError("Python returned invalid JSON: \(raw.prefix(200))")
     }
 
     guard json["ok"] as? Bool == true else {
-      let errMsg = json["error"] as? String ?? "Unknown error"
-      throw GmailReaderError.networkError(errMsg)
+      let (cls, summary, attempts) = GmailOutcomeParser.failure(from: json)
+      log(
+        "GmailReaderService: fetch failed [\(cls.rawValue)] - \(summary) | "
+          + "attempts: \(GmailOutcomeParser.diagnosticsLine(attempts))")
+      throw cls.asError
     }
 
     guard let emailDicts = json["emails"] as? [[String: Any]] else {
