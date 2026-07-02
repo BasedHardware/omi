@@ -1756,6 +1756,11 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
+  struct MemoryListPage {
+    let memories: [ServerMemory]
+    let canonicalLifecycleExposed: Bool
+    let deviceScopeSupported: Bool?
+  }
 
   /// Fetches memories from the API with optional filtering
   func getMemories(
@@ -1780,6 +1785,67 @@ extension APIClient {
       endpoint += "&device_scope=\(deviceScope)"
     }
     return try await get(endpoint)
+  }
+
+  /// Fetches memories plus server-authoritative capability headers.
+  func getMemoriesPage(
+    limit: Int = 100,
+    offset: Int = 0,
+    category: String? = nil,
+    tags: [String]? = nil,
+    includeDismissed: Bool = false,
+    deviceScope: String? = nil
+  ) async throws -> MemoryListPage {
+    var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
+    if let category = category {
+      endpoint += "&category=\(category)"
+    }
+    if let tags = tags, !tags.isEmpty {
+      endpoint += "&tags=\(tags.joined(separator: ","))"
+    }
+    if includeDismissed {
+      endpoint += "&include_dismissed=true"
+    }
+    if let deviceScope = deviceScope {
+      endpoint += "&device_scope=\(deviceScope)"
+    }
+
+    let url = URL(string: baseURL + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    return try await performMemoryListRequest(request, retriedAuth: false)
+  }
+
+  private func performMemoryListRequest(_ request: URLRequest, retriedAuth: Bool) async throws -> MemoryListPage {
+    let (data, response) = try await session.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401, !retriedAuth {
+      let authService = await MainActor.run { AuthService.shared }
+      var retry = request
+      retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      return try await performMemoryListRequest(retry, retriedAuth: true)
+    }
+    if httpResponse.statusCode == 401 {
+      throw APIError.unauthorized
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let detail = Self.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
+
+    let memories = try decoder.decode([ServerMemory].self, from: data)
+    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: "X-Omi-Memory-Device-Scope-Supported")
+    let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    return MemoryListPage(
+      memories: memories,
+      canonicalLifecycleExposed: deviceScopeSupported == true,
+      deviceScopeSupported: deviceScopeSupported
+    )
   }
 
   /// Creates a new memory (manual or extracted)
