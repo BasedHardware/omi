@@ -939,6 +939,225 @@
         "title": "AppBaseModel",
         "type": "object"
       },
+      "AppCapabilityAction": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "doc_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Url"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "id"
+        ],
+        "title": "AppCapabilityAction",
+        "type": "object"
+      },
+      "AppCapabilityResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AppCapabilityAction"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/AppSelectOption"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "triggers": {
+            "items": {
+              "$ref": "#/components/schemas/AppSelectOption"
+            },
+            "title": "Triggers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "title",
+          "id"
+        ],
+        "title": "AppCapabilityResponse",
+        "type": "object"
+      },
+      "AppDescriptionEmojiGenerationResponse": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "emoji": {
+            "title": "Emoji",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "emoji"
+        ],
+        "title": "AppDescriptionEmojiGenerationResponse",
+        "type": "object"
+      },
+      "AppDescriptionGenerationResponse": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "AppDescriptionGenerationResponse",
+        "type": "object"
+      },
+      "AppDraftGenerationResponse": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "chat_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Prompt"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "memory_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Prompt"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "category",
+          "capabilities"
+        ],
+        "title": "AppDraftGenerationResponse",
+        "type": "object"
+      },
+      "AppGenerationResponse": {
+        "properties": {
+          "app": {
+            "$ref": "#/components/schemas/AppDraftGenerationResponse"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "app"
+        ],
+        "title": "AppGenerationResponse",
+        "type": "object"
+      },
+      "AppIconGenerationResponse": {
+        "properties": {
+          "icon_base64": {
+            "title": "Icon Base64",
+            "type": "string"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "icon_base64",
+          "mime_type"
+        ],
+        "title": "AppIconGenerationResponse",
+        "type": "object"
+      },
+      "AppPromptsGenerationResponse": {
+        "properties": {
+          "prompts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prompts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "prompts"
+        ],
+        "title": "AppPromptsGenerationResponse",
+        "type": "object"
+      },
       "AppResult": {
         "properties": {
           "app_id": {
@@ -962,6 +1181,42 @@
           "content"
         ],
         "title": "AppResult",
+        "type": "object"
+      },
+      "AppSelectOption": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "id"
+        ],
+        "title": "AppSelectOption",
+        "type": "object"
+      },
+      "AppThumbnailUploadResponse": {
+        "properties": {
+          "thumbnail_id": {
+            "title": "Thumbnail Id",
+            "type": "string"
+          },
+          "thumbnail_url": {
+            "title": "Thumbnail Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thumbnail_url",
+          "thumbnail_id"
+        ],
+        "title": "AppThumbnailUploadResponse",
         "type": "object"
       },
       "AppleHealthSyncData": {
@@ -14491,7 +14746,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppCapabilityResponse"
+                  },
+                  "title": "Response Get App Capabilities V1 App Capabilities Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -14518,7 +14779,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppSelectOption"
+                  },
+                  "title": "Response Get App Categories V1 App Categories Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -14596,7 +14863,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppGenerationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14683,7 +14952,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppDescriptionGenerationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14771,7 +15042,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppDescriptionEmojiGenerationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14859,7 +15132,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppIconGenerationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14935,7 +15210,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppPromptsGenerationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14972,7 +15249,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppSelectOption"
+                  },
+                  "title": "Response Get Payment Plans V1 V1 App Payment Plans Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -15037,7 +15320,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppSelectOption"
+                  },
+                  "title": "Response Get Payment Plans V1 App Plans Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -15074,7 +15363,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppSelectOption"
+                  },
+                  "title": "Response Get Notification Scopes V1 App Proactive Notification Scopes Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -15150,7 +15445,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppThumbnailUploadResponse"
+                }
               }
             },
             "description": "Successful Response"

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 from typing import List, Optional
 from urllib.parse import urlparse
-from pydantic import BaseModel as PydanticBaseModel, ValidationError
+from pydantic import BaseModel as PydanticBaseModel, Field, ValidationError
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
@@ -134,6 +134,60 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class AppSelectOption(PydanticBaseModel):
+    title: str
+    id: str
+
+
+class AppCapabilityAction(AppSelectOption):
+    doc_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class AppCapabilityResponse(AppSelectOption):
+    triggers: List[AppSelectOption] = Field(default_factory=list)
+    actions: List[AppCapabilityAction] = Field(default_factory=list)
+    scopes: List[AppSelectOption] = Field(default_factory=list)
+
+
+class AppThumbnailUploadResponse(PydanticBaseModel):
+    thumbnail_url: str
+    thumbnail_id: str
+
+
+class AppDescriptionGenerationResponse(PydanticBaseModel):
+    description: str
+
+
+class AppDescriptionEmojiGenerationResponse(PydanticBaseModel):
+    description: str
+    emoji: str
+
+
+class AppPromptsGenerationResponse(PydanticBaseModel):
+    prompts: List[str]
+
+
+class AppDraftGenerationResponse(PydanticBaseModel):
+    name: str
+    description: str
+    category: str
+    capabilities: List[str]
+    chat_prompt: Optional[str] = None
+    memory_prompt: Optional[str] = None
+
+
+class AppGenerationResponse(PydanticBaseModel):
+    status: str
+    app: AppDraftGenerationResponse
+
+
+class AppIconGenerationResponse(PydanticBaseModel):
+    status: str
+    icon_base64: str
+    mime_type: str
 
 
 def _write_file(path: str, data: bytes):
@@ -880,7 +934,7 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return app
 
 
-@router.get('/v1/app-categories', tags=['v1'])
+@router.get('/v1/app-categories', tags=['v1'], response_model=List[AppSelectOption])
 def get_app_categories():
     return [
         {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
@@ -1050,7 +1104,7 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     return {'status': 'ok'}
 
 
-@router.get('/v1/app/proactive-notification-scopes', tags=['v1'])
+@router.get('/v1/app/proactive-notification-scopes', tags=['v1'], response_model=List[AppSelectOption])
 def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
@@ -1060,7 +1114,7 @@ def get_notification_scopes():
     ]
 
 
-@router.get('/v1/app-capabilities', tags=['v1'])
+@router.get('/v1/app-capabilities', tags=['v1'], response_model=List[AppCapabilityResponse])
 def get_app_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
@@ -1120,14 +1174,14 @@ def get_app_capabilities():
 
 
 # @deprecated
-@router.get('/v1/app/payment-plans', tags=['v1'])
+@router.get('/v1/app/payment-plans', tags=['v1'], response_model=List[AppSelectOption])
 def get_payment_plans_v1():
     return [
         {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
     ]
 
 
-@router.get('/v1/app/plans', tags=['v1'])
+@router.get('/v1/app/plans', tags=['v1'], response_model=List[AppSelectOption])
 def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
     if not uid or len(uid) == 0 or not is_permit_payment_plan_get(uid):
         return []
@@ -1136,7 +1190,7 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
     ]
 
 
-@router.post('/v1/app/generate-description', tags=['v1'])
+@router.post('/v1/app/generate-description', tags=['v1'], response_model=AppDescriptionGenerationResponse)
 def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if data['name'] == '':
         raise HTTPException(status_code=422, detail='App Name is required')
@@ -1149,7 +1203,7 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
     }
 
 
-@router.post('/v1/app/generate-description-emoji', tags=['v1'])
+@router.post('/v1/app/generate-description-emoji', tags=['v1'], response_model=AppDescriptionEmojiGenerationResponse)
 def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate an app description and representative emoji.
@@ -1172,7 +1226,7 @@ def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.
 # ******************************************************
 
 
-@router.get('/v1/app/generate-prompts', tags=['v1'])
+@router.get('/v1/app/generate-prompts', tags=['v1'], response_model=AppPromptsGenerationResponse)
 async def generate_sample_prompts_endpoint(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
 ):
@@ -1243,7 +1297,7 @@ Be creative, fun, and varied. No generic ideas."""
         }
 
 
-@router.post('/v1/app/generate', tags=['v1'])
+@router.post('/v1/app/generate', tags=['v1'], response_model=AppGenerationResponse)
 async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate an app configuration from a natural language prompt.
@@ -1282,7 +1336,7 @@ async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_
         raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
 
 
-@router.post('/v1/app/generate-icon', tags=['v1'])
+@router.post('/v1/app/generate-icon', tags=['v1'], response_model=AppIconGenerationResponse)
 async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate an app icon using AI (DALL-E).
@@ -1907,7 +1961,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
-@router.post('/v1/app/thumbnails', tags=['v1'])
+@router.post('/v1/app/thumbnails', tags=['v1'], response_model=AppThumbnailUploadResponse)
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
     """Upload a thumbnail image for an app.
 

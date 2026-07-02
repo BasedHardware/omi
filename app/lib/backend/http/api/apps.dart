@@ -5,9 +5,37 @@ import 'dart:io';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/gen/apps_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+Category _categoryFromWire(wire.GeneratedAppSelectOption option) {
+  return Category(title: option.title, id: option.id);
+}
+
+PaymentPlan _paymentPlanFromWire(wire.GeneratedAppSelectOption option) {
+  return PaymentPlan(title: option.title, id: option.id);
+}
+
+AppCapability _appCapabilityFromWire(wire.GeneratedAppCapabilityResponse capability) {
+  return AppCapability(
+    title: capability.title,
+    id: capability.id,
+    triggerEvents: capability.triggers.map((event) => TriggerEvent(title: event.title, id: event.id)).toList(),
+    notificationScopes: capability.scopes.map((scope) => NotificationScope(title: scope.title, id: scope.id)).toList(),
+    actions: capability.actions
+        .map(
+          (action) => CapacityAction(
+            title: action.title,
+            id: action.id,
+            docUrl: action.docUrl,
+            description: action.description,
+          ),
+        )
+        .toList(),
+  );
+}
 
 Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   int offset = 0,
@@ -65,7 +93,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
 }
 
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
@@ -215,8 +243,8 @@ Future<Map<String, String>> uploadAppThumbnail(File file) async {
     );
 
     if (response.statusCode == 200) {
-      var data = jsonDecode(response.body);
-      return {'thumbnail_url': data['thumbnail_url'], 'thumbnail_id': data['thumbnail_id']};
+      final data = wire.GeneratedAppThumbnailUploadResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return {'thumbnail_url': data.thumbnailUrl, 'thumbnail_id': data.thumbnailId};
     } else {
       Logger.debug('Failed to upload thumbnail. Status code: ${response.statusCode}');
       return {};
@@ -346,8 +374,11 @@ Future<List<Category>> getAppCategories() async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('getAppCategories: ${response.body}');
-    var res = jsonDecode(response.body);
-    return Category.fromJsonList(res);
+    final res = jsonDecode(response.body) as List;
+    return res
+        .map((item) => wire.GeneratedAppSelectOption.fromJson(item as Map<String, dynamic>))
+        .map(_categoryFromWire)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -360,8 +391,11 @@ Future<List<AppCapability>> getAppCapabilitiesServer() async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('getAppCapabilities: ${response.body}');
-    var res = jsonDecode(response.body);
-    return AppCapability.fromJsonList(res);
+    final res = jsonDecode(response.body) as List;
+    return res
+        .map((item) => wire.GeneratedAppCapabilityResponse.fromJson(item as Map<String, dynamic>))
+        .map(_appCapabilityFromWire)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -436,7 +470,11 @@ Future<List<PaymentPlan>> getPaymentPlansServer() async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('getPaymentPlansServer: ${response.body}');
-    return PaymentPlan.fromJsonList(jsonDecode(response.body));
+    final res = jsonDecode(response.body) as List;
+    return res
+        .map((item) => wire.GeneratedAppSelectOption.fromJson(item as Map<String, dynamic>))
+        .map(_paymentPlanFromWire)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -454,7 +492,9 @@ Future<String> getGenratedDescription(String name, String description) async {
   try {
     if (response == null || response.statusCode != 200) return '';
     log('getGenratedDescription: ${response.body}');
-    return jsonDecode(response.body)['description'];
+    return wire.GeneratedAppDescriptionGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).description;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -476,11 +516,10 @@ Future<({String description, String emoji})> getGeneratedDescriptionAndEmoji(Str
       return (description: 'A custom app that $prompt', emoji: '✨');
     }
     log('getGeneratedDescriptionAndEmoji: ${response.body}');
-    var data = jsonDecode(response.body);
-    return (
-      description: (data['description'] as String?) ?? 'A custom app that $prompt',
-      emoji: (data['emoji'] as String?) ?? '✨',
+    final data = wire.GeneratedAppDescriptionEmojiGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
     );
+    return (description: data.description, emoji: data.emoji);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -503,8 +542,9 @@ Future<List<String>> getGeneratedAppPrompts() async {
       return [];
     }
     log('getGeneratedAppPrompts: ${response.body}');
-    var data = jsonDecode(response.body);
-    return (data['prompts'] as List<dynamic>).cast<String>();
+    return wire.GeneratedAppPromptsGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).prompts;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -526,8 +566,8 @@ Future<Map<String, dynamic>?> generateAppFromPrompt(String prompt) async {
       return null;
     }
     log('generateAppFromPrompt: ${response.body}');
-    var data = jsonDecode(response.body);
-    return data['app'] as Map<String, dynamic>;
+    final data = wire.GeneratedAppGenerationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.app.toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -550,8 +590,9 @@ Future<String?> generateAppIcon(String name, String description, String category
       return null;
     }
     log('generateAppIcon: success');
-    var data = jsonDecode(response.body);
-    return data['icon_base64'] as String;
+    return wire.GeneratedAppIconGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).iconBase64;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);

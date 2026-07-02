@@ -103,6 +103,21 @@ SCHEMA_GROUPS = {
             'ClickUpListsResponse',
         ),
     },
+    'apps': {
+        'output': DEFAULT_OUTPUT_DIR / 'apps_wire.g.dart',
+        'schemas': (
+            'AppSelectOption',
+            'AppCapabilityAction',
+            'AppCapabilityResponse',
+            'AppThumbnailUploadResponse',
+            'AppDescriptionGenerationResponse',
+            'AppDescriptionEmojiGenerationResponse',
+            'AppPromptsGenerationResponse',
+            'AppDraftGenerationResponse',
+            'AppGenerationResponse',
+            'AppIconGenerationResponse',
+        ),
+    },
     'subscription_usage': {
         'output': DEFAULT_OUTPUT_DIR / 'subscription_usage_wire.g.dart',
         'schemas': (

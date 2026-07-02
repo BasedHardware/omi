@@ -22,6 +22,7 @@ IMPORTS_INTEGRATIONS_DART_PATH = (
 WRAPPED_TASK_INTEGRATIONS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'wrapped_task_integrations_wire.g.dart'
 )
+APPS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'apps_wire.g.dart'
 SUBSCRIPTION_USAGE_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'subscription_usage_wire.g.dart'
 )
@@ -152,6 +153,26 @@ def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openap
     assert 'integrations: _required(_readMap(_readAny(json, const ["integrations"])), "integrations")' in generated
     assert 'workspaces: _readAny(json, const ["workspaces"]) == null ? null : _readMapList' in generated
     assert 'List<Map<String, dynamic>>? _readMapList(dynamic value)' in generated
+
+
+def test_apps_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'apps')
+
+    assert APPS_DART_PATH.read_text() == generated
+    assert 'class GeneratedAppSelectOption' in generated
+    assert 'class GeneratedAppCapabilityResponse' in generated
+    assert 'class GeneratedAppThumbnailUploadResponse' in generated
+    assert 'class GeneratedAppDescriptionGenerationResponse' in generated
+    assert 'class GeneratedAppDescriptionEmojiGenerationResponse' in generated
+    assert 'class GeneratedAppPromptsGenerationResponse' in generated
+    assert 'class GeneratedAppGenerationResponse' in generated
+    assert 'class GeneratedAppIconGenerationResponse' in generated
+    assert 'id: _required(_readString(_readAny(json, const ["id"])), "id")' in generated
+    assert (
+        'app: _required(_readObject(_readAny(json, const ["app"]), GeneratedAppDraftGenerationResponse.fromJson), "app")'
+        in generated
+    )
 
 
 def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
