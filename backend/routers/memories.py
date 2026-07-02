@@ -32,6 +32,12 @@ from utils.memory.canonical_memory_adapter import (
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.import_write_guard import import_write_block_mode, import_write_violation
+from utils.memory.memory_api_contract import (
+    MemoryApiExposure,
+    memory_api_payload,
+    memory_api_payloads,
+    memory_write_payload,
+)
 from utils.memory.memory_system import MemorySystem
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
@@ -181,16 +187,30 @@ def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
 def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
     """Serialize legacy memories without canonical lifecycle fields.
 
-    ``MemoryDB`` carries ``memory_tier`` plus a computed ``layer`` for canonical
-    memory responses. Returning those through the legacy `/v3/memories` path
-    makes non-cohort desktop clients think the canonical Short-term layer is
-    enabled. Keep the legacy shape intentionally badge-less.
+    The single source of truth for which fields are canonical-only lives in
+    ``utils.memory.memory_api_contract``. Keep this wrapper small so every
+    legacy response takes the same field contract.
     """
 
-    body = [jsonable_encoder(memory, exclude={'memory_tier', 'layer'}) for memory in memories]
+    body = jsonable_encoder(memory_api_payloads(memories, MemoryApiExposure.LEGACY))
     return JSONResponse(
         content=body,
         headers={'X-Omi-Memory-Device-Scope-Supported': 'false'},
+    )
+
+
+def _legacy_memory_response(memory: MemoryDB) -> JSONResponse:
+    return JSONResponse(content=jsonable_encoder(memory_api_payload(memory, MemoryApiExposure.LEGACY)))
+
+
+def _legacy_batch_memories_response(memories: List[MemoryDB]) -> JSONResponse:
+    return JSONResponse(
+        content=jsonable_encoder(
+            {
+                'memories': memory_api_payloads(memories, MemoryApiExposure.LEGACY),
+                'created_count': len(memories),
+            }
+        )
     )
 
 
@@ -298,7 +318,7 @@ async def create_memory(
 
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
-    payload = memory_db.dict()
+    payload = memory_db.model_dump()
 
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
@@ -316,13 +336,21 @@ async def create_memory(
             )
             if item is not None:
                 return memory_item_to_memorydb(item)
-            return memory_db
+            logger.error(
+                "Canonical create_memory readback missing uid=%s memory_id=%s", uid, committed_id or memory_db.id
+            )
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable")
         except Exception:
             logger.exception("Canonical create_memory failed uid=%s", uid)
             raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     try:
-        await run_blocking(db_executor, memories_db.create_memory, uid, payload)
+        await run_blocking(
+            db_executor,
+            memories_db.create_memory,
+            uid,
+            memory_write_payload(memory_db, MemoryApiExposure.LEGACY),
+        )
     except Exception:
         logger.exception("Firestore create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -340,7 +368,7 @@ async def create_memory(
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
 
-    return memory_db
+    return _legacy_memory_response(memory_db)
 
 
 @router.post(
@@ -410,7 +438,8 @@ async def create_memories_batch(
             if item is not None:
                 server_memories.append(memory_item_to_memorydb(item))
             else:
-                server_memories.append(next(m for m in memory_dbs if m.id == memory_id))
+                logger.error("Canonical create_memories_batch readback missing uid=%s memory_id=%s", uid, memory_id)
+                raise HTTPException(status_code=503, detail="Service temporarily unavailable")
         return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
 
     # Persist to Firestore first — that write is the authoritative result.
@@ -419,7 +448,12 @@ async def create_memories_batch(
     # text-embedding-3-large access -> 403) can't 500 a request whose memories
     # were already saved, which would make the client retry and duplicate them.
     try:
-        await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
+        await run_blocking(
+            db_executor,
+            memories_db.save_memories,
+            uid,
+            [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs],
+        )
     except Exception:
         logger.exception("Firestore save_memories failed uid=%s count=%s", uid, len(memory_dbs))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -447,7 +481,7 @@ async def create_memories_batch(
             "Batch vector upsert failed uid=%s count=%s (memories saved, vectors missing)", uid, len(memory_dbs)
         )
 
-    return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
+    return _legacy_batch_memories_response(memory_dbs)
 
 
 @router.post(

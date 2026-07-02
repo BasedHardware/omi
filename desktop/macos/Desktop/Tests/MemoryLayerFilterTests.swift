@@ -67,6 +67,41 @@ final class MemoryLayerFilterTests: XCTestCase {
 
         XCTAssertNil(record.toServerMemory())
     }
+
+    func testHidingLifecycleExposureClearsStaleExplicitTierForLegacyDisplay() {
+        let memory = ServerMemory(
+            id: "mem-stale-tier",
+            content: "Cached stale tier",
+            category: .system,
+            tier: .shortTerm,
+            tierIsExplicit: true,
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 2),
+            conversationId: nil,
+            reviewed: false,
+            userReview: nil,
+            visibility: "private",
+            manuallyAdded: false,
+            scoring: nil,
+            source: nil,
+            confidence: nil,
+            sourceApp: nil,
+            contextSummary: nil,
+            isRead: false,
+            isDismissed: false,
+            tags: [],
+            reasoning: nil,
+            currentActivity: nil,
+            inputDeviceName: nil,
+            windowTitle: nil,
+            headline: nil
+        )
+
+        let hidden = memory.hidingLifecycleExposure()
+
+        XCTAssertEqual(hidden.tier, .longTerm)
+        XCTAssertFalse(hidden.tierIsExplicit)
+    }
 }
 
 /// Reversible alias during WS-G client rename (Wave 36).

@@ -164,6 +164,7 @@ def _projection_item(memory_id='m1'):
             'tags': [],
             'created_at': now,
             'updated_at': now,
+            'memory_tier': 'long_term',
             'reviewed': True,
             'user_review': None,
             'manually_added': False,
