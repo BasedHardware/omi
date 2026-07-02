@@ -81,7 +81,13 @@ async def chat(
         # Match the server-side cap (routers/integration.py persona_chat_via_integration)
         # so a chatty buffer doesn't blow the body budget or get a 422. The
         # server re-validates — this is just to keep payloads small.
-        capped = previous_messages[:20] if isinstance(previous_messages, list) else []
+        #
+        # previous_messages is ordered OLDEST-FIRST per the docstring.
+        # For a chat the LLM needs the MOST RECENT context to drive
+        # coherent replies, so we keep the LAST 20 entries (newest
+        # turns), not the first 20. previous_messages[-20:] inverts
+        # the direction of the slice. (Cubic review 4614064929 P1.)
+        capped = previous_messages[-20:] if isinstance(previous_messages, list) else []
         body["previous_messages"] = [
             {
                 "role": str(t.get("role"))[:8],
@@ -167,6 +173,21 @@ async def chat(
             app_id,
             uid,
             e,
+        )
+        return ""
+    except httpx.TransportError as e:
+        # Broader catch for httpx transport errors that aren't
+        # ConnectError or TimeoutException — ReadError, RemoteProtocolError,
+        # WriteError, CloseError, ProtocolError, etc. These can occur
+        # during SSE streaming (mid-response connection drops, malformed
+        # frames, etc.) and the documented resilience contract says
+        # transport errors return "". The narrower ConnectError catch
+        # above is kept for log clarity. (Cubic review 4614064929 P1.)
+        logger.error(
+            "persona chat transport error (app_id=%s, uid=%s): %s",
+            app_id,
+            uid,
+            type(e).__name__,
         )
         return ""
 
