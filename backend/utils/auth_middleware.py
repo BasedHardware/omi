@@ -11,7 +11,6 @@ WebSocket endpoints are NOT handled here — they use explicit auth helpers
 in ``endpoints.py`` and ``byok.py``.
 """
 
-import asyncio
 import logging
 import os
 from typing import AsyncGenerator, Dict, Optional
@@ -25,6 +24,8 @@ from utils.byok import (
     _byok_ctx,
     validate_and_return_byok_keys,
 )
+from utils.client_device import resolve_client_device
+from utils.executors import critical_executor, db_executor, run_blocking
 
 logger = logging.getLogger('auth_middleware')
 
@@ -78,21 +79,41 @@ async def require_firebase(request: Request) -> AsyncGenerator[str, None]:
     """
     token = _extract_token(request)
     try:
-        uid = await asyncio.to_thread(_verify_token, token)
+        uid = await run_blocking(critical_executor, _verify_token, token)
     except firebase_auth.InvalidIdTokenError:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
     request.state.uid = uid
 
+    x_app_platform = request.headers.get('x-app-platform')
+    x_device_id_hash = request.headers.get('x-device-id-hash')
+    x_app_version = request.headers.get('x-app-version')
+
     try:
-        platform = request.headers.get('x-app-platform')
-        if platform:
-            await asyncio.to_thread(users_db.record_user_platform, uid, platform)
+        if x_app_platform:
+            await run_blocking(db_executor, users_db.record_user_platform, uid, x_app_platform)
     except Exception:
-        pass
+        logger.debug("record_user_platform swallowed error for uid=%s", uid)
+
+    try:
+        device_ctx = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+            x_app_version=x_app_version,
+        )
+        await run_blocking(
+            db_executor,
+            users_db.record_client_device,
+            uid,
+            client_device_id=device_ctx.client_device_id,
+            platform=device_ctx.platform,
+            app_version=device_ctx.app_version,
+        )
+    except Exception:
+        logger.debug("record_client_device swallowed error for uid=%s", uid)
 
     byok_keys_raw = _extract_byok_headers(request)
-    validated_keys = await asyncio.to_thread(validate_and_return_byok_keys, uid, byok_keys_raw)
+    validated_keys = await run_blocking(db_executor, validate_and_return_byok_keys, uid, byok_keys_raw)
     request.state.byok_keys = validated_keys
 
     ctx_keys = validated_keys if validated_keys else None
@@ -116,19 +137,39 @@ async def require_firebase_no_byok(request: Request) -> AsyncGenerator[str, None
     """
     token = _extract_token(request)
     try:
-        uid = await asyncio.to_thread(_verify_token, token)
+        uid = await run_blocking(critical_executor, _verify_token, token)
     except firebase_auth.InvalidIdTokenError:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
     request.state.uid = uid
     request.state.byok_keys = {}
 
+    x_app_platform = request.headers.get('x-app-platform')
+    x_device_id_hash = request.headers.get('x-device-id-hash')
+    x_app_version = request.headers.get('x-app-version')
+
     try:
-        platform = request.headers.get('x-app-platform')
-        if platform:
-            await asyncio.to_thread(users_db.record_user_platform, uid, platform)
+        if x_app_platform:
+            await run_blocking(db_executor, users_db.record_user_platform, uid, x_app_platform)
     except Exception:
-        pass
+        logger.debug("record_user_platform swallowed error for uid=%s", uid)
+
+    try:
+        device_ctx = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+            x_app_version=x_app_version,
+        )
+        await run_blocking(
+            db_executor,
+            users_db.record_client_device,
+            uid,
+            client_device_id=device_ctx.client_device_id,
+            platform=device_ctx.platform,
+            app_version=device_ctx.app_version,
+        )
+    except Exception:
+        logger.debug("record_client_device swallowed error for uid=%s", uid)
 
     byok_keys_raw = _extract_byok_headers(request)
     ctx_keys = byok_keys_raw if byok_keys_raw else None
