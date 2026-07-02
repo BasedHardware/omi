@@ -40,3 +40,22 @@ def test_canonical_api_payload_keeps_lifecycle_fields():
 
     assert payload["memory_tier"] == MemoryTier.long_term
     assert payload["layer"] == "long_term"
+
+
+def test_api_payload_strips_internal_memory_fields_for_all_exposures():
+    for exposure in (MemoryApiExposure.LEGACY, MemoryApiExposure.CANONICAL):
+        payload = memory_api_payload(
+            {
+                "id": "m1",
+                "content": "User is testing memory rollout",
+                "memory_only": "strip-me",
+                "memory_source": "compatibility_projection",
+                "read_decision": "internal",
+            },
+            exposure,
+        )
+
+        assert "memory_only" not in payload
+        assert "memory_source" not in payload
+        assert "read_decision" not in payload
+        assert payload["content"] == "User is testing memory rollout"

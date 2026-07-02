@@ -388,11 +388,12 @@ class MemoriesViewModel: ObservableObject {
     var offset = 0
     let batchSize = 500
     var allFetched: [ServerMemory] = []
+    var fetchedLifecycleExposure: Bool?
 
     do {
       while true {
         let page = try await APIClient.shared.getMemoriesPage(limit: batchSize, offset: offset)
-        canonicalLifecycleExposed = page.canonicalLifecycleExposed
+        fetchedLifecycleExposure = page.canonicalLifecycleExposed
         let batch = page.memories
         if batch.isEmpty { break }
         allFetched.append(contentsOf: batch)
@@ -418,6 +419,9 @@ class MemoriesViewModel: ObservableObject {
         tiers: layers(for: token)
       )
       guard isCurrentScope(token) else { return }
+      if let fetchedLifecycleExposure {
+        canonicalLifecycleExposed = fetchedLifecycleExposure
+      }
       memories = displayMemories(mergedMemories, for: token)
       currentOffset = mergedMemories.count
       hasMoreMemories = mergedMemories.count >= reloadLimit
@@ -489,9 +493,9 @@ class MemoriesViewModel: ObservableObject {
     do {
       let reloadLimit = max(pageSize, memories.count)
       let page = try await APIClient.shared.getMemoriesPage(limit: reloadLimit, offset: 0)
-      canonicalLifecycleExposed = page.canonicalLifecycleExposed
       let apiMemories = page.memories
       guard isCurrentScope(token) else { return }
+      canonicalLifecycleExposed = page.canonicalLifecycleExposed
 
       // Sync API results to local cache
       try await MemoryStorage.shared.syncServerMemories(apiMemories)
@@ -773,16 +777,16 @@ class MemoriesViewModel: ObservableObject {
         limit: pageSize,
         offset: 0
       )
-      canonicalLifecycleExposed = page.canonicalLifecycleExposed
-      if let deviceScopeCapability = page.deviceScopeSupported {
-        deviceScopeSupported = deviceScopeCapability
-      }
       let fetchedMemories = page.memories
       guard isCurrentScope(token) else {
         // Scope changed mid-load; reset loading state so the replacement load
         // (gated by `guard !isLoading`) is not permanently blocked.
         isLoading = false
         return
+      }
+      canonicalLifecycleExposed = page.canonicalLifecycleExposed
+      if let deviceScopeCapability = page.deviceScopeSupported {
+        deviceScopeSupported = deviceScopeCapability
       }
       hasLoadedInitially = true
       log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API")
@@ -1017,11 +1021,12 @@ class MemoriesViewModel: ObservableObject {
 
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }
       if !moreFromCache.isEmpty {
-        memories.append(contentsOf: moreFromCache)
-        currentOffset += moreFromCache.count
-        hasMoreMemories = moreFromCache.count >= pageSize
+        let visibleMemories = displayMemories(moreFromCache, for: token)
+        memories.append(contentsOf: visibleMemories)
+        currentOffset += visibleMemories.count
+        hasMoreMemories = visibleMemories.count >= pageSize
         log(
-          "MemoriesViewModel: Loaded \(moreFromCache.count) more from local cache (total: \(memories.count))"
+          "MemoriesViewModel: Loaded \(visibleMemories.count) more from local cache (total: \(memories.count))"
         )
         return
       }
@@ -1039,12 +1044,12 @@ class MemoriesViewModel: ObservableObject {
         limit: pageSize,
         offset: requestedRawOffset
       )
+      let newMemories = page.memories
+      guard isCurrentScope(token), currentOffset == requestedOffset else { return }
       canonicalLifecycleExposed = page.canonicalLifecycleExposed
       if let deviceScopeCapability = page.deviceScopeSupported {
         deviceScopeSupported = deviceScopeCapability
       }
-      let newMemories = page.memories
-      guard isCurrentScope(token), currentOffset == requestedOffset else { return }
 
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)

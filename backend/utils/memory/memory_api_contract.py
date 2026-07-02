@@ -18,6 +18,21 @@ class MemoryApiExposure(str, Enum):
 
 
 CANONICAL_LIFECYCLE_FIELDS = frozenset({"memory_tier", "layer", "tier"})
+MEMORY_INTERNAL_FIELDS = frozenset(
+    {
+        "memory_only",
+        "memory_source",
+        "memory_policy",
+        "source",
+        "policy",
+        "cursor",
+        "read_source",
+        "read_decision",
+        "source_policy",
+        "archive_default_available",
+        "stale_short_term_default_visible",
+    }
+)
 
 
 def _payload(value: BaseModel | Dict[str, Any]) -> Dict[str, Any]:
@@ -29,6 +44,8 @@ def _payload(value: BaseModel | Dict[str, Any]) -> Dict[str, Any]:
 def memory_api_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExposure) -> Dict[str, Any]:
     """Serialize one memory for the requested API exposure."""
     payload = _payload(value)
+    for field in MEMORY_INTERNAL_FIELDS:
+        payload.pop(field, None)
     if exposure == MemoryApiExposure.LEGACY:
         for field in CANONICAL_LIFECYCLE_FIELDS:
             payload.pop(field, None)
