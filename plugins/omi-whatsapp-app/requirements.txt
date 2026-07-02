@@ -1,0 +1,13 @@
+# Pinned to >=0.115.4 so the resolver picks Starlette >=0.40.0
+# (CVE-2024-47874 — Starlette DoS via unbounded multipart/form-data
+# fields with no filename; fixed in starlette 0.40.0 by enforcing
+# max_fields / max_files / max_part_size limits). FastAPI 0.115.0-
+# 0.115.3 pins starlette<0.40.0, which leaves a known-vulnerable
+# transitive dep in the image even though this plugin currently has
+# no multipart endpoints. Identified by cubic (P2) on PR #8531.
+fastapi==0.115.12
+uvicorn[standard]==0.32.0
+httpx==0.27.2
+httpx-sse==0.4.3
+python-dotenv==1.0.1
+pydantic==2.9.2
