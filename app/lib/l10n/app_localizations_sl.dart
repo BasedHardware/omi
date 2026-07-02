@@ -1713,7 +1713,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8474,7 +8479,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9386,16 +9396,23 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Ta naprava';
+
   @override
   String get memoryThisIphone => 'Ta iPhone';
+
   @override
   String get memoryThisPhone => 'Ta telefon';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Kako uporabljati Omi';
 
   @override
@@ -9497,4 +9514,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get latest => 'Najnovejše';
+
+  @override
+  String get flashFirmware => 'Namesti vdelano programsko opremo';
 }

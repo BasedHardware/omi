@@ -10681,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "یک گشت سریع و کاربردی در همه‌ی کارهایی که Omi شما می‌تواند انجام دهد.",
     "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
     "jumpToLatestMessage": "پرش به آخرین پیام",
-    "latest": "آخرین"
+    "latest": "آخرین",
+    "flashFirmware": "فلش کردن میان‌افزار"
 }

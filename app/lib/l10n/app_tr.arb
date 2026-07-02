@@ -3138,5 +3138,6 @@
     "deviceOnboardingIntroSubtitle": "Omi'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.",
     "deviceOnboardingIntroDuration": "Yaklaşık 1 dakika",
     "jumpToLatestMessage": "En son mesaja git",
-    "latest": "En son"
+    "latest": "En son",
+    "flashFirmware": "Donanım Yazılımını Yükle"
 }

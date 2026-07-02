@@ -3071,5 +3071,6 @@
     "deviceOnboardingIntroSubtitle": "Ein kurzer, praktischer Rundgang durch alles, was dein Omi kann.",
     "deviceOnboardingIntroDuration": "Etwa 1 Minute",
     "jumpToLatestMessage": "Zur neuesten Nachricht springen",
-    "latest": "Neueste"
+    "latest": "Neueste",
+    "flashFirmware": "Firmware flashen"
 }

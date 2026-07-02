@@ -3138,5 +3138,6 @@
     "deviceOnboardingIntroSubtitle": "Szybki, praktyczny przegląd wszystkiego, co potrafi Twoje Omi.",
     "deviceOnboardingIntroDuration": "Około 1 minuty",
     "jumpToLatestMessage": "Przejdź do najnowszej wiadomości",
-    "latest": "Najnowsza"
+    "latest": "Najnowsza",
+    "flashFirmware": "Wgraj oprogramowanie układowe"
 }

@@ -3072,5 +3072,6 @@
     "deviceOnboardingIntroSubtitle": "Rychlá praktická prohlídka všeho, co váš Omi umí.",
     "deviceOnboardingIntroDuration": "Přibližně 1 minuta",
     "jumpToLatestMessage": "Přejít na nejnovější zprávu",
-    "latest": "Nejnovější"
+    "latest": "Nejnovější",
+    "flashFirmware": "Nahrát firmware"
 }
