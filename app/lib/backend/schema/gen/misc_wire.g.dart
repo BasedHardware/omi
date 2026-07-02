@@ -42,6 +42,58 @@ class GeneratedDeleteKnowledgeGraphResponse {
   }
 }
 
+class GeneratedKnowledgeGraphResponse {
+  final List<Map<String, dynamic>> edges;
+  final List<Map<String, dynamic>> nodes;
+
+  const GeneratedKnowledgeGraphResponse({
+    required this.edges,
+    required this.nodes,
+  });
+
+  factory GeneratedKnowledgeGraphResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedKnowledgeGraphResponse(
+      edges: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["edges"]), "edges", _readMapList, requiredField: true, nullable: false), "edges"),
+      nodes: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["nodes"]), "nodes", _readMapList, requiredField: true, nullable: false), "nodes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'edges': edges,
+      'nodes': nodes,
+    };
+  }
+}
+
+class GeneratedRebuildResponse {
+  final int edgesCount;
+  final int nodesCount;
+  final String status;
+
+  const GeneratedRebuildResponse({
+    required this.edgesCount,
+    required this.nodesCount,
+    required this.status,
+  });
+
+  factory GeneratedRebuildResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedRebuildResponse(
+      edgesCount: _required(_readFieldValue<int>(_readField(json, const ["edges_count"]), "edges_count", _readInt, requiredField: true, nullable: false), "edges_count"),
+      nodesCount: _required(_readFieldValue<int>(_readField(json, const ["nodes_count"]), "nodes_count", _readInt, requiredField: true, nullable: false), "nodes_count"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'edges_count': edgesCount,
+      'nodes_count': nodesCount,
+      'status': status,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;

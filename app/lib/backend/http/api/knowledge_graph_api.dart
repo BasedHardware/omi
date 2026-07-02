@@ -9,7 +9,7 @@ class KnowledgeGraphApi {
 
   static Future<Map<String, dynamic>> getKnowledgeGraph() async {
     final response = await makeApiCall(
-      url: _baseUrl,
+      url: '${Env.apiBaseUrl}v1/knowledge-graph',
       headers: {},
       body: '',
       method: 'GET',
@@ -18,7 +18,9 @@ class KnowledgeGraphApi {
     );
 
     if (response != null && response.statusCode == 200) {
-      return jsonDecode(response.body);
+      return wire.GeneratedKnowledgeGraphResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      ).toJson();
     } else {
       throw Exception('Failed to load knowledge graph: ${response?.body}');
     }
@@ -28,14 +30,19 @@ class KnowledgeGraphApi {
     final response = await makeApiCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
 
     if (response != null && response.statusCode == 200) {
-      return jsonDecode(response.body);
+      return wire.GeneratedRebuildResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     } else {
       throw Exception('Failed to rebuild knowledge graph: ${response?.body}');
     }
   }
 
   static Future<void> deleteKnowledgeGraph() async {
-    final response = await makeApiCall(url: _baseUrl, headers: {}, body: '{}', method: 'DELETE');
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/knowledge-graph',
+      headers: {},
+      body: '{}',
+      method: 'DELETE',
+    );
 
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to delete knowledge graph: ${response?.body}');

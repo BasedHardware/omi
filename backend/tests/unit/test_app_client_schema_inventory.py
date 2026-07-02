@@ -219,6 +219,17 @@ def test_inventory_scopes_record_return_type_route_functions():
     assert route.function_end_line is not None
 
 
+def test_inventory_ignores_static_base_url_field_routes():
+    routes = [
+        route
+        for route in inventory_app_client_schemas.scan_app_routes()
+        if route.path.name == 'knowledge_graph_api.dart' and route.normalized_route == '/v1/knowledge-graph'
+    ]
+
+    assert routes
+    assert all(route.function_name is not None for route in routes)
+
+
 def test_inventory_route_parser_handles_comments_queries_and_nested_interpolation():
     source = """
 // '${Env.apiBaseUrl}v1/commented'

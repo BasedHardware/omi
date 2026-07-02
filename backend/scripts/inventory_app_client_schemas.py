@@ -462,6 +462,18 @@ FUNCTION_START_RE = re.compile(
 )
 HTTP_METHOD_RE = re.compile(r"""\bmethod\s*:\s*['"]([A-Z]+)['"]""")
 CONTROL_STATEMENT_NAMES = frozenset({'if', 'for', 'while', 'switch', 'catch'})
+METHOD_DECLARATION_PREFIXES = (
+    'static ',
+    'Future',
+    'Stream',
+    'void ',
+    'bool ',
+    'int ',
+    'double ',
+    'String ',
+    'Map<',
+    'List<',
+)
 
 
 def _previous_nonempty_line(text: str, offset: int) -> str:
@@ -535,7 +547,12 @@ def _function_ranges(text: str) -> list[FunctionRange]:
             continue
         if match.group('indent'):
             previous = _previous_nonempty_line(text, match.start())
-            if previous[:1].isspace() or previous.rstrip().endswith(('{', '}', ';')):
+            stripped_line = text[
+                match.start() : text.find('\n', match.start()) if '\n' in text[match.start() :] else len(text)
+            ].strip()
+            if not stripped_line.startswith(METHOD_DECLARATION_PREFIXES) and (
+                previous[:1].isspace() or previous.rstrip().endswith(('{', '}', ';'))
+            ):
                 continue
         close_paren = _matching_delimiter_offset(text, match.end() - 1, '(', ')')
         if close_paren is None:
@@ -664,10 +681,13 @@ def scan_app_routes() -> list[AppRoute]:
         base_routes = [
             occurrence
             for occurrence in env_routes
-            if re.search(rf"""_baseUrl\s*=\s*['"]\$\{{Env\.apiBaseUrl\}}{re.escape(occurrence.route)}['"]""", text)
+            if _enclosing_function(functions, occurrence.line) is None
+            and re.search(rf"""_baseUrl\s*=\s*['"]\$\{{Env\.apiBaseUrl\}}{re.escape(occurrence.route)}['"]""", text)
         ]
         for occurrence in env_routes:
             function = _enclosing_function(functions, occurrence.line)
+            if function is None:
+                continue
             routes.append(
                 AppRoute(
                     path=path,

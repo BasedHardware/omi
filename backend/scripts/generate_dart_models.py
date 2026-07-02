@@ -125,6 +125,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'FcmTokenResponse',
             'DeleteKnowledgeGraphResponse',
+            'KnowledgeGraphResponse',
+            'RebuildResponse',
         ),
     },
     'wrapped_task_integrations': {

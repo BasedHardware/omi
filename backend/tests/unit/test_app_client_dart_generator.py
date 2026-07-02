@@ -200,6 +200,8 @@ def test_misc_wire_dart_is_generated_from_app_client_openapi():
     assert MISC_DART_PATH.read_text() == generated
     assert 'class GeneratedFcmTokenResponse' in generated
     assert 'class GeneratedDeleteKnowledgeGraphResponse' in generated
+    assert 'class GeneratedKnowledgeGraphResponse' in generated
+    assert 'class GeneratedRebuildResponse' in generated
     assert 'status: _required(_readFieldValue<String>' in generated
 
 
