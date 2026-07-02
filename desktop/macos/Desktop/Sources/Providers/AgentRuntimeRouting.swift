@@ -179,9 +179,39 @@ enum LocalAgentProviderDetector {
 
     private static func nvmNodeBinDirectories(homeDirectory: String, fileManager: FileManager) -> [String] {
         let versionsDir = "\(homeDirectory)/.nvm/versions/node"
-        guard let versions = try? fileManager.contentsOfDirectory(atPath: versionsDir) else { return [] }
-        return versions
+        let scanned = ((try? fileManager.contentsOfDirectory(atPath: versionsDir)) ?? [])
             .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
             .map { "\(versionsDir)/\($0)/bin" }
+        // `npm install -g` lands in nvm's DEFAULT version, which is not
+        // necessarily the numerically-highest installed one — prefer it.
+        guard let defaultBin = nvmDefaultAliasBinDirectory(homeDirectory: homeDirectory, fileManager: fileManager)
+        else {
+            return scanned
+        }
+        return [defaultBin] + scanned.filter { $0 != defaultBin }
+    }
+
+    /// Resolve `~/.nvm/alias/default` — a text file naming a version or another
+    /// alias (e.g. "v20.11.0", or "lts/*" → "lts/jod" → "v20.11.0"). GUI apps
+    /// never inherit NVM_BIN from the shell, so the alias file is the only
+    /// reliable way to learn which version `npm install -g` targets.
+    private static func nvmDefaultAliasBinDirectory(homeDirectory: String, fileManager: FileManager) -> String? {
+        var alias = "default"
+        for _ in 0..<3 {
+            guard
+                let contents = try? String(
+                    contentsOfFile: "\(homeDirectory)/.nvm/alias/\(alias)", encoding: .utf8)
+            else { return nil }
+            let resolved = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !resolved.isEmpty else { return nil }
+            if resolved.hasPrefix("v") {
+                let bin = "\(homeDirectory)/.nvm/versions/node/\(resolved)/bin"
+                var isDirectory: ObjCBool = false
+                return fileManager.fileExists(atPath: bin, isDirectory: &isDirectory) && isDirectory.boolValue
+                    ? bin : nil
+            }
+            alias = resolved
+        }
+        return nil
     }
 }
