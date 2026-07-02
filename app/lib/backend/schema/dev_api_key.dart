@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as wire;
+
 class DevApiKey {
   final String id;
   final String name;
@@ -16,13 +18,28 @@ class DevApiKey {
   });
 
   factory DevApiKey.fromJson(Map<String, dynamic> json) {
+    return DevApiKey.fromGenerated(wire.GeneratedDevApiKey.fromJson(json));
+  }
+
+  factory DevApiKey.fromGenerated(wire.GeneratedDevApiKey generated) {
     return DevApiKey(
-      id: json['id'],
-      name: json['name'],
-      keyPrefix: json['key_prefix'],
-      createdAt: DateTime.parse(json['created_at']),
-      lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
-      scopes: json['scopes'] != null ? List<String>.from(json['scopes']) : null,
+      id: generated.id,
+      name: generated.name,
+      keyPrefix: generated.keyPrefix,
+      createdAt: generated.createdAt,
+      lastUsedAt: generated.lastUsedAt,
+      scopes: generated.scopes,
+    );
+  }
+
+  wire.GeneratedDevApiKey toGenerated() {
+    return wire.GeneratedDevApiKey(
+      id: id,
+      name: name,
+      keyPrefix: keyPrefix,
+      createdAt: createdAt,
+      lastUsedAt: lastUsedAt,
+      scopes: scopes,
     );
   }
 }
@@ -41,14 +58,30 @@ class DevApiKeyCreated extends DevApiKey {
   });
 
   factory DevApiKeyCreated.fromJson(Map<String, dynamic> json) {
+    return DevApiKeyCreated.fromGenerated(wire.GeneratedDevApiKeyCreated.fromJson(json));
+  }
+
+  factory DevApiKeyCreated.fromGenerated(wire.GeneratedDevApiKeyCreated generated) {
     return DevApiKeyCreated(
-      id: json['id'],
-      name: json['name'],
-      keyPrefix: json['key_prefix'],
-      createdAt: DateTime.parse(json['created_at']),
-      lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
-      scopes: json['scopes'] != null ? List<String>.from(json['scopes']) : null,
-      key: json['key'],
+      id: generated.id,
+      name: generated.name,
+      keyPrefix: generated.keyPrefix,
+      createdAt: generated.createdAt,
+      lastUsedAt: generated.lastUsedAt,
+      scopes: generated.scopes,
+      key: generated.key,
+    );
+  }
+
+  wire.GeneratedDevApiKeyCreated toCreatedGenerated() {
+    return wire.GeneratedDevApiKeyCreated(
+      id: id,
+      name: name,
+      keyPrefix: keyPrefix,
+      createdAt: createdAt,
+      lastUsedAt: lastUsedAt,
+      scopes: scopes,
+      key: key,
     );
   }
 }

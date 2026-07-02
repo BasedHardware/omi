@@ -1,19 +1,49 @@
+import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as wire;
+
 class McpApiKey {
   final String id;
   final String name;
   final String keyPrefix;
   final DateTime createdAt;
   final DateTime? lastUsedAt;
+  final String? appId;
+  final List<String>? scopes;
 
-  McpApiKey({required this.id, required this.name, required this.keyPrefix, required this.createdAt, this.lastUsedAt});
+  McpApiKey({
+    required this.id,
+    required this.name,
+    required this.keyPrefix,
+    required this.createdAt,
+    this.lastUsedAt,
+    this.appId,
+    this.scopes,
+  });
 
   factory McpApiKey.fromJson(Map<String, dynamic> json) {
+    return McpApiKey.fromGenerated(wire.GeneratedMcpApiKey.fromJson(json));
+  }
+
+  factory McpApiKey.fromGenerated(wire.GeneratedMcpApiKey generated) {
     return McpApiKey(
-      id: json['id'],
-      name: json['name'],
-      keyPrefix: json['key_prefix'],
-      createdAt: DateTime.parse(json['created_at']),
-      lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
+      id: generated.id,
+      name: generated.name,
+      keyPrefix: generated.keyPrefix,
+      createdAt: generated.createdAt,
+      lastUsedAt: generated.lastUsedAt,
+      appId: generated.appId,
+      scopes: generated.scopes,
+    );
+  }
+
+  wire.GeneratedMcpApiKey toGenerated() {
+    return wire.GeneratedMcpApiKey(
+      id: id,
+      name: name,
+      keyPrefix: keyPrefix,
+      createdAt: createdAt,
+      lastUsedAt: lastUsedAt,
+      appId: appId,
+      scopes: scopes,
     );
   }
 }
@@ -27,17 +57,38 @@ class McpApiKeyCreated extends McpApiKey {
     required super.keyPrefix,
     required super.createdAt,
     super.lastUsedAt,
+    super.appId,
+    super.scopes,
     required this.key,
   });
 
   factory McpApiKeyCreated.fromJson(Map<String, dynamic> json) {
+    return McpApiKeyCreated.fromGenerated(wire.GeneratedMcpApiKeyCreated.fromJson(json));
+  }
+
+  factory McpApiKeyCreated.fromGenerated(wire.GeneratedMcpApiKeyCreated generated) {
     return McpApiKeyCreated(
-      id: json['id'],
-      name: json['name'],
-      keyPrefix: json['key_prefix'],
-      createdAt: DateTime.parse(json['created_at']),
-      lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
-      key: json['key'],
+      id: generated.id,
+      name: generated.name,
+      keyPrefix: generated.keyPrefix,
+      createdAt: generated.createdAt,
+      lastUsedAt: generated.lastUsedAt,
+      appId: generated.appId,
+      scopes: generated.scopes,
+      key: generated.key,
+    );
+  }
+
+  wire.GeneratedMcpApiKeyCreated toCreatedGenerated() {
+    return wire.GeneratedMcpApiKeyCreated(
+      id: id,
+      name: name,
+      keyPrefix: keyPrefix,
+      createdAt: createdAt,
+      lastUsedAt: lastUsedAt,
+      appId: appId,
+      scopes: scopes,
+      key: key,
     );
   }
 }

@@ -44,6 +44,15 @@ SCHEMA_GROUPS = {
             'BulkMoveConversationsResponse',
         ),
     },
+    'api_keys': {
+        'output': DEFAULT_OUTPUT_DIR / 'api_keys_wire.g.dart',
+        'schemas': (
+            'DevApiKey',
+            'DevApiKeyCreated',
+            'McpApiKey',
+            'McpApiKeyCreated',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
