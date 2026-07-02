@@ -319,11 +319,12 @@ enum DesktopCapabilityRegistry {
       title: "Setup Agent Provider",
       latency: .asyncBackground,
       surfaces: [.desktopChat, .realtimeHub],
-      summary: "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet via a background installer agent.",
+      summary: "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet, after the user confirms in a native dialog.",
       bullets: [
-        "Call ONLY after the user explicitly agrees in this conversation to install that provider — never unprompted.",
+        LocalAgentProviderInstaller.consentRule,
+        "The user must additionally confirm in a native dialog showing the exact install command — nothing downloads or runs until they click Install.",
         "Idempotent: an already-installed provider just reports ready without reinstalling.",
-        "The installer agent runs the official install command and verifies the provider binary; interactive sign-in or onboarding steps are left to the user."
+        "Omi runs the official install command itself and verifies the provider binary; interactive sign-in or onboarding steps are left to the user."
       ]),
     Capability(
       toolName: "ask_higher_model",
@@ -431,7 +432,7 @@ enum DesktopCapabilityRegistry {
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
     - You can manage circular floating agent pills with manage_agent_pills after checking status.
     - You can start a background agent with spawn_agent for multi-step work or acting in the user's other apps. Merely saying you will start an agent does not start one; emitting spawn_agent does.
-    - You can install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet with setup_agent_provider — but ONLY after the user explicitly agrees in this conversation.
+    - You can install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet with setup_agent_provider; the user must then confirm in a native dialog before anything runs. \(LocalAgentProviderInstaller.consentRule)
     """
   }
 

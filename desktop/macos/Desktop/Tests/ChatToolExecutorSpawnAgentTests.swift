@@ -58,7 +58,26 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
 
     let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: .act)
 
-    XCTAssertTrue(result.contains("Unsupported provider 'skynet'"))
+    // Shared wording with spawn_agent (DirectedProvider.unsupportedProviderMessage).
+    XCTAssertTrue(result.contains("Unsupported agent provider 'skynet'"))
     XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
+  }
+
+  func testSetupAgentProviderNeverSpawnsAnAgentPill() throws {
+    // The typed-chat executor delegates to the deterministic
+    // LocalAgentProviderInstaller (native confirm dialog + Process); it must
+    // never route the install through an agent pill again.
+    let source = try chatToolExecutorSource()
+
+    XCTAssertTrue(source.contains("LocalAgentProviderInstaller.shared.beginInstall(for: provider)"))
+    XCTAssertFalse(source.contains("spawnInstallAssistPill"))
+  }
+
+  private func chatToolExecutorSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatToolExecutor.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

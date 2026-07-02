@@ -326,12 +326,13 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     name: "setup_agent_provider",
     label: "Setup Agent Provider",
     description:
-      "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet. Starts a background installer agent that runs the official install command and verifies the provider binary; interactive sign-in steps are left to the user. Idempotent: an already-installed provider just reports ready.",
+      "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet. Shows the user a native confirmation dialog with the exact install command; nothing downloads or runs until they click Install, then Omi runs the official command itself and verifies the provider binary. Interactive sign-in steps are left to the user. Idempotent: an already-installed provider just reports ready.",
     promptSnippet: "setup_agent_provider - Install a missing local agent provider (openclaw, hermes, codex)",
     promptGuidelines: [
+      // Keep this sentence identical to LocalAgentProviderInstaller.consentRule (Swift).
       "Call setup_agent_provider ONLY after the user explicitly agrees in this conversation to install that provider — never unprompted.",
       "When a directed provider is reported as not installed, say it needs setup and offer to install it before calling anything.",
-      "The installer runs as a background agent pill; interactive login/onboarding steps are left to the user.",
+      "The install runs in the background after the user confirms in the native dialog; interactive login/onboarding steps are left to the user.",
     ],
     latency: "async background",
     inputSchema: schema(
@@ -348,8 +349,12 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires Swift AgentBridge/floating pill support."],
-    adapters: piAndStdio(),
+    runtimePreconditions: ["Requires Swift LocalAgentProviderInstaller (native confirm dialog)."],
+    // pi-mono ONLY — never advertised on the external omi-tools-stdio MCP
+    // projection: an external MCP client must not be able to trigger software
+    // installs on the user's machine (the native dialog is in-app consent for
+    // in-app conversations, not an authorization surface for third parties).
+    adapters: { "pi-mono": { advertised: true } },
   },
   {
     name: "search_tasks",

@@ -64,7 +64,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instruction.contains("Codex: \(AgentPillsManager.DirectedProvider.codex.strengths)"))
         // Unavailable providers must never be offered as a selection target.
         XCTAssertFalse(instruction.contains("Hermes: \(AgentPillsManager.DirectedProvider.hermes.strengths)"))
-        XCTAssertTrue(instruction.contains("I don't see Hermes installed"))
+        XCTAssertTrue(instruction.contains("Hermes: not installed"))
         // Conservative defaults: explicit user mention always wins, and the
         // default agent remains the choice when no provider clearly matches.
         XCTAssertTrue(instruction.contains("omit provider to use Omi's default agent"))
@@ -92,14 +92,17 @@ final class HubSystemInstructionTests: XCTestCase {
         let instruction = RealtimeHubTools.localAgentProviderInstruction(availability: availability)
 
         // Unavailable branch: needs-setup stance is kept, install assist is
-        // offered, and calling the tool is gated on explicit user consent.
+        // offered per missing provider, and the SINGLE shared consent rule
+        // sentence gates the tool call.
         XCTAssertTrue(instruction.contains("do NOT spawn a default agent"))
-        XCTAssertTrue(instruction.contains("mention you can install it for them"))
-        XCTAssertTrue(instruction.contains("If — and only if — the user explicitly agrees in this conversation, call setup_agent_provider with that provider."))
-        XCTAssertTrue(instruction.contains("NEVER call setup_agent_provider without the user's explicit consent."))
-        // The structured setup prompt (official command + docs URL) reaches the model.
-        XCTAssertTrue(instruction.contains(AgentPillsManager.DirectedProvider.hermes.installCommand))
-        XCTAssertTrue(instruction.contains(AgentPillsManager.DirectedProvider.hermes.installDocsURL))
+        XCTAssertTrue(instruction.contains("Say it needs setup and offer to install it:"))
+        XCTAssertTrue(instruction.contains("Hermes: not installed — offer to set it up via setup_agent_provider after explicit consent."))
+        XCTAssertTrue(instruction.contains("Codex: not installed — offer to set it up via setup_agent_provider after explicit consent."))
+        XCTAssertTrue(instruction.contains(LocalAgentProviderInstaller.consentRule))
+        // Compact instruction fragments only: the full user-facing setup
+        // prompt (install command + docs URL) stays on UI/toolError surfaces.
+        XCTAssertFalse(instruction.contains(AgentPillsManager.DirectedProvider.hermes.installCommand))
+        XCTAssertFalse(instruction.contains(AgentPillsManager.DirectedProvider.hermes.installDocsURL))
     }
 
     func testRealtimeSetupAgentProviderToolIsAlwaysExposedWithAllProviders() {
@@ -110,8 +113,10 @@ final class HubSystemInstructionTests: XCTestCase {
         let tools = RealtimeHubTools.openAITools(availableDirectedProviders: [])
         let setupTool = tools.first { ($0["name"] as? String) == HubTool.setupAgentProvider.rawValue }
         XCTAssertNotNil(setupTool)
-        XCTAssertTrue((setupTool?["description"] as? String ?? "").contains("explicitly"))
-        XCTAssertTrue((setupTool?["description"] as? String ?? "").contains("never unprompted"))
+        let description = (setupTool?["description"] as? String) ?? ""
+        XCTAssertTrue(description.contains(LocalAgentProviderInstaller.consentRule))
+        XCTAssertTrue(description.contains("native confirmation dialog"))
+        XCTAssertTrue(description.contains("nothing downloads or runs until they click Install"))
 
         let parameters = setupTool?["parameters"] as? [String: Any]
         let properties = parameters?["properties"] as? [String: Any]

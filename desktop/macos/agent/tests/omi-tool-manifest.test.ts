@@ -68,7 +68,21 @@ describe("omi tool manifest", () => {
     expect(setupProvider?.inputSchema.required).toEqual(["provider"]);
     expect(guidelines).toContain("ONLY after the user explicitly agrees");
     expect(guidelines).toContain("never unprompted");
+    expect(guidelines).toContain("after the user confirms in the native dialog");
     expect(guidelines).toContain("interactive login/onboarding steps are left to the user");
+    expect(setupProvider?.description).toContain("native confirmation dialog");
+  });
+
+  it("never exposes provider installs to external MCP clients", () => {
+    // setup_agent_provider triggers software installs on the user's machine.
+    // It must stay pi-mono only: the omi-tools-stdio projection is served to
+    // EXTERNAL MCP clients, which have no in-conversation consent path.
+    expect(toolNamesForAdapter("omi-tools-stdio")).not.toContain("setup_agent_provider");
+    expect(toolNamesForAdapter("omi-tools-stdio", { onboarding: true })).not.toContain("setup_agent_provider");
+    expect(mcpToolDefinitionsForAdapter("omi-tools-stdio").map((tool) => tool.name)).not.toContain(
+      "setup_agent_provider",
+    );
+    expect(toolNamesForAdapter("pi-mono")).toContain("setup_agent_provider");
   });
 
   it("guides provider selection by strengths with the default agent as fallback", () => {

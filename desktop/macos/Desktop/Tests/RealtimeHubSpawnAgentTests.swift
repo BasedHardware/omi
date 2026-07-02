@@ -37,18 +37,32 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 """))
   }
 
-  func testSetupAgentProviderIsConsentGatedAndIdempotent() throws {
+  func testSetupAgentProviderUsesDeterministicInstallerNotAnAgentPill() throws {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("case .setupAgentProvider:"))
-    // Idempotent already-installed path — no reinstall, no pill.
+    // Idempotent already-installed path — no dialog, no reinstall.
     XCTAssertTrue(source.contains("is already installed and ready — no setup needed."))
-    // The installer pill runs Omi's default agent via the shared executor.
-    XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnInstallAssistPill(for: provider, model: setupModel)"))
-    XCTAssertTrue(source.contains("Installer agent started — it will verify \\(provider.executableName) once the install finishes."))
-    // Consent guard wording: the tool call itself is the consent boundary.
-    XCTAssertTrue(source.contains("Consent boundary: the model may only call this after the user"))
-    XCTAssertTrue(source.contains("explicitly agreed in this conversation (prompt-enforced)"))
+    // The deterministic installer (native confirm dialog + Process) is the
+    // code-level consent gate; the hub never spawns an installer agent pill.
+    XCTAssertTrue(source.contains("LocalAgentProviderInstaller.shared.beginInstall(for: provider)"))
+    XCTAssertFalse(source.contains("spawnInstallAssistPill"))
+    // The tool result returns immediately — the voice turn never blocks on
+    // the dialog; the ack points the user at it.
+    XCTAssertTrue(source.contains("Please confirm the \\(provider.displayName) install in the dialog on screen."))
+    XCTAssertTrue(source.contains("output: installMessage)"))
+  }
+
+  func testForceRewarmIsIdleGatedIncludingBargeInReplacement() throws {
+    let source = try realtimeHubControllerSource()
+
+    // Shared idle-only re-warm used by system wake and provider-change
+    // refresh; the guard also skips an in-flight barge-in replacement.
+    XCTAssertTrue(source.contains("private func forceRewarm(reason: String) {"))
+    XCTAssertTrue(
+      source.contains("guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }"))
+    XCTAssertTrue(source.contains("forceRewarm(reason: \"system woke (dropping possibly-stale socket)\")"))
+    XCTAssertTrue(source.contains("forceRewarm(reason: \"local agent provider availability changed\")"))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {

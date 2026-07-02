@@ -476,15 +476,10 @@ class ChatToolExecutor {
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
       .replacingOccurrences(of: " ", with: "")
-    let directedProvider: AgentPillsManager.DirectedProvider?
-    switch providerName {
-    case "openclaw": directedProvider = .openclaw
-    case "hermes": directedProvider = .hermes
-    case "codex": directedProvider = .codex
-    case "": directedProvider = nil
-    default:
-      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
+    if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
+      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
     }
+    let directedProvider = AgentPillsManager.DirectedProvider(rawValue: providerName)
     if let directedProvider {
       let availability = LocalAgentProviderDetector.availability(for: directedProvider)
       guard availability.isAvailable else {
@@ -508,11 +503,12 @@ class ChatToolExecutor {
     """
   }
 
-  /// Install a missing local agent provider by spawning the code-built
-  /// "Install <Provider>" pill on Omi's default agent. The user's explicit
-  /// consent in the conversation is the boundary for calling this tool
-  /// (prompt-enforced); the pill itself runs through the normal agent
-  /// permission model. Idempotent for already-installed providers.
+  /// Install a missing local agent provider through the deterministic
+  /// LocalAgentProviderInstaller: a native confirmation dialog showing the
+  /// exact command is the REAL consent gate, then code runs the official
+  /// install command via Process and verifies with the shared detector — no
+  /// installer agent, so a prompt-injected call can never execute anything
+  /// by itself. Idempotent for already-installed providers.
   private static func executeSetupAgentProvider(
     _ args: [String: Any],
     originatingChatMode: ChatMode?,
@@ -529,20 +525,9 @@ class ChatToolExecutor {
       .lowercased()
       .replacingOccurrences(of: " ", with: "")
     guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
-      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
+      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
     }
-    if LocalAgentProviderDetector.isAvailable(provider) {
-      return "\(provider.displayName) is already installed and ready — no setup needed."
-    }
-    let model = ShortcutSettings.shared.selectedModel.isEmpty
-      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    let pill = AgentPillsManager.shared.spawnInstallAssistPill(for: provider, model: model)
-    return """
-    Installer agent started as a floating agent pill — it runs the official \(provider.displayName) install command and verifies `\(provider.executableName)` afterwards. Interactive sign-in or onboarding steps are left to the user.
-    id: \(pill.id.uuidString)
-    title: \(pill.title)
-    status: \(pill.status.displayLabel)
-    """
+    return LocalAgentProviderInstaller.shared.beginInstall(for: provider)
   }
 
   private static func executeManageAgentPills(_ args: [String: Any]) async -> String {

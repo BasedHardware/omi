@@ -28,8 +28,9 @@ enum HubTool: String {
   case getTaskAgentStatus = "get_task_agent_status"
   /// Manage floating-bar agent pills. Fast local action.
   case manageAgentPills = "manage_agent_pills"
-  /// Install a missing local agent provider (openclaw/hermes/codex) via a
-  /// background installer pill. Only after explicit user consent; idempotent.
+  /// Install a missing local agent provider (openclaw/hermes/codex) via the
+  /// deterministic LocalAgentProviderInstaller — native confirmation dialog,
+  /// then a code-run Process. Only after explicit user consent; idempotent.
   case setupAgentProvider = "setup_agent_provider"
   /// List canonical Omi-managed agent sessions and runs.
   case listAgentSessions = "list_agent_sessions"
@@ -98,10 +99,12 @@ enum RealtimeHubTools {
     if unavailable.isEmpty {
       parts.append("Treat those as available local providers, not as sessions to inspect.")
     } else {
+      // Compact instruction fragments only — the full user-facing setup
+      // prompt (install command + docs URL) stays on UI/toolError surfaces.
       let missingText = unavailable
-        .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+        .map { "\($0.provider.displayName): not installed — offer to set it up via setup_agent_provider after explicit consent." }
         .joined(separator: " ")
-      parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup, mention you can install it for them, and use this guidance: \(missingText) If — and only if — the user explicitly agrees in this conversation, call setup_agent_provider with that provider. NEVER call setup_agent_provider without the user's explicit consent.")
+      parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and offer to install it: \(missingText) \(LocalAgentProviderInstaller.consentRule)")
     }
     return parts.joined(separator: " ")
   }
@@ -457,10 +460,11 @@ enum RealtimeHubTools {
         "name": HubTool.setupAgentProvider.rawValue,
         "description":
           "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet. "
-          + "Starts a background installer agent that runs the official install command and verifies "
-          + "the binary afterwards; interactive sign-in steps are left to the user. Idempotent: an "
-          + "already-installed provider just reports ready. Call ONLY after the user explicitly "
-          + "agrees in this conversation to install that provider — never unprompted.",
+          + "Shows the user a native confirmation dialog with the exact install command; nothing "
+          + "downloads or runs until they click Install, then Omi runs the official command itself, "
+          + "verifies the binary, and reports the result. Interactive sign-in steps are left to the "
+          + "user. Idempotent: an already-installed provider just reports ready. "
+          + LocalAgentProviderInstaller.consentRule,
         "parameters": [
           "type": "object",
           "properties": [

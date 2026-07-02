@@ -28,39 +28,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }
 
-  func testInstallAssistBriefRunsOfficialCommandAndVerifiesBinary() {
-    let brief = AgentPillsManager.installAssistBrief(for: .codex)
-
-    XCTAssertTrue(brief.contains("`npm install -g @openai/codex @agentclientprotocol/codex-acp`"))
-    XCTAssertTrue(brief.contains("command -v codex-acp"))
-    XCTAssertTrue(brief.contains("Do NOT run any interactive login, onboarding, or setup wizard yourself."))
-    XCTAssertTrue(brief.contains("run `codex login` if you haven't signed in"))
-    XCTAssertTrue(brief.contains("simply ask Omi to use Codex again"))
-  }
-
-  func testInstallAssistBriefUsesUnattendedInstallerForCurlProviders() {
-    let openclaw = AgentPillsManager.installAssistBrief(for: .openclaw)
-    let hermes = AgentPillsManager.installAssistBrief(for: .hermes)
-
-    // The canonical curl one-liners launch interactive onboarding, which
-    // would hang an unattended installer agent — the briefs must use the
-    // documented non-interactive variants and verify the right binary.
-    XCTAssertTrue(openclaw.contains("curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard"))
-    XCTAssertTrue(hermes.contains("curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive"))
-    XCTAssertTrue(openclaw.contains("command -v openclaw"))
-    XCTAssertTrue(hermes.contains("command -v hermes"))
-    XCTAssertTrue(openclaw.contains("run `openclaw onboard --install-daemon` to finish onboarding"))
-    XCTAssertTrue(hermes.contains("run `hermes setup` to finish configuring it"))
-  }
-
-  func testInstallAssistPillRunsOnDefaultAgentAndRefreshesHub() throws {
+  func testAgentRunInstallAssistPillMachineryIsGone() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("func spawnInstallAssistPill(for provider: DirectedProvider, model: String) -> AgentPill"))
-    XCTAssertTrue(source.contains("query: Self.installAssistBrief(for: provider),"))
-    XCTAssertTrue(source.contains(#"preFetchedTitle: "Install \(provider.displayName)","#))
-    XCTAssertTrue(source.contains("RealtimeHubController.shared.refreshForLocalAgentProviderChange()"))
-    XCTAssertTrue(source.contains("guard LocalAgentProviderDetector.isAvailable(provider) else { return }"))
+    // The agent-run installer was replaced by the deterministic
+    // LocalAgentProviderInstaller (native confirm dialog + Process): no
+    // code-built install brief, no auto-approving installer pill, no
+    // Combine status watcher, and no stale `npm bin -g` probing prose.
+    XCTAssertFalse(source.contains("installAssistBrief"))
+    XCTAssertFalse(source.contains("spawnInstallAssistPill"))
+    XCTAssertFalse(source.contains("installAssistWatchersByPill"))
+    XCTAssertFalse(source.contains("npm bin -g"))
   }
 
   func testProviderCorrectionUsesPreviousFloatingRequestObjective() throws {
