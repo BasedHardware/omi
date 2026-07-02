@@ -170,6 +170,23 @@ actor APIClient {
     return try await performRequest(request)
   }
 
+  func put<T: Decodable, B: Encodable>(
+    _ endpoint: String,
+    body: B,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
+  ) async throws -> T {
+    let base = customBaseURL ?? baseURL
+    let url = URL(string: base + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.httpBody = try JSONEncoder().encode(body)
+
+    return try await performRequest(request)
+  }
+
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
   /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall.
   /// Credential failures are typed so the hub can recover deterministically instead
@@ -5606,6 +5623,52 @@ extension APIClient {
   func imessageSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
     let body = IMessageContactsSyncRequestPayload(contacts: contacts)
     let resp: IMessageContactsSyncResponsePayload = try await post("v1/imessage/contacts/sync", body: body)
+    return resp.peopleUpserted
+  }
+
+  // MARK: - WhatsApp connector
+
+  @discardableResult
+  func whatsappIngest(threads: [WhatsAppThreadPayload]) async throws -> WhatsAppIngestResponsePayload {
+    // The Z_PK cursor stays client-side (UserDefaults) — no `last_rowid` on the wire.
+    let body = WhatsAppIngestRequestPayload(threads: threads, language: "en")
+    return try await post("v1/whatsapp/threads", body: body)
+  }
+
+  func whatsappConnectionStatus() async throws -> WhatsAppStatusPayload {
+    try await get("v1/whatsapp/connection-status")
+  }
+
+  func whatsappGetSettings() async throws -> WhatsAppSettingsPayload {
+    try await get("v1/whatsapp/settings")
+  }
+
+  @discardableResult
+  func whatsappUpdateSettings(_ settings: WhatsAppSettingsPayload) async throws
+    -> WhatsAppSettingsPayload
+  {
+    try await put("v1/whatsapp/settings", body: settings)
+  }
+
+  func whatsappDisconnect() async throws {
+    let _: WhatsAppSimpleOK = try await post("v1/whatsapp/disconnect")
+  }
+
+  /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
+  /// a disambiguation ask as if it were a reply.
+  func whatsappDraftReply(person: String, thread: [WhatsAppDraftMessagePayload], intent: String?) async throws
+    -> WhatsAppDraftResponsePayload
+  {
+    let body = WhatsAppDraftRequestPayload(person: person, thread: thread, intent: intent)
+    return try await post("v1/whatsapp/draft-reply", body: body)
+  }
+
+  /// Uploads local address-book contacts so the backend can resolve WhatsApp
+  /// handles to People. Reuses the shared iMessage contact payload — the JSON
+  /// shape (`{name, handles}`) is identical.
+  func whatsappSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
+    let body = IMessageContactsSyncRequestPayload(contacts: contacts)
+    let resp: WhatsAppContactsSyncResponsePayload = try await post("v1/whatsapp/contacts/sync", body: body)
     return resp.peopleUpserted
   }
 }

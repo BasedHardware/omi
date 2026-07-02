@@ -18,6 +18,7 @@ enum ConnectorBrand: String, Sendable {
   case hermes
   case x
   case imessage
+  case whatsapp
 
   fileprivate var appPath: String? {
     switch self {
@@ -25,6 +26,8 @@ enum ConnectorBrand: String, Sendable {
       return "/System/Applications/Notes.app"
     case .imessage:
       return "/System/Applications/Messages.app"
+    case .whatsapp:
+      return "/Applications/WhatsApp.app"
     case .notion:
       return "/Applications/Notion.app"
     case .obsidian:
@@ -102,6 +105,8 @@ enum ConnectorBrand: String, Sendable {
       // SF Symbols has no X/Twitter mark — rendered as the 𝕏 glyph in the view.
       return "at"
     case .imessage:
+      return "message.fill"
+    case .whatsapp:
       return "message.fill"
     }
   }
