@@ -45,6 +45,7 @@ import type {
   WarmupMessage,
   RefreshTokenMessage,
   AuthMethod,
+  ErrorMessage,
 } from "./protocol.js";
 import { requestIdFor } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
@@ -63,6 +64,7 @@ import {
 } from "./runtime/adapter-selection.js";
 import { PRODUCTION_ADAPTER_IDS } from "./adapters/interface.js";
 import { selectAgent, type AgentId } from "./runtime/agent-selector.js";
+import { runAgentChain } from "./runtime/failover.js";
 import {
   activeControlToolOwnerId,
   controlRequestKey,
@@ -103,7 +105,30 @@ const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
 
+// Failover bookkeeping: once a request has streamed answer content (deltas,
+// tool calls, or a result) we must never retry it on another agent, or the user
+// would see duplicate output / re-run tools. We track that per requestId at the
+// single send() chokepoint. The transparent "trying X instead" notice is itself
+// a text_delta, so it is excluded via `emittingFailoverNotice`.
+const ANSWER_CONTENT_EVENT_TYPES = new Set<OutboundMessage["type"]>([
+  "text_delta",
+  "result",
+  "thinking_delta",
+  "tool_use",
+  "tool_result_display",
+]);
+const emittedContentByRequestId = new Set<string>();
+let emittingFailoverNotice = false;
+function recordEmittedContent(msg: OutboundMessage): void {
+  if (emittingFailoverNotice) return;
+  const rid = (msg as { requestId?: string }).requestId;
+  if (typeof rid === "string" && rid.length > 0 && ANSWER_CONTENT_EVENT_TYPES.has(msg.type)) {
+    emittedContentByRequestId.add(rid);
+  }
+}
+
 function send(msg: OutboundMessage): void {
+  recordEmittedContent(msg);
   try {
     process.stdout.write(JSON.stringify(msg) + "\n");
   } catch (err) {
@@ -821,14 +846,17 @@ function availableAgentIds(): AgentId[] {
 // currently-available adapters (used by the voice "run this task" path when the
 // user did not name a specific agent). Absent adapterId keeps the legacy default
 // so the settings-chosen chat provider is unaffected.
-function resolveQueryAdapterId(
+// Resolve the ordered adapter chain for a query. A named adapter (or the legacy
+// default) yields a single-element chain; "auto" yields the selector's ranked
+// fallback chain so the runtime can hand off if the primary agent fails.
+function resolveQueryAdapterChain(
   query: QueryMessage,
   defaultAdapterId: string,
   log: (message: string) => void
-): string {
+): string[] {
   const requested = query.adapterId?.trim();
-  if (requested && requested !== "auto") return requested;
-  if (requested !== "auto") return defaultAdapterId;
+  if (requested && requested !== "auto") return [requested];
+  if (requested !== "auto") return [defaultAdapterId];
   const outcome = selectAgent({
     taskText: query.prompt ?? "",
     available: availableAgentIds(),
@@ -838,10 +866,10 @@ function resolveQueryAdapterId(
   });
   if (outcome.kind === "selected") {
     log(`Agent selector -> ${outcome.primary} (category=${outcome.category}, chain=${outcome.chain.join(",")}): ${outcome.reason}`);
-    return outcome.primary;
+    return outcome.chain;
   }
   log(`Agent selector needs install for ${outcome.agent}; using default ${defaultAdapterId}`);
-  return defaultAdapterId;
+  return [defaultAdapterId];
 }
 
 // --- Main ---
@@ -1047,7 +1075,7 @@ async function main(): Promise<void> {
       case "query":
         (async () => {
           const query = msg as QueryMessage;
-          const adapterId = resolveQueryAdapterId(query, defaultAdapterId, logErr);
+          const adapterChain = resolveQueryAdapterChain(query, defaultAdapterId, logErr);
           if (query.protocolVersion === 2 && !query.clientId?.trim()) {
             throw new Error("protocol v2 query requires clientId");
           }
@@ -1058,32 +1086,78 @@ async function main(): Promise<void> {
           query.ownerId = queryOwnerId;
           query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
           const queryRequestId = requestIdFor(query);
+          // requestId is guaranteed set just above; a definite key for failover bookkeeping.
+          const emissionKey = queryRequestId ?? query.requestId ?? "";
           const queryOwnerKey =
             controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
             (query.protocolVersion === 2 ? undefined : legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId }));
           const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
           currentOwnerId = queryOwnerId;
           try {
-            if (adapterId === "acp") {
-              await startAcpProcess();
-              await initializeAcp();
-            } else if (adapterId === "pi-mono") {
-              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
-            } else if (adapterId === "hermes") {
-              if (!(await ensureHermesAdapter())) {
-                throw new Error(adapterActivationError("hermes"));
+            const ensure = async (adapterId: string): Promise<void> => {
+              if (adapterId === "acp") {
+                await startAcpProcess();
+                await initializeAcp();
+              } else if (adapterId === "pi-mono") {
+                await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+              } else if (adapterId === "hermes") {
+                if (!(await ensureHermesAdapter())) {
+                  throw new Error(adapterActivationError("hermes"));
+                }
+              } else if (adapterId === "openclaw") {
+                if (!(await ensureOpenClawAdapter())) {
+                  throw new Error(adapterActivationError("openclaw"));
+                }
+              } else if (adapterId === "codex") {
+                if (!(await ensureCodexAdapter())) {
+                  throw new Error(adapterActivationError("codex"));
+                }
               }
-            } else if (adapterId === "openclaw") {
-              if (!(await ensureOpenClawAdapter())) {
-                throw new Error(adapterActivationError("openclaw"));
-              }
-            } else if (adapterId === "codex") {
-              if (!(await ensureCodexAdapter())) {
-                throw new Error(adapterActivationError("codex"));
-              }
+            };
+
+            // Execution-time failover only when the selector produced a real
+            // multi-agent chain on a v2 query (where we can precisely track
+            // whether answer content already streamed). Otherwise run once,
+            // preserving the exact legacy single-adapter behavior.
+            const useFailover = query.protocolVersion === 2 && adapterChain.length > 1;
+            if (!useFailover) {
+              query.adapterId = adapterChain[0];
+              await ensure(adapterChain[0]);
+              await facade.handleQuery(query);
+            } else {
+              await runAgentChain({
+                chain: adapterChain,
+                ensure,
+                run: (adapterId, suppressError) => {
+                  query.adapterId = adapterId;
+                  return facade.handleQuery(query, { suppressTerminalError: suppressError });
+                },
+                hasEmitted: () => emittedContentByRequestId.has(emissionKey),
+                onFailover: (message) => {
+                  emittingFailoverNotice = true;
+                  try {
+                    send(withQueryCorrelation({ type: "text_delta", text: `${message}\n\n` }, query));
+                  } finally {
+                    emittingFailoverNotice = false;
+                  }
+                },
+                onError: (message, errorMessage) => {
+                  send(
+                    errorMessage ??
+                      ({
+                        type: "error",
+                        message,
+                        protocolVersion: query.protocolVersion,
+                        requestId: queryRequestId,
+                        clientId: query.clientId,
+                      } as ErrorMessage)
+                  );
+                },
+                log: logErr,
+              });
             }
-            await facade.handleQuery(query);
           } finally {
+            emittedContentByRequestId.delete(emissionKey);
             if (queryOwnerKey && insertedOwner) {
               activeControlToolOwnersByRequest.delete(queryOwnerKey);
             }

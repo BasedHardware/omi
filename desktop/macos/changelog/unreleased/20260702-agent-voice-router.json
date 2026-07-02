@@ -1,0 +1,3 @@
+{
+  "change": "Route a spoken or typed task to the best connected coding agent (Claude Code, Codex, Hermes, OpenClaw), automatically falling back to another agent if one fails and offering setup help when a named agent isn't installed"
+}
