@@ -355,3 +355,99 @@ export function nextInChain(chain: AgentId[], failed: AgentId): AgentId | undefi
   if (idx < 0) return undefined;
   return chain[idx + 1];
 }
+
+// ---------------------------------------------------------------------------
+// STT-robust agent-name resolution
+//
+// Nik tests Track 1 by VOICE. Speech-to-text mangles the agent names badly:
+// "openclaw" -> "open claw" / "open flaw" / "open clause", "hermes" -> "her mees",
+// "codex" -> "code decks" / "codecs", "claude code" -> "cloud code". A strict
+// string match drops those. This resolver fuzzy-matches a short spoken token to
+// the intended agent so the task still routes to what the user actually said.
+// ---------------------------------------------------------------------------
+
+/** Curated spoken variants + common STT mishears per agent (lowercased). */
+export const AGENT_SPEECH_VARIANTS: Record<AgentId, string[]> = {
+  acp: ["claude code", "claude", "cloud code", "clawed", "claude cody", "cloud claude", "anthropic", "cloud"],
+  codex: ["codex", "code x", "codecs", "code decks", "codeex", "kodex", "code ex", "codaks", "codecks", "openai codex"],
+  hermes: ["hermes", "her mees", "hermies", "hermez", "hermeez", "hermees", "hermus", "airmess", "nous"],
+  openclaw: ["openclaw", "open claw", "open flaw", "open clause", "open close", "opencloud", "claw", "lobster"],
+  "pi-mono": ["omi ai", "omi", "pi mono", "pimono", "oh me", "omee"],
+};
+
+export interface SpokenAgentMatch {
+  agent: AgentId;
+  confidence: number; // 0..1
+  matched: string;
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  let curr = new Array<number>(n + 1);
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+function similarity(a: string, b: string): number {
+  if (a === b) return 1;
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 1;
+  if (Math.min(a.length, b.length) < 3) return 0; // too short to fuzzy-match safely
+  return 1 - levenshtein(a, b) / maxLen;
+}
+
+/**
+ * Resolve a (possibly mangled) spoken agent name to an agent id. Intended for the
+ * short `provider` token the voice model extracts, not a whole task. Tries exact
+ * variant matches first, then fuzzy matches over unigrams, bigrams, de-spaced
+ * bigrams, and the whole de-spaced phrase. Returns null when nothing clears the bar.
+ */
+export function resolveSpokenAgent(text: string, minConfidence = 0.68): SpokenAgentMatch | null {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+
+  const words = normalized.split(" ");
+  const candidates = new Set<string>();
+  for (let i = 0; i < words.length; i++) {
+    candidates.add(words[i]);
+    if (i + 1 < words.length) {
+      candidates.add(`${words[i]} ${words[i + 1]}`);
+      candidates.add(`${words[i]}${words[i + 1]}`);
+    }
+  }
+  candidates.add(normalized);
+  candidates.add(normalized.replace(/\s+/g, ""));
+
+  let best: SpokenAgentMatch | null = null;
+  for (const [agentId, variants] of Object.entries(AGENT_SPEECH_VARIANTS) as [AgentId, string[]][]) {
+    for (const variant of variants) {
+      const variantDespaced = variant.replace(/\s+/g, "");
+      for (const cand of candidates) {
+        if (cand === variant || cand === variantDespaced) {
+          if (!best || best.confidence < 1) best = { agent: agentId, confidence: 1, matched: cand };
+          continue;
+        }
+        const sim = Math.max(similarity(cand, variant), similarity(cand.replace(/\s+/g, ""), variantDespaced));
+        if (sim >= minConfidence && (!best || sim > best.confidence)) {
+          best = { agent: agentId, confidence: sim, matched: cand };
+        }
+      }
+    }
+  }
+  return best;
+}

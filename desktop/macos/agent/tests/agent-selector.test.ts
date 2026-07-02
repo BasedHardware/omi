@@ -5,9 +5,49 @@ import {
   detectExplicitAgent,
   installCommandFor,
   nextInChain,
+  resolveSpokenAgent,
   selectAgent,
   type AgentId,
 } from "../src/runtime/agent-selector.js";
+
+describe("resolveSpokenAgent — STT-robust name matching", () => {
+  const cases: Array<[string, AgentId]> = [
+    ["codex", "codex"],
+    ["code x", "codex"],
+    ["codecs", "codex"],
+    ["code decks", "codex"],
+    ["hermes", "hermes"],
+    ["her mees", "hermes"],
+    ["hermies", "hermes"],
+    ["openclaw", "openclaw"],
+    ["open claw", "openclaw"],
+    ["open flaw", "openclaw"],
+    ["open clause", "openclaw"],
+    ["claw", "openclaw"],
+    ["claude code", "acp"],
+    ["cloud code", "acp"],
+    ["omi", "pi-mono"],
+  ];
+  for (const [spoken, expected] of cases) {
+    it(`maps "${spoken}" -> ${expected}`, () => {
+      const match = resolveSpokenAgent(spoken);
+      expect(match?.agent).toBe(expected);
+    });
+  }
+
+  it("returns null for non-agent words", () => {
+    expect(resolveSpokenAgent("")).toBeNull();
+    expect(resolveSpokenAgent("banana")).toBeNull();
+    expect(resolveSpokenAgent("the weather today")).toBeNull();
+  });
+
+  it("reports a confidence in [0,1]", () => {
+    const exact = resolveSpokenAgent("codex");
+    expect(exact?.confidence).toBe(1);
+    const fuzzy = resolveSpokenAgent("code decks");
+    expect(fuzzy && fuzzy.confidence > 0 && fuzzy.confidence <= 1).toBe(true);
+  });
+});
 
 describe("classifyTask", () => {
   it("routes coding tasks to codebase_edit", () => {

@@ -237,6 +237,16 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
+        /// The installable local provider matching a harness, if any (Claude Code / Omi AI have none).
+        init?(harness: AgentHarnessMode) {
+            switch harness {
+            case .hermes: self = .hermes
+            case .openclaw: self = .openclaw
+            case .codex: self = .codex
+            case .acp, .piMono: return nil
+            }
+        }
+
         var setupNeededStatus: String {
             "\(displayName) needs setup"
         }
