@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Messages tab — a native iMessage-style view of your chats. Shows the full
 /// conversation, with an Omi-drafted reply pre-filled in the compose bar that you
-/// review, edit, and send. Nothing is ever sent automatically.
+/// review, edit, and send. Per chat, an opt-in "Auto-reply" switch lets Omi draft
+/// and send replies to new inbound messages automatically (off by default).
 struct IMessageInboxPage: View {
   @StateObject private var store = IMessageInboxStore()
 
@@ -183,14 +184,20 @@ private struct ChatDetailView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      // Header
-      VStack(spacing: 2) {
-        Avatar(name: chat.displayName, size: 30, imageData: chat.avatarImageData)
-        Text(chat.displayName)
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+      // Header — contact centered, per-chat auto-reply toggle trailing.
+      ZStack {
+        VStack(spacing: 2) {
+          Avatar(name: chat.displayName, size: 30, imageData: chat.avatarImageData)
+          Text(chat.displayName)
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+        }
+        .frame(maxWidth: .infinity)
+        HStack {
+          Spacer()
+          autoReplyToggle
+        }
       }
-      .frame(maxWidth: .infinity)
       .padding(.vertical, 8)
       .background(OmiColors.backgroundPrimary.opacity(0.98))
       Divider()
@@ -221,6 +228,27 @@ private struct ChatDetailView: View {
     }
     .background(OmiColors.backgroundPrimary)
     .task(id: chat.id) { await generateDraft() }
+  }
+
+  /// Per-chat auto-reply switch. When on, Omi sends a drafted reply automatically
+  /// (no review) for new inbound messages in this chat.
+  private var autoReplyToggle: some View {
+    Toggle(
+      isOn: Binding(
+        get: { store.isAutoReplyEnabled(chat.chatGUID) },
+        set: { store.setAutoReply($0, for: chat.chatGUID) }
+      )
+    ) {
+      Text("Auto-reply")
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textSecondary)
+    }
+    .toggleStyle(.switch)
+    .controlSize(.mini)
+    .tint(accent)
+    .fixedSize()
+    .padding(.trailing, 12)
+    .help("When on, Omi automatically drafts and sends a reply to new messages in this chat.")
   }
 
   private var composeBar: some View {

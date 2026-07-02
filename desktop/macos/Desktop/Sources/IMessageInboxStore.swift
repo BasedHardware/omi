@@ -11,6 +11,28 @@ final class IMessageInboxStore: ObservableObject {
   @Published var selectedChatID: String?
   /// Replies pre-drafted in the background when a new inbound message arrived.
   @Published var preDrafts: [String: String] = [:]
+  /// Chat GUIDs the user has opted into automatic replies for. When a new inbound
+  /// message arrives in one of these chats, Omi drafts AND sends a reply without
+  /// review (sent iMessages can't be unsent — this is strictly opt-in per chat).
+  @Published var autoReplyChats: Set<String> = [] {
+    didSet { UserDefaults.standard.set(Array(autoReplyChats), forKey: Self.autoReplyDefaultsKey) }
+  }
+  private static let autoReplyDefaultsKey = "imessageAutoReplyChats"
+
+  init() {
+    // Restore per-chat auto-reply opt-ins from the previous session.
+    autoReplyChats = Set(UserDefaults.standard.stringArray(forKey: Self.autoReplyDefaultsKey) ?? [])
+  }
+
+  func isAutoReplyEnabled(_ chatGUID: String) -> Bool { autoReplyChats.contains(chatGUID) }
+
+  func setAutoReply(_ enabled: Bool, for chatGUID: String) {
+    if enabled {
+      autoReplyChats.insert(chatGUID)
+    } else {
+      autoReplyChats.remove(chatGUID)
+    }
+  }
 
   private var lastLatestMessageID: [String: String] = [:]
   private var baselined = false
@@ -126,11 +148,15 @@ final class IMessageInboxStore: ObservableObject {
       // awaitingReply on its first inbound message still gets a pre-draft.
       lastLatestMessageID[chat.id] = latestID
       guard chat.awaitingReply else { continue }
-      // Only draft NEW arrivals (after the first baseline pass), so we don't flood
+      // Only act on NEW arrivals (after the first baseline pass), so we don't flood
       // the backend for every existing unread thread on launch.
       if baselined, let known, known != latestID {
-        preDrafts[chat.id] = nil
-        Task { await self.predraft(chat) }
+        if autoReplyChats.contains(chat.chatGUID) {
+          Task { await self.autoReply(chat) }
+        } else {
+          preDrafts[chat.id] = nil
+          Task { await self.predraft(chat) }
+        }
       }
     }
     baselined = true
@@ -142,6 +168,25 @@ final class IMessageInboxStore: ObservableObject {
         person: chat.personRef, thread: chat.draftContext(), intent: nil)
     else { return }
     preDrafts[chat.id] = draft
+  }
+
+  /// Draft a reply and send it immediately, without review. Only ever called for
+  /// chats the user explicitly enabled auto-reply on. Sent messages can't be
+  /// unsent, so a send failure is logged and the draft is simply dropped (never
+  /// silently retried into a duplicate send).
+  private func autoReply(_ chat: IMessageChat) async {
+    guard
+      let draft = try? await APIClient.shared.imessageDraftReply(
+        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+    else { return }
+    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return }
+    do {
+      try IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
+      appendSent(text, to: chat.id)
+    } catch {
+      NSLog("iMessage auto-reply send failed for \(chat.chatGUID): \(error.localizedDescription)")
+    }
   }
 
   func load() async {
@@ -169,7 +214,14 @@ final class IMessageInboxStore: ObservableObject {
 
   /// Optimistically append a just-sent message to the selected chat.
   func appendSent(_ text: String) {
-    guard let id = selectedChatID, let idx = chats.firstIndex(where: { $0.id == id }) else { return }
+    guard let id = selectedChatID else { return }
+    appendSent(text, to: id)
+  }
+
+  /// Optimistically append a just-sent message to a specific chat (used by
+  /// auto-reply, where the target chat may not be the selected one).
+  func appendSent(_ text: String, to chatID: String) {
+    guard let idx = chats.firstIndex(where: { $0.id == chatID }) else { return }
     let chat = chats[idx]
     let bubble = IMessageChatBubble(
       id: UUID().uuidString, text: text, isFromMe: true, date: Date(), senderName: nil)
