@@ -35,6 +35,8 @@ pub fn FloatingBar() -> Element {
     let mut chat_history = use_signal(Vec::<ChatEntry>::new);
     let ai_loading = use_signal(|| false);
     let mut is_expanded = use_signal(|| false);
+    let mut dragging = use_signal(|| false);
+    let mut drag_offset = use_signal(|| (0i32, 0i32));
 
     // Sync voice history into chat_history
     use_effect(move || {
@@ -100,6 +102,28 @@ pub fn FloatingBar() -> Element {
             onmouseleave: move |_| {
                 if prompt_text.read().is_empty() && !*ai_loading.read() {
                     is_expanded.set(false);
+                }
+            },
+            onmousedown: move |e: MouseEvent| {
+                let coords = e.client_coordinates();
+                let cfg = config.read();
+                let (cur_x, cur_y) = cfg.floating_bar_position.unwrap_or((0, 0));
+                drag_offset.set((coords.x as i32 - cur_x, coords.y as i32 - cur_y));
+                dragging.set(true);
+            },
+            onmousemove: move |e: MouseEvent| {
+                if *dragging.read() {
+                    let coords = e.client_coordinates();
+                    let (ox, oy) = *drag_offset.read();
+                    let new_x = coords.x as i32 - ox;
+                    let new_y = coords.y as i32 - oy;
+                    config.write().floating_bar_position = Some((new_x, new_y));
+                }
+            },
+            onmouseup: move |_| {
+                if *dragging.read() {
+                    dragging.set(false);
+                    let _ = config.read().save();
                 }
             },
 
