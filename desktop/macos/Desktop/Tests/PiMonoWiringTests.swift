@@ -129,6 +129,25 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
+  func testLocalAgentProviderDetectorFindsNpmGlobalInstallsUnderNvm() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".nvm/versions/node/v22.1.0/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("codex-acp")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: [:],
+      homeDirectory: home.path)
+
+    XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
   func testLocalAgentProviderDetectorCodexMissingPromptExplainsBridgeInstall() {
     let availability = LocalAgentProviderDetector.availability(
       for: .codex,

@@ -76,20 +76,19 @@ enum RealtimeHubTools {
     let available = availability.filter(\.isAvailable).map(\.provider)
     let unavailable = availability.filter { !$0.isAvailable }
 
-    if unavailable.isEmpty {
-      let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
-      return "If the user asks to use/ask \(available.map(\.displayName).joined(separator: ", ")), call spawn_agent with provider set to \(names). Treat those as available local providers, not as sessions to inspect."
-    }
-
     var parts: [String] = []
     if !available.isEmpty {
       let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
       parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
     }
-    let missingText = unavailable
-      .map { "\($0.provider.displayName): \($0.setupPrompt)" }
-      .joined(separator: " ")
-    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    if unavailable.isEmpty {
+      parts.append("Treat those as available local providers, not as sessions to inspect.")
+    } else {
+      let missingText = unavailable
+        .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+        .joined(separator: " ")
+      parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    }
     return parts.joined(separator: " ")
   }
 

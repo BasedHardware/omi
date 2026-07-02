@@ -145,7 +145,7 @@ enum LocalAgentProviderDetector {
         fileManager: FileManager,
         homeDirectory: String
     ) -> String? {
-        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
+        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory, fileManager: fileManager) {
             let path = (dir as NSString).appendingPathComponent(name)
             if fileManager.isExecutableFile(atPath: path) {
                 return path
@@ -154,7 +154,12 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
+    /// Shared with AgentRuntimeProcess so detection ("is it installed?") and
+    /// command discovery ("what do we spawn?") can never disagree.
+    static func adapterActivationSearchDirectories(
+        homeDirectory: String,
+        fileManager: FileManager = .default
+    ) -> [String] {
         [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
@@ -162,6 +167,19 @@ enum LocalAgentProviderDetector {
             "\(homeDirectory)/.local/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
-        ]
+            // `npm install -g` under a node version manager lands outside the
+            // fixed directories above.
+            "\(homeDirectory)/.volta/bin",
+            "\(homeDirectory)/Library/pnpm",
+            "\(homeDirectory)/Library/Application Support/fnm/aliases/default/bin",
+        ] + nvmNodeBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager)
+    }
+
+    private static func nvmNodeBinDirectories(homeDirectory: String, fileManager: FileManager) -> [String] {
+        let versionsDir = "\(homeDirectory)/.nvm/versions/node"
+        guard let versions = try? fileManager.contentsOfDirectory(atPath: versionsDir) else { return [] }
+        return versions
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+            .map { "\(versionsDir)/\($0)/bin" }
     }
 }

@@ -580,11 +580,7 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
     ]
-    let adapterSearchDirs = adapterPathDirs + [
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
+    let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
