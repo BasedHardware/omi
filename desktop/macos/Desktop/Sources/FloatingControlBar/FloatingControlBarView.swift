@@ -758,12 +758,16 @@ struct FloatingControlBarView: View {
         }
 
         // Resize window BEFORE updating SwiftUI state on expand so the expanded
-        // content never renders in a too-small window (which causes overflow).
+        // content never renders in a too-small window. If the resize was
+        // skipped (guarded), do NOT show the expanded bar — oversized content
+        // in a small window force-grows it with the origin pinned, sliding
+        // the pill sideways.
+        var didExpand = false
         if effectiveHover {
-            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+            didExpand = (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true) ?? false
         }
         withAnimation(.easeInOut(duration: 0.12)) {
-            isHovering = effectiveHover
+            isHovering = effectiveHover && didExpand
         }
         if !effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)

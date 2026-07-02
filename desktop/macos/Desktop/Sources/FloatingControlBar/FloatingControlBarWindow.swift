@@ -779,7 +779,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                           !self.state.isHoveringBar,
                           self.state.currentNotification == nil
                     else { return }
-                    self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)
+                    self.resizeToFrame(self.canonicalCollapsedPillFrame(), makeResizable: false, animated: false)
                     return
                 }
 
@@ -819,9 +819,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 guard !self.notchModeEnabled else { return }
                 guard !self.state.showingAIConversation,
                       !self.state.isVoiceListening,
+                      !self.state.isHoveringBar,
+                      !self.state.isNotchHoverMenuVisible,
                       self.state.currentNotification == nil
                 else { return }
-                self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)
+                self.resizeToFrame(self.canonicalCollapsedPillFrame(), makeResizable: false, animated: false)
             }
     }
 
@@ -1409,11 +1411,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
-    func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return }
-        // The pinned pill agent list owns the window size while open; hover
+    /// Returns false when a guard skipped the resize; the view must not render
+    /// expanded hover content in that case, or the oversized SwiftUI content
+    /// force-grows the window with the origin pinned (a rightward drift).
+    @discardableResult
+    func resizeForHover(expanded: Bool) -> Bool {
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return false }
+        // The pill agent list owns the window size while open; hover
         // exits must not collapse it out from under the list.
-        guard notchModeEnabled || !state.isNotchHoverMenuVisible else { return }
+        guard notchModeEnabled || !state.isNotchHoverMenuVisible else { return false }
         guard !notchModeEnabled else {
             let targetSize = expanded
                 ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
@@ -1425,7 +1431,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 animationDuration: Self.askOmiAnimationDuration,
                 anchorTop: true
             )
-            return
+            return true
         }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
@@ -1440,10 +1446,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
-            let targetFrame = FloatingControlBarGeometry.centerAnchoredFrame(
-                currentFrame: self.frame,
-                targetSize: targetSize
-            )
+            // Expand grows outward from the current center; collapse snaps
+            // back to the canonical pill position so transient layout forces
+            // can never permanently drift the pill sideways.
+            let targetFrame = expanded
+                ? FloatingControlBarGeometry.centerAnchoredFrame(
+                    currentFrame: self.frame,
+                    targetSize: targetSize
+                )
+                : self.canonicalCollapsedPillFrame()
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
             self.setFrame(targetFrame, display: true, animate: false)
@@ -1464,6 +1475,33 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             resizeWorkItem = DispatchWorkItem(block: doResize)
             DispatchQueue.main.async(execute: resizeWorkItem!)
         }
+        return true
+    }
+
+    /// Canonical collapsed-pill frame on displays without a notch: the user's
+    /// saved (dragged) position when draggable, otherwise the default
+    /// top-center. Collapse-to-idle transitions snap here so transient layout
+    /// forces (e.g. oversized content briefly growing the window with the
+    /// origin pinned) can never permanently drift the pill sideways.
+    private func canonicalCollapsedPillFrame() -> NSRect {
+        let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: collapsedBarSize)
+        if ShortcutSettings.shared.draggableBarEnabled,
+           let saved = UserDefaults.standard.string(forKey: Self.positionKey) {
+            let origin = NSPointFromString(saved)
+            if origin != .zero {
+                // Saved origins are recorded for the bare pill; keep the pill's
+                // top-center fixed when the glow outset inflates the window.
+                let bare = Self.minBarSize
+                let topCenter = NSPoint(x: origin.x + bare.width / 2, y: origin.y + bare.height)
+                return NSRect(
+                    x: topCenter.x - windowSize.width / 2,
+                    y: topCenter.y - windowSize.height,
+                    width: windowSize.width,
+                    height: windowSize.height
+                )
+            }
+        }
+        return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
     }
 
     /// Gives the subagent switcher enough room to unfurl into a centered
@@ -1476,11 +1514,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
               !suppressHoverResize
         else { return }
 
-        let expandedSize = notchModeEnabled
-            ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
-            : pillAgentListWindowSize(agentCount: AgentPillsManager.shared.pills.count)
-        let targetSize = visible ? expandedSize : collapsedBarSize
-        resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
+        if visible {
+            let expandedSize = notchModeEnabled
+                ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+                : pillAgentListWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+            resizeAnchored(to: expandedSize, makeResizable: false, animated: true, anchorTop: true)
+        } else if notchModeEnabled {
+            resizeAnchored(to: collapsedBarSize, makeResizable: false, animated: true, anchorTop: true)
+        } else {
+            // Collapse to the canonical pill position, not the current midX —
+            // see canonicalCollapsedPillFrame.
+            resizeToFrame(canonicalCollapsedPillFrame(), makeResizable: false, animated: true)
+        }
     }
 
     /// Window size for the pill-mode agent list. No chrome band and no glow
