@@ -1,0 +1,535 @@
+import SwiftUI
+
+/// Messages tab — a native iMessage-style view of your chats. Shows the full
+/// conversation, with an Omi-drafted reply pre-filled in the compose bar that you
+/// review, edit, and send. Per chat, an opt-in "Auto-reply" switch lets Omi draft
+/// and send replies to new inbound messages automatically (off by default).
+struct IMessageInboxPage: View {
+  @StateObject private var store = IMessageInboxStore()
+
+  private static let iMessageBlue = Color(red: 0.0, green: 0.478, blue: 1.0)
+
+  var body: some View {
+    Group {
+      if store.permissionNeeded {
+        permissionCard
+      } else {
+        HStack(spacing: 0) {
+          conversationList
+            .frame(width: 300)
+          Divider()
+          if let chat = store.selectedChat {
+            ChatDetailView(chat: chat, store: store, accent: Self.iMessageBlue)
+              .id(chat.id)
+          } else {
+            emptyDetail
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(OmiColors.backgroundPrimary)
+    .task {
+      await store.load()
+      store.startWatching()
+    }
+    .onDisappear { store.stopWatching() }
+  }
+
+
+  // MARK: conversation list
+
+  private var conversationList: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: 10) {
+        Text("Messages")
+          .scaledFont(size: 20, weight: .bold)
+          .foregroundColor(OmiColors.textPrimary)
+        Spacer()
+        Button { Task { await store.load() } } label: {
+          Image(systemName: "arrow.clockwise").foregroundColor(OmiColors.textSecondary)
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isLoading)
+      }
+      .padding(.horizontal, 16)
+      .padding(.vertical, 14)
+
+      if store.isLoading && store.chats.isEmpty {
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small)
+          Text("Loading chats…").scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
+        }
+        .padding(16)
+        Spacer()
+      } else if store.chats.isEmpty {
+        Text("No recent conversations.")
+          .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
+          .padding(16)
+        Spacer()
+      } else {
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            ForEach(store.chats) { chat in
+              ConversationRow(
+                chat: chat, isSelected: chat.id == store.selectedChatID,
+                draftReady: store.preDrafts[chat.id] != nil
+              )
+              .contentShape(Rectangle())
+              .onTapGesture { store.selectedChatID = chat.id }
+            }
+          }
+        }
+      }
+    }
+    .background(OmiColors.backgroundPrimary)
+  }
+
+  private var emptyDetail: some View {
+    VStack(spacing: 8) {
+      Image(systemName: "message").font(.system(size: 34)).foregroundColor(OmiColors.textTertiary)
+      Text("Select a conversation").scaledFont(size: 14).foregroundColor(OmiColors.textSecondary)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private var permissionCard: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Grant Full Disk Access")
+        .scaledFont(size: 16, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+      Text(
+        "Omi needs Full Disk Access to read Messages. Turn it on in System Settings → Privacy & Security → Full Disk Access, then quit and reopen Omi."
+      )
+      .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
+      .fixedSize(horizontal: false, vertical: true)
+      Button("Open System Settings") { IMessagePermissionPolicy.openFullDiskAccessSettings() }
+        .buttonStyle(.borderedProminent).tint(.white).foregroundColor(.black)
+    }
+    .padding(20)
+    .frame(maxWidth: 460, alignment: .leading)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+// MARK: - Conversation row
+
+private struct ConversationRow: View {
+  let chat: IMessageChat
+  let isSelected: Bool
+  var draftReady: Bool = false
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Avatar(name: chat.displayName, size: 40, imageData: chat.avatarImageData)
+      VStack(alignment: .leading, spacing: 2) {
+        HStack {
+          Text(chat.displayName)
+            .scaledFont(size: 14, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+            .lineLimit(1)
+          Spacer()
+          Text(shortTime(chat.lastDate))
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        HStack(spacing: 6) {
+          Text(chat.lastPreview)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textSecondary)
+            .lineLimit(2)
+          if chat.awaitingReply {
+            let blue = Color(red: 0.0, green: 0.478, blue: 1.0)
+            Text(draftReady ? "Draft ready" : "Draft")
+              .scaledFont(size: 9, weight: .semibold)
+              .foregroundColor(draftReady ? .white : blue)
+              .padding(.horizontal, 5)
+              .padding(.vertical, 1)
+              .background(draftReady ? blue : blue.opacity(0.15))
+              .clipShape(Capsule())
+          }
+        }
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .background(isSelected ? OmiColors.backgroundSecondary : Color.clear)
+  }
+
+  private func shortTime(_ date: Date) -> String {
+    let cal = Calendar.current
+    let f = DateFormatter()
+    if cal.isDateInToday(date) {
+      f.dateFormat = "h:mm a"
+    } else if cal.isDateInYesterday(date) {
+      return "Yesterday"
+    } else {
+      f.dateFormat = "MMM d"
+    }
+    return f.string(from: date)
+  }
+}
+
+// MARK: - Chat detail (bubbles + compose)
+
+private struct ChatDetailView: View {
+  let chat: IMessageChat
+  @ObservedObject var store: IMessageInboxStore
+  let accent: Color
+
+  @State private var draft = ""
+  @State private var isDrafting = false
+  @State private var isSending = false
+  @State private var errorText: String?
+
+  var body: some View {
+    VStack(spacing: 0) {
+      // Header — contact centered, per-chat auto-reply toggle trailing.
+      ZStack {
+        VStack(spacing: 2) {
+          Avatar(name: chat.displayName, size: 30, imageData: chat.avatarImageData)
+          Text(chat.displayName)
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+        }
+        .frame(maxWidth: .infinity)
+        HStack {
+          Spacer()
+          autoReplyToggle
+        }
+      }
+      .padding(.vertical, 8)
+      .background(OmiColors.backgroundPrimary.opacity(0.98))
+      Divider()
+
+      // Bubbles
+      ScrollViewReader { proxy in
+        ScrollView {
+          LazyVStack(spacing: 2) {
+            ForEach(Array(chat.bubbles.enumerated()), id: \.element.id) { idx, bubble in
+              ChatBubbleView(
+                bubble: bubble, isGroup: chat.isGroup,
+                showSender: shouldShowSender(at: idx), accent: accent
+              )
+              .id(bubble.id)
+            }
+            Color.clear.frame(height: 1).id("bottom")
+          }
+          .padding(.horizontal, 14)
+          .padding(.vertical, 10)
+        }
+        .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
+        .onChange(of: chat.bubbles.count) { _, _ in
+          withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+        }
+      }
+
+      composeBar
+    }
+    .background(OmiColors.backgroundPrimary)
+    .task(id: chat.id) { await generateDraft() }
+  }
+
+  /// Per-chat auto-reply switch. When on, Omi sends a drafted reply automatically
+  /// (no review) for new inbound messages in this chat.
+  private var autoReplyToggle: some View {
+    Toggle(
+      isOn: Binding(
+        get: { store.isAutoReplyEnabled(chat.chatGUID) },
+        set: { store.setAutoReply($0, for: chat.chatGUID) }
+      )
+    ) {
+      Text("Auto-reply")
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textSecondary)
+    }
+    .toggleStyle(.switch)
+    .controlSize(.mini)
+    .tint(accent)
+    .fixedSize()
+    .padding(.trailing, 12)
+    .help("When on, Omi automatically drafts and sends a reply to new messages in this chat.")
+  }
+
+  private var composeBar: some View {
+    VStack(spacing: 6) {
+      if let errorText {
+        Text(errorText).scaledFont(size: 11).foregroundColor(.orange)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      HStack(alignment: .bottom, spacing: 8) {
+        Button { Task { await generateDraft(force: true) } } label: {
+          Image(systemName: "sparkles")
+            .foregroundColor(isDrafting ? OmiColors.textTertiary : accent)
+        }
+        .buttonStyle(.plain)
+        .help("Draft a reply with Omi")
+        .disabled(isDrafting)
+
+        ZStack(alignment: .leading) {
+          if draft.isEmpty && !isDrafting {
+            Text("iMessage").scaledFont(size: 13).foregroundColor(OmiColors.textTertiary)
+              .padding(.leading, 12)
+          }
+          if isDrafting {
+            HStack(spacing: 6) {
+              ProgressView().controlSize(.small)
+              Text("Omi is drafting…").scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
+            }.padding(.leading, 12)
+          }
+          TextEditor(text: $draft)
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textPrimary)
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: 20, maxHeight: 90)
+            .padding(.horizontal, 8)
+            .opacity(isDrafting ? 0 : 1)
+        }
+        .padding(.vertical, 6)
+        .background(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(OmiColors.textTertiary.opacity(0.4), lineWidth: 1)
+        )
+
+        Button { Task { await send() } } label: {
+          Image(systemName: "arrow.up.circle.fill")
+            .font(.system(size: 26))
+            .foregroundColor(canSend ? accent : OmiColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSend)
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .background(OmiColors.backgroundPrimary)
+  }
+
+  private var canSend: Bool {
+    !isSending && !isDrafting && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  /// In group chats, show the sender name only at the start of each run of
+  /// consecutive messages from the same person.
+  private func shouldShowSender(at idx: Int) -> Bool {
+    guard chat.isGroup else { return false }
+    let bubble = chat.bubbles[idx]
+    guard !bubble.isFromMe, bubble.senderName != nil else { return false }
+    if idx == 0 { return true }
+    let prev = chat.bubbles[idx - 1]
+    return prev.isFromMe || prev.senderName != bubble.senderName
+  }
+
+  private func generateDraft(force: Bool = false) async {
+    if !force && !draft.isEmpty { return }
+    // Don't auto-draft if you already replied (you sent the last message) — there's
+    // nothing to respond to. The sparkle button can still force a draft.
+    if !force, let last = chat.bubbles.last, last.isFromMe { return }
+    // Use a reply the background watcher already pre-drafted, if any (instant).
+    if !force, let ready = store.preDrafts[chat.id], !ready.isEmpty {
+      draft = ready
+      return
+    }
+    isDrafting = true
+    errorText = nil
+    defer { isDrafting = false }
+    do {
+      let resp = try await APIClient.shared.imessageDraftReply(
+        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+      if resp.ambiguous {
+        // The contact name matched more than one person — `draft` is a
+        // disambiguation ask, not a reply. Surface it and keep the composer empty
+        // so it can't be sent as-is.
+        draft = ""
+        errorText = resp.draft
+      } else {
+        draft = resp.draft
+      }
+    } catch is CancellationError {
+      // Switching chats / the detail view disappearing cancels `.task(id:)`.
+      // Normal cancellation is not a failure — don't surface it to the user.
+      return
+    } catch let urlError as URLError where urlError.code == .cancelled {
+      return
+    } catch {
+      errorText = "Couldn't draft a reply: \(error.localizedDescription)"
+    }
+  }
+
+  private func send() async {
+    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return }
+    isSending = true
+    errorText = nil
+    defer { isSending = false }
+    do {
+      try IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
+      store.appendSent(text)
+      draft = ""
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+}
+
+// MARK: - Bubble
+
+private struct ChatBubbleView: View {
+  let bubble: IMessageChatBubble
+  let isGroup: Bool
+  let showSender: Bool
+  let accent: Color
+
+  @State private var loadedImage: NSImage?
+
+  /// File path if this bubble is an image attachment (resolved synchronously
+  /// from mime + path — the pixels are decoded off the render path in `.task`).
+  private var imageAttachmentPath: String? {
+    guard bubble.attachmentMime?.lowercased().hasPrefix("image/") ?? false,
+      let path = bubble.attachmentPath
+    else { return nil }
+    return path
+  }
+
+  /// A real user caption to show alongside an image, if any. When a message has
+  /// no text, the reader synthesizes a placeholder ("📷 Photo") — don't render
+  /// that as a caption below the image it already represents.
+  private var caption: String? {
+    guard imageAttachmentPath != nil else { return nil }
+    let placeholders: Set<String> = ["📷 Photo", "🎥 Video", "🎤 Audio", "📎 Attachment"]
+    let trimmed = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !placeholders.contains(trimmed) else { return nil }
+    return bubble.text
+  }
+
+  var body: some View {
+    HStack {
+      if bubble.isFromMe { Spacer(minLength: 60) }
+      VStack(alignment: bubble.isFromMe ? .trailing : .leading, spacing: 2) {
+        if showSender, let sender = bubble.senderName {
+          Text(sender).scaledFont(size: 10).foregroundColor(OmiColors.textTertiary)
+            .padding(.leading, 12)
+        }
+        if let path = imageAttachmentPath {
+          imageAttachment(path: path)
+          if let caption { messageBubble(caption) }
+        } else {
+          messageBubble(bubble.text)
+        }
+      }
+      if !bubble.isFromMe { Spacer(minLength: 60) }
+    }
+  }
+
+  @ViewBuilder
+  private func imageAttachment(path: String) -> some View {
+    Group {
+      if let img = loadedImage {
+        Image(nsImage: img)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(maxWidth: 220, maxHeight: 260)
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      } else {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(Color(red: 0.17, green: 0.17, blue: 0.19))
+          .frame(width: 160, height: 160)
+          .overlay(
+            Image(systemName: "photo")
+              .font(.system(size: 28))
+              .foregroundColor(OmiColors.textTertiary)
+          )
+      }
+    }
+    .task(id: path) {
+      loadedImage = await IMessageAttachmentImageCache.shared.image(atPath: path)
+    }
+  }
+
+  @ViewBuilder
+  private func messageBubble(_ text: String) -> some View {
+    Text(text)
+      .scaledFont(size: 13)
+      .foregroundColor(bubble.isFromMe ? .white : OmiColors.textPrimary)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .background(bubble.isFromMe ? accent : Color(red: 0.17, green: 0.17, blue: 0.19))
+      .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+  }
+}
+
+// MARK: - Attachment image cache
+
+/// Loads and caches iMessage attachment images off the SwiftUI render path.
+/// Mirrors the `AppIconCache` pattern (actor + NSCache) so scrolling never
+/// decodes images synchronously in a view body.
+private actor IMessageAttachmentImageCache {
+  static let shared = IMessageAttachmentImageCache()
+
+  private let cache: NSCache<NSString, NSImage> = {
+    let cache = NSCache<NSString, NSImage>()
+    cache.countLimit = 200
+    cache.totalCostLimit = 100 * 1024 * 1024  // 100MB
+    return cache
+  }()
+
+  func image(atPath path: String) -> NSImage? {
+    let key = path as NSString
+    if let cached = cache.object(forKey: key) { return cached }
+    // Skip the expensive decode if the requesting bubble already scrolled away.
+    if Task.isCancelled { return nil }
+    guard let image = NSImage(contentsOfFile: path) else { return nil }
+    // Insert with a cost reflecting the decoded byte size so `totalCostLimit`
+    // actually bounds memory — without a cost only `countLimit` applies and 200
+    // high-res images can far exceed the 100MB budget.
+    cache.setObject(image, forKey: key, cost: Self.decodedByteCost(of: image))
+    return image
+  }
+
+  /// Approximate decoded size in bytes (widest pixel rep × 4 bytes RGBA). Falls
+  /// back to the point size when no bitmap rep exposes pixel dimensions.
+  private static func decodedByteCost(of image: NSImage) -> Int {
+    var pixels = 0
+    for rep in image.representations {
+      pixels = max(pixels, rep.pixelsWide * rep.pixelsHigh)
+    }
+    if pixels == 0 {
+      pixels = Int(image.size.width * image.size.height)
+    }
+    return max(1, pixels * 4)
+  }
+}
+
+// MARK: - Avatar
+
+private struct Avatar: View {
+  let name: String
+  let size: CGFloat
+  var imageData: Data? = nil
+
+  var body: some View {
+    Group {
+      if let data = imageData, let nsImage = NSImage(data: data) {
+        Image(nsImage: nsImage)
+          .resizable()
+          .aspectRatio(contentMode: .fill)
+      } else {
+        Circle()
+          .fill(OmiColors.backgroundSecondary)
+          .overlay(
+            Text(initials)
+              .scaledFont(size: size * 0.38, weight: .semibold)
+              .foregroundColor(OmiColors.textSecondary)
+          )
+      }
+    }
+    .frame(width: size, height: size)
+    .clipShape(Circle())
+  }
+
+  private var initials: String {
+    let parts = name.split(separator: " ").prefix(2)
+    let letters = parts.compactMap { $0.first }.map(String.init).joined()
+    return letters.isEmpty ? "?" : letters.uppercased()
+  }
+}

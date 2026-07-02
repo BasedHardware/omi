@@ -5742,6 +5742,35 @@ extension APIClient {
   func xDisconnect() async throws {
     let _: XSimpleOK = try await post("v1/x/disconnect")
   }
+
+  // MARK: - iMessage connector
+
+  @discardableResult
+  func imessageIngest(threads: [IMessageThreadPayload], lastRowID: Int64?) async throws
+    -> IMessageIngestResponsePayload
+  {
+    let body = IMessageIngestRequestPayload(threads: threads, language: "en", lastRowid: lastRowID)
+    return try await post("v1/imessage/threads", body: body)
+  }
+
+  func imessageConnectionStatus() async throws -> IMessageStatusPayload {
+    try await get("v1/imessage/connection-status")
+  }
+
+  /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
+  /// a disambiguation ask as if it were a reply.
+  func imessageDraftReply(person: String, thread: [IMessageDraftMessagePayload], intent: String?) async throws
+    -> IMessageDraftResponsePayload
+  {
+    let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent)
+    return try await post("v1/imessage/draft-reply", body: body)
+  }
+
+  func imessageSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
+    let body = IMessageContactsSyncRequestPayload(contacts: contacts)
+    let resp: IMessageContactsSyncResponsePayload = try await post("v1/imessage/contacts/sync", body: body)
+    return resp.peopleUpserted
+  }
 }
 
 struct XOAuthURLResponse: Decodable {

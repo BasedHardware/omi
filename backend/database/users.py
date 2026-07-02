@@ -10,6 +10,7 @@ from database.redis_db import try_acquire_client_device_write_lock, try_acquire_
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -577,6 +578,25 @@ def get_person_by_name(uid: str, name: str):
     return None
 
 
+def get_people_by_name(uid: str, name: str) -> list[dict]:
+    """Return ALL people matching a display name (no .limit(1)).
+
+    Display names are not unique — distinct people can share a saved name. This
+    helper returns every match so callers can disambiguate instead of silently
+    picking an arbitrary first match (a cross-contact privacy risk).
+    """
+    if not name:
+        return []
+    people_ref = db.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('name', '==', name))
+    result = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        data.setdefault('id', doc.id)
+        result.append(data)
+    return result
+
+
 def get_people_by_ids(uid: str, person_ids: list[str]):
     """Fetch people docs by ID using db.get_all().
 
@@ -606,6 +626,155 @@ def update_person(uid: str, person_id: str, name: str):
 def delete_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.delete()
+
+
+def canonical_handle(handle: str) -> str:
+    """Normalize a chat handle to a single canonical form so sync, ingest, and
+    resolution all key on the same value.
+
+    - Emails: lowercased, whitespace-stripped, returned as-is.
+    - Phone numbers: reduced to digits; a leading US country code (11 digits
+      starting with '1') is stripped so `+1XXXXXXXXXX` == `XXXXXXXXXX`.
+    """
+    h = (handle or '').strip().lower()
+    if not h:
+        return ''
+    if '@' in h:
+        return h  # email
+    digits = re.sub(r'\D', '', h)
+    if len(digits) == 11 and digits.startswith('1'):
+        digits = digits[1:]  # strip US country code so +1XXXXXXXXXX == XXXXXXXXXX
+    return digits or h
+
+
+def get_person_by_handle(uid: str, handle: str):
+    handle = canonical_handle(handle)
+    if not handle:
+        return None
+    people_ref = db.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('handles', 'array_contains', handle)).limit(1)
+    docs = list(query.stream())
+    if docs:
+        data = docs[0].to_dict()
+        data.setdefault('id', docs[0].id)
+        return data
+    return None
+
+
+def get_or_create_person_by_handle(uid: str, handle: str, display_name: str):
+    """Idempotently resolve a chat-app contact to a Person.
+
+    Contacts are identified by a normalized handle (e.g. an iMessage phone/email).
+    Resolution is by handle IDENTITY only: existing handle → create a new person.
+    The person id is seeded from the handle so concurrent ingests converge on the
+    same document.
+
+    We deliberately do NOT merge by display name. Distinct people can share a saved
+    name, so a name-based merge would silently fold a handle-discovered contact into
+    an unrelated (possibly manually-saved) person — a cross-contact privacy leak.
+    The display name is still stored as the person's name on CREATE, but never used
+    to merge.
+    """
+    handle = canonical_handle(handle)
+    existing = get_person_by_handle(uid, handle)
+    if existing:
+        return existing
+
+    person_id = document_id_from_seed(f'{uid}:imessage:{handle}')
+    person_data = {
+        'id': person_id,
+        'name': display_name or handle,
+        'handles': [handle] if handle else [],
+        'source': 'imessage',
+        'created_at': datetime.now(timezone.utc),
+        'updated_at': datetime.now(timezone.utc),
+    }
+    return create_person(uid, person_data)
+
+
+def import_contacts(uid: str, contacts: list[dict]) -> int:
+    """User-driven merge of the macOS contact book into the People collection.
+
+    Each contact is `{'name': str, 'handles': [str]}`. Unlike message-ingest,
+    grouping a contact's multiple handles under ONE person is intended here — the
+    user explicitly asserts these handles belong to the same person.
+
+    For each contact: canonicalize + dedupe handles. If ANY canonical handle
+    already maps to an existing person, union the new handles onto that person and
+    fill in the name only if the person has no real name yet (never clobber a
+    better existing name). Otherwise create one person seeded from the first
+    canonical handle. Returns the count of people created or updated.
+    """
+    upserted = 0
+    people_ref = db.collection('users').document(uid).collection('people')
+    for contact in contacts or []:
+        try:
+            canon: list[str] = []
+            seen = set()
+            for h in contact.get('handles') or []:
+                ch = canonical_handle(h)
+                if not ch or ch in seen:
+                    continue
+                seen.add(ch)
+                canon.append(ch)
+            if not canon:
+                continue
+
+            name = (contact.get('name') or '').strip()
+
+            existing = None
+            for ch in canon:
+                existing = get_person_by_handle(uid, ch)
+                if existing:
+                    break
+
+            now = datetime.now(timezone.utc)
+            if existing:
+                update = {
+                    'handles': firestore.ArrayUnion(canon),
+                    'updated_at': now,
+                }
+                existing_name = (existing.get('name') or '').strip()
+                existing_handles = existing.get('handles') or []
+                name_is_real = (
+                    bool(existing_name)
+                    and existing_name not in existing_handles
+                    and canonical_handle(existing_name) not in existing_handles
+                )
+                if name and not name_is_real:
+                    update['name'] = name
+                people_ref.document(existing['id']).update(update)
+                upserted += 1
+            else:
+                first_handle = canon[0]
+                person_id = document_id_from_seed(f'{uid}:contact:{first_handle}')
+                create_person(
+                    uid,
+                    {
+                        'id': person_id,
+                        'name': name or first_handle,
+                        'handles': canon,
+                        'source': 'contacts',
+                        'created_at': now,
+                        'updated_at': now,
+                    },
+                )
+                upserted += 1
+        except Exception as e:
+            logger.warning(f"import_contacts: skipped contact uid={uid} err={type(e).__name__}")
+    return upserted
+
+
+def update_person_profile(uid: str, person_id: str, profile_fields: dict):
+    """Merge per-person profile fields (relationship, profile_summary, tone_notes, ...)."""
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+    if not person_doc.exists:
+        return False
+    update = dict(profile_fields)
+    update['updated_at'] = datetime.now(timezone.utc)
+    person_ref.update(update)
+    return True
 
 
 @transactional

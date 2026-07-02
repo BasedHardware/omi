@@ -560,6 +560,9 @@ struct DashboardPage: View {
             HomeAIChoiceButton(title: "Omi Device", usesOmiMark: true, isConnected: hasOmiDeviceHistory) {
                 openOmiDeviceWebsite()
             }
+            HomeAIChoiceButton(title: "Messages", brand: .imessage, isConnected: isImportConnectorConnected("imessage")) {
+                navigate(to: .replies)
+            }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
                 openAppsPage()
             }

@@ -1,0 +1,332 @@
+import Foundation
+import SwiftUI
+
+/// Backing store for the Messages tab: recent iMessage chats with full history.
+@MainActor
+final class IMessageInboxStore: ObservableObject {
+  @Published var chats: [IMessageChat] = []
+  @Published var isLoading = false
+  @Published var errorMessage: String?
+  @Published var permissionNeeded = false
+  @Published var selectedChatID: String?
+  /// Replies pre-drafted in the background when a new inbound message arrived.
+  @Published var preDrafts: [String: String] = [:]
+  /// Chat GUIDs the user has opted into automatic replies for. When a new inbound
+  /// message arrives in one of these chats, Omi drafts AND sends a reply without
+  /// review (sent iMessages can't be unsent — this is strictly opt-in per chat).
+  @Published var autoReplyChats: Set<String> = [] {
+    didSet { UserDefaults.standard.set(Array(autoReplyChats), forKey: Self.autoReplyDefaultsKey) }
+  }
+  private static let autoReplyDefaultsKey = "imessageAutoReplyChats"
+
+  init() {
+    // Restore per-chat auto-reply opt-ins from the previous session.
+    autoReplyChats = Set(UserDefaults.standard.stringArray(forKey: Self.autoReplyDefaultsKey) ?? [])
+  }
+
+  func isAutoReplyEnabled(_ chatGUID: String) -> Bool { autoReplyChats.contains(chatGUID) }
+
+  func setAutoReply(_ enabled: Bool, for chatGUID: String) {
+    if enabled {
+      autoReplyChats.insert(chatGUID)
+      // If the chat already has an unanswered inbound message, reply to it now
+      // instead of waiting for the contact's next new message — that's what a user
+      // expects when they flip the toggle on for a waiting thread.
+      if let chat = chats.first(where: { $0.chatGUID == chatGUID }), chat.awaitingReply {
+        Task { await autoReply(chat) }
+      }
+    } else {
+      autoReplyChats.remove(chatGUID)
+    }
+  }
+
+  private var lastLatestMessageID: [String: String] = [:]
+  private var baselined = false
+  private var watchTask: Task<Void, Never>?
+  private var dbWatcher: IMessageDBWatcher?
+  /// High-water ROWID for incremental gating: we only do a full refresh when a
+  /// message newer than this appears. Primed once the baseline is loaded.
+  private var lastSeenROWID: Int64 = 0
+
+  var selectedChat: IMessageChat? {
+    guard let id = selectedChatID else { return nil }
+    return chats.first { $0.id == id }
+  }
+
+  // MARK: - Real-time watcher
+
+  /// Event-driven watcher for new inbound messages. Instead of periodically
+  /// reloading the whole chat.db, we watch the SQLite files for writes (WAL-mode
+  /// writes land in the -wal/-shm sidecars), debounce the burst, then cheaply
+  /// query only messages newer than `lastSeenROWID`. A full `readChats()` refresh
+  /// (and the resulting pre-draft) runs only when something genuinely new arrived.
+  /// A slow fallback timer covers the rare case where a file event is missed.
+  func startWatching() {
+    guard watchTask == nil else { return }
+    startFileWatcher()
+    watchTask = Task { [weak self] in
+      // Baseline pass (equivalent to the former first poll): full load + record
+      // the latest id per chat, then prime the incremental cursor from "now".
+      await self?.bootstrap()
+      while !Task.isCancelled {
+        // Fallback in case a file-system event is missed (e.g. sidecar rotation).
+        try? await Task.sleep(nanoseconds: 45_000_000_000)  // 45s
+        // Stop the loop once the store is gone, otherwise it keeps waking forever.
+        guard let self else { break }
+        await self.syncNewMessages()
+      }
+    }
+  }
+
+  func stopWatching() {
+    watchTask?.cancel()
+    watchTask = nil
+    dbWatcher?.stop()
+    dbWatcher = nil
+  }
+
+  deinit {
+    watchTask?.cancel()
+    dbWatcher?.stop()
+  }
+
+  private func startFileWatcher() {
+    guard dbWatcher == nil else { return }
+    let dbPath = IMessagePermissionPolicy.chatDatabaseURL.path
+    // WAL-mode writes usually update the -wal/-shm sidecars, so watch all three.
+    let paths = [dbPath, dbPath + "-wal", dbPath + "-shm"]
+    let watcher = IMessageDBWatcher(paths: paths) { [weak self] in
+      // DispatchSource fires on a background queue; hop back to the main actor.
+      Task { await self?.syncNewMessages() }
+    }
+    dbWatcher = watcher
+    watcher.start()
+  }
+
+  /// One-time baseline: full load (records latest ids for all chats without
+  /// pre-drafting) and prime the incremental high-water mark.
+  private func bootstrap() async {
+    await refresh()
+    // Prime the cursor to the current DB max so gating starts from "now".
+    // `limit: 1` keeps this cheap — we only need `maxROWID`.
+    if let result = try? await IMessageReaderService.shared.newMessages(afterROWID: lastSeenROWID, limit: 1) {
+      lastSeenROWID = max(lastSeenROWID, result.maxROWID)
+    }
+  }
+
+  /// Debounced change handler: cheaply check for messages newer than the
+  /// high-water mark and only do a full refresh (+ pre-draft) when something new
+  /// actually arrived.
+  private func syncNewMessages() async {
+    guard IMessagePermissionPolicy.fullDiskAccessGranted() else {
+      // Mirror refresh()/load(): reflect revoked Full Disk Access in the UI
+      // instead of silently leaving stale chats on screen.
+      permissionNeeded = true
+      chats = []
+      // Force a fresh baseline once access is granted again.
+      lastSeenROWID = 0
+      return
+    }
+    permissionNeeded = false
+    guard let result = try? await IMessageReaderService.shared.newMessages(afterROWID: lastSeenROWID)
+    else { return }
+    guard result.maxROWID > lastSeenROWID else { return }  // nothing new
+    lastSeenROWID = result.maxROWID
+    await refresh()
+  }
+
+  private func refresh() async {
+    guard IMessagePermissionPolicy.fullDiskAccessGranted() else {
+      // Mirror load(): reflect revoked Full Disk Access in the UI instead of
+      // silently leaving stale chats on screen.
+      permissionNeeded = true
+      chats = []
+      return
+    }
+    permissionNeeded = false
+    guard let loaded = try? await IMessageReaderService.shared.readChats() else { return }
+    chats = loaded
+
+    for chat in loaded {
+      let latestID = chat.bubbles.last?.id ?? ""
+      let known = lastLatestMessageID[chat.id]
+      // Baseline the latest ID for ALL chats so a chat transitioning to
+      // awaitingReply on its first inbound message still gets a pre-draft.
+      lastLatestMessageID[chat.id] = latestID
+      guard chat.awaitingReply else { continue }
+      // Only act on NEW arrivals (after the first baseline pass), so we don't flood
+      // the backend for every existing unread thread on launch.
+      if baselined, let known, known != latestID {
+        if autoReplyChats.contains(chat.chatGUID) {
+          Task { await self.autoReply(chat) }
+        } else {
+          preDrafts[chat.id] = nil
+          Task { await self.predraft(chat) }
+        }
+      }
+    }
+    baselined = true
+  }
+
+  private func predraft(_ chat: IMessageChat) async {
+    guard
+      let resp = try? await APIClient.shared.imessageDraftReply(
+        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+    else { return }
+    // Don't offer a disambiguation ask as a ready-to-send pre-draft.
+    guard !resp.ambiguous else { return }
+    preDrafts[chat.id] = resp.draft
+  }
+
+  /// Draft a reply and send it immediately, without review. Only ever called for
+  /// chats the user explicitly enabled auto-reply on. Sent messages can't be
+  /// unsent, so a send failure is logged and the draft is simply dropped (never
+  /// silently retried into a duplicate send).
+  private func autoReply(_ chat: IMessageChat) async {
+    guard
+      let resp = try? await APIClient.shared.imessageDraftReply(
+        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+    else { return }
+    // NEVER auto-send when the person is ambiguous — the "draft" is a
+    // disambiguation ask, and auto-reply sends without review.
+    guard !resp.ambiguous else {
+      NSLog("iMessage auto-reply skipped for \(chat.chatGUID): ambiguous contact needs disambiguation")
+      return
+    }
+    let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return }
+    do {
+      try IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
+      appendSent(text, to: chat.id)
+    } catch {
+      NSLog("iMessage auto-reply send failed for \(chat.chatGUID): \(error.localizedDescription)")
+    }
+  }
+
+  func load() async {
+    isLoading = true
+    errorMessage = nil
+    defer { isLoading = false }
+
+    guard IMessagePermissionPolicy.fullDiskAccessGranted() else {
+      permissionNeeded = true
+      chats = []
+      return
+    }
+    permissionNeeded = false
+
+    do {
+      let loaded = try await IMessageReaderService.shared.readChats()
+      chats = loaded
+      if selectedChatID == nil {
+        selectedChatID = loaded.first?.id
+      }
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  /// Optimistically append a just-sent message to the selected chat.
+  func appendSent(_ text: String) {
+    guard let id = selectedChatID else { return }
+    appendSent(text, to: id)
+  }
+
+  /// Optimistically append a just-sent message to a specific chat (used by
+  /// auto-reply, where the target chat may not be the selected one).
+  func appendSent(_ text: String, to chatID: String) {
+    guard let idx = chats.firstIndex(where: { $0.id == chatID }) else { return }
+    let chat = chats[idx]
+    let bubble = IMessageChatBubble(
+      id: UUID().uuidString, text: text, isFromMe: true, date: Date(), senderName: nil)
+    chats[idx] = IMessageChat(
+      chatGUID: chat.chatGUID, displayName: chat.displayName, isGroup: chat.isGroup,
+      personRef: chat.personRef, bubbles: chat.bubbles + [bubble], avatarImageData: chat.avatarImageData)
+  }
+}
+
+/// Watches the Messages SQLite files (`chat.db` + its `-wal`/`-shm` sidecars) for
+/// writes and invokes `onChange` after a short debounce. WAL-mode writes land in
+/// the sidecars, so all three are monitored. If a file is checkpointed/rotated
+/// away (delete/rename/revoke) the source is re-armed on the new inode.
+///
+/// All mutable state is confined to `queue`, so DispatchSource callbacks, arming,
+/// and teardown never race. `onChange` is invoked on `queue` (a background queue);
+/// callers must hop to their own actor.
+final class IMessageDBWatcher {
+  private let paths: [String]
+  private let debounce: TimeInterval
+  private let onChange: () -> Void
+  private let queue = DispatchQueue(label: "com.omi.imessage.dbwatcher")
+  private var sources: [DispatchSourceFileSystemObject] = []
+  private var pending: DispatchWorkItem?
+  private var stopped = false
+
+  init(paths: [String], debounce: TimeInterval = 1.2, onChange: @escaping () -> Void) {
+    self.paths = paths
+    self.debounce = debounce
+    self.onChange = onChange
+  }
+
+  func start() {
+    queue.async { [weak self] in
+      guard let self, !self.stopped else { return }
+      for path in self.paths { self.arm(path) }
+    }
+  }
+
+  func stop() {
+    queue.async { [weak self] in
+      guard let self else { return }
+      self.stopped = true
+      self.pending?.cancel()
+      self.pending = nil
+      for source in self.sources { source.cancel() }
+      self.sources.removeAll()
+    }
+  }
+
+  deinit {
+    // Cancel any live sources so their file descriptors are closed even if stop()
+    // was never called.
+    for source in sources { source.cancel() }
+  }
+
+  /// Must run on `queue`.
+  private func arm(_ path: String) {
+    guard !stopped else { return }
+    let fd = open(path, O_EVTONLY)
+    // A sidecar may not exist yet (e.g. `-wal` before the first WAL write); the
+    // fallback timer and the chat.db watcher cover that until it appears.
+    guard fd >= 0 else { return }
+
+    let source = DispatchSource.makeFileSystemObjectSource(
+      fileDescriptor: fd,
+      eventMask: [.write, .extend, .delete, .rename, .revoke, .link],
+      queue: queue)
+    source.setEventHandler { [weak self] in
+      guard let self else { return }
+      let flags = source.data
+      if flags.contains(.delete) || flags.contains(.rename) || flags.contains(.revoke) {
+        // The file was checkpointed/rotated away — drop this source and re-arm on
+        // the new inode shortly after.
+        source.cancel()
+        self.sources.removeAll { $0 === source }
+        self.queue.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.arm(path) }
+      }
+      self.scheduleFire()
+    }
+    source.setCancelHandler { close(fd) }
+    sources.append(source)
+    source.resume()
+  }
+
+  /// Must run on `queue`.
+  private func scheduleFire() {
+    guard !stopped else { return }
+    pending?.cancel()
+    let work = DispatchWorkItem { [weak self] in self?.onChange() }
+    pending = work
+    queue.asyncAfter(deadline: .now() + debounce, execute: work)
+  }
+}
