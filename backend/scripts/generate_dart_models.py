@@ -82,6 +82,15 @@ SCHEMA_GROUPS = {
             'IntegrationResponse',
         ),
     },
+    'wrapped_task_integrations': {
+        'output': DEFAULT_OUTPUT_DIR / 'wrapped_task_integrations_wire.g.dart',
+        'schemas': (
+            'WrappedStatusResponse',
+            'GenerateWrappedResponse',
+            'TaskIntegrationsResponse',
+            'DefaultTaskIntegrationResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},

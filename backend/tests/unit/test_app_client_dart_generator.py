@@ -19,6 +19,9 @@ PEOPLE_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'pe
 IMPORTS_INTEGRATIONS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'imports_integrations_wire.g.dart'
 )
+WRAPPED_TASK_INTEGRATIONS_DART_PATH = (
+    ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'wrapped_task_integrations_wire.g.dart'
+)
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -113,6 +116,19 @@ def test_imports_integrations_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedIntegrationResponse' in generated
     assert 'jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id")' in generated
     assert 'connected: _required(_readBool(_readAny(json, const ["connected"])), "connected")' in generated
+
+
+def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'wrapped_task_integrations')
+
+    assert WRAPPED_TASK_INTEGRATIONS_DART_PATH.read_text() == generated
+    assert 'class GeneratedWrappedStatusResponse' in generated
+    assert 'class GeneratedGenerateWrappedResponse' in generated
+    assert 'class GeneratedTaskIntegrationsResponse' in generated
+    assert 'class GeneratedDefaultTaskIntegrationResponse' in generated
+    assert 'status: _required(_readString(_readAny(json, const ["status"])), "status")' in generated
+    assert 'integrations: _required(_readMap(_readAny(json, const ["integrations"])), "integrations")' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

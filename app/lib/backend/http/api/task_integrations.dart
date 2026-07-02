@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/wrapped_task_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -12,10 +13,15 @@ class TaskIntegrationsResponse {
   TaskIntegrationsResponse({required this.integrations, this.defaultApp});
 
   factory TaskIntegrationsResponse.fromJson(Map<String, dynamic> json) {
-    return TaskIntegrationsResponse(
-      integrations: json['integrations'] as Map<String, dynamic>? ?? {},
-      defaultApp: json['default_app'] as String?,
-    );
+    return TaskIntegrationsResponse.fromGenerated(wire.GeneratedTaskIntegrationsResponse.fromJson(json));
+  }
+
+  factory TaskIntegrationsResponse.fromGenerated(wire.GeneratedTaskIntegrationsResponse generated) {
+    return TaskIntegrationsResponse(integrations: generated.integrations, defaultApp: generated.defaultApp);
+  }
+
+  wire.GeneratedTaskIntegrationsResponse toGenerated() {
+    return wire.GeneratedTaskIntegrationsResponse(integrations: integrations, defaultApp: defaultApp);
   }
 }
 
