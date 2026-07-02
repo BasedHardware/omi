@@ -68,6 +68,17 @@ find_pcre2() {
   return 1
 }
 
+resolve_pcre2_for_dep() {
+  local dep="$1"
+
+  if [[ -f "$dep" ]]; then
+    printf '%s\n' "$dep"
+    return 0
+  fi
+
+  find_pcre2
+}
+
 vendor_pcre2_for_ripgrep() {
   local rg="$1"
   local dep
@@ -76,8 +87,8 @@ vendor_pcre2_for_ripgrep() {
 
   while IFS= read -r dep; do
     [[ -n "$dep" ]] || continue
-    if ! pcre2="$(find_pcre2)"; then
-      echo "ERROR: $rg depends on $dep but libpcre2-8.0.dylib was not found" >&2
+    if ! pcre2="$(resolve_pcre2_for_dep "$dep")"; then
+      echo "ERROR: $rg depends on $dep but neither that file nor a fallback libpcre2-8.0.dylib was found" >&2
       exit 1
     fi
 
