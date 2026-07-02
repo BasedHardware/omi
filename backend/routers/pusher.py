@@ -85,6 +85,8 @@ async def _process_conversation_task(
     STT calls made inside process_conversation route through the user's own
     provider keys instead of Omi's env keys.
     """
+    if byok_keys:
+        set_byok_keys(byok_keys)
     try:
         conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation_data:
