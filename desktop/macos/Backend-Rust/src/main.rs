@@ -5,6 +5,7 @@ use axum::Router;
 use std::fs::OpenOptions;
 use std::io::LineWriter;
 use std::sync::Arc;
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::fmt::format::Writer;
@@ -355,7 +356,10 @@ async fn main() {
         .layer(paywall_checker_extension(paywall_checker))
         .layer(byok_cache_extension(byok_cache))
         .layer(cors)
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        // Outermost layer: turn any handler/middleware panic into a 500 + logged
+        // error instead of a dropped connection with no response or structured log.
+        .layer(CatchPanicLayer::new());
 
     // Start server
     let addr = format!("0.0.0.0:{}", config.port);

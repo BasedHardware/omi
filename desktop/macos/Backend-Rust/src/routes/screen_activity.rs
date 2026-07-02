@@ -44,15 +44,16 @@ async fn sync_screen_activity(
         .upsert_screen_activity(&user.uid, &request.rows)
         .await;
 
-    if let Err(e) = &firestore_result {
-        tracing::error!("Screen activity Firestore write failed: {}", e);
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Firestore write failed: {}", e),
-        ));
-    }
-
-    let written = firestore_result.unwrap();
+    let written = match firestore_result {
+        Ok(written) => written,
+        Err(e) => {
+            tracing::error!("Screen activity Firestore write failed: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Firestore write failed: {}", e),
+            ));
+        }
+    };
 
     // Upsert embeddings to Pinecone ns3 (fire-and-forget in background)
     let rows_with_embeddings: Vec<_> = request
