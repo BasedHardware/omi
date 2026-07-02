@@ -53,14 +53,20 @@ _seen_event_keys: Deque[str] = deque()
 _seen_event_set: Set[str] = set()
 
 
-def _already_handled(key: str) -> bool:
+def _is_duplicate(key: str) -> bool:
+    """Read-only check; does not record the key (so a failed attempt can retry)."""
+    return key in _seen_event_set
+
+
+def _mark_handled(key: str) -> None:
+    """Commit a key as handled. Called only after a reply was successfully queued or
+    sent, so a transient failure doesn't permanently drop the message on replay."""
     if key in _seen_event_set:
-        return True
+        return
     _seen_event_set.add(key)
     _seen_event_keys.append(key)
     if len(_seen_event_keys) > _MAX_SEEN_EVENTS:
         _seen_event_set.discard(_seen_event_keys.popleft())
-    return False
 
 
 def _api_base_url_error() -> Optional[str]:
@@ -159,8 +165,11 @@ def _handle_event(event: Dict[str, Any]) -> None:
     incoming = (event.get("text") or "").strip()
     if not chat_id or not incoming:
         return
-    dedup_key = str(event.get("messageID") or event.get("message_id") or event.get("id") or f"{chat_id}:{incoming}")
-    if _already_handled(dedup_key):
+    # Scope the dedup key with chat_id: Beeper message ids are unique per chat, not
+    # globally, so an unscoped id could collide across chats and drop a valid message.
+    message_id = event.get("messageID") or event.get("message_id") or event.get("id") or incoming
+    dedup_key = f"{chat_id}:{message_id}"
+    if _is_duplicate(dedup_key):
         return
 
     reply = _draft_reply(event)
@@ -173,6 +182,9 @@ def _handle_event(event: Dict[str, Any]) -> None:
         _send(chat_id, reply["draft"])
     else:
         _queue_for_review(chat_id, incoming, reply)
+    # Commit dedup only after a successful queue/send. main() swallows exceptions to
+    # stay alive, so marking earlier would drop a message that failed transiently.
+    _mark_handled(dedup_key)
 
 
 def main() -> int:
