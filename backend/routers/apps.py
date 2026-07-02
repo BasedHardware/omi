@@ -1942,9 +1942,8 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@_public_router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @_firebase_router.post('/v1/app/thumbnails', tags=['v1'])
-async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def upload_app_thumbnail_endpoint(request: Request, file: UploadFile = File(...)):
     """Upload a thumbnail image for an app.
 
     Args:
@@ -1975,6 +1974,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
             os.remove(temp_path)
 
 
+@_public_router.delete('/v1/personas/{persona_id}', tags=['v1'])
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
