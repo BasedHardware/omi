@@ -134,10 +134,10 @@ def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe(users_serv
         users_service.background_wipe_user_data("uid1")
     finally:
         _stop(patchers)
-    # one backend failing must not stop the rest or the Firestore wipe
+    # required vector purge failures must block the irreversible Firestore wipe.
     m["delete_memory_vectors_batch"].assert_called_once()
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
-    m["delete_user_data"].assert_called_once_with("uid1")
+    m["delete_user_data"].assert_not_called()
 
 
 def test_gcs_failure_does_not_block_firestore_wipe(users_service):
@@ -158,7 +158,7 @@ def test_enumeration_failure_is_isolated(users_service):
         users_service.background_wipe_user_data("uid1")
     finally:
         _stop(patchers)
-    # conversation enumeration blew up, but the other backends + the wipe still run
+    # conversation enumeration is a required purge input, so it blocks the irreversible wipe.
     m["delete_memory_vectors_batch"].assert_called_once_with("uid1", ["m1"])
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
-    m["delete_user_data"].assert_called_once_with("uid1")
+    m["delete_user_data"].assert_not_called()
