@@ -2587,9 +2587,15 @@ class FloatingControlBarManager {
                 provider.stopAgent()
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
-            let availability = LocalAgentProviderDetector.availability(for: directive.provider)
-            guard availability.isAvailable else {
-                let assistantText = availability.setupPrompt
+            let resolution = LocalAgentProviderRouting.resolveSpawn(
+                brief: directive.rewrittenQuery,
+                requestedProvider: directive.provider,
+                userRequestText: message,
+                title: directive.title
+            )
+            switch resolution {
+            case .setupRequired(_, let setupPrompt, let spokenStatus):
+                let assistantText = setupPrompt
                 let recordedTurn = provider.recordCompletedTurn(
                     userText: message,
                     assistantText: assistantText,
@@ -2605,38 +2611,46 @@ class FloatingControlBarManager {
                 case .voiceOnly:
                     barWindow.state.currentQueryFromVoice = false
                     barWindow.state.isVoiceResponseActive = false
-                    FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(spokenStatus)
+                }
+                return
+            case .spawn(let plan):
+                let pill = AgentPillsManager.shared.spawnFromUserQuery(
+                    directive.rewrittenQuery,
+                    model: selectedFloatingModel,
+                    fromVoice: presentation.fromVoice,
+                    preFetchedTitle: plan.title,
+                    preFetchedAck: plan.ack,
+                    bridgeHarnessOverride: plan.harnessOverride,
+                    spawnContext: plan.context
+                )
+                let providerName = plan.selectedProvider?.displayName ?? directive.provider.displayName
+                let assistantText: String
+                if let fallbackNote = plan.fallbackNote {
+                    assistantText = "\(fallbackNote) I started \(providerName) in a background agent titled \"\(pill.title)\"."
+                } else {
+                    assistantText = "I started \(providerName) in a background agent titled \"\(pill.title)\"."
+                }
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: assistantText,
+                    logLabel: "floating-agent-provider"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentHandoff(
+                        .init(originalRequest: message, agentTask: directive.rewrittenQuery),
+                        pill: pill,
+                        assistantMessage: recordedTurn.assistant,
+                        assistantText: assistantText,
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
                 }
                 return
             }
-            let pill = AgentPillsManager.shared.spawnFromUserQuery(
-                directive.rewrittenQuery,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice,
-                preFetchedTitle: directive.title,
-                preFetchedAck: directive.ack,
-                bridgeHarnessOverride: directive.provider.harnessMode
-            )
-            let assistantText = "I started \(directive.provider.displayName) in a background agent titled \"\(pill.title)\"."
-            let recordedTurn = provider.recordCompletedTurn(
-                userText: message,
-                assistantText: assistantText,
-                logLabel: "floating-agent-provider"
-            )
-            switch presentation {
-            case .visible:
-                completeVisibleAgentHandoff(
-                    .init(originalRequest: message, agentTask: directive.rewrittenQuery),
-                    pill: pill,
-                    assistantMessage: recordedTurn.assistant,
-                    assistantText: assistantText,
-                    barWindow: barWindow
-                )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
-            }
-            return
         }
 
         if let handoff {
@@ -2690,38 +2704,72 @@ class FloatingControlBarManager {
         let decision = await AgentPillsManager.classify(message)
         routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
-            let pill = AgentPillsManager.shared.spawnFromUserQuery(
-                message,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice,
-                preFetchedTitle: decision.title,
-                preFetchedAck: decision.ack
+            let resolution = LocalAgentProviderRouting.resolveSpawn(
+                brief: message,
+                requestedProvider: nil,
+                userRequestText: message,
+                title: decision.title
             )
-            let title = decision.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
-            let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let assistantText = ack?.isEmpty == false
-                ? "\(ack!) I started a background agent\(titleSuffix) for that."
-                : "I started a background agent\(titleSuffix) for that."
-            let recordedTurn = provider.recordCompletedTurn(
-                userText: message,
-                assistantText: assistantText,
-                logLabel: "floating-agent"
-            )
-            switch presentation {
-            case .visible:
-                completeVisibleAgentHandoff(
-                    .init(originalRequest: message, agentTask: message),
-                    pill: pill,
-                    assistantMessage: recordedTurn.assistant,
-                    assistantText: assistantText,
-                    barWindow: barWindow
+            switch resolution {
+            case .setupRequired(_, let setupPrompt, _):
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: setupPrompt,
+                    logLabel: "floating-agent-provider-unavailable"
                 )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentResponse(
+                        userText: message,
+                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: setupPrompt, sender: .ai),
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                }
+                return
+            case .spawn(let plan):
+                let pill = AgentPillsManager.shared.spawnFromUserQuery(
+                    message,
+                    model: selectedFloatingModel,
+                    fromVoice: presentation.fromVoice,
+                    preFetchedTitle: plan.title,
+                    preFetchedAck: plan.ack,
+                    bridgeHarnessOverride: plan.harnessOverride,
+                    spawnContext: plan.context
+                )
+                let title = plan.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let titleSuffix = title.isEmpty ? "" : " titled \"\(title)\""
+                let ack = plan.ack.trimmingCharacters(in: .whitespacesAndNewlines)
+                let assistantText: String
+                if let fallbackNote = plan.fallbackNote {
+                    assistantText = "\(fallbackNote) I started a background agent\(titleSuffix) for that."
+                } else if ack.isEmpty {
+                    assistantText = "I started a background agent\(titleSuffix) for that."
+                } else {
+                    assistantText = "\(ack) I started a background agent\(titleSuffix) for that."
+                }
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: assistantText,
+                    logLabel: "floating-agent"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentHandoff(
+                        .init(originalRequest: message, agentTask: message),
+                        pill: pill,
+                        assistantMessage: recordedTurn.assistant,
+                        assistantText: assistantText,
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                }
+                return
             }
-            return
         }
 
         // Chat route: continue with the requested delivery surface.

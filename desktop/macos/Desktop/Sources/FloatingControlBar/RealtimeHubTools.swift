@@ -82,12 +82,16 @@ enum RealtimeHubTools {
     var parts: [String] = []
     if !available.isEmpty {
       let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
-      parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+      parts.append("Installed local providers: \(available.map(\.displayName).joined(separator: ", ")). Prefer these in spawn_agent's provider argument.")
+      parts.append("If the user explicitly asks to use/ask one of them by name, pass that provider. Otherwise pick the best fit from the installed list above — Omi will fall back automatically if your pick is missing.")
+      parts.append("Never tell the user to install a provider they did not ask for by name.")
     }
-    let missingText = unavailable
-      .map { "\($0.provider.displayName): \($0.setupPrompt)" }
-      .joined(separator: " ")
-    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    if !unavailable.isEmpty {
+      let missingText = unavailable
+        .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+        .joined(separator: " ")
+      parts.append("Only mention install guidance when the user explicitly asked for that provider by name: \(missingText)")
+    }
     return parts.joined(separator: " ")
   }
 
@@ -212,10 +216,10 @@ enum RealtimeHubTools {
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
-    - Smart agent routing: When calling spawn_agent, you must select the best local agent provider (pass it in the `provider` argument) based on availability and task fit. When the user explicitly requests an agent by name (e.g. \"use hermes\"), always select that provider. If the user doesn't specify one: \
-      - Choose \"hermes\" for coding tasks involving codebase exploration, refactoring, or multi-file edits. \
+    - Smart agent routing: When calling spawn_agent, pass the best installed local provider in `provider` when you know one fits. Omi also picks and falls back automatically in code. When the user explicitly requests an agent by name (e.g. \"use codex\"), always pass that provider. If the user doesn't specify one, prefer an installed provider from the list above — do NOT pick or mention providers that are not installed: \
       - Choose \"codex\" for writing new code/scripts, debugging, or code review. \
       - Choose \"openclaw\" for general-purpose automation or structured tasks. \
+      - Choose \"hermes\" only when it is installed and the task needs codebase exploration or multi-file refactors. \
       - Omit the provider (default) to use Claude Code for general reasoning, complex analysis, and multi-step tasks.
     - \(localAgentProviderInstruction())
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
