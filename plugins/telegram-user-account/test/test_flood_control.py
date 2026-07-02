@@ -275,9 +275,6 @@ class TestDefaultRateLimit:
 # ---------------------------------------------------------------------------
 
 
-from datetime import date as _date
-
-
 def _fixed_wall_clock(year, month, day):
     """Build a wall_clock callable that returns a fixed
     (year, month, day, ...) tuple. Only the date portion
