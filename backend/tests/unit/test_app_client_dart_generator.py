@@ -28,6 +28,7 @@ SUBSCRIPTION_USAGE_DART_PATH = (
 PRIVACY_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'privacy_wire.g.dart'
 ANNOUNCEMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'announcements_wire.g.dart'
 AUDIO_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'audio_wire.g.dart'
+PAYMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'payments_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -193,6 +194,21 @@ def test_audio_wire_dart_is_generated_from_app_client_openapi():
     assert 'audioFiles: _required(_readObjectList(_readAny(json, const ["audio_files"])' in generated
     assert 'List<T>? _readObjectList<T>' in generated
     assert 'if (value is! List) return null;' in generated
+
+
+def test_payments_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'payments')
+
+    assert PAYMENTS_DART_PATH.read_text() == generated
+    assert 'class GeneratedStripeConnectAccountResponse' in generated
+    assert 'class GeneratedStripeOnboardingStatusResponse' in generated
+    assert 'class GeneratedStripeSupportedCountryResponse' in generated
+    assert 'class GeneratedPayPalPaymentDetailsResponse' in generated
+    assert 'class GeneratedPaymentMethodStatusResponse' in generated
+    assert 'final String? defaultValue;' in generated
+    assert 'defaultValue: _readString(_readAny(json, const ["default"]))' in generated
+    assert "'default': defaultValue" in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

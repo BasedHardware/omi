@@ -24,9 +24,9 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert 'app/lib/backend/schema/folder.dart' not in remaining_manual_paths
     assert ('GET', '/v1/app-categories', 'get_app_categories_v1_app_categories_get') in unmodeled_operations
     assert (
-        'GET',
-        '/v1/payment-methods/status',
-        'get_payment_method_status_v1_payment_methods_status_get',
+        'POST',
+        '/v1/payments/checkout-session',
+        'create_checkout_session_endpoint_v1_payments_checkout_session_post',
     ) in unmodeled_operations
     assert report['app_used_unmodeled_success_response_count'] == len(report['app_used_unmodeled_success_responses'])
     assert report['manual_dart_json_schema_file_count'] == (

@@ -136,12 +136,26 @@ SCHEMA_GROUPS = {
             'AudioUrlsResponse',
         ),
     },
+    'payments': {
+        'output': DEFAULT_OUTPUT_DIR / 'payments_wire.g.dart',
+        'schemas': (
+            'PaymentMutationResponse',
+            'StripeConnectAccountResponse',
+            'StripeOnboardingStatusResponse',
+            'StripeSupportedCountryResponse',
+            'PayPalPaymentDetailsResponse',
+            'PaymentMethodStatusResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
     'Event': {'start': ('startsAt',)},
     'AppResult': {'app_id': ('appId',)},
     'Geolocation': {'google_place_id': ('googlePlaceId',), 'location_type': ('locationType',)},
+}
+DART_FIELD_NAME_OVERRIDES = {
+    'default': 'defaultValue',
 }
 
 
@@ -173,6 +187,11 @@ class Field:
 def snake_to_camel(value: str) -> str:
     parts = value.split('_')
     return parts[0] + ''.join(part[:1].upper() + part[1:] for part in parts[1:])
+
+
+def dart_field_name(wire_name: str) -> str:
+    name = snake_to_camel(wire_name)
+    return DART_FIELD_NAME_OVERRIDES.get(name, name)
 
 
 def generated_class_name(schema_name: str) -> str:
@@ -373,7 +392,7 @@ def fields_for_schema(
         fields.append(
             Field(
                 wire_name=wire_name,
-                dart_name=snake_to_camel(wire_name),
+                dart_name=dart_field_name(wire_name),
                 dart_type=dart_type_for(prop_schema, is_required, target_schemas, all_schemas),
                 required=is_required,
                 default=prop_schema.get('default'),

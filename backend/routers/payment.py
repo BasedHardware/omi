@@ -75,6 +75,35 @@ class UpgradeSubscriptionRequest(BaseModel):
     promotion_code: Optional[str] = None
 
 
+class PaymentMutationResponse(BaseModel):
+    status: str
+
+
+class StripeConnectAccountResponse(BaseModel):
+    account_id: str
+    url: str
+
+
+class StripeOnboardingStatusResponse(BaseModel):
+    onboarding_complete: bool
+
+
+class StripeSupportedCountryResponse(BaseModel):
+    id: str
+    name: str
+
+
+class PayPalPaymentDetailsResponse(BaseModel):
+    email: str
+    paypalme_url: str
+
+
+class PaymentMethodStatusResponse(BaseModel):
+    stripe: str
+    paypal: str
+    default: Optional[str] = None
+
+
 class PricingOption(BaseModel):
     id: str  # price_id
     plan_id: str = ''  # "unlimited", "operator", "architect"
@@ -1016,7 +1045,7 @@ async def stripe_connect_webhook(request: Request, stripe_signature: str = Heade
     return {"status": "success"}
 
 
-@router.post("/v1/stripe/connect-accounts")
+@router.post("/v1/stripe/connect-accounts", response_model=StripeConnectAccountResponse)
 def create_connect_account_endpoint(
     country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -1044,12 +1073,12 @@ def create_connect_account_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get('/v1/stripe/supported-countries')
+@router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
 def get_supported_countries():
     return stripe_utils.get_supported_countries()
 
 
-@router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
+@router.get("/v1/stripe/onboarded", response_model=StripeOnboardingStatusResponse, tags=['v1', 'stripe'])
 def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
     """
     Check the onboarding status of a Connect account
@@ -1143,7 +1172,7 @@ def stripe_return(account_id: str):
     return HTMLResponse(content=html_content)
 
 
-@router.post("/v1/paypal/payment-details")
+@router.post("/v1/paypal/payment-details", response_model=PaymentMutationResponse)
 def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """
     Save PayPal payment details (email and paypal.me link)
@@ -1164,7 +1193,7 @@ def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/v1/paypal/payment-details")
+@router.get("/v1/paypal/payment-details", response_model=Optional[PayPalPaymentDetailsResponse])
 def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """
     Get the PayPal payment details for the user
@@ -1244,7 +1273,7 @@ def portal_return():
     """)
 
 
-@router.get("/v1/payment-methods/status")
+@router.get("/v1/payment-methods/status", response_model=PaymentMethodStatusResponse)
 def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     """Get the statuses of the payment methods for the user"""
     default_payment_method = get_default_payment_method(uid)
@@ -1261,7 +1290,7 @@ def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     return {"stripe": stripe_status, "paypal": paypal_status, "default": default_payment_method}
 
 
-@router.post("/v1/payment-methods/default")
+@router.post("/v1/payment-methods/default", response_model=PaymentMutationResponse)
 def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """Set the default payment method for the user"""
     method = data.get('method')

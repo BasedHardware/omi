@@ -7090,6 +7090,66 @@
         "title": "PageContext",
         "type": "object"
       },
+      "PayPalPaymentDetailsResponse": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "paypalme_url": {
+            "title": "Paypalme Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "paypalme_url"
+        ],
+        "title": "PayPalPaymentDetailsResponse",
+        "type": "object"
+      },
+      "PaymentMethodStatusResponse": {
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "paypal": {
+            "title": "Paypal",
+            "type": "string"
+          },
+          "stripe": {
+            "title": "Stripe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stripe",
+          "paypal"
+        ],
+        "title": "PaymentMethodStatusResponse",
+        "type": "object"
+      },
+      "PaymentMutationResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PaymentMutationResponse",
+        "type": "object"
+      },
       "PaywallStatusResponse": {
         "properties": {
           "paywalled": {
@@ -8681,6 +8741,55 @@
           "calendar_event_id"
         ],
         "title": "StoreMeetingResponse",
+        "type": "object"
+      },
+      "StripeConnectAccountResponse": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "url"
+        ],
+        "title": "StripeConnectAccountResponse",
+        "type": "object"
+      },
+      "StripeOnboardingStatusResponse": {
+        "properties": {
+          "onboarding_complete": {
+            "title": "Onboarding Complete",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "onboarding_complete"
+        ],
+        "title": "StripeOnboardingStatusResponse",
+        "type": "object"
+      },
+      "StripeSupportedCountryResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "StripeSupportedCountryResponse",
         "type": "object"
       },
       "Structured": {
@@ -27730,7 +27839,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -27803,7 +27914,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -28445,7 +28558,17 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PayPalPaymentDetailsResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Paypal Payment Details Endpoint V1 Paypal Payment Details Get"
+                }
               }
             },
             "description": "Successful Response"
@@ -28528,7 +28651,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -29067,7 +29192,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StripeConnectAccountResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -29190,7 +29317,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StripeOnboardingStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -29361,7 +29490,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StripeSupportedCountryResponse"
+                  },
+                  "title": "Response Get Supported Countries V1 Stripe Supported Countries Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
