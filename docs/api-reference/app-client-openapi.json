@@ -1187,6 +1187,113 @@
         "title": "AudioFile",
         "type": "object"
       },
+      "AudioFileUrlInfo": {
+        "properties": {
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "duration": {
+            "default": 0,
+            "title": "Duration",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "signed_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Url"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "AudioFileUrlInfo",
+        "type": "object"
+      },
+      "AudioPrecacheResponse": {
+        "properties": {
+          "audio_file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio File Count"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AudioPrecacheResponse",
+        "type": "object"
+      },
+      "AudioUrlsResponse": {
+        "properties": {
+          "audio_files": {
+            "items": {
+              "$ref": "#/components/schemas/AudioFileUrlInfo"
+            },
+            "title": "Audio Files",
+            "type": "array"
+          },
+          "poll_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll After Ms"
+          }
+        },
+        "required": [
+          "audio_files"
+        ],
+        "title": "AudioUrlsResponse",
+        "type": "object"
+      },
       "AuthStep": {
         "properties": {
           "name": {
@@ -29151,7 +29258,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AudioPrecacheResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -29236,7 +29345,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AudioUrlsResponse"
+                }
               }
             },
             "description": "Successful Response"

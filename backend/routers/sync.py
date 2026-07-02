@@ -49,6 +49,7 @@ from database.sync_jobs import (
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
+from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -119,7 +120,7 @@ def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Di
     return headers
 
 
-@router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
+@router.post("/v1/sync/audio/{conversation_id}/precache", response_model=AudioPrecacheResponse, tags=['v1'])
 def precache_conversation_audio_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -137,7 +138,7 @@ def precache_conversation_audio_endpoint(
     return sync_playback.precache_audio_files(uid, conversation_id, conversation.get('audio_files', []))
 
 
-@router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
+@router.get("/v1/sync/audio/{conversation_id}/urls", response_model=AudioUrlsResponse, tags=['v1'])
 def get_audio_signed_urls_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),

@@ -27,6 +27,7 @@ SUBSCRIPTION_USAGE_DART_PATH = (
 )
 PRIVACY_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'privacy_wire.g.dart'
 ANNOUNCEMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'announcements_wire.g.dart'
+AUDIO_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'audio_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -171,6 +172,18 @@ def test_announcements_wire_dart_is_generated_from_app_client_openapi():
     assert 'createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at")' in generated
     assert 'trigger: _readString(_readAny(json, const ["trigger"])) ?? "version_upgrade"' in generated
     assert 'deviceModels: _readAny(json, const ["device_models"]) == null ? null : _readStringList' in generated
+
+
+def test_audio_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'audio')
+
+    assert AUDIO_DART_PATH.read_text() == generated
+    assert 'class GeneratedAudioPrecacheResponse' in generated
+    assert 'class GeneratedAudioFileUrlInfo' in generated
+    assert 'class GeneratedAudioUrlsResponse' in generated
+    assert 'duration: _readDouble(_readAny(json, const ["duration"])) ?? 0' in generated
+    assert 'audioFiles: _required(_readObjectList(_readAny(json, const ["audio_files"])' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

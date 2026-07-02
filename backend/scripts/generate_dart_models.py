@@ -121,6 +121,14 @@ SCHEMA_GROUPS = {
             'Announcement',
         ),
     },
+    'audio': {
+        'output': DEFAULT_OUTPUT_DIR / 'audio_wire.g.dart',
+        'schemas': (
+            'AudioPrecacheResponse',
+            'AudioFileUrlInfo',
+            'AudioUrlsResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
