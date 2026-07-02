@@ -115,9 +115,6 @@ _firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 _no_byok_router = APIRouter(dependencies=[Depends(require_firebase_no_byok)])
 _public_router = APIRouter()
 router = APIRouter()
-router.include_router(_firebase_router)
-router.include_router(_no_byok_router)
-router.include_router(_public_router)
 
 
 class MigrationRequest(BaseModel):
@@ -1774,3 +1771,8 @@ def get_total_llm_cost(request: Request):
     uid = request.state.uid
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}
+
+
+router.include_router(_firebase_router)
+router.include_router(_no_byok_router)
+router.include_router(_public_router)
