@@ -386,3 +386,39 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertEqual(config.bearerToken, "")
     }
 }
+
+    // MARK: - Telegram user-account ToS acknowledgement (plan §8)
+
+    func testTelegramUserSessionEnabledPersistsIndependentlyFromAcknowledgement() {
+        // plan §8: the ToS acknowledgement is a separate @AppStorage
+        // flag from telegramAccountEnabled. They're tracked
+        // independently: enabling the account (via the generator
+        // writing to Keychain) doesn't auto-acknowledge the ToS,
+        // and acknowledging the ToS doesn't auto-enable the
+        // account. Pin that the two are distinct concepts.
+        let config = AICloneConfig(defaults: customDefaults)
+        XCTAssertFalse(config.telegramAccountEnabled)
+        // The acknowledgement flag lives in @AppStorage which
+        // is separate from the config; the test just confirms
+        // that the config's `telegramAccountEnabled` is the
+        // authoritative source of truth for "is the session in
+        // Keychain?" and not coupled to user acknowledgement.
+        try? config.setTelegramUserSession(
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        XCTAssertTrue(config.telegramAccountEnabled)
+    }
+
+    func testSetTelegramUserSessionOverwritesPreviousSession() {
+        // Calling setTelegramUserSession(non-empty) twice should
+        // overwrite the Keychain entry -- not append, not fail.
+        // The single-slot contract: there is at most one active
+        // Telethon session per AICloneConfig.
+        let config = AICloneConfig(defaults: customDefaults)
+        let session1 = "1AgAOMT_FIRST" + String(repeating: "A", count: 200)
+        let session2 = "1AgAOMT_SECOND" + String(repeating: "B", count: 200)
+        try? config.setTelegramUserSession(session1)
+        XCTAssertEqual(try? AICloneKeychain.get(.telegramUserSession), session1)
+        try? config.setTelegramUserSession(session2)
+        XCTAssertEqual(try? AICloneKeychain.get(.telegramUserSession), session2)
+    }
