@@ -1,3 +1,0 @@
-{
-  "change": "Fixed memory labels appearing incorrectly after stale fetches or local cache updates"
-}
