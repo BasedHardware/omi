@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+
 class Geolocation {
   // TODO: location should be the place the memory starts
 
@@ -27,34 +29,41 @@ class Geolocation {
   });
 
   static Geolocation fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedGeolocation.fromJson(json);
     var geolocation = Geolocation(
-      latitude: json['latitude'],
-      longitude: json['longitude'],
+      latitude: generated.latitude,
+      longitude: generated.longitude,
       altitude: json['altitude'],
       accuracy: json['accuracy'],
       // not in server
       time: json['time'] == null ? null : DateTime.parse(json['time']),
       // google_place_id server
-      googlePlaceId: json['googlePlaceId'] ?? json['google_place_id'],
-      address: json['address'],
+      googlePlaceId: generated.googlePlaceId,
+      address: generated.address,
       // location_type server
-      locationType: json['locationType'] ?? json['location_type'],
+      locationType: generated.locationType,
     );
     return geolocation;
   }
 
+  wire.GeneratedGeolocation toGenerated() {
+    return wire.GeneratedGeolocation(
+      latitude: latitude ?? 0.0,
+      longitude: longitude ?? 0.0,
+      googlePlaceId: googlePlaceId,
+      address: address,
+      locationType: locationType,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
+      ...toGenerated().toJson(),
       'id': id,
-      'latitude': latitude,
-      'longitude': longitude,
       'altitude': altitude,
       'accuracy': accuracy,
       'time': time?.toUtc().toIso8601String(),
-      'googlePlaceId': googlePlaceId,
       'google_place_id': googlePlaceId, // server
-      'address': address,
-      'locationType': locationType,
       'location_type': locationType, // server
     };
   }
