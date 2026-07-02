@@ -68,12 +68,13 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("pendingRewarmReason = reason"))
     XCTAssertTrue(source.contains("forceRewarm(reason: \"system woke (dropping possibly-stale socket)\")"))
     XCTAssertTrue(source.contains("forceRewarm(reason: \"local agent provider availability changed\")"))
-    // Deferred requests retry at both clean end-of-turn points — except when a
-    // late turn-done raced a new capture — and any teardown or fresh session
-    // clears them (the rebuild is what the deferral wanted).
+    // Deferred requests retry at both clean end-of-turn points, and any teardown
+    // or fresh session clears them (the rebuild is what the deferral wanted). A
+    // late turn-done that raced a new capture returns early — no rewarm, no
+    // exitVoiceUI teardown, no turnRecorded clobber of the live turn.
     XCTAssertTrue(source.contains("private func firePendingRewarm() {"))
-    XCTAssertTrue(source.contains("let wasMidCapture = barState?.isVoiceListening == true"))
-    XCTAssertTrue(source.contains("if !wasMidCapture { firePendingRewarm() }"))
+    XCTAssertTrue(source.contains("late turn-done during a new capture — leaving voice UI untouched"))
+    XCTAssertTrue(source.contains("exitVoiceUI()\n    firePendingRewarm()"))
     XCTAssertTrue(source.contains("exitVoiceUI(clearResponseGlow: true)\n    firePendingRewarm()"))
     XCTAssertTrue(source.contains("pendingRewarmReason = nil"))
   }

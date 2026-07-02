@@ -1163,6 +1163,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     if realtimePlaybackActive {
       log("RealtimeHub[\(providerTag)]: server turn done; waiting for local playback to drain")
     }
+    // A turn-done delivered late — after the user already began the next capture —
+    // must leave that capture alone: beginTurn already wiped this turn's transcript
+    // buffers (nothing left to record) and reset turnRecorded for the new turn,
+    // exitVoiceUI would clear the live listening/locked state and collapse the bar
+    // mid-hold, and the pending rewarm would tear the session down mid-turn. All of
+    // it stays parked for the new turn's own clean end.
+    if barState?.isVoiceListening == true {
+      log("RealtimeHub[\(providerTag)]: late turn-done during a new capture — leaving voice UI untouched")
+      return
+    }
     // Record the completed turn into chat history (+ backend sync) in the background.
     // The hub plays its reply itself and never routes through the query path, so this is
     // the only place voice turns get persisted. Idempotent per turn; recordVoiceTurn is
@@ -1171,12 +1181,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       turnRecorded = true
       FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
     }
-    // Captured before exitVoiceUI clears it: a turn-done delivered late — after
-    // the user already began the next capture — must not fire the pending
-    // rewarm mid-capture; it stays parked for the next clean end of turn.
-    let wasMidCapture = barState?.isVoiceListening == true
     exitVoiceUI()
-    if !wasMidCapture { firePendingRewarm() }
+    firePendingRewarm()
   }
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {
