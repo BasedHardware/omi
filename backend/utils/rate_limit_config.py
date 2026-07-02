@@ -89,7 +89,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Not migrated to per-UID Lua limiter intentionally.
     # Dev API
     "dev:conversations": (25, 3600),
+    "dev:conversations_search": (60, 3600),
     "dev:memories": (120, 3600),
+    "dev:memories_search": (60, 3600),
     "dev:memories_batch": (15, 3600),
     # Test
     "test:prompt": (30, 3600),
