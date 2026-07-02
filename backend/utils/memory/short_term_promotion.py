@@ -57,7 +57,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROMOTION_STATUS_PROMOTED,
     REQUIRED_PROMOTION_STATUSES,
 )
-from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
+from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult, extract_kg_for_promoted_memory
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_lifecycle import ShortTermDisposition, evaluate_short_term_lifecycle
@@ -166,7 +166,7 @@ def _merge_required_promotion_duplicate(
     trigger_reason: str,
     now: datetime,
     db_client,
-) -> MemoryItem:
+) -> tuple[MemoryItem, bool]:
     collections = MemoryCollections(uid=uid)
     evidence_by_id = {evidence.evidence_id: evidence for evidence in existing.evidence}
     for evidence in item.evidence:
@@ -198,8 +198,8 @@ def _merge_required_promotion_duplicate(
     )
     db_client.document(f"{collections.memory_items}/{existing.memory_id}").set(merged_existing.model_dump(mode="json"))
     db_client.document(f"{collections.memory_items}/{item.memory_id}").set(superseded_source.model_dump(mode="json"))
-    sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
-    return merged_existing
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
+    return merged_existing, keyword_sync_succeeded
 
 
 def list_fast_track_promotable_items(
@@ -303,14 +303,15 @@ def promote_short_term_item_via_apply(
     trigger_reason: str,
     now: datetime,
     db_client=None,
-) -> tuple[MemoryItem, bool]:
+) -> tuple[MemoryItem, bool, CanonicalKgPromotionResult, bool]:
     """Promote one short_term item to long_term through the authoritative apply path.
 
-    Returns ``(promoted_item, vector_sync_failed)``. Firestore promotion commits even when
-    vector sync fails; the bool is True when Pinecone upsert hard-failed.
+    Firestore promotion commits even when external side effects fail. The returned
+    vector bool is True when Pinecone upsert hard-failed, and the KG result exposes
+    extraction failures or empty-but-successful extractions for rollout auditing.
     """
     if item.tier == MemoryLayer.long_term:
-        return item, False
+        return item, False, CanonicalKgPromotionResult(skipped_reason="already_long_term"), True
     if not is_promotable_short_term_item(item, now=now):
         raise ValueError(f"memory item {item.memory_id} is not promotable")
 
@@ -321,16 +322,19 @@ def promote_short_term_item_via_apply(
     if is_required_promotion_item(item):
         existing_duplicate = _exact_long_term_duplicate(uid, item, db_client=client)
         if existing_duplicate is not None:
+            merged_item, keyword_sync_succeeded = _merge_required_promotion_duplicate(
+                uid,
+                item,
+                existing_duplicate,
+                trigger_reason=trigger_reason,
+                now=current_time,
+                db_client=client,
+            )
             return (
-                _merge_required_promotion_duplicate(
-                    uid,
-                    item,
-                    existing_duplicate,
-                    trigger_reason=trigger_reason,
-                    now=current_time,
-                    db_client=client,
-                ),
+                merged_item,
                 False,
+                CanonicalKgPromotionResult(skipped_reason="merged_into_existing"),
+                keyword_sync_succeeded,
             )
     operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=client)
     idempotency_key = deterministic_contract_id(
@@ -387,7 +391,7 @@ def promote_short_term_item_via_apply(
     )
     if promoted.tier != MemoryLayer.long_term:
         raise RuntimeError(f"promotion did not land long_term for {item.memory_id}")
-    sync_atom_keyword_index_for_item(promoted, db_client=client)
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(promoted, db_client=client)
     vector_sync_failed = False
 
     def _record_vector_sync_failure() -> None:
@@ -395,8 +399,8 @@ def promote_short_term_item_via_apply(
         vector_sync_failed = True
 
     sync_canonical_memory_vector(promoted, on_hard_failure=_record_vector_sync_failure)
-    extract_kg_for_promoted_memory(uid, promoted, db_client=client)
-    return promoted, vector_sync_failed
+    kg_result = extract_kg_for_promoted_memory(uid, promoted, db_client=client)
+    return promoted, vector_sync_failed, kg_result, keyword_sync_succeeded
 
 
 def _audit_promotion_transition(
@@ -425,6 +429,11 @@ class ShortTermPromotionReport:
     promoted_memory_ids: List[str] = field(default_factory=list)
     transition_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=list)
     vector_sync_failures: int = 0
+    keyword_sync_failures: int = 0
+    kg_extraction_failures: int = 0
+    kg_extraction_empty: int = 0
+    kg_nodes_created: int = 0
+    kg_edges_created: int = 0
     last_promotion_run_at: Optional[datetime] = None
 
     @property
@@ -519,7 +528,7 @@ def run_canonical_short_term_promotion(
 
     for item in promotable:
         control = _read_control_state(uid, db_client=client)
-        promoted, vector_sync_failed = promote_short_term_item_via_apply(
+        promoted, vector_sync_failed, kg_result, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             item,
             control=control,
@@ -530,6 +539,14 @@ def run_canonical_short_term_promotion(
         )
         if vector_sync_failed:
             report.vector_sync_failures += 1
+        if not keyword_sync_succeeded:
+            report.keyword_sync_failures += 1
+        if kg_result.attempted and not kg_result.success:
+            report.kg_extraction_failures += 1
+        if kg_result.empty:
+            report.kg_extraction_empty += 1
+        report.kg_nodes_created += kg_result.node_count
+        report.kg_edges_created += kg_result.edge_count
         report.promoted_memory_ids.append(promoted.memory_id)
         report.transition_records.append(
             _audit_promotion_transition(item, store=transition_store, run_id=run_id, now=current_time)

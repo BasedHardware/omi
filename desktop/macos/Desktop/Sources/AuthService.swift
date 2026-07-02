@@ -4,10 +4,286 @@ import CryptoKit
 import AppKit
 import AuthenticationServices
 import Sentry
+import Darwin
 
 extension Notification.Name {
     /// Posted by AuthService.signOut() so views can reset @AppStorage-backed properties directly.
     static let userDidSignOut = Notification.Name("com.omi.desktop.userDidSignOut")
+}
+
+final class OAuthLoopbackCallbackServer: @unchecked Sendable {
+    enum ServerError: Error {
+        case socketCreationFailed
+        case bindFailed
+        case listenFailed
+        case portLookupFailed
+        case invalidRequest
+    }
+
+    private var socketFD: Int32?
+    private var activeClientFD: Int32?
+    private let queue = DispatchQueue(label: "com.omi.desktop.oauth-loopback-callback")
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<(code: String, state: String), Error>?
+    private var pendingResult: Result<(code: String, state: String), Error>?
+    private var completed = false
+    private let expectedState: String
+
+    let port: UInt16
+    let redirectURI: String
+
+    private init(socketFD: Int32, port: UInt16, expectedState: String) {
+        self.socketFD = socketFD
+        self.port = port
+        self.expectedState = expectedState
+        self.redirectURI = "http://127.0.0.1:\(port)/callback"
+    }
+
+    static func start(expectedState: String) throws -> OAuthLoopbackCallbackServer {
+        let fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        guard fd >= 0 else { throw ServerError.socketCreationFailed }
+
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = 0
+        inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr)
+
+        let bindResult = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bindResult == 0 else {
+            close(fd)
+            throw ServerError.bindFailed
+        }
+
+        guard listen(fd, 1) == 0 else {
+            close(fd)
+            throw ServerError.listenFailed
+        }
+
+        var boundAddr = sockaddr_in()
+        var boundAddrLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let portResult = withUnsafeMutablePointer(to: &boundAddr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(fd, $0, &boundAddrLen)
+            }
+        }
+        guard portResult == 0 else {
+            close(fd)
+            throw ServerError.portLookupFailed
+        }
+
+        let server = OAuthLoopbackCallbackServer(
+            socketFD: fd,
+            port: UInt16(bigEndian: boundAddr.sin_port),
+            expectedState: expectedState
+        )
+        server.acceptRequests()
+        return server
+    }
+
+    func waitForCallback() async throws -> (code: String, state: String) {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            if let pendingResult {
+                lock.unlock()
+                continuation.resume(with: pendingResult)
+                return
+            }
+            self.continuation = continuation
+            lock.unlock()
+        }
+    }
+
+    func cancel() {
+        finish(.failure(AuthError.cancelled))
+    }
+
+    func fail(with error: Error) {
+        finish(.failure(error))
+    }
+
+    func stop() {
+        lock.lock()
+        let alreadyCompleted = completed
+        completed = true
+        closeSocketsLocked()
+        lock.unlock()
+        if !alreadyCompleted {
+            resumeIfNeeded(.failure(AuthError.cancelled))
+        }
+    }
+
+    deinit {
+        stop()
+    }
+
+    private func acceptRequests() {
+        queue.async { [weak self] in
+            guard let self else { return }
+
+            while !self.isCompleted {
+                guard let listenFD = self.currentListenSocket() else { return }
+
+                var remoteAddr = sockaddr()
+                var remoteLen = socklen_t(MemoryLayout<sockaddr>.size)
+                let clientFD = accept(listenFD, &remoteAddr, &remoteLen)
+                guard clientFD >= 0 else { continue }
+
+                self.setActiveClient(clientFD)
+                defer {
+                    self.closeActiveClientIfMatching(clientFD)
+                }
+
+                var noSigPipe: Int32 = 1
+                setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+
+                var timeout = timeval(tv_sec: 5, tv_usec: 0)
+                setsockopt(clientFD, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+
+                var buffer = [UInt8](repeating: 0, count: 8192)
+                let bytesRead = recv(clientFD, &buffer, buffer.count - 1, 0)
+                guard bytesRead > 0,
+                      let request = String(bytes: buffer.prefix(bytesRead), encoding: .utf8) else {
+                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    continue
+                }
+
+                switch self.parseCallbackRequest(request) {
+                case .success(let code, let state):
+                    self.sendResponse(clientFD, status: "200 OK", message: "Authentication complete. You can close this tab.")
+                    self.finish(.success((code: code, state: state)))
+                    return
+                case .providerError(let error):
+                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Authentication failed. You can close this tab.")
+                    self.finish(.failure(AuthError.oauthError(error)))
+                    return
+                case .ignore:
+                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    continue
+                }
+            }
+        }
+    }
+
+    private enum ParsedCallbackRequest {
+        case success(code: String, state: String)
+        case providerError(String)
+        case ignore
+    }
+
+    private func parseCallbackRequest(_ request: String) -> ParsedCallbackRequest {
+        guard let requestLine = request.split(separator: "\r\n", maxSplits: 1).first else {
+            return .ignore
+        }
+        let parts = requestLine.split(separator: " ")
+        guard parts.count >= 2, parts[0] == "GET" else {
+            return .ignore
+        }
+
+        let target = String(parts[1])
+        guard let components = URLComponents(string: "http://127.0.0.1\(target)"),
+              components.path == "/callback" else {
+            return .ignore
+        }
+
+        let queryItems = components.queryItems ?? []
+        guard let state = queryItems.first(where: { $0.name == "state" })?.value,
+              state == expectedState else {
+            return .ignore
+        }
+
+        if let providerError = queryItems.first(where: { $0.name == "error" })?.value {
+            return .providerError(providerError)
+        }
+
+        guard let code = queryItems.first(where: { $0.name == "code" })?.value else {
+            return .ignore
+        }
+        return .success(code: code, state: state)
+    }
+
+    private func sendResponse(_ clientFD: Int32, status: String, message: String) {
+        let body = """
+        <!doctype html><html><head><meta charset="utf-8"><title>Omi Authentication</title></head><body><p>\(message)</p></body></html>
+        """
+        let response = """
+        HTTP/1.1 \(status)\r
+        Content-Type: text/html; charset=utf-8\r
+        Content-Length: \(body.utf8.count)\r
+        Connection: close\r
+        \r
+        \(body)
+        """
+        response.withCString { pointer in
+            _ = send(clientFD, pointer, strlen(pointer), 0)
+        }
+    }
+
+    private func finish(_ result: Result<(code: String, state: String), Error>) {
+        lock.lock()
+        guard !completed else {
+            lock.unlock()
+            return
+        }
+        completed = true
+        closeSocketsLocked()
+        lock.unlock()
+        resumeIfNeeded(result)
+    }
+
+    private func resumeIfNeeded(_ result: Result<(code: String, state: String), Error>) {
+        lock.lock()
+        if let continuation {
+            self.continuation = nil
+            lock.unlock()
+            continuation.resume(with: result)
+        } else {
+            pendingResult = result
+            lock.unlock()
+        }
+    }
+
+    private var isCompleted: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return completed
+    }
+
+    private func currentListenSocket() -> Int32? {
+        lock.lock()
+        defer { lock.unlock() }
+        return socketFD
+    }
+
+    private func setActiveClient(_ fd: Int32) {
+        lock.lock()
+        activeClientFD = fd
+        lock.unlock()
+    }
+
+    private func closeActiveClientIfMatching(_ fd: Int32) {
+        lock.lock()
+        if activeClientFD == fd {
+            activeClientFD = nil
+            close(fd)
+        }
+        lock.unlock()
+    }
+
+    private func closeSocketsLocked() {
+        if let activeClientFD {
+            close(activeClientFD)
+            self.activeClientFD = nil
+        }
+        if let socketFD {
+            close(socketFD)
+            self.socketFD = nil
+        }
+    }
 }
 
 @MainActor
@@ -37,7 +313,9 @@ class AuthService {
     // OAuth state for CSRF protection
     private var pendingOAuthState: String?
     private var pendingOAuthFlow: OAuthFlowContext?
+    private var loopbackCallbackServer: OAuthLoopbackCallbackServer?
     private var oauthContinuation: CheckedContinuation<(code: String, state: String), Error>?
+    private var oauthTimeoutTask: Task<Void, Never>?
 
     // Native Apple Sign In
     private var currentNonce: String?
@@ -71,6 +349,7 @@ class AuthService {
         let provider: String
         let state: String
         let startedAt: Date
+        let callbackTransport: String
     }
 
     // UserDefaults keys for auth persistence (dev builds with ad-hoc signing)
@@ -494,7 +773,16 @@ class AuthService {
         // Track sign-in started
         AnalyticsManager.shared.signInStarted(provider: provider)
 
-        defer { isLoading = false }
+        var activeFlowId: String?
+        var activeFlowStartedAt: Date?
+        var activeCallbackServer: OAuthLoopbackCallbackServer?
+        var activeCallbackTransport = "custom_scheme"
+
+        defer {
+            if activeFlowId == nil || pendingOAuthFlow == nil || pendingOAuthFlow?.id == activeFlowId {
+                isLoading = false
+            }
+        }
 
         do {
             // Step 1: Generate state for CSRF protection
@@ -502,13 +790,69 @@ class AuthService {
             let state = generateState(flowId: flowId)
             let codeVerifier = generateCodeVerifier()
             let codeChallenge = makeCodeChallenge(for: codeVerifier)
+            let startedAt = Date()
+            activeFlowId = flowId
+            activeFlowStartedAt = startedAt
             pendingOAuthState = state
-            pendingOAuthFlow = OAuthFlowContext(id: flowId, provider: provider, state: state, startedAt: Date())
-            trackAuthFlowEvent("Auth Flow Started", stage: "started", provider: provider, authFlowId: flowId)
+
+            let callbackServer: OAuthLoopbackCallbackServer?
+            do {
+                callbackServer = try OAuthLoopbackCallbackServer.start(expectedState: state)
+                activeCallbackServer = callbackServer
+                loopbackCallbackServer = callbackServer
+            } catch {
+                callbackServer = nil
+                let nsError = error as NSError
+                trackAuthFlowEvent(
+                    "Auth Callback Server Failed",
+                    stage: "callback_server_started",
+                    provider: provider,
+                    authFlowId: flowId,
+                    failureClass: "\(nsError.domain)_\(nsError.code)",
+                    error: error.localizedDescription,
+                    extraProperties: ["callback_transport": "custom_scheme_fallback"]
+                )
+            }
+            let selectedRedirectURI = callbackServer?.redirectURI ?? redirectURI
+            let selectedCallbackTransport = callbackServer == nil ? "custom_scheme_fallback" : "loopback"
+            activeCallbackTransport = selectedCallbackTransport
+            pendingOAuthFlow = OAuthFlowContext(
+                id: flowId,
+                provider: provider,
+                state: state,
+                startedAt: startedAt,
+                callbackTransport: selectedCallbackTransport
+            )
+
+            trackAuthFlowEvent(
+                "Auth Flow Started",
+                stage: "started",
+                provider: provider,
+                authFlowId: flowId,
+                extraProperties: ["callback_transport": selectedCallbackTransport]
+            )
+            if let callbackServer {
+                trackAuthFlowEvent(
+                    "Auth Callback Server Started",
+                    stage: "callback_server_started",
+                    provider: provider,
+                    authFlowId: flowId,
+                    extraProperties: [
+                        "callback_transport": selectedCallbackTransport,
+                        "redirect_scheme": "http",
+                        "loopback_port": callbackServer.port
+                    ]
+                )
+            }
             NSLog("OMI AUTH: Generated OAuth state")
 
             // Step 2: Build authorization URL
-            let authURL = buildAuthorizationURL(provider: provider, state: state, codeChallenge: codeChallenge)
+            let authURL = buildAuthorizationURL(
+                provider: provider,
+                state: state,
+                codeChallenge: codeChallenge,
+                redirectURI: selectedRedirectURI
+            )
             NSLog("OMI AUTH: Opening browser for authentication")
 
             // Step 3: Open browser for authentication
@@ -521,7 +865,16 @@ class AuthService {
 
             // Step 4: Wait for callback with authorization code
             NSLog("OMI AUTH: Waiting for OAuth callback...")
-            let (code, returnedState) = try await waitForOAuthCallback()
+            let (code, returnedState) = try await waitForOAuthCallback(callbackServer: callbackServer)
+            clearLoopbackCallbackServerIfCurrent(callbackServer, flowId: flowId)
+            if callbackServer != nil {
+                trackAuthFlowEvent(
+                    "Auth Callback Received",
+                    stage: "callback_received",
+                    provider: provider,
+                    authFlowId: flowId
+                )
+            }
 
             // Step 5: Verify state matches
             guard returnedState == state else {
@@ -535,6 +888,14 @@ class AuthService {
                 )
                 throw AuthError.stateMismatch
             }
+            if callbackServer != nil {
+                trackAuthFlowEvent(
+                    "Auth Callback Valid",
+                    stage: "callback_validated",
+                    provider: provider,
+                    authFlowId: flowId
+                )
+            }
             NSLog("OMI AUTH: Received valid authorization code")
 
             // Step 6: Exchange code for custom token and user info
@@ -542,7 +903,11 @@ class AuthService {
             trackAuthFlowEvent("Auth Token Exchange Started", stage: "token_exchange", provider: provider, authFlowId: flowId)
             let tokenResult: TokenExchangeResult
             do {
-                tokenResult = try await exchangeCodeForToken(code: code, codeVerifier: codeVerifier)
+                tokenResult = try await exchangeCodeForToken(
+                    code: code,
+                    codeVerifier: codeVerifier,
+                    redirectURI: selectedRedirectURI
+                )
             } catch {
                 trackAuthFlowEvent(
                     "Auth Token Exchange Failed",
@@ -632,11 +997,11 @@ class AuthService {
                 provider: provider,
                 authFlowId: flowId,
                 terminalState: "completed",
-                durationMs: authFlowDurationMs()
+                durationMs: authFlowDurationMs(startedAt: startedAt),
+                extraProperties: ["callback_transport": selectedCallbackTransport]
             )
             AnalyticsManager.shared.signInCompleted(provider: provider)
-            pendingOAuthFlow = nil
-            pendingOAuthState = nil
+            clearOAuthFlowIfCurrent(flowId: flowId, callbackServer: callbackServer)
             APIKeyService.shared.startFetchingKeys()
             Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
@@ -665,33 +1030,57 @@ class AuthService {
         } catch AuthError.cancelled {
             // User-initiated cancel: clear any stale error and stay silent.
             NSLog("OMI AUTH: %@ web OAuth sign-in cancelled by user", provider)
-            trackCurrentAuthFlowEvent("Auth Flow Cancelled", stage: "cancelled", terminalState: "cancelled")
-            pendingOAuthFlow = nil
-            pendingOAuthState = nil
+            trackAuthFlowEvent(
+                "Auth Flow Cancelled",
+                stage: "cancelled",
+                provider: provider,
+                authFlowId: activeFlowId,
+                terminalState: "cancelled",
+                durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
+                extraProperties: ["callback_transport": activeCallbackTransport]
+            )
+            if let activeFlowId {
+                clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
+            }
             self.error = nil
             throw AuthError.cancelled
         } catch AuthError.timeout {
             NSLog("OMI AUTH: %@ web OAuth sign-in timed out", provider)
-            trackCurrentAuthFlowEvent("Auth Flow Timed Out", stage: "timed_out", terminalState: "timed_out", failureClass: "timeout")
+            trackAuthFlowEvent(
+                "Auth Flow Timed Out",
+                stage: "timed_out",
+                provider: provider,
+                authFlowId: activeFlowId,
+                terminalState: "timed_out",
+                failureClass: "timeout",
+                durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
+                extraProperties: ["callback_transport": activeCallbackTransport]
+            )
             AnalyticsManager.shared.signInFailed(provider: provider, error: AuthError.timeout.localizedDescription)
-            pendingOAuthFlow = nil
-            pendingOAuthState = nil
+            if let activeFlowId {
+                clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
+            }
             self.error = AuthError.timeout.localizedDescription
             throw AuthError.timeout
         } catch {
             let nsError = error as NSError
             NSLog("OMI AUTH: Error during sign in: %@", error.localizedDescription)
             logError("AUTH: \(provider) web OAuth sign-in failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
-            trackCurrentAuthFlowEvent(
+            trackAuthFlowEvent(
                 "Auth Flow Failed",
                 stage: "failed",
+                provider: provider,
+                authFlowId: activeFlowId,
                 terminalState: "failed",
                 failureClass: authFailureClass(for: error),
-                error: error.localizedDescription
+                error: error.localizedDescription,
+                durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
+                extraProperties: ["callback_transport": activeCallbackTransport]
             )
             AnalyticsManager.shared.signInFailed(provider: provider, error: error.localizedDescription)
-            pendingOAuthFlow = nil
-            pendingOAuthState = nil
+            if let activeFlowId {
+                clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
+            }
             self.error = error.localizedDescription
             throw error
         }
@@ -699,12 +1088,16 @@ class AuthService {
 
     // MARK: - OAuth URL Building
 
-    private func buildAuthorizationURL(provider: String, state: String, codeChallenge: String) -> String {
-        let encodedRedirectURI = redirectURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? redirectURI
-        let encodedCodeChallenge =
-            codeChallenge.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? codeChallenge
-        return "\(apiBaseURL)v1/auth/authorize?provider=\(provider)&redirect_uri=\(encodedRedirectURI)"
-            + "&state=\(state)&code_challenge=\(encodedCodeChallenge)&code_challenge_method=S256"
+    private func buildAuthorizationURL(provider: String, state: String, codeChallenge: String, redirectURI: String) -> String {
+        var components = URLComponents(string: "\(apiBaseURL)v1/auth/authorize")
+        components?.queryItems = [
+            URLQueryItem(name: "provider", value: provider),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: codeChallenge),
+            URLQueryItem(name: "code_challenge_method", value: "S256")
+        ]
+        return components?.url?.absoluteString ?? ""
     }
 
     private func trackCurrentAuthFlowEvent(
@@ -743,6 +1136,9 @@ class AuthService {
         properties["stage"] = stage
         properties["bundle_id"] = currentBundleIdentifier
         properties["url_scheme"] = urlScheme
+        if properties["callback_transport"] == nil {
+            properties["callback_transport"] = pendingOAuthFlow?.callbackTransport ?? "custom_scheme"
+        }
         properties["auth_flow_id"] = authFlowId ?? "missing"
         properties["app_version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         properties["app_build"] = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
@@ -764,6 +1160,28 @@ class AuthService {
     private func authFlowDurationMs() -> Int? {
         guard let startedAt = pendingOAuthFlow?.startedAt else { return nil }
         return max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+    }
+
+    private func authFlowDurationMs(startedAt: Date?) -> Int? {
+        guard let startedAt else { return nil }
+        return max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+    }
+
+    private func clearLoopbackCallbackServerIfCurrent(_ callbackServer: OAuthLoopbackCallbackServer?, flowId: String) {
+        guard let callbackServer else { return }
+        callbackServer.stop()
+        guard pendingOAuthFlow?.id == flowId, loopbackCallbackServer === callbackServer else { return }
+        loopbackCallbackServer = nil
+    }
+
+    private func clearOAuthFlowIfCurrent(flowId: String, callbackServer: OAuthLoopbackCallbackServer?) {
+        callbackServer?.stop()
+        guard pendingOAuthFlow?.id == flowId else { return }
+        if callbackServer == nil || loopbackCallbackServer === callbackServer {
+            loopbackCallbackServer = nil
+        }
+        pendingOAuthFlow = nil
+        pendingOAuthState = nil
     }
 
     private func authFailureClass(for error: Error) -> String {
@@ -795,18 +1213,53 @@ class AuthService {
     private func waitForOAuthCallback() async throws -> (code: String, state: String) {
         try await withCheckedThrowingContinuation { continuation in
             self.oauthContinuation = continuation
+            let expectedState = self.pendingOAuthState
 
             // Set a timeout
-            Task {
-                try await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000) // 5 minutes
-                if self.oauthContinuation != nil {
-                    self.oauthContinuation?.resume(throwing: AuthError.timeout)
-                    self.oauthContinuation = nil
+            oauthTimeoutTask?.cancel()
+            oauthTimeoutTask = Task {
+                try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000) // 5 minutes
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.pendingOAuthState == expectedState else { return }
+                    self.resumeOAuthContinuation(throwing: AuthError.timeout)
                 }
             }
         }
     }
 
+    private func waitForOAuthCallback(callbackServer: OAuthLoopbackCallbackServer?) async throws -> (code: String, state: String) {
+        guard let callbackServer else {
+            return try await waitForOAuthCallback()
+        }
+
+        let timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000) // 5 minutes
+            guard !Task.isCancelled else { return }
+            callbackServer.fail(with: AuthError.timeout)
+        }
+        defer { timeoutTask.cancel() }
+
+        return try await withTaskCancellationHandler {
+            try await callbackServer.waitForCallback()
+        } onCancel: {
+            callbackServer.cancel()
+        }
+    }
+
+    private func resumeOAuthContinuation(returning value: (code: String, state: String)) {
+        oauthTimeoutTask?.cancel()
+        oauthTimeoutTask = nil
+        oauthContinuation?.resume(returning: value)
+        oauthContinuation = nil
+    }
+
+    private func resumeOAuthContinuation(throwing error: Error) {
+        oauthTimeoutTask?.cancel()
+        oauthTimeoutTask = nil
+        oauthContinuation?.resume(throwing: error)
+        oauthContinuation = nil
+    }
     /// Called by AppDelegate when the app receives an OAuth callback URL
     @MainActor
     func handleOAuthCallback(url: URL) {
@@ -819,8 +1272,7 @@ class AuthService {
                 stage: "callback_parse",
                 failureClass: "invalid_callback"
             )
-            oauthContinuation?.resume(throwing: AuthError.invalidCallback)
-            oauthContinuation = nil
+            resumeOAuthContinuation(throwing: AuthError.invalidCallback)
             return
         }
 
@@ -860,6 +1312,17 @@ class AuthService {
         }
 
         if let error = error {
+            guard let state, state == pendingOAuthState else {
+                NSLog("OMI AUTH: Ignoring OAuth error callback with missing or mismatched state")
+                trackAuthFlowEvent(
+                    "Auth Callback Invalid",
+                    stage: "callback_provider_error_state",
+                    provider: pendingOAuthFlow?.provider ?? "unknown",
+                    authFlowId: callbackFlowId ?? pendingOAuthFlow?.id,
+                    failureClass: "state_mismatch"
+                )
+                return
+            }
             NSLog("OMI AUTH: OAuth error: %@", error)
             trackAuthFlowEvent(
                 "Auth Callback Invalid",
@@ -869,8 +1332,7 @@ class AuthService {
                 failureClass: "provider_error",
                 error: error
             )
-            oauthContinuation?.resume(throwing: AuthError.oauthError(error))
-            oauthContinuation = nil
+            resumeOAuthContinuation(throwing: AuthError.oauthError(error))
             return
         }
 
@@ -883,8 +1345,7 @@ class AuthService {
                 authFlowId: callbackFlowId ?? pendingOAuthFlow?.id,
                 failureClass: "missing_code_or_state"
             )
-            oauthContinuation?.resume(throwing: AuthError.missingCodeOrState)
-            oauthContinuation = nil
+            resumeOAuthContinuation(throwing: AuthError.missingCodeOrState)
             return
         }
 
@@ -895,8 +1356,7 @@ class AuthService {
             provider: pendingOAuthFlow?.provider ?? "unknown",
             authFlowId: callbackFlowId
         )
-        oauthContinuation?.resume(returning: (code: code, state: state))
-        oauthContinuation = nil
+        resumeOAuthContinuation(returning: (code: code, state: state))
     }
 
     /// Cancel an in-flight web OAuth sign-in so the user can retry from a clean
@@ -906,15 +1366,23 @@ class AuthService {
     /// callback that will never arrive.
     @MainActor
     func cancelSignIn() {
-        guard oauthContinuation != nil else {
-            // No in-flight web OAuth; still reset loading so the UI unblocks.
+        if let loopbackCallbackServer {
+            NSLog("OMI AUTH: User cancelled in-flight loopback web OAuth sign-in")
+            pendingOAuthState = nil
+            loopbackCallbackServer.cancel()
+            self.loopbackCallbackServer = nil
             isLoading = false
+            return
+        }
+
+        guard oauthContinuation != nil else {
+            // Callback wait already finished; later auth stages own loading and
+            // cleanup so a stale cancel action cannot race a token exchange.
             return
         }
         NSLog("OMI AUTH: User cancelled in-flight web OAuth sign-in")
         pendingOAuthState = nil
-        oauthContinuation?.resume(throwing: AuthError.cancelled)
-        oauthContinuation = nil
+        resumeOAuthContinuation(throwing: AuthError.cancelled)
     }
 
     // MARK: - Token Exchange
@@ -927,7 +1395,7 @@ class AuthService {
         let email: String?
     }
 
-    private func exchangeCodeForToken(code: String, codeVerifier: String) async throws -> TokenExchangeResult {
+    private func exchangeCodeForToken(code: String, codeVerifier: String, redirectURI: String) async throws -> TokenExchangeResult {
         guard let url = URL(string: "\(apiBaseURL)v1/auth/token") else {
             throw AuthError.invalidURL
         }
@@ -937,15 +1405,15 @@ class AuthService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
         let bodyParams = [
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": redirectURI,
-            "use_custom_token": "true",
-            "code_verifier": codeVerifier
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("redirect_uri", redirectURI),
+            ("use_custom_token", "true"),
+            ("code_verifier", codeVerifier)
         ]
 
         let bodyString = bodyParams
-            .map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0.value)" }
+            .map { "\(formEncode($0.0))=\(formEncode($0.1))" }
             .joined(separator: "&")
 
         request.httpBody = bodyString.data(using: .utf8)
@@ -1007,6 +1475,12 @@ class AuthService {
             familyName: extractedFamilyName,
             email: extractedEmail
         )
+    }
+
+    private func formEncode(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
     }
 
     /// Decode a JWT and return the payload as a dictionary

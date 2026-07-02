@@ -658,7 +658,6 @@ final class ImportConnectorStatusStore: ObservableObject {
     private let lastDeltaCountKeyPrefix = "appsImportConnectorLastDeltaCount."
     private let hasLastDeltaKeyPrefix = "appsImportConnectorHasLastDelta."
     private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
-    private let appleNotesFolderDefaultsKey = "onboardingAppleNotesFolderPath"
     private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
     private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
 
@@ -751,11 +750,8 @@ final class ImportConnectorStatusStore: ObservableObject {
 
         hydrateLegacyManualImports()
 
-        if let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey), !folderPath.isEmpty {
-            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-            metrics.availabilityText = "Folder granted"
-            metricsByID["apple-notes"] = metrics
-        }
+        // A remembered path is not enough to call Apple Notes connected. The
+        // status becomes connected only after the reader proves the store is readable.
     }
 
     private func hydrateLegacyManualImports() {
@@ -808,18 +804,14 @@ final class ImportConnectorStatusStore: ObservableObject {
     private func refreshAppleNotesMetrics() async {
         do {
             let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
-            guard !notes.isEmpty else { return }
 
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
             metrics.sourceCount = notes.count
             metrics.availabilityText = "Private notes accessible"
             metricsByID["apple-notes"] = metrics
         } catch {
-            let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey) ?? ""
-            guard !folderPath.isEmpty else { return }
-            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-            metrics.availabilityText = "Folder granted"
-            metricsByID["apple-notes"] = metrics
+            let reason = (error as? AppleNotesReaderError)?.reasonCode ?? "unknown"
+            log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reason)")
         }
     }
 
@@ -1269,7 +1261,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return try await runAppleNotesImport()
         } catch let error as AppleNotesReaderError {
             switch error {
-            case .storeNotFound, .storeUnavailable:
+            case .storeNotFound, .authorizationDenied, .invalidSelectedFolder, .schemaUnavailable, .storeReadFailed:
                 break
             }
             let granted = await selectAppleNotesFolder()
@@ -1357,29 +1349,17 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return false
         }
 
-        let resolvedURL: URL
-        if selectedURL.path == groupContainersURL.path {
-            let inferredURL = groupContainersURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
-            guard fileManager.fileExists(atPath: inferredURL.path) else {
-                errorMessage = "Choose the Apple Notes folder inside Group Containers."
-                return false
-            }
-            resolvedURL = inferredURL
-        } else if selectedURL.lastPathComponent == "group.com.apple.notes" {
-            resolvedURL = selectedURL
-        } else {
-            let nestedURL = selectedURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
-            if fileManager.fileExists(atPath: nestedURL.path) {
-                resolvedURL = nestedURL
-            } else {
-                errorMessage = "Choose the Apple Notes folder named group.com.apple.notes."
-                return false
-            }
+        do {
+            _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: selectedURL.path)
+            errorMessage = nil
+            return true
+        } catch let error as AppleNotesReaderError {
+            errorMessage = error.localizedDescription
+            return false
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
-
-        errorMessage = nil
-        await AppleNotesReaderService.shared.rememberSelectedFolder(path: resolvedURL.path)
-        return true
     }
 
     private func currentIndexedFileCount() async -> Int {

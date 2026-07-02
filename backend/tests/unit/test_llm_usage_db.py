@@ -26,6 +26,11 @@ _google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("
 _google_firestore_module = types.ModuleType("google.cloud.firestore")
 _google_firestore_module.Increment = lambda x: {"__increment": x}
 sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
+_google_firestore_v1_module = sys.modules.get("google.cloud.firestore_v1") or types.ModuleType(
+    "google.cloud.firestore_v1"
+)
+_google_firestore_v1_module.transactional = lambda fn: fn
+sys.modules["google.cloud.firestore_v1"] = _google_firestore_v1_module
 setattr(_google_module, "cloud", _google_cloud_module)
 setattr(_google_cloud_module, "firestore", _google_firestore_module)
 
@@ -50,6 +55,9 @@ class _FakeDocRef:
 
     def get(self):
         return _FakeDocSnapshot({}, exists=False)
+
+    def collection(self, name):
+        return _FakeCollection()
 
 
 class _FakeCollection:
@@ -136,6 +144,93 @@ def test_record_llm_usage_skips_zero_tokens():
         )
 
     assert len(doc_ref.set_calls) == 0
+
+
+def test_record_chat_quota_question_public_wrapper_uses_transaction():
+    usage_ref = MagicMock()
+    event_ref = MagicMock()
+    events_collection = MagicMock()
+    events_collection.document.return_value = event_ref
+    usage_collection = MagicMock()
+    usage_collection.document.return_value = usage_ref
+    user_ref = MagicMock()
+
+    def collection_for_name(name):
+        if name == 'llm_usage':
+            return usage_collection
+        if name == 'chat_quota_events':
+            return events_collection
+        raise AssertionError(f'unexpected collection {name}')
+
+    user_ref.collection.side_effect = collection_for_name
+    transaction = MagicMock()
+
+    with patch.object(llm_usage, 'db') as patched_db:
+        patched_db.collection.return_value.document.return_value = user_ref
+        patched_db.transaction.return_value = transaction
+        with patch.object(llm_usage, '_record_chat_quota_question_transaction', return_value=True) as mock_record:
+            recorded = llm_usage.record_chat_quota_question(
+                'test-user',
+                idempotency_key='v2_messages:msg-1',
+                source='v2_messages',
+                message_id='msg-1',
+                chat_session_id='session-1',
+                platform='ios',
+            )
+
+    assert recorded is True
+    event_data = mock_record.call_args.args[3]
+    assert mock_record.call_args.args[0] is transaction
+    assert mock_record.call_args.args[1] is usage_ref
+    assert mock_record.call_args.args[2] is event_ref
+    assert mock_record.call_args.args[4].count('-') == 2
+    assert event_data['idempotency_key'] == 'v2_messages:msg-1'
+    assert event_data['source'] == 'v2_messages'
+    assert event_data['message_id'] == 'msg-1'
+    assert event_data['chat_session_id'] == 'session-1'
+    assert event_data['platform'] == 'ios'
+
+
+def test_record_chat_quota_question_transaction_is_idempotent_when_event_exists():
+    transaction = MagicMock()
+    usage_ref = MagicMock()
+    event_ref = MagicMock()
+    event_ref.get.return_value = _FakeDocSnapshot({}, exists=True)
+
+    recorded = llm_usage._record_chat_quota_question_transaction(
+        transaction,
+        usage_ref,
+        event_ref,
+        {'idempotency_key': 'v2_messages:msg-1'},
+        '2026-06-23',
+    )
+
+    assert recorded is False
+    transaction.set.assert_not_called()
+
+
+def test_record_chat_quota_question_transaction_increments_backend_quota_once():
+    transaction = MagicMock()
+    usage_ref = MagicMock()
+    event_ref = MagicMock()
+    event_ref.get.return_value = _FakeDocSnapshot({}, exists=False)
+    event_data = {'idempotency_key': 'v2_messages:msg-1'}
+
+    recorded = llm_usage._record_chat_quota_question_transaction(
+        transaction,
+        usage_ref,
+        event_ref,
+        event_data,
+        '2026-06-23',
+    )
+
+    assert recorded is True
+    transaction.set.assert_any_call(event_ref, event_data)
+    usage_call = transaction.set.call_args_list[1]
+    assert usage_call.args[0] is usage_ref
+    assert usage_call.kwargs['merge'] is True
+    assert usage_call.args[1]['backend_chat.quota_questions'] == {'__increment': 1}
+    assert usage_call.args[1]['date'] == '2026-06-23'
 
 
 def test_get_daily_usage_returns_empty_when_not_exists():

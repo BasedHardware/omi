@@ -338,7 +338,7 @@ class TaskChatState: ObservableObject {
                                 || !messages[currentIndex].contentBlocks.isEmpty
                             )
                         messages[currentIndex].isStreaming = false
-                        completeRemainingToolCalls(messageId: aiMessageId)
+                        completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
                         if shouldPersistPartial {
                             persistMessage(messages[currentIndex])
                         }
@@ -382,7 +382,10 @@ class TaskChatState: ObservableObject {
                 } else {
                     Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
                     messages[index].isStreaming = false
-                    completeRemainingToolCalls(messageId: aiMessageId)
+                    completeRemainingToolCalls(
+                        messageId: aiMessageId,
+                        terminalStatus: failedByUserStop ? .completed : .failed
+                    )
                     persistMessage(messages[index])
                 }
             }
@@ -534,7 +537,7 @@ class TaskChatState: ObservableObject {
            messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
             messages[index].isStreaming = false
-            completeRemainingToolCalls(messageId: activeAssistantMessageId)
+            completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)
             if persist {
                 persistMessage(messages[index])
             }
@@ -548,7 +551,7 @@ class TaskChatState: ObservableObject {
         }) {
             Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
             messages[index].isStreaming = false
-            completeRemainingToolCalls(messageId: messages[index].id)
+            completeRemainingToolCalls(messageId: messages[index].id, terminalStatus: .failed)
             if persist {
                 persistMessage(messages[index])
             }
@@ -643,62 +646,25 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    // Mirrors ChatProvider.addToolActivity — kept in lockstep.
-    // TODO: DRY these two implementations into a shared helper.
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-
-        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
-
-        if status == .running {
-            if let toolUseId = toolUseId, toolInput != nil {
-                for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
-                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: st,
-                            toolUseId: toolUseId, input: toolInput, output: output
-                        )
-                        return
-                    }
-                }
-            }
-            messages[index].contentBlocks.append(
-                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
-                          toolUseId: toolUseId, input: toolInput)
-            )
-        } else {
-            for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, let st, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
-                   st.isInFlight {
-                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
-                    if matches {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: .completed,
-                            toolUseId: toolUseId ?? existingTuid,
-                            input: toolInput ?? existingInput,
-                            output: output
-                        )
-                        break
-                    }
-                }
-            }
-        }
+        ToolCallBlockUpdater.applyToolActivity(
+            to: &messages[index].contentBlocks,
+            toolName: toolName,
+            status: status,
+            toolUseId: toolUseId,
+            input: input
+        )
     }
 
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-
-        for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let blockName, let status, let tuid, let input, _) = messages[index].contentBlocks[i],
-               (tuid == toolUseId || (tuid == nil && blockName == name)) {
-                messages[index].contentBlocks[i] = .toolCall(
-                    id: id, name: blockName, status: status,
-                    toolUseId: toolUseId, input: input, output: output
-                )
-                return
-            }
-        }
+        ToolCallBlockUpdater.applyToolOutput(
+            to: &messages[index].contentBlocks,
+            toolUseId: toolUseId,
+            name: name,
+            output: output
+        )
     }
 
     private func appendThinking(messageId: String, text: String) {
@@ -717,16 +683,11 @@ class TaskChatState: ObservableObject {
     /// Mirrors ChatProvider.completeRemainingToolCalls — matches any
     /// in-flight state (`.running`, `.slow`, `.stalled`) so detector-
     /// promoted blocks resolve when the turn ends.
-    private func completeRemainingToolCalls(messageId: String) {
+    private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = messages[index].contentBlocks[i],
-               status.isInFlight {
-                messages[index].contentBlocks[i] = .toolCall(
-                    id: id, name: name, status: .completed,
-                    toolUseId: toolUseId, input: input, output: output
-                )
-            }
-        }
+        ToolCallBlockUpdater.completeRemainingToolCalls(
+            in: &messages[index].contentBlocks,
+            terminalStatus: terminalStatus
+        )
     }
 }

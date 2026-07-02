@@ -8,11 +8,23 @@ final class ClientDeviceService {
 
   private let keychainService = "com.omi.client-device-id"
   private let keychainAccount = "install-uuid"
+  private let devInstallIdDefaultsKey = "dev-client-device-install-uuid"
+  private let installIdMirrorDefaultsKey = "client-device-install-uuid-mirror"
+  private let bundleIdentifier: String?
+  private let userDefaults: UserDefaults
+  private let cacheLock = NSLock()
+  private var cachedInstallId: String?
 
-  private init() {}
+  init(
+    bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+    userDefaults: UserDefaults = .standard
+  ) {
+    self.bundleIdentifier = bundleIdentifier
+    self.userDefaults = userDefaults
+  }
 
   var deviceIdHash: String {
-    let installId = loadOrCreateInstallId()
+    let installId = resolveInstallId()
     let digest = SHA256.hash(data: Data(installId.utf8))
     return digest.map { String(format: "%02x", $0) }.joined().prefix(8).description
   }
@@ -47,16 +59,65 @@ final class ClientDeviceService {
     return memory.captureDeviceIds.contains(localId)
   }
 
+  private func resolveInstallId() -> String {
+    cacheLock.lock()
+    defer { cacheLock.unlock() }
+    if let cached = cachedInstallId {
+      return cached
+    }
+    let resolved = loadOrCreateInstallId()
+    cachedInstallId = resolved
+    return resolved
+  }
+
   private func loadOrCreateInstallId() -> String {
-    if let existing = readKeychainInstallId() {
+    if usesBundleScopedDevInstallId {
+      return loadOrCreateDevInstallId()
+    }
+    switch readKeychainInstallId() {
+    case .found(let existing):
+      userDefaults.set(existing, forKey: installIdMirrorDefaultsKey)
+      return existing
+    case .missing:
+      let fresh = UUID().uuidString
+      saveKeychainInstallId(fresh)
+      userDefaults.set(fresh, forKey: installIdMirrorDefaultsKey)
+      return fresh
+    case .unavailable(let status):
+      // Denied prompt or transient keychain failure. Never rotate the shared
+      // item here — that would change this Mac's identity for all Omi builds.
+      log("ClientDeviceService: keychain read unavailable (status \(status)); using mirror fallback")
+      if let mirror = userDefaults.string(forKey: installIdMirrorDefaultsKey), !mirror.isEmpty {
+        return mirror
+      }
+      let fallback = UUID().uuidString
+      userDefaults.set(fallback, forKey: installIdMirrorDefaultsKey)
+      return fallback
+    }
+  }
+
+  private var usesBundleScopedDevInstallId: Bool {
+    guard let bundleIdentifier else { return false }
+    // Throwaway named dev bundles should not prompt for the shared login-keychain item.
+    return bundleIdentifier.hasPrefix("com.omi.omi-")
+  }
+
+  private func loadOrCreateDevInstallId() -> String {
+    if let existing = userDefaults.string(forKey: devInstallIdDefaultsKey), !existing.isEmpty {
       return existing
     }
     let fresh = UUID().uuidString
-    saveKeychainInstallId(fresh)
+    userDefaults.set(fresh, forKey: devInstallIdDefaultsKey)
     return fresh
   }
 
-  private func readKeychainInstallId() -> String? {
+  private enum KeychainReadResult {
+    case found(String)
+    case missing
+    case unavailable(OSStatus)
+  }
+
+  private func readKeychainInstallId() -> KeychainReadResult {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: keychainService,
@@ -66,10 +127,18 @@ final class ClientDeviceService {
     ]
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
-    guard status == errSecSuccess, let data = item as? Data, let value = String(data: data, encoding: .utf8) else {
-      return nil
+    switch status {
+    case errSecSuccess:
+      guard let data = item as? Data, let value = String(data: data, encoding: .utf8), !value.isEmpty else {
+        return .missing
+      }
+      return .found(value)
+    case errSecItemNotFound:
+      return .missing
+    default:
+      // errSecAuthFailed / errSecUserCanceled / errSecInteractionNotAllowed etc.
+      return .unavailable(status)
     }
-    return value
   }
 
   private func saveKeychainInstallId(_ value: String) {

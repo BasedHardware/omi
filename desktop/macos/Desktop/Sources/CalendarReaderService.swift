@@ -13,30 +13,131 @@ struct CalendarEvent: Identifiable {
   let isAllDay: Bool
 }
 
-enum CalendarReaderError: LocalizedError {
+/// Result of a functional connection probe (philosophy §3/§4). Distinct from a
+/// stored "connected" flag: it reflects what is true *right now*.
+enum CalendarConnectionStatus: Equatable {
+  case connected(verifiedAt: Date)
+  case needsSignIn(message: String)
+  case error(message: String)
+
+  var isConnected: Bool {
+    if case .connected = self { return true }
+    return false
+  }
+}
+
+enum CalendarReaderError: LocalizedError, Equatable {
   case noBrowserFound
-  case noGoogleCookies
+  case notSignedIn
+  case sessionExpired
   case cookieDecryptionFailed(String)
   case networkError(String)
-  case authFailed
   case pythonNotFound
 
   var errorDescription: String? {
     switch self {
     case .noBrowserFound:
-      return "No browser with Google session found. Log into Google in Chrome, Arc, Brave, or Edge."
-    case .noGoogleCookies:
-      return "No Google session cookies found. Make sure you're logged into Google."
+      return "No supported browser found. Open Google Calendar in Chrome, Arc, Brave, or Edge, then try again."
+    case .notSignedIn:
+      return "Not signed into Google in any browser. Open calendar.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+    case .sessionExpired:
+      return "Your Google session expired. Reload calendar.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
-      return "Cookie decryption failed: \(msg)"
+      return "Couldn't read your browser session: \(msg)"
     case .networkError(let msg):
-      return "Network error: \(msg)"
-    case .authFailed:
-      return
-        "Google Calendar authentication failed. Try refreshing your Google session in the browser."
+      return "Couldn't reach Google Calendar: \(msg)"
     case .pythonNotFound:
       return "Python 3 not found. Install it via Homebrew: brew install python3"
     }
+  }
+}
+
+// MARK: - Fetch outcome (pure, testable layer)
+
+/// The classified outcome of a fetch attempt across all browsers/profiles.
+///
+/// Per `docs/integrations-philosophy.md` §2 (observe → recover, never a script)
+/// and §3 (the UI must reflect reality): we aggregate every browser/profile
+/// attempt instead of surfacing whichever one happened to be tried last, then
+/// classify the failure into an actionable error — never the catch-all
+/// "Network error" that a login problem used to render as.
+enum CalendarFetchOutcome: Equatable {
+  case success(events: [[String: Any]], browser: String)
+  case failure(CalendarFailureClass, summary: String, attempts: [CalendarAttempt])
+
+  static func == (lhs: CalendarFetchOutcome, rhs: CalendarFetchOutcome) -> Bool {
+    switch (lhs, rhs) {
+    case let (.success(_, lb), .success(_, rb)):
+      return lb == rb
+    case let (.failure(lc, ls, la), .failure(rc, rs, ra)):
+      return lc == rc && ls == rs && la == ra
+    default:
+      return false
+    }
+  }
+}
+
+/// One browser/profile attempt, carrying only non-sensitive diagnostics — names,
+/// stages, and reasons, never cookie values (philosophy §7: sanitized traces).
+struct CalendarAttempt: Equatable {
+  let browser: String
+  let stage: String  // "decrypt" | "auth" | "fetch" | "ok"
+  let reason: String
+  let hadAuthCookies: Bool
+}
+
+enum CalendarFailureClass: String, Equatable {
+  case noBrowser = "no_browser"
+  case notSignedIn = "not_signed_in"
+  case sessionExpired = "session_expired"
+  case decryptFailed = "decrypt_failed"
+  case network = "network"
+  case unknown = "unknown"
+
+  var asError: CalendarReaderError {
+    switch self {
+    case .noBrowser: return .noBrowserFound
+    case .notSignedIn: return .notSignedIn
+    case .sessionExpired: return .sessionExpired
+    case .decryptFailed: return .cookieDecryptionFailed("browser session could not be decrypted")
+    case .network: return .networkError("please check your connection and try again")
+    case .unknown: return .networkError("unexpected error")
+    }
+  }
+}
+
+/// Parses the structured JSON the Python helper writes into a classified
+/// outcome. Pure and side-effect free so it can be unit-tested against captured
+/// payloads without a browser or Python (philosophy §7: make the surface
+/// testable).
+enum CalendarOutcomeParser {
+  static func parse(_ json: [String: Any]) -> CalendarFetchOutcome {
+    let attempts = (json["attempts"] as? [[String: Any]] ?? []).map { dict in
+      CalendarAttempt(
+        browser: dict["browser"] as? String ?? "unknown",
+        stage: dict["stage"] as? String ?? "unknown",
+        reason: dict["reason"] as? String ?? "",
+        hadAuthCookies: dict["had_auth"] as? Bool ?? false
+      )
+    }
+
+    if json["ok"] as? Bool == true {
+      let events = json["events"] as? [[String: Any]] ?? []
+      let browser = json["browser"] as? String ?? "unknown"
+      return .success(events: events, browser: browser)
+    }
+
+    let cls = CalendarFailureClass(rawValue: json["error_class"] as? String ?? "") ?? .unknown
+    let summary =
+      (json["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+      ?? cls.asError.errorDescription ?? "Unknown error"
+    return .failure(cls, summary: summary, attempts: attempts)
+  }
+
+  /// Human-readable, non-sensitive one-liner for logs and the eval corpus.
+  static func diagnosticsLine(_ attempts: [CalendarAttempt]) -> String {
+    guard !attempts.isEmpty else { return "no browsers scanned" }
+    return attempts.map { "\($0.browser)[\($0.stage):\($0.reason)]" }.joined(separator: ", ")
   }
 }
 
@@ -123,6 +224,31 @@ actor CalendarReaderService {
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
     return events.sorted { $0.startTime > $1.startTime }
+  }
+
+  /// Lightweight functional probe — does the integration actually work right now?
+  ///
+  /// Per `docs/integrations-philosophy.md` §3/§4, "connected" must mean "verified
+  /// recently against the real surface," never a stored latch. Callers use this
+  /// to render honest status and to drive self-healing, rather than trusting a
+  /// one-time success. It runs the same real fetch path over a tiny window so a
+  /// green result guarantees the whole chain (cookies → auth → API) works.
+  func verifyConnection() async -> CalendarConnectionStatus {
+    do {
+      _ = try fetchCalendarViaCookies(daysBack: 1, daysForward: 1, maxResults: 1)
+      return .connected(verifiedAt: Date())
+    } catch let error as CalendarReaderError {
+      switch error {
+      case .notSignedIn, .noBrowserFound:
+        return .needsSignIn(message: error.errorDescription ?? "Sign into Google to connect.")
+      case .sessionExpired:
+        return .needsSignIn(message: error.errorDescription ?? "Your Google session expired.")
+      default:
+        return .error(message: error.errorDescription ?? "Couldn't verify the connection.")
+      }
+    } catch {
+      return .error(message: error.localizedDescription)
+    }
   }
 
   /// Synthesize profile memories and tasks from calendar events.
@@ -239,23 +365,20 @@ actor CalendarReaderService {
       let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
       let profileSummary = parsed["profile"] as? String ?? ""
 
-      // Save memories
-      var memoriesSaved = 0
-      for memory in memoryStrings {
-        do {
-          _ = try await APIClient.shared.createMemory(
+      let memoryItems = memoryStrings.map { memory in
+        MemoryBatchItem(
             content: memory,
             visibility: "private",
             category: .system,
             tags: ["calendar", "onboarding", "profile"],
-            source: "google_calendar",
-            headline: "Calendar Profile Insight"
-          )
-          memoriesSaved += 1
-        } catch {
-          log("CalendarReaderService: Failed to save memory: \(error)")
-        }
+            headline: "Calendar Profile Insight",
+            source: "google_calendar"
+        )
       }
+      let saveResult = await OnboardingMemoryBatchImportService.save(
+        memoryItems,
+        logPrefix: "CalendarReaderService"
+      )
 
       // Save tasks
       var tasksSaved = 0
@@ -277,9 +400,9 @@ actor CalendarReaderService {
       }
 
       log(
-        "CalendarReaderService: Synthesis complete — \(memoriesSaved) memories, \(tasksSaved) tasks, profile: \(profileSummary.prefix(80))"
+        "CalendarReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks, profile: \(profileSummary.prefix(80))"
       )
-      return (memoriesSaved, tasksSaved, profileSummary)
+      return (saveResult.saved, tasksSaved, profileSummary)
 
     } catch {
       if attempt < maxAttempts {
@@ -299,38 +422,34 @@ actor CalendarReaderService {
     let eventsToSave = limit.map { Array(events.prefix($0)) } ?? events
     guard !eventsToSave.isEmpty else { return (0, 0) }
 
-    let concurrency = min(8, eventsToSave.count)
-    var nextIndex = 0
-
-    return await withTaskGroup(of: Bool.self) { group in
-      func enqueueNext() {
-        guard nextIndex < eventsToSave.count else { return }
-        let event = eventsToSave[nextIndex]
-        nextIndex += 1
-        group.addTask {
-          await Self.saveMemory(for: event)
-        }
+    let memoryItems = eventsToSave.map { event in
+      var parts = ["Calendar event — \(event.summary)"]
+      if !event.startTime.isEmpty {
+        parts.append("Starts: \(event.startTime)")
+      }
+      if !event.location.isEmpty {
+        parts.append("Location: \(event.location)")
+      }
+      if !event.attendees.isEmpty {
+        parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
       }
 
-      for _ in 0..<concurrency {
-        enqueueNext()
-      }
-
-      var saved = 0
-      var failed = 0
-
-      while let success = await group.next() {
-        if success {
-          saved += 1
-        } else {
-          failed += 1
-        }
-        enqueueNext()
-      }
-
-      log("CalendarReaderService: Saved \(saved) events as memories (\(failed) failed)")
-      return (saved, failed)
+      return MemoryBatchItem(
+        content: parts.joined(separator: " | "),
+        visibility: "private",
+        category: .system,
+        tags: ["calendar", "onboarding", "event"],
+        headline: event.summary,
+        source: "google_calendar"
+      )
     }
+
+    let result = await OnboardingMemoryBatchImportService.save(
+      memoryItems,
+      logPrefix: "CalendarReaderService"
+    )
+    log("CalendarReaderService: Saved \(result.saved) events as memories (\(result.failed) failed)")
+    return result
   }
 
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
@@ -468,6 +587,9 @@ actor CalendarReaderService {
           return "SAPISIDHASH " + timestamp + "_" + hash_val
 
       def fetch_calendar_events(jar, cookies_list, days_back, days_forward, max_results):
+          # Returns (events, error, http_status). http_status lets the caller
+          # distinguish an expired session (401/403) from a transient network
+          # failure so the user gets the right recovery step (philosophy §3).
           # Find SAPISID cookie
           sapisid = None
           for c in cookies_list:
@@ -481,7 +603,7 @@ actor CalendarReaderService {
                       sapisid = c['value']
                       break
           if not sapisid:
-              return None, "No SAPISID cookie found"
+              return None, "No SAPISID cookie found", None
 
           origin = "https://calendar.google.com"
           auth_header = get_sapisidhash(sapisid, origin)
@@ -517,13 +639,12 @@ actor CalendarReaderService {
                   status = resp.getcode()
                   body = resp.read()
                   if status != 200:
-                      return None, f"HTTP {status}"
+                      return None, f"HTTP {status}", status
                   data = json.loads(body)
               except urllib.error.HTTPError as e:
-                  body = e.read().decode('utf-8', errors='replace')[:200] if e.fp else ''
-                  return None, f"HTTP {e.code}: {body}"
+                  return None, f"HTTP {e.code}", e.code
               except Exception as e:
-                  return None, str(e)
+                  return None, str(e), None
 
               items = data.get('items', [])
               all_items.extend(items)
@@ -531,28 +652,54 @@ actor CalendarReaderService {
               if not page_token or not items:
                   break
 
-          return all_items[:max_results], None
+          return all_items[:max_results], None, 200
 
-      last_error = None
+      # Aggregate every browser/profile attempt instead of last-writer-wins, so
+      # we can classify the *most actionable* failure rather than surfacing
+      # whichever profile happened to be tried last (philosophy §2, §3, §7).
+      attempts = []
 
-      # Try each browser
+      def classify(attempts):
+          # No browser produced any readable cookies at all.
+          if not attempts:
+              return 'no_browser', 'No supported browser with a readable session was found.'
+          # Session expired beats "not signed in": if any profile HAD auth
+          # cookies but Google rejected them, telling the user to re-login is the
+          # actionable next step.
+          if any(a['stage'] == 'fetch' and a.get('http') in (401, 403) for a in attempts):
+              return 'session_expired', 'Your Google session expired. Reload calendar.google.com to refresh it.'
+          # Some profile had auth cookies but the fetch failed for another reason.
+          if any(a['stage'] == 'fetch' for a in attempts):
+              detail = next(a['reason'] for a in attempts if a['stage'] == 'fetch')
+              return 'network', f'Could not reach Google Calendar ({detail}).'
+          # Cookies decrypted but no profile was signed into Google.
+          if any(a['stage'] == 'auth' for a in attempts):
+              return 'not_signed_in', 'No browser is signed into Google. Sign into calendar.google.com and try again.'
+          # Everything failed at the decrypt stage.
+          return 'decrypt_failed', 'Your browser session could not be read.'
+
+      # Try each browser/profile
       for browser in browsers:
           cookies, err = decrypt_cookies(browser['db_path'], browser['password'])
           if err or not cookies:
-              last_error = f"{browser['name']}: cookie read failed ({err or 'no cookies'})"
+              attempts.append({'browser': browser['name'], 'stage': 'decrypt',
+                               'reason': (err or 'no cookies'), 'had_auth': False})
               continue
 
           # Check for auth cookies
           auth_names = {'SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'}
           found_auth = [c for c in cookies if c['name'] in auth_names]
           if not found_auth:
-              last_error = f"{browser['name']}: no Google auth cookies"
+              attempts.append({'browser': browser['name'], 'stage': 'auth',
+                               'reason': 'no Google auth cookies', 'had_auth': False})
               continue
 
           jar = make_cookie_jar(cookies)
-          events, fetch_err = fetch_calendar_events(jar, cookies, days_back, days_forward, max_results)
+          events, fetch_err, http_status = fetch_calendar_events(jar, cookies, days_back, days_forward, max_results)
           if fetch_err or events is None:
-              last_error = f"{browser['name']}: {fetch_err or 'unknown fetch error'}"
+              attempts.append({'browser': browser['name'], 'stage': 'fetch',
+                               'reason': (fetch_err or 'unknown fetch error'),
+                               'had_auth': True, 'http': http_status})
               continue
 
           # Format events for output
@@ -576,18 +723,22 @@ actor CalendarReaderService {
                   'is_all_day': 'date' in start and 'dateTime' not in start,
               })
 
+          attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
           # Write to temp file to avoid pipe buffer truncation with large event lists
           import tempfile
           outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
           with open(outfile, 'w') as f:
-              json.dump({'ok': True, 'browser': browser['name'], 'events': result_events, 'count': len(result_events)}, f)
+              json.dump({'ok': True, 'browser': browser['name'], 'events': result_events,
+                         'count': len(result_events), 'attempts': attempts}, f)
           print(outfile)
           sys.exit(0)
 
+      error_class, summary = classify(attempts)
       import tempfile
       outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
       with open(outfile, 'w') as f:
-          json.dump({'ok': False, 'error': last_error or 'No browser with valid Google session found'}, f)
+          json.dump({'ok': False, 'error_class': error_class, 'summary': summary,
+                     'attempts': attempts}, f)
       print(outfile)
       sys.exit(0)
       """
@@ -671,33 +822,33 @@ actor CalendarReaderService {
       throw CalendarReaderError.networkError("Python returned invalid JSON: \(raw.prefix(200))")
     }
 
-    guard json["ok"] as? Bool == true else {
-      let errMsg = json["error"] as? String ?? "Unknown error"
-      throw CalendarReaderError.networkError(errMsg)
-    }
+    let outcome = CalendarOutcomeParser.parse(json)
+    switch outcome {
+    case let .failure(cls, summary, attempts):
+      // Structured, non-sensitive diagnostics for the eval corpus (philosophy §7).
+      log(
+        "CalendarReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
+          + "attempts: \(CalendarOutcomeParser.diagnosticsLine(attempts))")
+      throw cls.asError
 
-    guard let eventDicts = json["events"] as? [[String: Any]] else {
-      return []
-    }
+    case let .success(eventDicts, browserName):
+      log("CalendarReaderService: Got \(eventDicts.count) events from \(browserName)")
+      return eventDicts.compactMap { dict -> CalendarEvent? in
+        guard let id = dict["id"] as? String,
+          let summary = dict["summary"] as? String
+        else { return nil }
 
-    let browserName = json["browser"] as? String ?? "unknown"
-    log("CalendarReaderService: Got \(eventDicts.count) events from \(browserName)")
-
-    return eventDicts.compactMap { dict -> CalendarEvent? in
-      guard let id = dict["id"] as? String,
-        let summary = dict["summary"] as? String
-      else { return nil }
-
-      return CalendarEvent(
-        id: id,
-        summary: summary,
-        startTime: dict["start_time"] as? String ?? "",
-        endTime: dict["end_time"] as? String ?? "",
-        attendees: dict["attendees"] as? [String] ?? [],
-        location: dict["location"] as? String ?? "",
-        description: dict["description"] as? String ?? "",
-        isAllDay: dict["is_all_day"] as? Bool ?? false
-      )
+        return CalendarEvent(
+          id: id,
+          summary: summary,
+          startTime: dict["start_time"] as? String ?? "",
+          endTime: dict["end_time"] as? String ?? "",
+          attendees: dict["attendees"] as? [String] ?? [],
+          location: dict["location"] as? String ?? "",
+          description: dict["description"] as? String ?? "",
+          isAllDay: dict["is_all_day"] as? Bool ?? false
+        )
+      }
     }
   }
 
@@ -725,32 +876,4 @@ actor CalendarReaderService {
     }
   }
 
-  nonisolated private static func saveMemory(for event: CalendarEvent) async -> Bool {
-    var parts = ["Calendar event — \(event.summary)"]
-    if !event.startTime.isEmpty {
-      parts.append("Starts: \(event.startTime)")
-    }
-    if !event.location.isEmpty {
-      parts.append("Location: \(event.location)")
-    }
-    if !event.attendees.isEmpty {
-      parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
-    }
-    let content = parts.joined(separator: " | ")
-
-    do {
-      _ = try await APIClient.shared.createMemory(
-        content: content,
-        visibility: "private",
-        category: .system,
-        tags: ["calendar", "onboarding", "event"],
-        source: "google_calendar",
-        headline: event.summary
-      )
-      return true
-    } catch {
-      log("CalendarReaderService: Failed to save raw event memory \(event.id): \(error)")
-      return false
-    }
-  }
 }

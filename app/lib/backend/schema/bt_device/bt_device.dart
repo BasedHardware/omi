@@ -1,16 +1,16 @@
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/devices/apple_watch_connection.dart';
-import 'package:omi/services/devices/bee_connection.dart';
-import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/bee_connection.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
-import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/friend_pendant_connection.dart';
-import 'package:omi/services/devices/limitless_connection.dart';
-import 'package:omi/services/devices/omi_connection.dart';
-import 'package:omi/services/devices/omiglass_connection.dart';
-import 'package:omi/services/devices/plaud_connection.dart';
+import 'package:omi/services/devices/connectors/fieldy_connection.dart';
+import 'package:omi/services/devices/connectors/friend_pendant_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices/connectors/omiglass_connection.dart';
+import 'package:omi/services/devices/connectors/plaud_connection.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ImageOrientation {
@@ -245,16 +245,16 @@ class BtDevice {
 
   // create an empty device
   BtDevice.empty()
-      : name = '',
-        id = '',
-        type = DeviceType.omi,
-        rssi = 0,
-        locator = null,
-        _modelNumber = '',
-        _firmwareRevision = '',
-        _hardwareRevision = '',
-        _manufacturerName = '',
-        _serialNumber = '';
+    : name = '',
+      id = '',
+      type = DeviceType.omi,
+      rssi = 0,
+      locator = null,
+      _modelNumber = '',
+      _firmwareRevision = '',
+      _hardwareRevision = '',
+      _manufacturerName = '',
+      _serialNumber = '';
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';

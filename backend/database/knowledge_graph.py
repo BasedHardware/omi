@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import uuid
 
-from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
@@ -10,6 +9,10 @@ from ._client import db
 users_collection = 'users'
 knowledge_nodes_collection = 'knowledge_nodes'
 knowledge_edges_collection = 'knowledge_edges'
+
+
+def _firestore_client(db_client=None):
+    return db_client if db_client is not None else db
 
 
 class KnowledgeNode:
@@ -96,26 +99,29 @@ class KnowledgeEdge:
         )
 
 
-def get_knowledge_nodes(uid: str) -> List[Dict[str, Any]]:
-    user_ref = db.collection(users_collection).document(uid)
+def get_knowledge_nodes(uid: str, *, db_client=None) -> List[Dict[str, Any]]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
     return [doc.to_dict() for doc in nodes_ref.stream()]
 
 
-def get_knowledge_node(uid: str, node_id: str) -> Optional[Dict[str, Any]]:
-    user_ref = db.collection(users_collection).document(uid)
+def get_knowledge_node(uid: str, node_id: str, *, db_client=None) -> Optional[Dict[str, Any]]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
     node_ref = user_ref.collection(knowledge_nodes_collection).document(node_id)
     doc = node_ref.get()
     return doc.to_dict() if doc.exists else None
 
 
-def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
-    user_ref = db.collection(users_collection).document(uid)
+def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client=None) -> Dict[str, Any]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
 
     node_id = node_data.get('id')
     if not node_id:
-        existing_node = find_node_by_label_or_alias(uid, node_data.get('label', ''))
+        existing_node = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
         if existing_node:
             node_id = existing_node['id']
             node_data['id'] = node_id
@@ -127,7 +133,7 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
     existing = node_ref.get()
 
     if not existing.exists:
-        existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''))
+        existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
         if existing_node_by_label:
             node_id = existing_node_by_label['id']
             node_data['id'] = node_id
@@ -160,11 +166,12 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
     return node_data
 
 
-def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]]:
+def find_node_by_label_or_alias(uid: str, label: str, *, db_client=None) -> Optional[Dict[str, Any]]:
     if not label:
         return None
 
-    nodes_ref = db.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
+    client = _firestore_client(db_client)
+    nodes_ref = client.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
     label_lower = label.lower()
 
     query = nodes_ref.where(filter=FieldFilter('label_lower', '==', label_lower)).limit(1)
@@ -180,14 +187,16 @@ def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]
     return None
 
 
-def get_knowledge_edges(uid: str) -> List[Dict[str, Any]]:
-    user_ref = db.collection(users_collection).document(uid)
+def get_knowledge_edges(uid: str, *, db_client=None) -> List[Dict[str, Any]]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
     return [doc.to_dict() for doc in edges_ref.stream()]
 
 
-def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
-    user_ref = db.collection(users_collection).document(uid)
+def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client=None) -> Dict[str, Any]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
 
     edge_id = edge_data.get('id')
@@ -214,22 +223,24 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]
     return edge_data
 
 
-def get_knowledge_graph(uid: str) -> Dict[str, Any]:
+def get_knowledge_graph(uid: str, *, db_client=None) -> Dict[str, Any]:
+    client = _firestore_client(db_client)
     return {
-        'nodes': get_knowledge_nodes(uid),
-        'edges': get_knowledge_edges(uid),
+        'nodes': get_knowledge_nodes(uid, db_client=client),
+        'edges': get_knowledge_edges(uid, db_client=client),
     }
 
 
-def delete_knowledge_graph(uid: str) -> None:
-    user_ref = db.collection(users_collection).document(uid)
+def delete_knowledge_graph(uid: str, *, db_client=None) -> None:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
 
     def _batch_delete(coll_ref):
         while True:
             docs = list(coll_ref.limit(500).stream())
             if not docs:
                 break
-            batch = db.batch()
+            batch = client.batch()
             for doc in docs:
                 batch.delete(doc.reference)
             batch.commit()
@@ -241,12 +252,13 @@ def delete_knowledge_graph(uid: str) -> None:
     _batch_delete(edges_ref)
 
 
-def prune_memory_citations_from_kg(uid: str, memory_ids: List[str]) -> int:
+def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client=None) -> int:
     """Remove memory_ids from KG nodes/edges; delete entities with no remaining citations."""
     if not memory_ids:
         return 0
     retracted = set(memory_ids)
-    user_ref = db.collection(users_collection).document(uid)
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
     edges_ref = user_ref.collection(knowledge_edges_collection)
     pruned = 0

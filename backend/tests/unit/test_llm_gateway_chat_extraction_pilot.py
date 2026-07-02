@@ -5,8 +5,10 @@ import types
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
+import yaml
 
 for module_name in (
     'database.auth',
@@ -46,6 +48,12 @@ from utils.llm import conversation_processing
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
+
+GATEWAY_FEATURE_MODELS = {
+    'chat_extraction.requires_context': chat.RequiresContext,
+    'conversation_structure.extract.shadow': ConversationStructureExtraction,
+    'conversation_action_items.extract.shadow': ActionItemsExtraction,
+}
 
 
 class FakeParser:
@@ -128,6 +136,7 @@ def _mock_gateway_client(monkeypatch, fake_post):
 
 _VALUE_TRUE_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"value": true}'}}]})
 _UNEXPECTED_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"unexpected": true}'}}]})
+_UNEXPECTED_STRUCTURE_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"answer": "ok"}'}}]})
 
 
 def test_requires_context_gateway_success_returns_parsed_result(monkeypatch):
@@ -192,16 +201,44 @@ def test_requires_context_invalid_gateway_content_falls_back(monkeypatch):
     assert existing_calls == [chat.RequiresContext]
 
 
+def test_gateway_validation_rejects_conversation_structure_defaults_masking_missing_fields(monkeypatch):
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _UNEXPECTED_STRUCTURE_RESPONSE)
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'extract structure',
+        ConversationStructureExtraction,
+        feature='conversation_structure.extract.shadow',
+    )
+
+    assert result is None
+    assert counter.calls == [
+        (
+            {
+                'feature': 'conversation_structure.extract.shadow',
+                'outcome': 'fallback',
+                'reason': 'schema_validation',
+            },
+            1,
+        )
+    ]
+
+
 def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeypatch):
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway.test/')
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'service-token')
-    captured = {}
+    captured = {'client_kwargs': None}
+
+    def fake_client(*args, **kwargs):
+        captured['client_kwargs'] = kwargs
+        return FakeGatewayClient(fake_post)
 
     def fake_post(url, *, headers=None, json=None, **kwargs):
         captured.update({'url': url, 'headers': headers, 'json': json})
         return _VALUE_TRUE_RESPONSE
 
-    _mock_gateway_client(monkeypatch, fake_post)
+    monkeypatch.setattr(gateway_client.httpx, 'Client', fake_client)
 
     result = gateway_client.invoke_chat_structured_gateway(
         'classified prompt',
@@ -217,6 +254,27 @@ def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeyp
     assert captured['json']['messages'] == [{'role': 'user', 'content': 'classified prompt'}]
     assert captured['json']['response_format']['type'] == 'json_schema'
     assert captured['json']['response_format']['json_schema']['schema']['properties']['value']['type'] == 'boolean'
+    assert captured['client_kwargs'] == {'timeout': gateway_client.CHAT_EXTRACTION_TIMEOUT_SECONDS}
+
+
+def test_chat_structured_gateway_allows_background_timeout_override(monkeypatch):
+    captured = {}
+
+    def fake_client(*args, **kwargs):
+        captured['client_kwargs'] = kwargs
+        return FakeGatewayClient(lambda *args, **kwargs: _VALUE_TRUE_RESPONSE)
+
+    monkeypatch.setattr(gateway_client.httpx, 'Client', fake_client)
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'classified prompt',
+        chat.RequiresContext,
+        feature='chat_extraction.requires_context',
+        timeout_seconds=gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
+    )
+
+    assert result == chat.RequiresContext(value=True)
+    assert captured['client_kwargs'] == {'timeout': gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS}
 
 
 def test_strict_schema_normalizes_action_item_extraction_for_openai():
@@ -240,6 +298,9 @@ def test_strict_schema_keeps_conversation_structure_shadow_contract_narrow():
     assert set(schema['properties']) == {'title', 'overview', 'emoji', 'category'}
     assert 'action_items' not in schema['properties']
     assert 'events' not in schema['properties']
+    assert '$ref' not in schema['properties']['category']
+    assert schema['properties']['category']['type'] == 'string'
+    assert 'enum' in schema['properties']['category']
 
 
 def test_strict_schema_removes_defaults_recursively():
@@ -253,6 +314,59 @@ def test_strict_schema_removes_defaults_recursively():
         elif isinstance(node, list):
             for value in node:
                 walk(value)
+
+    walk(schema)
+
+
+@pytest.mark.parametrize(('feature', 'output_model'), sorted(GATEWAY_FEATURE_MODELS.items()))
+def test_gateway_feature_payloads_use_openai_strict_schema_subset(feature, output_model):
+    payload = gateway_client._chat_structured_payload('fixture prompt', output_model, feature=feature)
+    schema = payload['response_format']['json_schema']['schema']
+
+    assert payload['model'] == 'omi:auto:chat-structured'
+    assert payload['response_format']['json_schema']['strict'] is True
+    assert payload['metadata']['omi_feature'] == feature
+    _assert_openai_strict_schema_subset(schema)
+
+
+def test_feature_bundles_have_gateway_payload_contract_coverage():
+    config_path = Path(__file__).resolve().parents[2] / 'llm_gateway' / 'config' / 'feature_bundles.yaml'
+    configured = {bundle['feature'] for bundle in yaml.safe_load(config_path.read_text())['feature_bundles']}
+
+    assert configured <= set(GATEWAY_FEATURE_MODELS)
+
+
+def _assert_openai_strict_schema_subset(schema):
+    unsupported_keys = {
+        'allOf',
+        'oneOf',
+        'not',
+        'if',
+        'then',
+        'else',
+        'dependentRequired',
+        'dependentSchemas',
+        'patternProperties',
+    }
+
+    def walk(node, path='$'):
+        if isinstance(node, dict):
+            for key in unsupported_keys:
+                assert key not in node, f'{path} contains unsupported strict schema key: {key}'
+            if '$ref' in node:
+                siblings = set(node) - {'$ref'}
+                assert not siblings, f'{path} has $ref sibling keys: {sorted(siblings)}'
+            if node.get('type') == 'object':
+                assert node.get('additionalProperties') is False, f'{path} must set additionalProperties=false'
+                properties = node.get('properties')
+                if isinstance(properties, dict):
+                    assert node.get('required') == list(properties.keys()), f'{path} must require every property'
+            assert 'default' not in node, f'{path} must not contain default'
+            for key, value in node.items():
+                walk(value, f'{path}.{key}')
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f'{path}[{index}]')
 
     walk(schema)
 
@@ -332,8 +446,10 @@ def test_chat_structured_gateway_failure_does_not_log_raw_prompt_or_response(mon
 def test_conversation_discard_gateway_success_returns_without_legacy_llm(monkeypatch):
     captured = {}
 
-    def fake_gateway(prompt, output_model, *, feature):
-        captured.update({'prompt': prompt, 'output_model': output_model, 'feature': feature})
+    def fake_gateway(prompt, output_model, *, feature, timeout_seconds):
+        captured.update(
+            {'prompt': prompt, 'output_model': output_model, 'feature': feature, 'timeout_seconds': timeout_seconds}
+        )
         return output_model(discard=True)
 
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
@@ -346,6 +462,7 @@ def test_conversation_discard_gateway_success_returns_without_legacy_llm(monkeyp
     assert conversation_processing.should_discard_conversation('hello there', duration_seconds=15) is True
     assert captured['output_model'] is conversation_processing.DiscardConversation
     assert captured['feature'] == 'conversation_discard.should_discard'
+    assert captured['timeout_seconds'] == gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
     assert 'hello there' in captured['prompt']
 
 
@@ -426,8 +543,10 @@ def test_conversation_discard_gateway_failure_falls_back_to_legacy_llm(monkeypat
     assert conversation_processing.should_discard_conversation('hello there', duration_seconds=15) is False
 
 
-def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
+def test_action_items_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch, caplog):
     captured = {}
+    counter = FakeCounter()
+    call_order = []
 
     class FakeParser:
         def __init__(self, pydantic_object):
@@ -446,16 +565,121 @@ def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
 
         def invoke(self, values):
             assert 'submit report by Friday' in values['conversation_context']
-            return conversation_processing.ActionItemsExtraction(action_items=[])
+            call_order.append('legacy')
+            return conversation_processing.ActionItemsExtraction(
+                action_items=[
+                    {'description': 'Submit report', 'due_at': datetime(2026, 7, 3, 17, 0, tzinfo=timezone.utc)}
+                ]
+            )
 
-    def fake_gateway(prompt, output_model, *, feature):
-        captured.update({'prompt': prompt, 'output_model': output_model, 'feature': feature})
-        return output_model(action_items=[])
+    def fake_gateway(prompt, output_model, *, feature, timeout_seconds):
+        call_order.append('gateway')
+        captured.update(
+            {'prompt': prompt, 'output_model': output_model, 'feature': feature, 'timeout_seconds': timeout_seconds}
+        )
+        return output_model(action_items=[{'description': 'Submit the report', 'due_at': datetime(2026, 7, 3, 17, 0)}])
 
+    class ImmediateFuture:
+        def result(self):
+            return None
+
+        def add_done_callback(self, callback):
+            callback(self)
+
+    def immediate_submit(fn, *args):
+        fn(*args)
+        return ImmediateFuture()
+
+    monkeypatch.setenv(conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV, 'true')
+    monkeypatch.setenv(conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV, '1.0')
     monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
     monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', immediate_submit)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS', counter)
+
+    with caplog.at_level(logging.INFO, logger='utils.llm.gateway_observability'):
+        result = conversation_processing.extract_action_items(
+            'submit report by Friday',
+            datetime(2026, 7, 1, tzinfo=timezone.utc),
+            'en',
+            'UTC',
+        )
+
+    assert [item.description for item in result] == ['Submit report']
+    assert call_order == ['legacy', 'gateway']
+    assert captured['output_model'] is conversation_processing.ActionItemsExtraction
+    assert captured['feature'] == conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE
+    assert captured['timeout_seconds'] == gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
+    assert 'submit report by Friday' in captured['prompt']
+    assert '{started_at_local}' not in captured['prompt']
+    assert '{current_time_local}' not in captured['prompt']
+    assert '{format_instructions}' not in captured['prompt']
+    assert 'return structured output' in captured['prompt']
+    comparison_labels = [labels for labels, _amount in counter.calls]
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'count',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'description_similarity',
+        'outcome': 'all_high_similarity',
+    } in comparison_labels
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'due_at_presence',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert {
+        'feature': 'conversation_action_items.extract.shadow',
+        'field': 'due_at_value',
+        'outcome': 'exact_match',
+    } in comparison_labels
+    assert 'llm_gateway_backend_event kind=shadow_comparison' in caplog.text
+    assert 'feature=conversation_action_items.extract.shadow' in caplog.text
+    assert 'Submit report' not in caplog.text
+    assert 'Submit the report' not in caplog.text
+
+
+def test_action_items_gateway_shadow_disabled_skips_submit(monkeypatch):
+    captured = {'gateway_called': False, 'submitted': False}
+    counter = FakeCounter()
+
+    class FakeParser:
+        def __init__(self, pydantic_object):
+            self.pydantic_object = pydantic_object
+
+        def get_format_instructions(self):
+            return 'return structured output'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            return conversation_processing.ActionItemsExtraction(action_items=[])
+
+    def fake_gateway(*args, **kwargs):
+        captured['gateway_called'] = True
+        return None
+
+    def fake_submit(*args, **kwargs):
+        captured['submitted'] = True
+
+    monkeypatch.delenv(conversation_processing.CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', fake_submit)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
 
     result = conversation_processing.extract_action_items(
         'submit report by Friday',
@@ -465,9 +689,15 @@ def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
     )
 
     assert result == []
-    assert captured['output_model'] is conversation_processing.ActionItemsExtraction
-    assert captured['feature'] == 'conversation_action_items.extract.shadow'
-    assert 'submit report by Friday' in captured['prompt']
+    assert captured == {'gateway_called': False, 'submitted': False}
+    assert (
+        {
+            'feature': 'conversation_action_items.extract.shadow',
+            'outcome': 'skipped',
+            'reason': 'disabled',
+        },
+        1,
+    ) in counter.calls
 
 
 def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch, caplog):
@@ -505,9 +735,11 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
                 category=CategoryEnum.work,
             )
 
-    def fake_gateway(prompt, output_model, *, feature):
+    def fake_gateway(prompt, output_model, *, feature, timeout_seconds):
         call_order.append('gateway')
-        captured.update({'prompt': prompt, 'output_model': output_model, 'feature': feature})
+        captured.update(
+            {'prompt': prompt, 'output_model': output_model, 'feature': feature, 'timeout_seconds': timeout_seconds}
+        )
         return output_model(
             title='Weekly Plan',
             overview='Discussed launch tasks for the project.',
@@ -550,6 +782,7 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
     assert call_order == ['legacy', 'gateway']
     assert captured['output_model'] is ConversationStructureExtraction
     assert captured['feature'] == 'conversation_structure.extract.shadow'
+    assert captured['timeout_seconds'] == gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
     assert 'return shadow structure' in captured['prompt']
     comparison_labels = [labels for labels, _amount in counter.calls]
     assert {

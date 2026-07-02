@@ -5,6 +5,7 @@ import httpx
 
 import database.users as users_db
 import database.action_items as action_items_db
+from utils.executors import db_executor, run_blocking
 from utils.notifications import send_apple_reminders_sync_push
 import logging
 
@@ -24,11 +25,11 @@ async def auto_sync_action_item(uid: str, action_item: dict, skip_apple_reminder
         dict: {"synced": bool, "platform": str, "external_task_id": str, "error": str}
     """
     try:
-        default_app = users_db.get_default_task_integration(uid)
+        default_app = await run_blocking(db_executor, users_db.get_default_task_integration, uid)
         if not default_app:
             return {"synced": False, "reason": "no_default_integration"}
 
-        integration = users_db.get_task_integration(uid, default_app)
+        integration = await run_blocking(db_executor, users_db.get_task_integration, uid, default_app)
         if not integration:
             return {"synced": False, "reason": "integration_not_found"}
 
@@ -64,7 +65,9 @@ async def _sync_to_cloud_service(uid: str, app_key: str, integration: dict, acti
 
     if result.get("success"):
         # Mark action item as exported
-        action_items_db.update_action_item(
+        await run_blocking(
+            db_executor,
+            action_items_db.update_action_item,
             uid,
             action_item["id"],
             {
@@ -102,11 +105,11 @@ async def auto_sync_action_items_batch(uid: str, action_items: list) -> list:
         return []
 
     try:
-        default_app = users_db.get_default_task_integration(uid)
+        default_app = await run_blocking(db_executor, users_db.get_default_task_integration, uid)
         if not default_app:
             return [{"synced": False, "reason": "no_default_integration"}] * len(action_items)
 
-        integration = users_db.get_task_integration(uid, default_app)
+        integration = await run_blocking(db_executor, users_db.get_task_integration, uid, default_app)
         if not integration:
             return [{"synced": False, "reason": "integration_not_found"}] * len(action_items)
 

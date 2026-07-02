@@ -43,6 +43,7 @@ from utils.memory.canonical_memory_adapter import (
 )
 from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 from utils.memory.short_term_promotion import (
     DEFAULT_PROMOTION_BATCH_THRESHOLD,
     promotion_batch_threshold,
@@ -207,7 +208,10 @@ def _clear_canonical_cohort_fixture(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
     clear_canonical_cohort(monkeypatch)
-    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),
+    )
 
 
 def test_promotion_fires_on_batch_threshold_via_apply(monkeypatch):
@@ -454,7 +458,10 @@ def test_required_promotion_fires_on_first_run_below_batch_threshold(monkeypatch
         lambda **_: _trusted_account_generation(),
     )
     monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
-    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),
+    )
     payload = required_promotion_payload(
         {
             "id": "manual-required-2",
@@ -486,7 +493,10 @@ def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
         lambda **_: _trusted_account_generation(),
     )
     monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
-    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),
+    )
 
     existing_payload = {
         "id": "existing-long-term",

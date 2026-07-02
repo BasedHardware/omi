@@ -176,7 +176,7 @@ def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account)
         ) as mock_extract,
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted"),
     ):
-        assert extract_kg_for_promoted_memory("uid-kg", item) is True
+        assert extract_kg_for_promoted_memory("uid-kg", item).success is True
         mock_extract.assert_called_once()
         kg_content = mock_extract.call_args[0][1]
         assert kg_content == f"[{USER_ENTITY_ID}] resides_in (location=San Francisco): lives in San Francisco"

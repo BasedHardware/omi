@@ -1,0 +1,225 @@
+name: Firmware Build & Release (Omi CV1)
+
+# Builds the Omi CV1 firmware (nRF5340, the consumer "Omi CV 1" device) and
+# optionally publishes a GitHub Release that the backend serves as an OTA
+# update (backend/routers/firmware.py).
+#
+# Manual-only by design: firmware has no auto-version/changelog system like the
+# desktop app, builds are heavy (~1.5GB SDK download, ~20-30 min cold), and the
+# release metadata (min versions, changelog, OTA steps) is hand-curated. A
+# human-gated dispatch with an explicit publish guard mirrors the spirit of
+# desktop_promote_prod.yml.
+#
+# Release contract enforced here (verified against backend/routers/firmware.py):
+#   - Tag:   Omi_CV1_v<ver>            (NO "OTA" in the tag)
+#   - OTA asset name MUST contain "ota" and end in .zip  (e.g. Omi_CV1_OTA_v3.0.20.zip)
+#   - Release MUST be published, non-draft, non-prerelease (else not served)
+#   - Body MUST contain a KEY_VALUE block with release_firmware_version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override e.g. 3.0.20 (blank = read CONFIG_BT_DIS_FW_REV_STR from omi.conf)'
+        type: string
+        required: false
+        default: ''
+      publish:
+        description: 'Type "publish" to create the GitHub Release. Anything else = build-only (artifacts uploaded to the run, no release).'
+        type: string
+        required: false
+        default: ''
+      changelog:
+        description: 'Pipe-separated changelog e.g. "Fixed audio|Battery improvements"'
+        type: string
+        required: false
+        default: 'Bug fixes and improvements'
+      minimum_firmware_required:
+        description: 'minimum_firmware_required e.g. 3.0.6 (blank = omit)'
+        type: string
+        required: false
+        default: ''
+      minimum_app_version:
+        description: 'minimum_app_version e.g. 1.0.74 (blank = omit)'
+        type: string
+        required: false
+        default: ''
+      minimum_app_version_code:
+        description: 'minimum_app_version_code e.g. 438 (blank = omit)'
+        type: string
+        required: false
+        default: ''
+      ota_update_steps:
+        description: 'Comma-separated OTA prerequisites e.g. battery,internet (blank = omit)'
+        type: string
+        required: false
+        default: 'battery,internet'
+
+permissions:
+  # Default token is read-only (checkout). The release/tag is created with the
+  # separate, contents:write-scoped Omi Bot app token in the publish step.
+  contents: read
+
+jobs:
+  build-cv1:
+    name: Omi CV1 (nRF5340)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: firmware-release-cv1
+      cancel-in-progress: false
+    env:
+      # Zephyr CI image blessed by omi/firmware/omi/BUILD.md; bundles the
+      # toolchain for the NCS 2.9.0 sysbuild + MCUboot signing build.
+      # Pinned by digest for reproducible, supply-chain-safe builds (tag kept
+      # for readability). Digest = the v0.26.13 multi-arch index; re-resolve with
+      # `docker buildx imagetools inspect ghcr.io/zephyrproject-rtos/ci:<tag>`.
+      CI_IMAGE: ghcr.io/zephyrproject-rtos/ci:v0.26.13@sha256:b0ac6334d1926cd0971a0a444f7adc6dd020e88ee3ce865aa070b6475a3ac4eb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version and tag
+        id: meta
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+        run: |
+          CONF=omi/firmware/omi/omi.conf
+          if [ -n "$VERSION_INPUT" ]; then
+            VER="$VERSION_INPUT"
+          else
+            VER="$(grep -E '^CONFIG_BT_DIS_FW_REV_STR=' "$CONF" | sed -E 's/.*="([^"]+)".*/\1/')"
+          fi
+          VER="${VER#v}"
+          if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid CV1 version '$VER' (expected X.Y.Z)"
+            exit 1
+          fi
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag=Omi_CV1_v$VER" >> "$GITHUB_OUTPUT"
+          echo "CV1 version $VER -> tag Omi_CV1_v$VER"
+
+      - name: Cache nRF Connect SDK workspace (v2.9.0)
+        uses: actions/cache@v4
+        with:
+          path: omi/firmware/v2.9.0
+          key: ncs-v2.9.0-${{ runner.os }}
+
+      - name: Sync firmware version into config
+        env:
+          VER: ${{ steps.meta.outputs.ver }}
+        run: |
+          # Make the binary's BLE DIS firmware revision match the release tag.
+          # Without this, a `version` override would publish OTA metadata for one
+          # version while the device reports another -> perpetual update loop.
+          # No-op when version is derived from omi.conf (VER already equals it).
+          CONF=omi/firmware/omi/omi.conf
+          sed -i -E "s|^(CONFIG_BT_DIS_FW_REV_STR=)\".*\"|\1\"$VER\"|" "$CONF"
+          grep -q "CONFIG_BT_DIS_FW_REV_STR=\"$VER\"" "$CONF" || {
+            echo "::error::Failed to set CONFIG_BT_DIS_FW_REV_STR to $VER in $CONF"; exit 1; }
+          echo "omi.conf now: $(grep -E '^CONFIG_BT_DIS_FW_REV_STR=' "$CONF")"
+
+      - name: Build firmware (Docker)
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/omi/firmware:/omi/firmware" \
+            -e CMAKE_PREFIX_PATH=/opt/toolchains \
+            "$CI_IMAGE" \
+            bash /omi/firmware/scripts/ci/build-cv1.sh
+
+      - name: Fix workspace ownership
+        run: sudo chown -R "$(id -u):$(id -g)" omi/firmware
+
+      - name: Stage release assets
+        id: stage
+        env:
+          VER: ${{ steps.meta.outputs.ver }}
+        run: |
+          OUT="$RUNNER_TEMP/cv1-assets"
+          mkdir -p "$OUT"
+          B=omi/firmware/v2.9.0/build
+          cp "$B/dfu_application.zip" "$OUT/Omi_CV1_OTA_v$VER.zip"
+          cp "$B/merged.hex"          "$OUT/Omi_CV1_v$VER.hex"
+          cp "$B/merged_CPUNET.hex"   "$OUT/Omi_CV1_v${VER}_CPUNET.hex"
+          # OTA asset name must contain "ota" + end .zip or the backend drops it.
+          test -s "$OUT/Omi_CV1_OTA_v$VER.zip"
+          ls -l "$OUT"
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release body
+        id: body
+        env:
+          TITLE: Omi CV1 Firmware v${{ steps.meta.outputs.ver }}
+          VER: ${{ steps.meta.outputs.ver }}
+          CHANGELOG: ${{ github.event.inputs.changelog }}
+          MIN_FW: ${{ github.event.inputs.minimum_firmware_required }}
+          MIN_APP: ${{ github.event.inputs.minimum_app_version }}
+          MIN_APP_CODE: ${{ github.event.inputs.minimum_app_version_code }}
+          OTA_STEPS: ${{ github.event.inputs.ota_update_steps }}
+          # CV1 uses MCUboot (not legacy Adafruit secure DFU).
+          IS_LEGACY_SECURE_DFU: 'False'
+          HOW_TO_FLASH: |
+            To update your device in the Omi app:
+            1. Open the Omi app.
+            2. Go to **Settings** > **Device Settings**.
+            3. Select **Update Latest Version**.
+        run: |
+          OUT="$RUNNER_TEMP/cv1-body.md"
+          OUT="$OUT" bash omi/firmware/scripts/ci/make-release-body.sh
+          echo "file=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Omi_CV1_v${{ steps.meta.outputs.ver }}
+          path: ${{ steps.stage.outputs.out }}/*
+          if-no-files-found: error
+
+      - name: Guard - publish only from main
+        if: ${{ github.event.inputs.publish == 'publish' }}
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Refusing to publish a firmware release from '$REF'. Dispatch the publish run from the 'main' branch only."
+            exit 1
+          fi
+          echo "Publishing from main — OK."
+
+      - name: Generate Omi Bot token
+        id: app-token
+        if: ${{ github.event.inputs.publish == 'publish' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+          # Least privilege: only what creating a release/tag needs.
+          permission-contents: write
+
+      - name: Publish GitHub Release
+        if: ${{ github.event.inputs.publish == 'publish' }}
+        env:
+          # Release is created/tagged by the Omi Bot GitHub App so it is clearly
+          # attributed to automation, not a person (same as the desktop pipeline).
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          TITLE: Omi CV1 Firmware v${{ steps.meta.outputs.ver }}
+          BODY_FILE: ${{ steps.body.outputs.file }}
+          OUT: ${{ steps.stage.outputs.out }}
+          VER: ${{ steps.meta.outputs.ver }}
+          SHA: ${{ github.sha }}
+        run: |
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists. Bump CONFIG_BT_DIS_FW_REV_STR or pass a new version."
+            exit 1
+          fi
+          # Published, non-draft, non-prerelease — the only shape the backend serves.
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --title "$TITLE" \
+            --notes-file "$BODY_FILE" \
+            --target "$SHA" \
+            "$OUT/Omi_CV1_OTA_v$VER.zip" \
+            "$OUT/Omi_CV1_v$VER.hex" \
+            "$OUT/Omi_CV1_v${VER}_CPUNET.hex"
+          echo "Published $TAG"
