@@ -3,6 +3,7 @@ import asyncio
 
 import pytest
 
+import dependencies
 from fastapi import HTTPException
 
 import database.mcp_api_key as mcp_api_key_db
@@ -212,6 +213,7 @@ def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
         'get_user_and_scopes_by_api_key',
         lambda token: {'user_id': 'u1', 'scopes': ['memories.read'], 'key_id': 'key-1', 'app_id': 'mcp-api'},
     )
+    monkeypatch.setattr(dependencies, 'check_api_key_rate_limit', lambda **_kwargs: None)
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
     context = asyncio.run(get_mcp_memory_default_memory_read_context(auth))
