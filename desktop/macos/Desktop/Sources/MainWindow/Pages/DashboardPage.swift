@@ -227,6 +227,10 @@ struct DashboardPage: View {
     @State private var conversationCount: Int?
     @State private var memoryCount: Int?
     @State private var taskCount: Int?
+    // Wearable used on this account (any friend/omi-sourced conversation).
+    // Seeded from UserDefaults so the badge is instant on later launches.
+    @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
+        forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
     @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
@@ -257,8 +261,11 @@ struct DashboardPage: View {
         isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
     }
 
+    private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
+            || accountHasOmiDeviceConversations
     }
 
     /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
@@ -808,11 +815,18 @@ struct DashboardPage: View {
         // Open tasks only (matches the "Tasks" label and the old tile's intent —
         // the old value just under-counted, capping each bucket at a 7-day window).
         async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        let (c, m, t) = await (convos, mems, tasks)
+        async let deviceHistory = try? APIClient.shared.hasOmiDeviceConversations()
+        let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
         await MainActor.run {
             if let c { conversationCount = c }
             if let m { memoryCount = m }
             if let t { taskCount = t }
+            // Sticky: device history never un-happens; keep the badge across
+            // launches and network failures once observed.
+            if d == true {
+                accountHasOmiDeviceConversations = true
+                UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
+            }
         }
     }
 
