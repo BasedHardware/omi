@@ -19,12 +19,15 @@ PaymentPlan _paymentPlanFromWire(wire.GeneratedAppSelectOption option) {
 }
 
 AppCapability _appCapabilityFromWire(wire.GeneratedAppCapabilityResponse capability) {
+  final triggers = capability.triggers ?? const <wire.GeneratedAppSelectOption>[];
+  final scopes = capability.scopes ?? const <wire.GeneratedAppSelectOption>[];
+  final actions = capability.actions ?? const <wire.GeneratedAppCapabilityAction>[];
   return AppCapability(
     title: capability.title,
     id: capability.id,
-    triggerEvents: capability.triggers.map((event) => TriggerEvent(title: event.title, id: event.id)).toList(),
-    notificationScopes: capability.scopes.map((scope) => NotificationScope(title: scope.title, id: scope.id)).toList(),
-    actions: capability.actions
+    triggerEvents: triggers.map((event) => TriggerEvent(title: event.title, id: event.id)).toList(),
+    notificationScopes: scopes.map((scope) => NotificationScope(title: scope.title, id: scope.id)).toList(),
+    actions: actions
         .map(
           (action) => CapacityAction(
             title: action.title,
@@ -195,27 +198,41 @@ Future<List<String>> getEnabledAppsServer() async {
 }
 
 Future<bool> enableAppServer(String appId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('enableAppServer: $appId ${response.body}');
-  return response.statusCode == 200;
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
+      headers: {},
+      method: 'POST',
+      body: '',
+    );
+    if (response == null || response.statusCode != 200) return false;
+    Logger.debug('enableAppServer: $appId ${response.body}');
+    final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return false;
+  }
 }
 
 Future<bool> disableAppServer(String appId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/disable?app_id=$appId',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('disableAppServer: ${response.body}');
-  return response.statusCode == 200;
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/disable?app_id=$appId',
+      headers: {},
+      method: 'POST',
+      body: '',
+    );
+    if (response == null || response.statusCode != 200) return false;
+    Logger.debug('disableAppServer: ${response.body}');
+    final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return false;
+  }
 }
 
 Future<bool> reviewApp(String appId, AppReview review) async {
@@ -227,7 +244,9 @@ Future<bool> reviewApp(String appId, AppReview review) async {
       body: jsonEncode(review.toJson()),
     );
     Logger.debug('reviewApp: ${response?.body}');
-    return response?.statusCode == 200;
+    if (response == null || response.statusCode != 200) return false;
+    final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
   } catch (e) {
     Logger.debug('Error reviewing app: $e');
     return false;
@@ -326,8 +345,8 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
     );
 
     if (response.statusCode == 200) {
-      var respData = jsonDecode(response.body);
-      String? appId = respData['app_id'];
+      final respData = wire.GeneratedAppCreateResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      String appId = respData.appId;
       Logger.debug('submitAppServer Response body: $respData');
       return (true, '', appId);
     } else {
@@ -659,7 +678,8 @@ Future<bool> migrateAppOwnerId(String oldId) async {
   try {
     if (response == null || response.statusCode != 200) return false;
     log('migrateAppOwnerId: ${response.body}');
-    return true;
+    final data = wire.GeneratedAppMigrationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -684,7 +704,7 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
     if (response == null) return null;
     Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      return wire.GeneratedMcpAddServerResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }
     // Return error detail
     try {

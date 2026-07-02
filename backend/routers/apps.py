@@ -113,6 +113,7 @@ from database.memories import migrate_memories
 
 from utils.llm.persona import generate_persona_intro_message
 from utils.llm.app_generator import generate_description
+from utils.llm.app_generation_prompts import app_generation_prompts_from_llm_payload, app_generation_prompts_response
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
@@ -155,6 +156,26 @@ class AppCapabilityResponse(AppSelectOption):
 class AppThumbnailUploadResponse(PydanticBaseModel):
     thumbnail_url: str
     thumbnail_id: str
+
+
+class AppMutationResponse(PydanticBaseModel):
+    status: str
+
+
+class AppCreateResponse(AppMutationResponse):
+    app_id: str
+
+
+class AppMigrationResponse(AppMutationResponse):
+    message: str
+
+
+class McpAddServerResponse(PydanticBaseModel):
+    app_id: str
+    requires_oauth: bool
+    auth_url: Optional[str] = None
+    tools_count: Optional[int] = None
+    tool_names: List[str] = Field(default_factory=list)
 
 
 class AppDescriptionGenerationResponse(PydanticBaseModel):
@@ -278,7 +299,7 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
 
 
-@router.get('/v1/apps/enabled', tags=['v1'])
+@router.get('/v1/apps/enabled', tags=['v1'], response_model=List[str])
 def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
     """Returns the list of app IDs the user has enabled/installed."""
     return get_enabled_apps(uid)
@@ -524,7 +545,7 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
-@router.post('/v1/apps', tags=['v1'])
+@router.post('/v1/apps', tags=['v1'], response_model=AppCreateResponse)
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = parse_form_json(dict, app_data, 'app_data')
     data['approved'] = False
@@ -956,7 +977,7 @@ def get_app_categories():
     ]
 
 
-@router.post('/v1/apps/review', tags=['v1'])
+@router.post('/v1/apps/review', tags=['v1'], response_model=AppMutationResponse)
 def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
@@ -1271,30 +1292,10 @@ Be creative, fun, and varied. No generic ideas."""
 
         prompts = json.loads(content)
 
-        if isinstance(prompts, list) and len(prompts) >= 5:
-            return {"prompts": prompts[:5]}
-        else:
-            # Fallback
-            return {
-                "prompts": [
-                    "Mind map generator from conversations",
-                    "Jokes and funny moments extractor",
-                    "Key decisions and commitments tracker",
-                    "Elon Musk startup advisor clone",
-                    "Strict accountability coach",
-                ]
-            }
+        return app_generation_prompts_from_llm_payload(prompts)
     except Exception as e:
         logger.error(f"Error generating prompts: {e}")
-        return {
-            "prompts": [
-                "Mind map generator from conversations",
-                "Jokes and funny moments extractor",
-                "Key decisions and commitments tracker",
-                "Elon Musk startup advisor clone",
-                "Strict accountability coach",
-            ]
-        }
+        return app_generation_prompts_response()
 
 
 @router.post('/v1/app/generate', tags=['v1'], response_model=AppGenerationResponse)
@@ -1450,7 +1451,7 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
     return {'message': ''}
 
 
-@router.post('/v1/apps/migrate-owner', tags=['v1'])
+@router.post('/v1/apps/migrate-owner', tags=['v1'], response_model=AppMigrationResponse)
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
@@ -1510,7 +1511,7 @@ def _serialize_chat_tools_for_firestore(tools) -> list:
     return result
 
 
-@router.post('/v1/apps/mcp', tags=['v1'])
+@router.post('/v1/apps/mcp', tags=['v1'], response_model=McpAddServerResponse)
 async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Add a remote MCP server as a private app with chat tools.
 
@@ -1809,7 +1810,7 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 # ******************************************************
 
 
-@router.post('/v1/apps/enable')
+@router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     app = App(**app) if app else None
@@ -1844,7 +1845,7 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/disable')
+@router.post('/v1/apps/disable', response_model=AppMutationResponse)
 def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     # Allow users to always disable apps they have installed, even if the app
     # was made private after installation (see issue #4886).

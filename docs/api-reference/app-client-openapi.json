@@ -1018,6 +1018,24 @@
         "title": "AppCapabilityResponse",
         "type": "object"
       },
+      "AppCreateResponse": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "app_id"
+        ],
+        "title": "AppCreateResponse",
+        "type": "object"
+      },
       "AppDescriptionEmojiGenerationResponse": {
         "properties": {
           "description": {
@@ -1140,6 +1158,37 @@
           "mime_type"
         ],
         "title": "AppIconGenerationResponse",
+        "type": "object"
+      },
+      "AppMigrationResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "AppMigrationResponse",
+        "type": "object"
+      },
+      "AppMutationResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AppMutationResponse",
         "type": "object"
       },
       "AppPromptsGenerationResponse": {
@@ -6206,6 +6255,53 @@
           "event_id"
         ],
         "title": "LinkCalendarEventRequest",
+        "type": "object"
+      },
+      "McpAddServerResponse": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "auth_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Url"
+          },
+          "requires_oauth": {
+            "title": "Requires Oauth",
+            "type": "boolean"
+          },
+          "tool_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tool Names",
+            "type": "array"
+          },
+          "tools_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools Count"
+          }
+        },
+        "required": [
+          "app_id",
+          "requires_oauth"
+        ],
+        "title": "McpAddServerResponse",
         "type": "object"
       },
       "McpApiKey": {
@@ -15621,7 +15717,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppCreateResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -15705,7 +15803,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -15786,7 +15886,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -15859,7 +15961,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Get User Enabled Apps V1 Apps Enabled Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -15945,7 +16053,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpAddServerResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -16086,7 +16196,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMigrationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -16311,7 +16423,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"

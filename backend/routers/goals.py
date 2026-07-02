@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from database import goals as goals_db
 from utils.other import endpoints as auth
 from utils.request_validation import HistoryDays
+from utils.goals_response import normalize_goal_history_entry, normalize_goal_response
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
     get_goal_advice as get_goal_advice_llm,
@@ -107,13 +108,7 @@ class GoalDeleteResponse(BaseModel):
 def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
     """Get the current active goal for the user (backward compatibility)."""
     goal = goals_db.get_user_goal(uid)
-    if goal:
-        # Convert datetime objects to strings for JSON serialization
-        if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
-            goal['created_at'] = goal['created_at'].isoformat()
-        if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
-            goal['updated_at'] = goal['updated_at'].isoformat()
-    return goal
+    return normalize_goal_response(goal) if goal else None
 
 
 @router.get('/v1/goals/all', tags=['goals'], response_model=List[GoalResponse])
@@ -121,14 +116,7 @@ def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
     """Get all active goals for the user (up to 4)."""
     goals = goals_db.get_user_goals(uid, limit=4)
 
-    # Convert datetime objects to strings for JSON serialization
-    for goal in goals:
-        if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
-            goal['created_at'] = goal['created_at'].isoformat()
-        if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
-            goal['updated_at'] = goal['updated_at'].isoformat()
-
-    return goals
+    return [normalize_goal_response(goal) for goal in goals]
 
 
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
@@ -147,13 +135,7 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
 
     created_goal = goals_db.create_goal(uid, goal_data)
 
-    # Convert datetime for JSON
-    if 'created_at' in created_goal and hasattr(created_goal['created_at'], 'isoformat'):
-        created_goal['created_at'] = created_goal['created_at'].isoformat()
-    if 'updated_at' in created_goal and hasattr(created_goal['updated_at'], 'isoformat'):
-        created_goal['updated_at'] = created_goal['updated_at'].isoformat()
-
-    return created_goal
+    return normalize_goal_response(created_goal)
 
 
 @router.patch('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalResponse)
@@ -169,13 +151,7 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    # Convert datetime for JSON
-    if 'created_at' in updated_goal and hasattr(updated_goal['created_at'], 'isoformat'):
-        updated_goal['created_at'] = updated_goal['created_at'].isoformat()
-    if 'updated_at' in updated_goal and hasattr(updated_goal['updated_at'], 'isoformat'):
-        updated_goal['updated_at'] = updated_goal['updated_at'].isoformat()
-
-    return updated_goal
+    return normalize_goal_response(updated_goal)
 
 
 @router.patch('/v1/goals/{goal_id}/progress', tags=['goals'], response_model=GoalResponse)
@@ -190,13 +166,7 @@ def update_goal_progress(
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    # Convert datetime for JSON
-    if 'created_at' in updated_goal and hasattr(updated_goal['created_at'], 'isoformat'):
-        updated_goal['created_at'] = updated_goal['created_at'].isoformat()
-    if 'updated_at' in updated_goal and hasattr(updated_goal['updated_at'], 'isoformat'):
-        updated_goal['updated_at'] = updated_goal['updated_at'].isoformat()
-
-    return updated_goal
+    return normalize_goal_response(updated_goal)
 
 
 @router.get('/v1/goals/{goal_id}/history', tags=['goals'], response_model=List[GoalHistoryEntryResponse])
@@ -204,12 +174,7 @@ def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(au
     """Get progress history for a goal."""
     history = goals_db.get_goal_history(uid, goal_id, days)
 
-    # Convert datetime objects
-    for entry in history:
-        if 'recorded_at' in entry and hasattr(entry['recorded_at'], 'isoformat'):
-            entry['recorded_at'] = entry['recorded_at'].isoformat()
-
-    return history
+    return [normalize_goal_history_entry(entry) for entry in history]
 
 
 @router.delete('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalDeleteResponse)

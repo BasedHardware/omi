@@ -118,6 +118,110 @@ class GeneratedAppThumbnailUploadResponse {
   }
 }
 
+class GeneratedAppMutationResponse {
+  final String status;
+
+  const GeneratedAppMutationResponse({
+    required this.status,
+  });
+
+  factory GeneratedAppMutationResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppMutationResponse(
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+    };
+  }
+}
+
+class GeneratedAppCreateResponse {
+  final String appId;
+  final String status;
+
+  const GeneratedAppCreateResponse({
+    required this.appId,
+    required this.status,
+  });
+
+  factory GeneratedAppCreateResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppCreateResponse(
+      appId: _required(_readString(_readAny(json, const ["app_id"])), "app_id"),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'app_id': appId,
+      'status': status,
+    };
+  }
+}
+
+class GeneratedAppMigrationResponse {
+  final String message;
+  final String status;
+
+  const GeneratedAppMigrationResponse({
+    required this.message,
+    required this.status,
+  });
+
+  factory GeneratedAppMigrationResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppMigrationResponse(
+      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'status': status,
+    };
+  }
+}
+
+class GeneratedMcpAddServerResponse {
+  final String appId;
+  final String? authUrl;
+  final bool requiresOauth;
+  final List<String>? toolNames;
+  final int? toolsCount;
+
+  const GeneratedMcpAddServerResponse({
+    required this.appId,
+    this.authUrl,
+    required this.requiresOauth,
+    this.toolNames,
+    this.toolsCount,
+  });
+
+  factory GeneratedMcpAddServerResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMcpAddServerResponse(
+      appId: _required(_readString(_readAny(json, const ["app_id"])), "app_id"),
+      authUrl: _readString(_readAny(json, const ["auth_url"])),
+      requiresOauth: _required(_readBool(_readAny(json, const ["requires_oauth"])), "requires_oauth"),
+      toolNames: _readAny(json, const ["tool_names"]) == null ? null : _readStringList(_readAny(json, const ["tool_names"])),
+      toolsCount: _readInt(_readAny(json, const ["tools_count"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'app_id': appId,
+      'auth_url': authUrl,
+      'requires_oauth': requiresOauth,
+      'tool_names': toolNames,
+      'tools_count': toolsCount,
+    };
+  }
+}
+
 class GeneratedAppDescriptionGenerationResponse {
   final String description;
 

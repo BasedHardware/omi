@@ -163,6 +163,10 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAppSelectOption' in generated
     assert 'class GeneratedAppCapabilityResponse' in generated
     assert 'class GeneratedAppThumbnailUploadResponse' in generated
+    assert 'class GeneratedAppMutationResponse' in generated
+    assert 'class GeneratedAppCreateResponse' in generated
+    assert 'class GeneratedAppMigrationResponse' in generated
+    assert 'class GeneratedMcpAddServerResponse' in generated
     assert 'class GeneratedAppDescriptionGenerationResponse' in generated
     assert 'class GeneratedAppDescriptionEmojiGenerationResponse' in generated
     assert 'class GeneratedAppPromptsGenerationResponse' in generated
@@ -172,6 +176,9 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert (
         'app: _required(_readObject(_readAny(json, const ["app"]), GeneratedAppDraftGenerationResponse.fromJson), "app")'
         in generated
+    )
+    assert (
+        'requiresOauth: _required(_readBool(_readAny(json, const ["requires_oauth"])), "requires_oauth")' in generated
     )
 
 
