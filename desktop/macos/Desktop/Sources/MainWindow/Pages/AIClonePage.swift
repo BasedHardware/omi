@@ -796,8 +796,7 @@ private struct AIClonePreviewChatSheet: View {
           as: persona, to: text, context: context)
         // A burst reply comes back as newline-joined bubbles — render each as its own
         // message bubble, exactly like the real person's multi-text bursts.
-        for bubble in reply.components(separatedBy: "\n")
-        where !bubble.trimmingCharacters(in: .whitespaces).isEmpty {
+        for bubble in AICloneReplyPresentation.bubbles(from: reply) {
           messages.append(AIClonePreviewMessage(kind: .reply, text: bubble))
         }
       } catch {
@@ -815,6 +814,16 @@ private struct AIClonePreviewChatSheet: View {
         proxy.scrollTo(last.id, anchor: .bottom)
       }
     }
+  }
+}
+
+/// Splits a clone reply (newline-joined bubbles) into the separate message bubbles the
+/// preview transcript renders — one bubble per line, blanks dropped.
+enum AICloneReplyPresentation {
+  static func bubbles(from reply: String) -> [String] {
+    reply.components(separatedBy: "\n")
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty }
   }
 }
 

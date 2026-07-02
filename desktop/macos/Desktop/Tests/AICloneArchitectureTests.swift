@@ -87,6 +87,16 @@ final class AICloneArchitectureTests: XCTestCase {
     XCTAssertGreaterThan(inStyle, offStyle)
   }
 
+  // MARK: - Preview bubble rendering
+
+  func testReplySplitsIntoSeparatePreviewBubbles() {
+    XCTAssertEqual(
+      AICloneReplyPresentation.bubbles(from: "nah\njs forgot abt it\nu done it"),
+      ["nah", "js forgot abt it", "u done it"])
+    XCTAssertEqual(AICloneReplyPresentation.bubbles(from: "single"), ["single"])
+    XCTAssertEqual(AICloneReplyPresentation.bubbles(from: "a\n\n  \nb"), ["a", "b"])
+  }
+
   // MARK: - Pair extraction (session gap)
 
   func testBuildPairsSkipsRepliesAcrossLongGaps() {
