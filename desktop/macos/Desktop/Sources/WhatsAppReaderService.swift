@@ -256,6 +256,24 @@ actor WhatsAppReaderService {
       return rows.compactMap { Self.chatRecord(from: $0) }
     }
 
+    // 1:1 chats are keyed by phone JID (`<phone>@s.whatsapp.net`) but WhatsApp
+    // stores each person's profile pic under their opaque `@lid` identity. The
+    // session row carries that mapping in ZCONTACTIDENTIFIER, so build
+    // chatJID → lid to resolve 1:1 avatars.
+    let lidByChat: [String: String] = try await dbQueue.read { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: "SELECT ZCONTACTJID AS jid, ZCONTACTIDENTIFIER AS lid FROM ZWACHATSESSION WHERE ZCONTACTIDENTIFIER LIKE '%@lid'"
+      )
+      var map: [String: String] = [:]
+      for row in rows {
+        guard let jid = row["jid"] as? String, let lid = row["lid"] as? String, !lid.isEmpty
+        else { continue }
+        map[jid] = lid
+      }
+      return map
+    }
+
     // WhatsApp profile push-names (JID local part → self-set display name). The
     // only readable name for `@lid` senders whose message metadata is an encoded
     // blob (e.g. "IAA=") or an opaque id.
@@ -328,9 +346,13 @@ actor WhatsAppReaderService {
         if let handle = latest.handle ?? Self.handle(fromJID: chatID) {
           title = await resolver.displayName(for: handle) ?? groupName ?? Self.prettyHandle(handle)
           personRef = handle
-          // Prefer the saved Contacts photo; fall back to WhatsApp's own profile thumb.
-          avatar =
-            await resolver.imageData(for: handle) ?? Self.profileThumb(for: chatID, in: thumbMap)
+          // Prefer the saved Contacts photo; else WhatsApp's own profile pic, looked
+          // up by the person's @lid (1:1 pics aren't keyed by phone JID).
+          avatar = await resolver.imageData(for: handle)
+          if avatar == nil, let lid = lidByChat[chatID] {
+            avatar = Self.profileThumb(for: lid, in: thumbMap)
+          }
+          if avatar == nil { avatar = Self.profileThumb(for: chatID, in: thumbMap) }
         } else {
           title = groupName ?? "Unknown"
           personRef = title
