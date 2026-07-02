@@ -86,6 +86,7 @@ describe('local agent controls', () => {
 
   afterEach(async () => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
     await stopLocalAgentServer()
     rmSync(electronState.userData, { recursive: true, force: true })
   })
@@ -174,7 +175,6 @@ describe('local agent controls', () => {
     )
     expect(status.tokenError).not.toContain(electronState.userData)
     expect(warnSpy).toHaveBeenCalledWith('[local-agent] failed to load token:', expect.anything())
-    warnSpy.mockRestore()
   })
 
   it('rotates the bearer token and invalidates the old one', async () => {
