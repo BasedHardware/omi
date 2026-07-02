@@ -105,8 +105,15 @@ def list_calendar_meetings(
     """List calendar meetings within a date range"""
     meetings = calendar_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)
     # Skip any malformed stored meeting rather than 500 the whole list, so one bad
-    # record cannot hide every other meeting the user has.
+    # record cannot hide every other meeting the user has. Log a safe identifier plus
+    # the exception class only: a ValidationError's str() renders the field input_value,
+    # which for a meeting can be sensitive (title, participant emails, link, notes).
     return CalendarMeetingContext.from_records(
         meetings,
-        on_error=lambda record, exc: logger.warning('Skipping malformed calendar meeting for uid=%s: %s', uid, exc),
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed calendar meeting for uid=%s event_id=%s: %s',
+            uid,
+            record.get('calendar_event_id'),
+            type(exc).__name__,
+        ),
     )
