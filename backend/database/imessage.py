@@ -79,15 +79,18 @@ def claim_message(
     *,
     firestore_client=None,
 ) -> bool:
-    """Atomically claim a processed message.
+    """Atomically claim a message BEFORE it is durably persisted (insert-first).
 
     Returns True if this call won the claim (wrote the ledger doc), False if it
-    was already claimed (``AlreadyExists``) — meaning another ingest already
-    handled this message and it is safe to skip.
+    was already claimed (``AlreadyExists``) — meaning another concurrent ingest
+    already owns this message and it is safe to skip.
 
-    Claims happen AFTER a message's conversation is processed successfully, so a
-    conversation that fails to process leaves its messages unclaimed and thus
-    retryable on the next sync (never permanently dropped).
+    Claiming first serializes concurrent ingests so the same message can never be
+    turned into two conversations / duplicate segments. The caller then persists
+    the message's conversation synchronously; if that durable write fails it must
+    call ``release_message`` so the message is retried on the next sync (never
+    permanently dropped). Best-effort LLM enrichment runs later and its failure
+    must NOT release the claim — the raw content is already durable.
     """
     coll = _processed_messages_ref(uid, firestore_client=firestore_client)
     payload = {'claimed_at': datetime.now(timezone.utc)}
@@ -100,3 +103,17 @@ def claim_message(
         return True
     except (AlreadyExists, Conflict):
         return False
+
+
+def release_message(uid: str, key: str, *, firestore_client=None) -> None:
+    """Delete a claim so its message is retried on the next sync.
+
+    Called only when the synchronous durable persist of a claimed message's
+    conversation fails, so a transient Firestore error can never strand a claimed
+    message that was never actually stored.
+    """
+    coll = _processed_messages_ref(uid, firestore_client=firestore_client)
+    try:
+        coll.document(key).delete()
+    except Exception as e:
+        logger.warning(f'imessage: failed to release claim key={key} uid={uid}: {e}')

@@ -151,6 +151,14 @@ def test_ingest_dedup_windowing_and_people():
         ic.users_db, 'get_or_create_person_by_handle', fake_get_or_create
     ), patch.object(
         ic.imessage_db, 'filter_claimed_keys', return_value=set()
+    ), patch.object(
+        # Insert-first durable persist: every message is won and the (chat, day)
+        # window is created synchronously before responding.
+        ic.imessage_db,
+        'claim_message',
+        return_value=True,
+    ), patch.object(
+        ic.conversations_db, 'create_conversation_if_absent', return_value=True
     ):
         resp = asyncio.run(ic.ingest_threads('uid', req))
 

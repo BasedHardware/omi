@@ -268,75 +268,110 @@ def _append_to_conversation(
 # ---------------------------------------------------------------------------
 
 
-async def _process_windows(
+class _WindowResult:
+    """Outcome of durably persisting one (chat, day) window (see _persist_window)."""
+
+    def __init__(self, created: bool, conversation, persisted: int, race_skipped: int):
+        self.created = created  # True only when a NEW conversation doc was created
+        self.conversation = conversation  # the created Conversation to enrich later (None on append)
+        self.persisted = persisted  # messages this request durably stored
+        self.race_skipped = race_skipped  # messages a concurrent ingest claimed first
+
+
+def _persist_window(
+    uid: str,
+    conv_id: str,
+    chat_guid: str,
+    messages: List,
+    handle_to_person: Dict[str, str],
+    language: Optional[str],
+) -> _WindowResult:
+    """Synchronously and durably persist one (chat, day) window — insert-first.
+
+    Runs entirely before the ingest HTTP response, so a 200 means the messages
+    are durably accepted (the desktop ROWID cursor is only an optimization, never
+    the correctness mechanism):
+
+    1. Claim each message atomically FIRST (``claim_message``). Only messages this
+       request wins proceed, so two concurrent ingests can never turn the same
+       message into duplicate conversations/segments.
+    2. Durably write the won messages' conversation with its raw segments —
+       ``create_conversation_if_absent`` for a new (chat, day) window, or append to
+       an existing one. NO LLM work happens here.
+    3. If that durable write fails, RELEASE the just-won claims so the messages are
+       retried on the next sync (never stranded as claimed-but-unstored).
+
+    Summary/memory/action-item enrichment runs later, best-effort, and its failure
+    must NOT undo these claims — the raw content is already durable.
+    """
+    won: List = []
+    won_keys: List[str] = []
+    race_skipped = 0
+    for m in messages:
+        key = processed_message_key(chat_guid, m.guid)
+        if imessage_db.claim_message(uid, key, chat_guid, m.guid):
+            won.append(m)
+            won_keys.append(key)
+        else:
+            race_skipped += 1
+    if not won:
+        return _WindowResult(created=False, conversation=None, persisted=0, race_skipped=race_skipped)
+
+    try:
+        started_at = min(_norm_dt(m.timestamp) for m in won)
+        finished_at = max(_norm_dt(m.timestamp) for m in won)
+        segments, _ = _build_segments(won, started_at, handle_to_person, {}, 1)
+        conversation = _build_new_conversation(conv_id, started_at, finished_at, segments, language)
+        created = conversations_db.create_conversation_if_absent(uid, conversation.dict())
+        if created:
+            return _WindowResult(created=True, conversation=conversation, persisted=len(won), race_skipped=race_skipped)
+        # Same chat+day already ingested on an earlier sync: append the new
+        # segments and extend finished_at. Appends deliberately do NOT re-run the
+        # pipeline (see _enrich_conversations for the rationale).
+        existing = conversations_db.get_conversation(uid, conv_id)
+        if existing:
+            _append_to_conversation(uid, conv_id, existing, won, handle_to_person)
+        return _WindowResult(created=False, conversation=None, persisted=len(won), race_skipped=race_skipped)
+    except Exception:
+        # Durable write failed — release claims so these messages retry next sync.
+        for key in won_keys:
+            imessage_db.release_message(uid, key)
+        raise
+
+
+async def _enrich_conversations(
     uid: str,
     language: Optional[str],
-    windows: List[Tuple[str, str, IMessageThread, List, Dict[str, str]]],
+    created_conversations: List,
     person_ids: List[str],
 ) -> None:
-    """Background coordinator. For each (chat_guid, day) window:
+    """Best-effort background enrichment for conversations already persisted.
 
-    - CREATE case (no conversation yet): run the full post-processing pipeline
-      (summary + memory + action-item extraction) on a conversation carrying the
-      deterministic id.
-    - APPEND case (conversation exists): append the new segments and extend
-      finished_at only. We deliberately do NOT re-run the pipeline on append.
+    Runs the full post-processing pipeline (summary + memory + action-item
+    extraction) on each NEWLY created conversation, then refreshes person
+    profiles. Every conversation here is already durable, so a failure only means
+    the summary/memories are missing (retryable later) — it NEVER drops content.
 
-    Why the append case is conservative: re-running process_conversation on an
-    existing conversation IS idempotent for internal memories/action items
-    (extraction deletes-by-conversation-id then re-extracts) and for the summary
-    vector (upsert-by-id). It is NOT free of duplication for the external
-    task-integration sync inside _save_action_items (Todoist / MS To Do get a
-    fresh push on every reprocess), and with is_reprocess=True the structured
-    search vector is not refreshed. To guarantee zero duplicate memories /
-    action items / external tasks, appends only extend the transcript; the
-    summary/memories reflect the window's first sync. A future "window close"
-    reprocess can be layered on once the external-sync re-push is made
-    idempotent.
-
-    Each message is claimed in the ledger ONLY after its window processes
-    successfully, so a failed window leaves its messages retryable next sync."""
-    created = 0
-    for conv_id, chat_guid, thread, messages, handle_to_person in windows:
-        usable = [m for m in messages if m.text and m.text.strip()]
-        if not usable:
-            continue
+    Enrichment is limited to the CREATE case on purpose: re-running
+    process_conversation on an appended conversation is idempotent for internal
+    memories/action items and the summary vector, but NOT for the external
+    task-integration sync (Todoist / MS To Do get a fresh push on every
+    reprocess). So appends only extend the transcript; a future idempotent
+    "window close" reprocess can enrich them later."""
+    for conversation in created_conversations:
         try:
-            existing = await run_blocking(db_executor, conversations_db.get_conversation, uid, conv_id)
-            if existing:
-                await run_blocking(
-                    db_executor, _append_to_conversation, uid, conv_id, existing, usable, handle_to_person
-                )
-            else:
-                started_at = min(_norm_dt(m.timestamp) for m in usable)
-                finished_at = max(_norm_dt(m.timestamp) for m in usable)
-                segments, _ = _build_segments(usable, started_at, handle_to_person, {}, 1)
-                conversation = _build_new_conversation(conv_id, started_at, finished_at, segments, language)
-                await run_blocking(postprocess_executor, process_conversation, uid, language or 'en', conversation)
-                created += 1
-
-            # Claim on success. AlreadyExists just means a concurrent ingest won
-            # the race for this message — safe to skip.
-            for m in usable:
-                key = processed_message_key(chat_guid, m.guid)
-                await run_blocking(db_executor, imessage_db.claim_message, uid, key, chat_guid, m.guid)
+            await run_blocking(postprocess_executor, process_conversation, uid, language or 'en', conversation)
         except Exception as e:
-            logger.error(f'imessage: window processing failed uid={uid} conv={conv_id}: {sanitize(str(e))}')
+            logger.error(
+                f'imessage: enrichment failed (content already durable) uid={uid} '
+                f'conv={getattr(conversation, "id", "?")}: {sanitize(str(e))}'
+            )
 
     for person_id in person_ids:
         try:
             await run_blocking(llm_executor, generate_person_profile, uid, person_id)
         except Exception as e:
             logger.warning(f'imessage: profile generation failed uid={uid} person={person_id}: {sanitize(str(e))}')
-
-    if created:
-        doc = await run_blocking(db_executor, _get_doc, uid)
-        await run_blocking(
-            db_executor,
-            _save_doc,
-            uid,
-            {'conversations_ingested': int(doc.get('conversations_ingested', 0)) + created},
-        )
 
 
 async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngestResponse:
@@ -380,9 +415,8 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
         g['messages'].append(m)
 
     # 4. Resolve people per window and build the work list.
-    windows: List[Tuple[str, str, IMessageThread, List, Dict[str, str]]] = []
+    windows: List[Tuple[str, str, List, Dict[str, str]]] = []
     people_ids = set()
-    messages_ingested = 0
     for (chat_guid, day), g in groups.items():
         thread = g['thread']
         msgs = g['messages']
@@ -394,12 +428,34 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
             handle_to_person[h] = person['id']
             people_ids.add(person['id'])
         conv_id = imessage_conversation_id(uid, chat_guid, day)
-        windows.append((conv_id, chat_guid, thread, msgs, handle_to_person))
-        messages_ingested += len(msgs)
+        windows.append((conv_id, chat_guid, msgs, handle_to_person))
 
-    # Persist state: mark connected/consented and advance cursor. Message GUIDs
-    # are NOT recorded here — the background pipeline claims them in the durable
-    # ledger only after their conversation succeeds.
+    # 5. Durably persist each window synchronously (insert-first claim + write)
+    #    BEFORE responding, so a 200 means the messages are safely accepted and the
+    #    desktop can advance its cursor without risking data loss. Only best-effort
+    #    LLM enrichment is deferred to the background.
+    conversations_created = 0
+    messages_ingested = 0
+    race_skipped = 0
+    created_conversations: List = []
+    for conv_id, chat_guid, msgs, handle_to_person in windows:
+        try:
+            result = await run_blocking(
+                db_executor, _persist_window, uid, conv_id, chat_guid, msgs, handle_to_person, req.language
+            )
+        except Exception as e:
+            # Claims were released inside _persist_window; messages retry next sync.
+            logger.error(f'imessage: window persist failed uid={uid} conv={conv_id}: {sanitize(str(e))}')
+            continue
+        messages_ingested += result.persisted
+        race_skipped += result.race_skipped
+        if result.created:
+            conversations_created += 1
+            if result.conversation is not None:
+                created_conversations.append(result.conversation)
+
+    # Persist state: mark connected/consented, advance cursor, and bump the durable
+    # created-conversation counter (all content above is already durable).
     patch = {
         'connected': True,
         'enabled': True,  # clicking Connect + sending data is the consent signal
@@ -407,22 +463,25 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
     }
     if req.last_rowid is not None:
         patch['last_rowid'] = req.last_rowid
+    if conversations_created:
+        patch['conversations_ingested'] = int(doc.get('conversations_ingested', 0)) + conversations_created
     await run_blocking(db_executor, _save_doc, uid, patch)
 
-    if windows:
+    # Enrichment is best-effort and runs after the durable writes above.
+    if created_conversations or people_ids:
         start_background_task(
-            _process_windows(uid, req.language, windows, list(people_ids)),
-            name=f'imessage_ingest_{uid}',
+            _enrich_conversations(uid, req.language, created_conversations, list(people_ids)),
+            name=f'imessage_enrich_{uid}',
         )
 
-    skipped = legacy_skipped + ledger_skipped
+    skipped = legacy_skipped + ledger_skipped + race_skipped
     logger.info(
         f'imessage ingest uid={uid} threads={len(req.threads)} windows={len(windows)} '
-        f'people={len(people_ids)} msgs={messages_ingested} skipped={skipped}'
+        f'people={len(people_ids)} msgs={messages_ingested} created={conversations_created} skipped={skipped}'
     )
     return IMessageIngestResponse(
         success=True,
-        conversations_created=len(windows),
+        conversations_created=conversations_created,
         people_upserted=len(people_ids),
         messages_ingested=messages_ingested,
         skipped_duplicates=skipped,
