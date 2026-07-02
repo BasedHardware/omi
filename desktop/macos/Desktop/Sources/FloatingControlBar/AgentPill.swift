@@ -112,8 +112,6 @@ final class AgentPillsManager: ObservableObject {
     static let shared = AgentPillsManager()
 
     @Published private(set) var pills: [AgentPill] = []
-    @Published var hoveredPillID: UUID?
-    @Published var pinnedPillID: UUID?
 
     /// Configurable soft cap so the row never grows past a reasonable width.
     private let maxPills: Int = 8
@@ -841,8 +839,6 @@ final class AgentPillsManager: ObservableObject {
             FloatingControlBarManager.shared.leaveActiveAgentSurfaceFromPillDismiss()
         }
         cleanup(pillID: pillID)
-        if hoveredPillID == pillID { hoveredPillID = nil }
-        if pinnedPillID == pillID { pinnedPillID = nil }
     }
 
     func stop(pillID: UUID) {

@@ -54,6 +54,8 @@ def check_desktop_codemagic_release() -> list[str]:
 
     required_files = [
         "desktop/macos/scripts/prepare-agent-runtime.sh",
+        "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+        "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
         "desktop/macos/scripts/test-tool-surfaces.sh",
         "desktop/macos/Desktop/Omi-Release.entitlements",
         "desktop/macos/Desktop/Node.entitlements",

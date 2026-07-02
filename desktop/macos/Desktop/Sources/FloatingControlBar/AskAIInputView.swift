@@ -100,9 +100,4 @@ struct AskAIInputView: View {
             onEscape?()
         }
     }
-
-    // Model picker moved to Settings > Ask Omi Floating Bar
-    // private var modelPicker: some View { ... }
-    // private func showModelMenu() { ... }
-    // private var currentModelLabel: String { ... }
 }

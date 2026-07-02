@@ -36,6 +36,7 @@ from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vector
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.executors import db_executor, run_blocking
@@ -364,7 +365,7 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
             for mdb in memory_dbs:
                 memory_service.write(uid, mdb.dict())
         else:
-            memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
+            memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
             upsert_memory_vectors_batch(
                 uid,
                 [

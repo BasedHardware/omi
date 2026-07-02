@@ -93,6 +93,7 @@ struct OnboardingTasksStepView: View {
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
 
             }
             .padding(.bottom, 32)

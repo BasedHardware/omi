@@ -93,7 +93,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
 
-    guard let dockRange = source.range(of: "NotchDockShape(bottomRadius:") else {
+    guard let dockRange = source.range(of: "NotchDockShape(") else {
       return XCTFail("Expected expanded notch dock surface")
     }
     guard let glowRange = source.range(of: "NotchResponseGlowView(") else {
@@ -239,7 +239,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("? .spring(response: 0.34, dampingFraction: 0.86)"))
     XCTAssertTrue(source.contains(": .spring(response: 0.18, dampingFraction: 0.92)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
-    XCTAssertTrue(source.contains("notchOmiChatRow\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
+    XCTAssertTrue(source.contains("notchOmiChatRow\n                            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
     XCTAssertTrue(source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
     XCTAssertTrue(source.contains("notchOmiChatOverlayHitTarget\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
     XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
@@ -269,13 +269,13 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
     XCTAssertTrue(source.contains("Color.white.opacity(0.96 * Double(1 - progress))"))
     XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
-    XCTAssertTrue(source.contains("if shouldUseOmiChatOverlayHitTarget"))
+    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
     XCTAssertTrue(source.contains("if state.hasVisibleConversation {\n                        escToClearHint\n                    }"))
-    XCTAssertTrue(source.contains("canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation"))
-    XCTAssertTrue(source.contains("showsHeader: !state.usesNotchIsland"))
+    XCTAssertTrue(source.contains("canClearVisibleConversation: false"))
+    XCTAssertTrue(source.contains("showsHeader: false"))
     XCTAssertTrue(responseSource.contains("var showsHeader: Bool = true"))
     XCTAssertTrue(responseSource.contains("if showsHeader {"))
     XCTAssertTrue(responseSource.contains(".padding(.top, state.usesNotchIsland ? 0 : 16)"))
@@ -290,8 +290,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(".fill(isSelected ? Color.white.opacity(0.12 * Double(progress)) : .clear)"))
     XCTAssertTrue(source.contains(".overlay(alignment: .bottom)"))
     XCTAssertFalse(source.contains(".strokeBorder(Color.white.opacity(0.10 * Double(progress)), lineWidth: 0.6)"))
-    XCTAssertTrue(windowSource.contains("private static let askOmiAnimationDuration: TimeInterval = 0.055"))
-    XCTAssertTrue(windowSource.contains("private static let askOmiSettleDelay: TimeInterval = 0.065"))
+    XCTAssertTrue(windowSource.contains("private static let askOmiAnimationDuration: TimeInterval = 0.14"))
+    XCTAssertTrue(windowSource.contains("private static let askOmiSettleDelay: TimeInterval = 0.16"))
     XCTAssertTrue(windowSource.contains("let currentTopCenteredFrame = NSRect("))
     XCTAssertTrue(windowSource.contains("abs(frame.midX - targetFrame.midX) > 0.5"))
     XCTAssertTrue(windowSource.contains("let keepVoiceResponseAlive = state.isVoiceResponseActive"))
@@ -375,7 +375,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let windowSource = try floatingControlBarWindowSource()
 
     guard let inputRange = viewSource.range(of: "private var aiInputView: some View"),
-      let inputEnd = viewSource.range(of: "private func recomputeNotchInputHeight")
+      let inputEnd = viewSource.range(of: "private func recomputeUnifiedInputHeight")
     else {
       return XCTFail("Expected AI input view section")
     }
@@ -455,7 +455,6 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testSubagentDoneBadgeDismissesAndViewedAgentsExpire() throws {
     let agentSource = try agentPillSource()
     let viewSource = try floatingControlBarViewSource()
-    let popoverSource = try agentPillsViewSource()
 
     XCTAssertTrue(agentSource.contains("@Published var viewedAt: Date?"))
     XCTAssertTrue(agentSource.contains("private let viewedFinishedTTL: TimeInterval = 10 * 60"))
@@ -466,8 +465,6 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
     XCTAssertTrue(viewSource.contains("if pill.status == .done"))
     XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
-    XCTAssertTrue(popoverSource.contains("if pill.status == .done"))
-    XCTAssertTrue(popoverSource.contains("Button(action: onDismiss)"))
   }
 
   func testViewedExpirationReArmsWhenActiveChatBlocksExpiry() throws {
@@ -644,9 +641,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarWindowSource()
 
     // The glow observer must trigger a resize to the glow-adjusted collapsed
-    // size on legacy displays, not just record the boolean.
+    // size on legacy displays, not just record the boolean — and it collapses
+    // to the canonical pill frame so drift cannot accumulate.
     XCTAssertTrue(source.contains("guard !self.notchModeEnabled else { return }"))
-    XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
+    XCTAssertTrue(source.contains("self.resizeToFrame(self.canonicalCollapsedPillFrame(), makeResizable: false, animated: false)"))
   }
 
   func testStartupRevalidatesDisplayMetadataForAutomaticNotchMode() throws {
@@ -666,21 +664,41 @@ final class AgentPillLifecycleTests: XCTestCase {
     let windowSource = try floatingControlBarWindowSource()
 
     // Both the Omi Chat header and subagent header should enter one shared
-    // window transition. Notch surfaces go back to the row list; legacy
-    // surfaces keep their previous main-input/main-response back behavior.
+    // window transition. Back from a subagent goes to the row list on every
+    // display mode when pills exist; otherwise main-input/main-response.
     XCTAssertTrue(viewSource.contains("onBackToAgentRows: {\n                        showAgentListFromConversation()"))
     XCTAssertTrue(viewSource.contains("private func showAgentListFromConversation() {\n        (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()\n    }"))
     XCTAssertTrue(windowSource.contains("func leaveAgentConversation()"))
-    XCTAssertTrue(windowSource.contains("if state.usesNotchIsland, !AgentPillsManager.shared.pills.isEmpty"))
+    XCTAssertTrue(windowSource.contains("if !AgentPillsManager.shared.pills.isEmpty {\n            showAgentRowsFromConversation()"))
     XCTAssertTrue(windowSource.contains("private func showAgentRowsFromConversation()"))
     XCTAssertTrue(windowSource.contains("private func showMainConversationFromAgent()"))
     XCTAssertTrue(windowSource.contains("state.hideConversationSurface()"))
     XCTAssertTrue(windowSource.contains("openNotchHoverMenuUntilExit()"))
     XCTAssertTrue(windowSource.contains("resizeForMainInputAfterAgentExit()"))
     XCTAssertTrue(windowSource.contains("window.leaveAgentConversation()"))
-    XCTAssertTrue(windowSource.contains("let expectsRows = window.state.usesNotchIsland && !AgentPillsManager.shared.pills.isEmpty"))
+    XCTAssertTrue(windowSource.contains("let expectsRows = !AgentPillsManager.shared.pills.isEmpty"))
     XCTAssertTrue(windowSource.contains("\"mode\": expectsRows ? \"rows\" : \"main\""))
     XCTAssertFalse(viewSource.contains("let onBackToOmi: () -> Void"))
+  }
+
+  func testNonNotchExpandedChatUsesUnifiedSurface() throws {
+    let viewSource = try floatingControlBarViewSource()
+
+    guard let bodyRange = viewSource.range(of: "var body: some View"),
+      let bodyEnd = viewSource.range(of: "private var barNeedsFullWidth")
+    else {
+      return XCTFail("Expected floating bar body section")
+    }
+    let bodySource = String(viewSource[bodyRange.lowerBound..<bodyEnd.lowerBound])
+
+    XCTAssertTrue(bodySource.contains("if state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible {\n                unifiedFloatingSurface"))
+    XCTAssertTrue(viewSource.contains("private var unifiedFloatingSurface: some View"))
+    XCTAssertTrue(viewSource.contains("if state.showingAIConversation {\n                conversationView"))
+    XCTAssertFalse(bodySource.contains("conversationView"))
+    XCTAssertFalse(bodySource.contains("AskAIInputView("))
+    XCTAssertFalse(bodySource.contains("AIResponseView("))
+    XCTAssertTrue(viewSource.contains("private var barChrome: some View"))
+    XCTAssertTrue(viewSource.contains("chrome only ever shows the idle pill, hover hints, and voice states"))
   }
 
   func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
@@ -830,41 +848,38 @@ final class AgentPillLifecycleTests: XCTestCase {
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
     let source = try agentPillSource()
-    let pillViewSource = try agentPillsViewSource()
+    let logoMarkSource = try agentProviderLogoMarkSource()
+    let viewSource = try floatingControlBarViewSource()
 
     XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = bridgeHarnessOverride != nil"))
     XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
     XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
     XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
-    XCTAssertTrue(pillViewSource.contains("AgentProviderLogoMark("))
-    XCTAssertTrue(pillViewSource.contains("provider: pill.bridgeHarnessOverride"))
-    XCTAssertTrue(pillViewSource.contains("private var providerPill: some View"))
-    XCTAssertTrue(pillViewSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))
-    XCTAssertTrue(pillViewSource.contains("private static let openClawLogo = load(\"openclaw_logo_flat\")"))
-    XCTAssertTrue(pillViewSource.contains("return hermesLogo"))
-    XCTAssertTrue(pillViewSource.contains("return openClawLogo"))
-    XCTAssertTrue(pillViewSource.contains(".renderingMode(.template)"))
-    XCTAssertTrue(pillViewSource.contains(".foregroundStyle(statusColor)"))
-    XCTAssertFalse(pillViewSource.contains("return load(\"hermes_logo\")"))
-    XCTAssertFalse(pillViewSource.contains("return load(\"openclaw_logo\")"))
-    XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride.rendersProviderMark {\n            return false\n        }"))
+    XCTAssertTrue(viewSource.contains("AgentProviderLogoMark("))
+    XCTAssertTrue(viewSource.contains("provider: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(logoMarkSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))
+    XCTAssertTrue(logoMarkSource.contains("private static let openClawLogo = load(\"openclaw_logo_flat\")"))
+    XCTAssertTrue(logoMarkSource.contains("return hermesLogo"))
+    XCTAssertTrue(logoMarkSource.contains("return openClawLogo"))
+    XCTAssertTrue(logoMarkSource.contains(".renderingMode(.template)"))
+    XCTAssertTrue(logoMarkSource.contains(".foregroundStyle(statusColor)"))
+    XCTAssertFalse(logoMarkSource.contains("return load(\"hermes_logo\")"))
+    XCTAssertFalse(logoMarkSource.contains("return load(\"openclaw_logo\")"))
     // Provider agents without a dedicated logo fall back to a flat, status-tinted
     // robot mark — not the Omi round dot. Omi-native agents (nil override) keep
     // the dot via the `provider != nil` guard.
-    XCTAssertTrue(pillViewSource.contains("} else if provider != nil {"))
-    XCTAssertTrue(pillViewSource.contains("Text(\"🤖\")"))
-    XCTAssertTrue(pillViewSource.contains("statusColor\n                    .mask("))
+    XCTAssertTrue(logoMarkSource.contains("} else if provider != nil {"))
+    XCTAssertTrue(logoMarkSource.contains("Text(\"🤖\")"))
+    XCTAssertTrue(logoMarkSource.contains("statusColor\n                    .mask("))
   }
 
   func testProviderMarkRoutingIsCentralized() throws {
     let routingSource = try agentRuntimeRoutingSource()
     XCTAssertTrue(routingSource.contains("var rendersProviderMark: Bool { self != nil }"))
 
-    let pillViewSource = try agentPillsViewSource()
-    XCTAssertTrue(pillViewSource.contains("pill.bridgeHarnessOverride.rendersProviderMark"))
-
-    let windowSource = try floatingControlBarViewSource()
-    XCTAssertTrue(windowSource.contains("if provider.rendersProviderMark {"))
+    let viewSource = try floatingControlBarViewSource()
+    XCTAssertTrue(viewSource.contains("pill.bridgeHarnessOverride.rendersProviderMark"))
+    XCTAssertTrue(viewSource.contains("if provider.rendersProviderMark {"))
   }
 
   func testDirectedProviderLogoAssetsUseSingleTemplateMasks() throws {
@@ -989,11 +1004,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
-  private func agentPillsViewSource() throws -> String {
+  private func agentProviderLogoMarkSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/AgentPillsView.swift")
+      .appendingPathComponent("Sources/FloatingControlBar/AgentProviderLogoMark.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

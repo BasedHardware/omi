@@ -2423,6 +2423,8 @@ workflows:
 
       - name: Sign app
         script: |
+          scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
+
           xattr -cr "$APP_BUNDLE"
 
           # Sign ffmpeg (inside SPM resource bundle)
@@ -2524,6 +2526,10 @@ workflows:
 
           codesign --verify --verbose=2 "$APP_BUNDLE" 2>&1 | head -3
           echo "App signed successfully"
+
+      - name: Audit app bundle dependencies
+        script: |
+          scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
       - name: Notarize app
         script: |

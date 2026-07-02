@@ -509,13 +509,16 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     guard let setup = mcpSetup(key: key) else { return nil }
     switch self {
     case .claude:
+      // Public OAuth client: match the manual setup copy and native automation.
+      // Claude may render a secret field, but the backend expects it to stay blank.
       return [
         CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
         CloudConnectorCopyField(
           id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
-        CloudConnectorCopyField(id: "oauth_client_id", label: "OAuth Client ID", value: "omi"),
         CloudConnectorCopyField(
-          id: "oauth_client_secret", label: "OAuth Client Secret", value: key, masksValue: true),
+          id: "oauth_client_id", label: "OAuth Client ID", value: cloudOAuthClientID ?? ""),
+        CloudConnectorCopyField(
+          id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
       ]
     case .chatgpt:
       // Public PKCE client: the backend rejects token requests that carry a
@@ -649,7 +652,10 @@ actor MemoryExportService {
     }
 
     let detailText = defaults.string(forKey: destination.detailKey)
-    let hasConnection = exportedCount > 0 || defaults.double(forKey: destination.connectedAtKey) > 0
+    let hasConnection =
+      exportedCount > 0
+      || defaults.double(forKey: destination.connectedAtKey) > 0
+      || MemoryExportConnectionDetector.hasExistingConnection(for: destination)
     let isConfigured: Bool
     switch destination {
     case .obsidian:
@@ -660,7 +666,9 @@ actor MemoryExportService {
         && LocalAgentAPISettings.storedToken() != nil
     case .claudeCode, .codex, .openclaw, .hermes:
       isConfigured = hasStoredMCPKey
-    case .notion, .chatgpt, .claude, .gemini:
+    case .chatgpt, .claude:
+      isConfigured = hasConnection
+    case .notion, .gemini:
       isConfigured = exportedCount > 0
     }
 
