@@ -3,6 +3,7 @@
 // split out (pure) so the JSON handling is unit-tested without the network.
 import { desktopApi } from './apiClient'
 import { extractJSONObject } from './memoryExtract'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 import type { CalendarItem } from '../../../shared/types'
 
 const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
@@ -61,20 +62,28 @@ export function parseCalendarTasks(content: string): SynthesizedTask[] {
 
 export async function extractCalendarTasks(items: CalendarItem[]): Promise<SynthesizedTask[]> {
   if (items.length === 0) return []
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildCalendarPrompt(items) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+  const prompt = buildCalendarPrompt(items)
+  const byok = await tryByokCompletion('memory', {
+    systemPrompt: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }]
+  })
+  let content = byok ?? ''
+  if (byok === null) {
+    const res = await desktopApi.post(
+      '/v2/chat/completions',
+      {
+        model: hostedModelForPurpose('memory', SYNTHESIS_MODEL),
+        stream: false,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt }
+        ]
+      },
+      { timeout: 60_000 }
+    )
+    content =
+      (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
+        ?.content ?? ''
+  }
   return parseCalendarTasks(content)
 }

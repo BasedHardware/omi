@@ -3,6 +3,7 @@
 // the prompt is Gmail-specific. Mirrors stickyNotesExtract.ts.
 import { desktopApi } from './apiClient'
 import { extractJSONObject, normalize } from './memoryExtract'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 import type { GmailItem } from '../../../shared/types'
 
 const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
@@ -70,20 +71,28 @@ export async function extractGmailMemories(
   existing: string[] = []
 ): Promise<string[]> {
   if (items.length === 0) return []
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildGmailPrompt(items, existing) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+  const prompt = buildGmailPrompt(items, existing)
+  const byok = await tryByokCompletion('memory', {
+    systemPrompt: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }]
+  })
+  let content = byok ?? ''
+  if (byok === null) {
+    const res = await desktopApi.post(
+      '/v2/chat/completions',
+      {
+        model: hostedModelForPurpose('memory', SYNTHESIS_MODEL),
+        stream: false,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt }
+        ]
+      },
+      { timeout: 60_000 }
+    )
+    content =
+      (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
+        ?.content ?? ''
+  }
   return parseGmailMemories(content, existing)
 }

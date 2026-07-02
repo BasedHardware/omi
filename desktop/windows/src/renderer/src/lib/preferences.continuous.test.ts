@@ -14,3 +14,20 @@ it('continuousRecording round-trips through setPreferences', () => {
   setPreferences({ continuousRecording: true })
   expect(getPreferences().continuousRecording).toBe(true)
 })
+
+it('defaultModelByPurpose patches merge instead of replacing the map', () => {
+  setPreferences({ defaultModelByPurpose: { chat: 'openai:gpt-4o', agent: 'openai:gpt-4o-mini' } })
+  setPreferences({ defaultModelByPurpose: { memory: 'gemini:gemini-1.5-flash' } })
+  expect(getPreferences().defaultModelByPurpose).toMatchObject({
+    chat: 'openai:gpt-4o',
+    agent: 'openai:gpt-4o-mini',
+    memory: 'gemini:gemini-1.5-flash'
+  })
+
+  setPreferences({ defaultModelByPurpose: { agent: undefined } })
+  expect(getPreferences().defaultModelByPurpose).toMatchObject({
+    chat: 'openai:gpt-4o',
+    memory: 'gemini:gemini-1.5-flash'
+  })
+  expect(getPreferences().defaultModelByPurpose?.agent).toBeUndefined()
+})

@@ -24,6 +24,11 @@ asarUnpack:
   - out/main/kgWorker.js
 win:
   executableName: omi-windows
+  extraResources:
+    - from: resources/koffi
+      to: koffi
+      filter:
+        - '**/*'
   target:
     - target: nsis
       arch: [x64]

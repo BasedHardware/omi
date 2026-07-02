@@ -7,7 +7,9 @@ import {
   type ContextSection
 } from './localAgentProtocol'
 import { orderFloorSections, relationshipItems, type KindedSection } from './floorContext'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 import { rankMemories } from './memoryRank'
+import type { ChatMessage } from '../../../shared/types'
 import type { Memory } from '../hooks/useMemories'
 
 const AGENT_MODEL = 'claude-haiku-4-5-20251001'
@@ -90,11 +92,13 @@ async function snapshotSections(): Promise<KindedSection[]> {
   const cards = nodes.filter((n) => n.nodeType === 'card').map((n) => n.summary)
   if (cards.length) out.push({ kind: 'overview', heading: 'Overview', items: cards })
   const tech = pick('technology')
-  if (tech.length) out.push({ kind: 'tech', heading: 'Programming languages & technologies', items: tech })
+  if (tech.length)
+    out.push({ kind: 'tech', heading: 'Programming languages & technologies', items: tech })
   const ent = nodes
     .filter((n) => ['project', 'person', 'org', 'interest'].includes(n.nodeType))
     .map((n) => `${n.label} (${n.nodeType}): ${n.summary}`)
-  if (ent.length) out.push({ kind: 'entities', heading: 'Projects, people & interests', items: ent })
+  if (ent.length)
+    out.push({ kind: 'entities', heading: 'Projects, people & interests', items: ent })
   // Tier 1: surface the labeled relationships synthesis built (macOS's signature).
   const rels = relationshipItems(nodes, graph.edges)
   if (rels.length) out.push({ kind: 'relationships', heading: 'How they relate', items: rels })
@@ -119,12 +123,20 @@ async function runAgentLoop(userText: string): Promise<ContextSection[]> {
   ]
 
   for (let i = 0; i < MAX_ITERS; i++) {
-    const res = await desktopApi.post(
-      '/v2/chat/completions',
-      { model: AGENT_MODEL, stream: false, messages },
-      { timeout: AGENT_CALL_TIMEOUT_MS }
-    )
-    const content = (res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? ''
+    const byok = await tryByokCompletion('agent', {
+      systemPrompt: SYSTEM_PROMPT,
+      messages: messages.filter((message) => message.role !== 'system') as ChatMessage[],
+      timeoutMs: AGENT_CALL_TIMEOUT_MS
+    })
+    let content = byok ?? ''
+    if (byok === null) {
+      const res = await desktopApi.post(
+        '/v2/chat/completions',
+        { model: hostedModelForPurpose('agent', AGENT_MODEL), stream: false, messages },
+        { timeout: AGENT_CALL_TIMEOUT_MS }
+      )
+      content = (res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? ''
+    }
     const action = parseAction(content)
     if (!action || action.action === 'final') break
     messages.push({ role: 'assistant', content })
@@ -188,9 +200,15 @@ export async function gatherLocalContext(userText: string): Promise<string> {
     // the remaining sections are intent-routed so the question-relevant one comes
     // next and survives formatContextBlock's end-trimming. Agent enrichment, when
     // enabled, is appended last.
-    const overview = floor.filter((s) => s.kind === 'overview').map(({ heading, items }) => ({ heading, items }))
+    const overview = floor
+      .filter((s) => s.kind === 'overview')
+      .map(({ heading, items }) => ({ heading, items }))
     const rest = floor.filter((s) => s.kind !== 'overview')
-    return formatContextBlock([...overview, ...orderFloorSections(rest, userText), ...agentSections])
+    return formatContextBlock([
+      ...overview,
+      ...orderFloorSections(rest, userText),
+      ...agentSections
+    ])
   } catch {
     return ''
   }

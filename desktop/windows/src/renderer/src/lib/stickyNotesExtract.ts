@@ -5,6 +5,7 @@
 // prompt is notes-specific.
 import { desktopApi } from './apiClient'
 import { extractJSONObject, normalize } from './memoryExtract'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 
 const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
 
@@ -61,22 +62,30 @@ export async function extractNoteMemories(
   const trimmed = notesText.trim()
   if (!trimmed) return { memories: [], profile: '' }
 
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildNotesPrompt(trimmed, existing) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
+  const prompt = buildNotesPrompt(trimmed, existing)
+  const byok = await tryByokCompletion('memory', {
+    systemPrompt: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }]
+  })
+  let content = byok ?? ''
+  if (byok === null) {
+    const res = await desktopApi.post(
+      '/v2/chat/completions',
+      {
+        model: hostedModelForPurpose('memory', SYNTHESIS_MODEL),
+        stream: false,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt }
+        ]
+      },
+      { timeout: 60_000 }
+    )
 
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+    content =
+      (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
+        ?.content ?? ''
+  }
   const parsed = JSON.parse(extractJSONObject(content)) as {
     memories?: unknown
     profile?: unknown

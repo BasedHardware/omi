@@ -2,6 +2,7 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
+import type { ModelPurpose } from '../../../shared/types'
 
 const KEY = 'omi-windows-prefs-v1'
 
@@ -16,6 +17,8 @@ export type Preferences = {
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
   chatHistoryMode: 'per-launch' | 'infinite'
+  modelPurpose?: ModelPurpose
+  defaultModelByPurpose?: Partial<Record<ModelPurpose, string>>
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
@@ -71,7 +74,19 @@ export function getPreferences(): Preferences {
 }
 
 export function setPreferences(patch: Partial<Preferences>): void {
-  current = { ...current, ...patch }
+  const next = { ...current, ...patch }
+  if (Object.prototype.hasOwnProperty.call(patch, 'defaultModelByPurpose')) {
+    const merged = { ...(current.defaultModelByPurpose ?? {}) }
+    for (const [purpose, modelId] of Object.entries(patch.defaultModelByPurpose ?? {})) {
+      if (typeof modelId === 'string' && modelId.trim()) {
+        merged[purpose as ModelPurpose] = modelId.trim()
+      } else {
+        delete merged[purpose as ModelPurpose]
+      }
+    }
+    next.defaultModelByPurpose = Object.keys(merged).length ? merged : undefined
+  }
+  current = next
   try {
     localStorage.setItem(KEY, JSON.stringify(current))
   } catch {

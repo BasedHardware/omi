@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { desktopApi, omiApi } from './apiClient'
 import { parseMessagesSse } from './messagesSse'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 
 // Non-streaming single-shot completion used by the action planner & intent gate.
 // Mirrors the model + endpoint localAgent.ts uses for its agent loop.
@@ -26,9 +27,19 @@ async function callViaMessages(prompt: string): Promise<string> {
 
 export async function callAgentLLM(prompt: string): Promise<string> {
   try {
+    const byok = await tryByokCompletion('agent', {
+      messages: [{ role: 'user', content: prompt }],
+      systemPrompt: 'Return only the requested agent output.'
+    })
+    if (byok !== null) return byok
+
     const res = await desktopApi.post(
       '/v2/chat/completions',
-      { model: AGENT_MODEL, stream: false, messages: [{ role: 'user', content: prompt }] },
+      {
+        model: hostedModelForPurpose('agent', AGENT_MODEL),
+        stream: false,
+        messages: [{ role: 'user', content: prompt }]
+      },
       { timeout: CALL_TIMEOUT_MS }
     )
     return (res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? ''
