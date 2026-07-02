@@ -191,6 +191,7 @@ struct ChatScrollContainer<Content: View>: View {
   @State private var scrollThrottleWorkItem: DispatchWorkItem?
   @State private var userScrollEndWorkItem: DispatchWorkItem?
   @State private var settleWorkItems: [DispatchWorkItem] = []
+  @State private var lastViewportSize: CGSize = .zero
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -217,6 +218,7 @@ struct ChatScrollContainer<Content: View>: View {
       .onChange(of: contentChangeToken) {
         handleLiveContentChange(proxy: proxy)
       }
+      .background(viewportResizeDetector(proxy: proxy))
     }
   }
 
@@ -289,12 +291,18 @@ struct ChatScrollContainer<Content: View>: View {
   private func handleLiveContentChange(proxy: ScrollViewProxy) {
     if scrollMode == .followingBottom {
       throttledScrollToBottom(proxy: proxy)
+      scheduleSettledBottomFollow(proxy: proxy)
     } else {
       hasActivityBelow = true
     }
   }
 
   private func scheduleSettledBottomFollow(proxy: ScrollViewProxy) {
+    for item in settleWorkItems {
+      item.cancel()
+    }
+    settleWorkItems.removeAll()
+
     for delay in [0.05, 0.16, 0.32] {
       let work = DispatchWorkItem {
         guard scrollMode == .followingBottom else { return }
@@ -302,6 +310,27 @@ struct ChatScrollContainer<Content: View>: View {
       }
       settleWorkItems.append(work)
       DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+  }
+
+  private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy) {
+    guard size.width > 0, size.height > 0 else { return }
+    guard size != lastViewportSize else { return }
+    lastViewportSize = size
+    guard scrollMode == .followingBottom, !userIsScrolling else { return }
+    scrollToBottom(proxy: proxy, animated: false)
+    scheduleSettledBottomFollow(proxy: proxy)
+  }
+
+  private func viewportResizeDetector(proxy: ScrollViewProxy) -> some View {
+    GeometryReader { geometry in
+      Color.clear
+        .onAppear {
+          handleViewportSizeChange(geometry.size, proxy: proxy)
+        }
+        .onChange(of: geometry.size) { _, newSize in
+          handleViewportSizeChange(newSize, proxy: proxy)
+        }
     }
   }
 

@@ -22,6 +22,23 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("speak(ack)"))
   }
 
+  func testRealtimeToolTurnsStayOpenUntilToolResultReturns() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("private var pendingRealtimeToolCallIds = Set<String>()"))
+    XCTAssertTrue(source.contains("private var realtimeToolTurnEpoch = 0"))
+    XCTAssertTrue(source.contains("expectedTurnEpoch: Int? = nil"))
+    XCTAssertTrue(source.contains("pendingRealtimeToolCallIds.insert(toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch))"))
+    XCTAssertTrue(source.contains("pendingRealtimeToolCallIds.remove(key)"))
+    XCTAssertTrue(source.contains("turnEpoch == realtimeToolTurnEpoch"))
+    XCTAssertTrue(source.contains("guard pendingRealtimeToolCallIds.isEmpty else"))
+    XCTAssertTrue(source.contains("deferring turn done with"))
+    XCTAssertTrue(source.contains("private func clearRealtimeToolTracking()"))
+    XCTAssertTrue(source.contains("realtimeToolTurnEpoch += 1"))
+    XCTAssertGreaterThanOrEqual(source.components(separatedBy: "clearRealtimeToolTracking()").count - 1, 4)
+    XCTAssertFalse(source.contains("session?.sendToolResult("))
+  }
+
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
     let source = try realtimeHubControllerSource()
 

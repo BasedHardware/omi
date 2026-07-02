@@ -1740,7 +1740,6 @@ private struct AgentMainChatView: View {
         }
         manager.continueAgent(from: pill, text: trimmed)
     }
-
 }
 
 private struct NotchAgentPillsRowView: View {

@@ -986,8 +986,8 @@ function normalizeProjectedSchema(schema: any): Record<string, unknown> {
   return normalized;
 }
 
-test("OMI_TOOLS: exactly 27 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 27);
+test("OMI_TOOLS: exact tool count matches canonical pi-mono projection", () => {
+  assert.equal(OMI_TOOLS.length, toolNamesForAdapter("pi-mono").length);
 });
 
 test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
@@ -1081,6 +1081,13 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     fill_cloud_connector_form: ["provider", "server_url"],
     list_agent_sessions: [],
     get_agent_run: ["runId"],
+    build_desktop_awareness_snapshot: [],
+    list_desktop_action_queue: [],
+    get_desktop_open_loops: [],
+    build_desktop_context_packet: ["objective", "packetJson", "retentionClass", "surfaceKind", "ttlMs"],
+    route_desktop_intent: ["surfaceKind", "utterance"],
+    evaluate_desktop_tool_policy: ["selectedBundles"],
+    create_desktop_dispatch: ["decisionPrompt", "kind", "priority", "title"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],
     update_agent_artifact_lifecycle: ["artifactId", "state"],
@@ -1159,15 +1166,19 @@ test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfac
 });
 
 test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {
+  const advertisedControlManifest = agentControlCapabilityManifest.filter((manifestTool) =>
+    OMI_TOOLS.some((tool) => tool.name === manifestTool.name)
+  );
   const controlTools = OMI_TOOLS.filter((tool) =>
     agentControlCapabilityManifest.some((manifestTool) => manifestTool.name === tool.name)
   );
   assert.deepEqual(
     controlTools.map((tool) => tool.name),
-    agentControlCapabilityManifest.map((tool) => tool.name),
+    advertisedControlManifest.map((tool) => tool.name),
   );
+  assert.ok(!OMI_TOOLS.some((tool) => tool.name === "resolve_desktop_dispatch"));
 
-  for (const manifestTool of agentControlCapabilityManifest) {
+  for (const manifestTool of advertisedControlManifest) {
     const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
     assert.ok(tool, `${manifestTool.name} missing from OMI_TOOLS`);
     assert.equal(tool!.label, manifestTool.label, `${manifestTool.name} label drifted`);
@@ -1290,7 +1301,8 @@ test("registerOmiTools: snapshot write failure logs and still registers tools", 
 
 test("OMI_TOOLS: agent control timeout classes match canonical manifest", () => {
   for (const manifestTool of agentControlCapabilityManifest) {
-    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name)!;
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
+    if (!tool) continue;
     const timeoutMs = manifestTool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS;
     assert.equal((tool as any).__omiTimeoutMsForTest, timeoutMs, `${tool.name} timeout class drifted`);
   }

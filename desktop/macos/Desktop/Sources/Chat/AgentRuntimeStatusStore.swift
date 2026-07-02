@@ -158,10 +158,6 @@ final class AgentRuntimeStatusStore: ObservableObject {
     update(surface: surface, status: .cancelled, statusText: nil, errorMessage: message, terminal: true)
   }
 
-  func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil) {
-    update(surface: surface, status: .succeeded, statusText: statusText, terminal: true)
-  }
-
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
     switch message.kind {
     case .textDelta, .thinkingDelta:

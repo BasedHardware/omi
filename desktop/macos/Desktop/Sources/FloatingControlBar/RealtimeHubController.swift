@@ -146,6 +146,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// Guards against recording the same turn to chat history twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
+  /// Provider turn-complete events can arrive after a tool-call-only response and
+  /// before our async tool body has returned. Keep the voice turn open until every
+  /// requested tool has been answered; otherwise the bar collapses after "I'll check"
+  /// and the follow-up response is lost until the next PTT.
+  private var pendingRealtimeToolCallIds = Set<String>()
+  private var realtimeToolTurnEpoch = 0
+  private var pendingCompletedAgentDeltaAckIds: [String] = []
   /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   private var lastTurnAt: Date?
@@ -425,6 +432,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     sessionAuth = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     clearBargeInReplacementState()
+    pendingCompletedAgentDeltaAckIds.removeAll()
+    clearRealtimeToolTracking()
   }
 
   private func clearBargeInReplacementState() {
@@ -579,6 +588,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     audioReceivedThisTurn = false
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
+    pendingCompletedAgentDeltaAckIds.removeAll()
+    clearRealtimeToolTracking()
     lastTurnAt = Date()
     if bargeIn {
       pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
@@ -677,6 +688,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     realtimePlaybackEpoch += 1
     turnTranscript = ""
     assistantText = ""
+    pendingCompletedAgentDeltaAckIds.removeAll()
+    clearRealtimeToolTracking()
     clearBargeInReplacementState()
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
     // and leave the reply gated off so the model never answers the silence. Keeps the
@@ -695,12 +708,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     source: RealtimeHubSession,
     callId: String,
     name: String,
-    output: String
+    output: String,
+    expectedTurnEpoch: Int? = nil
   ) {
     guard isCurrentSession(source) else {
       log("RealtimeHub[\(providerTag)]: dropping stale tool result \(name)")
       return
     }
+    let turnEpoch = expectedTurnEpoch ?? realtimeToolTurnEpoch
+    let key = toolCallKey(callId: callId, name: name, turnEpoch: turnEpoch)
+    guard turnEpoch == realtimeToolTurnEpoch, pendingRealtimeToolCallIds.contains(key) else {
+      log("RealtimeHub[\(providerTag)]: dropping stale tool result \(name) epoch=\(turnEpoch)")
+      return
+    }
+    pendingRealtimeToolCallIds.remove(key)
     source.sendToolResult(callId: callId, name: name, output: output)
   }
 
@@ -772,6 +793,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     source: RealtimeHubSession,
     callId: String, name: String, detail: String = "",
     emptyText: String, errorText: String,
+    expectedTurnEpoch: Int,
     _ body: @escaping () async throws -> String
   ) {
     Task { [weak self] in
@@ -781,12 +803,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out = emptyText }
       let suffix = detail.isEmpty ? "" : " \(detail)"
       log("RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) → \(out.prefix(60))")
-      self.sendToolResultIfCurrent(source: source, callId: callId, name: name, output: out)
+      self.sendToolResultIfCurrent(
+        source: source, callId: callId, name: name, output: out, expectedTurnEpoch: expectedTurnEpoch)
     }
   }
 
   func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
+    let toolTurnEpoch = realtimeToolTurnEpoch
+    pendingRealtimeToolCallIds.insert(toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch))
     let arguments =
       (try? JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any]) ?? [:]
     guard let tool = HubTool(rawValue: name) else {
@@ -807,7 +832,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         guard let self else { return }
         let answer = await self.escalateToHigherModel(
           query, context: context, aboutUser: self.aboutUserCard)
-        self.sendToolResultIfCurrent(source: source, callId: callId, name: name, output: answer)
+        self.sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: answer, expectedTurnEpoch: toolTurnEpoch)
       }
     case .getTasks:
       // Fast LOCAL read — no agent. Fetch today's + overdue tasks and hand them back
@@ -826,7 +852,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         if !today.isEmpty { out += "Due today (\(today.count)):\n\(list(today))\n" }
         if out.isEmpty { out = "No tasks overdue or due today." }
         log("RealtimeHub[\(self.providerTag)]: tool get_tasks → \(overdue.count) overdue, \(today.count) today")
-        self.sendToolResultIfCurrent(source: source, callId: callId, name: name, output: out)
+        self.sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: out, expectedTurnEpoch: toolTurnEpoch)
       }
     case .getMemories:
       // Fast READ — "who am I" / "what do you know about me". Backend memories+facts.
@@ -834,7 +861,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name,
         emptyText: "I don't have any memories saved about you yet.",
-        errorText: "Could not read your memories right now."
+        errorText: "Could not read your memories right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) { try await APIClient.shared.toolGetMemories(limit: 15).resultText }
     case .searchMemories:
       let query = arg("query")
@@ -842,7 +870,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
         emptyText: "I couldn't find anything about that.",
-        errorText: "Could not search your memories right now."
+        errorText: "Could not search your memories right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) { try await APIClient.shared.toolSearchMemories(query: query, limit: 5).resultText }
     case .searchConversations:
       // Capped for voice: top 5, summaries only (no full transcripts).
@@ -851,7 +880,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
         emptyText: "I couldn't find a conversation about that.",
-        errorText: "Could not search your conversations right now."
+        errorText: "Could not search your conversations right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         try await APIClient.shared.toolSearchConversations(
           query: query, limit: 5, includeTranscript: false
@@ -865,7 +895,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name,
         emptyText: "I don't see any recent conversations.",
-        errorText: "Could not read your recent conversations right now."
+        errorText: "Could not read your recent conversations right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         try await APIClient.shared.toolGetConversations(
           limit: 3, includeTranscript: false
@@ -880,7 +911,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: "days_ago=\(daysAgo)",
         emptyText: "I don't have any activity recorded for then.",
-        errorText: "Could not pull up your activity right now."
+        errorText: "Could not pull up your activity right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         await ChatToolExecutor.execute(
           ToolCall(name: "get_daily_recap", arguments: ["days_ago": daysAgo], thoughtSignature: nil))
@@ -895,16 +927,49 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: completed.map { "completed=\($0)" } ?? "",
         emptyText: "I couldn't find any matching tasks.",
-        errorText: "Could not read your tasks right now."
+        errorText: "Could not read your tasks right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         try await APIClient.shared.toolGetActionItems(
           limit: 25, completed: completed, dueStartDate: dueStart, dueEndDate: dueEnd
         ).resultText
       }
     case .getTaskAgentStatus:
-      let result = TaskAgentStatusRegistry.shared.combinedSummary()
-      log("RealtimeHub[\(providerTag)]: tool get_task_agent_status")
-      sendToolResultIfCurrent(source: source, callId: callId, name: name, output: result)
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "coordinator_open_loops_and_completion_delta",
+        emptyText: "No active agent attention items.",
+        errorText: "Could not read the agent coordinator right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        do {
+          let openLoops = try await DesktopCoordinatorService.shared.openLoopsJSON()
+          if let completionDelta = await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surfaceKind: "ptt") {
+            self.pendingCompletedAgentDeltaAckIds = completionDelta.ids
+            return """
+            \(openLoops)
+
+            # Completed Agent Delta
+            \(completionDelta.prompt)
+            """
+          }
+          if self.coordinatorOpenLoopsIsEmpty(openLoops) {
+            let fallback = TaskAgentStatusRegistry.shared.combinedSummary()
+            if !fallback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+              return """
+              No open coordinator loops or newly completed canonical agent deltas.
+
+              # Legacy/Floating Agent Status
+              \(fallback)
+              """
+            }
+          }
+          return openLoops
+        } catch {
+          logError("RealtimeHub[\(self.providerTag)]: coordinator status fallback failed", error: error)
+          return TaskAgentStatusRegistry.shared.combinedSummary()
+        }
+      }
     case .manageAgentPills:
       let action = ((arguments["action"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
         .flatMap { $0.isEmpty ? nil : $0 } ?? "list"
@@ -917,7 +982,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
         emptyText: "No canonical agent data came back.",
-        errorText: "Could not reach the agent control plane right now."
+        errorText: "Could not reach the agent control plane right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
       }
@@ -930,7 +996,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
         emptyText: "I couldn't find anything on your screen about that.",
-        errorText: "Could not search your screen history right now."
+        errorText: "Could not search your screen history right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         await ChatToolExecutor.execute(
           ToolCall(name: "search_screen_history", arguments: toolArgs, thoughtSignature: nil))
@@ -948,7 +1015,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: "\"\(description.prefix(60))\"",
         emptyText: "Task created.",
-        errorText: "Could not create the task right now."
+        errorText: "Could not create the task right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         try await APIClient.shared.toolCreateActionItem(
           description: description, dueAt: dueAt
@@ -968,7 +1036,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: "id=\(id.prefix(8))",
         emptyText: "Task updated.",
-        errorText: "Could not update the task right now."
+        errorText: "Could not update the task right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         try await APIClient.shared.toolUpdateActionItem(
           id: id, completed: completed, description: newDescription, dueAt: dueAt
@@ -996,7 +1065,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source,
         callId: callId, name: name, detail: "\"\(title.prefix(60))\"",
         emptyText: "Calendar event created.",
-        errorText: "Could not create the calendar event right now."
+        errorText: "Could not create the calendar event right now.",
+        expectedTurnEpoch: toolTurnEpoch
       ) {
         try await APIClient.shared.toolCreateCalendarEvent(
           title: title,
@@ -1020,8 +1090,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       case "hermes": directedProvider = .hermes
       case "": directedProvider = nil
       default:
-        session?.sendToolResult(
-          callId: callId, name: name,
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
           output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
         return
       }
@@ -1087,6 +1157,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   func hubDidFinishTurn(source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
+    guard pendingRealtimeToolCallIds.isEmpty else {
+      log("RealtimeHub[\(providerTag)]: deferring turn done with \(pendingRealtimeToolCallIds.count) tool result(s) pending")
+      return
+    }
     responding = false
     hubReconnectStrikes = 0  // a completed turn proves the hub works — reset the budget
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1103,7 +1177,32 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       turnRecorded = true
       FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
     }
+    if !pendingCompletedAgentDeltaAckIds.isEmpty {
+      DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
+        surfaceKind: "ptt",
+        ids: pendingCompletedAgentDeltaAckIds
+      )
+      pendingCompletedAgentDeltaAckIds.removeAll()
+    }
     exitVoiceUI()
+  }
+
+  private func toolCallKey(callId: String, name: String, turnEpoch: Int) -> String {
+    "\(turnEpoch):\(name):\(callId)"
+  }
+
+  private func clearRealtimeToolTracking() {
+    realtimeToolTurnEpoch += 1
+    pendingRealtimeToolCallIds.removeAll()
+  }
+
+  private func coordinatorOpenLoopsIsEmpty(_ raw: String) -> Bool {
+    guard let data = raw.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return false }
+    if let openLoops = object["openLoops"] as? [Any] { return openLoops.isEmpty }
+    if let items = object["items"] as? [Any] { return items.isEmpty }
+    return false
   }
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {
@@ -1115,6 +1214,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       || (barState?.isVoiceListening == true)
       || (barState?.isVoiceResponseActive == true)
     responding = false
+    pendingCompletedAgentDeltaAckIds.removeAll()
+    clearRealtimeToolTracking()
     let aliveFor = (hubConnected ? lastWarmAt.map { Date().timeIntervalSince($0) } : nil) ?? 0
     // Most "session error" closes are expected lifecycle events, not bugs: a socket
     // that lived past the idle window is a normal provider idle-close (Gemini ~2.5min,

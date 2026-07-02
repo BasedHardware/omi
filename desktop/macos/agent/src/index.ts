@@ -81,6 +81,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
   "list_agent_sessions",
   "get_agent_run",
+  "build_desktop_awareness_snapshot",
+  "list_desktop_action_queue",
+  "get_desktop_open_loops",
+  "build_desktop_context_packet",
+  "route_desktop_intent",
+  "evaluate_desktop_tool_policy",
+  "create_desktop_dispatch",
+  "resolve_desktop_dispatch",
   "cancel_agent_run",
   "inspect_agent_artifacts",
   "update_agent_artifact_lifecycle",
@@ -1170,6 +1178,7 @@ async function main(): Promise<void> {
                 const toolResult = await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
+                    trustedUserControl: false,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
@@ -1314,6 +1323,7 @@ async function main(): Promise<void> {
               ? await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
+                    trustedUserControl: true,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () => controlContext.activeOwnerId,
                   },

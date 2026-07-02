@@ -125,6 +125,10 @@ function localApiOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailabi
   };
 }
 
+function trustedDirectControlOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
+  return {};
+}
+
 export const swiftToolManifest: OmiToolManifestEntry[] = [
   {
     name: "execute_sql",
@@ -776,6 +780,7 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
 ] satisfies OmiToolManifestEntry[];
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
+  const adapters = tool.name === "resolve_desktop_dispatch" ? trustedDirectControlOnly() : piAndStdio();
   return {
     name: tool.name,
     label: tool.label,
@@ -797,7 +802,7 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     executor: { kind: "runtimeControl" },
     intendedForAgents: true,
     runtimePreconditions: tool.runtimePreconditions,
-    adapters: piAndStdio(),
+    adapters,
   };
 }
 

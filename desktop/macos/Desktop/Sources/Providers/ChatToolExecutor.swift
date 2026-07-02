@@ -44,6 +44,11 @@ class ChatToolExecutor {
   ) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
+    if case .deny(let message) = localPolicyDecision(toolName: toolCall.name, arguments: toolCall.arguments) {
+      log("Tool \(toolCall.name) denied by local policy")
+      return message
+    }
+
     switch toolCall.name {
     case "get_local_status":
       return await executeLocalStatus()
@@ -180,6 +185,75 @@ class ChatToolExecutor {
     }
   }
 
+  // MARK: - Local Tool Policy
+
+  nonisolated enum LocalToolPolicyDecision: Equatable {
+    case allow
+    case deny(String)
+  }
+
+  nonisolated static func localPolicyDecision(toolName: String, arguments: [String: Any]) -> LocalToolPolicyDecision {
+    switch toolName {
+    case "execute_sql":
+      guard let query = arguments["query"] as? String, !query.isEmpty else {
+        return .allow
+      }
+      guard isReadOnlySQLStatement(query) else {
+        return .deny(
+          policyDeniedMessage(
+            toolName: toolName,
+            code: "approval_required",
+            capability: "desktop.context.local_write",
+            message: "SQL writes require explicit approval before Omi can change local data."
+          ))
+      }
+      return .allow
+
+    case "complete_task", "delete_task", "create_action_item", "update_action_item":
+      return .deny(
+        policyDeniedMessage(
+          toolName: toolName,
+          code: "approval_required",
+          capability: "desktop.tasks.readwrite",
+          message: "Task changes from an agent require explicit approval before Omi can update your tasks."
+        ))
+
+    case "capture_screen", "get_screenshot":
+      return .deny(
+        policyDeniedMessage(
+          toolName: toolName,
+          code: "approval_required",
+          capability: "desktop.context.screenshot_image",
+          message: "Screenshot image access requires explicit approval before Omi can share screen image bytes."
+        ))
+
+    default:
+      return .allow
+    }
+  }
+
+  private nonisolated static func policyDeniedMessage(
+    toolName: String,
+    code: String,
+    capability: String,
+    message: String
+  ) -> String {
+    let payload = [
+      "ok": false,
+      "code": code,
+      "tool": toolName,
+      "capability": capability,
+      "message": message,
+    ] as [String: Any]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "POLICY_DENIED: \(message)"
+    }
+    return "POLICY_DENIED: \(json)"
+  }
+
   /// Execute multiple tool calls and return results keyed by tool name
   static func executeAll(_ toolCalls: [ToolCall]) async -> [String: String] {
     var results: [String: String] = [:]
@@ -266,7 +340,7 @@ class ChatToolExecutor {
       }
     } catch {
       logError("Tool execute_sql failed", error: error)
-      return "SQL Error: \(error.localizedDescription)\nFailed query: \(trimmed)"
+      return "SQL Error: The local database could not complete that query."
     }
   }
 

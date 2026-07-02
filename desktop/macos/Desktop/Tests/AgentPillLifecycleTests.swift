@@ -413,6 +413,35 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(viewSource.contains("state.reportContentHeight(height, for: .agent(pill.id))"))
   }
 
+  func testSharedChatMessagesOpenAndSendFollowLatest() throws {
+    let source = try chatMessagesViewSource()
+
+    XCTAssertTrue(source.contains("On the first load of a saved conversation, follow the latest message."))
+    XCTAssertTrue(source.contains("scrollToBottom(proxy: proxy)\n        scheduleInitialScroll(proxy: proxy, delay: 0.05)"))
+    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
+    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
+    XCTAssertTrue(source.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
+    XCTAssertTrue(source.contains(".background(viewportResizeDetector(proxy: proxy))"))
+    XCTAssertTrue(source.contains("scrollMode = .followingBottom\n        hasActivityBelow = false\n        userIsScrolling = false"))
+    XCTAssertFalse(source.contains("Find the last user message"))
+  }
+
+  func testFloatingSubagentChatSettlesToLatestOnOpenContentAndResize() throws {
+    let viewSource = try floatingControlBarViewSource()
+    let scrollSource = try chatScrollBehaviorSource()
+
+    XCTAssertTrue(viewSource.contains("ChatScrollContainer("))
+    XCTAssertTrue(viewSource.contains("bottomAnchorId: \"agentBottom\""))
+    XCTAssertTrue(viewSource.contains("contentChangeToken: scrollContentToken"))
+    XCTAssertTrue(scrollSource.contains("@State private var lastViewportSize: CGSize = .zero"))
+    XCTAssertTrue(scrollSource.contains(".background(viewportResizeDetector(proxy: proxy))"))
+    XCTAssertTrue(scrollSource.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
+    XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow(proxy: proxy)"))
+    XCTAssertTrue(scrollSource.contains("for delay in [0.05, 0.16, 0.32]"))
+    XCTAssertFalse(viewSource.contains("private func agentChatViewportResizeDetector"))
+    XCTAssertFalse(viewSource.contains("private func scrollToBottomSettled(_ proxy: ScrollViewProxy)"))
+  }
+
   func testActiveSubagentChatDoesNotDependOnMainChatHeight() throws {
     let viewSource = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
@@ -564,6 +593,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("return eventResponseID == expected"))
     XCTAssertFalse(sessionSource.contains("guard let expected = openAIActiveResponseID else { return true }"))
     XCTAssertTrue(sessionSource.contains("ignoring stale response.done"))
+    XCTAssertTrue(sessionSource.contains("private var pendingOpenAIToolCallIds = Set<String>()"))
+    XCTAssertTrue(sessionSource.contains("pendingOpenAIToolCallIds.insert(callId)"))
+    XCTAssertTrue(sessionSource.contains("waiting for \\(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s)"))
+    XCTAssertTrue(sessionSource.contains("private var pendingGeminiToolCallIds = Set<String>()"))
+    XCTAssertTrue(sessionSource.contains("pendingGeminiToolCallIds.insert(callId)"))
+    XCTAssertTrue(sessionSource.contains("deferring Gemini turnComplete with"))
+    XCTAssertTrue(sessionSource.contains("nextGeminiSyntheticToolCallId(name: name)"))
+    XCTAssertFalse(sessionSource.contains("let callId = call[\"id\"] as? String ?? name"))
   }
 
   func testCredentialHealthRetryAndFailoverInvariants() throws {
@@ -771,8 +808,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("if pill.status.isFinished {\n            return\n        }"))
     XCTAssertTrue(source.contains("guard !pill.status.isFinished || projection.status.isTerminal else { return }"))
     XCTAssertTrue(source.contains("let activity = Self.describeActivity(for: aiMessage)"))
-    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordLocalSuccess("))
-    XCTAssertTrue(statusStoreSource.contains("func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil)"))
+    XCTAssertFalse(source.contains("AgentRuntimeStatusStore.shared.recordPresentationCompletion("))
+    XCTAssertFalse(statusStoreSource.contains("func recordPresentationCompletion("))
+    XCTAssertFalse(statusStoreSource.contains("func recordLocalSuccess("))
     XCTAssertTrue(statusStoreSource.contains("if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {\n      return\n    }"))
   }
 
@@ -1063,6 +1101,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func chatMessagesViewSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Components/ChatMessagesView.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
