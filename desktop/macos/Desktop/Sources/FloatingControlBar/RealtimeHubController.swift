@@ -288,18 +288,36 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     refreshAboutUserCard()
   }
 
+  /// Rewarm request that arrived mid PTT capture — retried at the clean
+  /// end-of-turn points (hubDidFinishTurn / cancelTurn). Any teardownSession
+  /// clears it: the rebuild that follows is what the deferred request wanted.
+  private var pendingRewarmReason: String?
+
   /// Shared idle-only "drop and rebuild the warm session" used by discrete
   /// refresh events. Only acts when idle: a live session exists and we're
-  /// neither mid-reply, mid-mint, mid barge-in replacement, nor mid PTT
-  /// capture (voice UI listening), so this never interrupts an active turn,
-  /// drops in-flight audio, or races a connect already in flight. teardown
+  /// neither mid-reply, mid-mint, nor mid barge-in replacement, so this never
+  /// interrupts an active turn or races a connect already in flight. A request
+  /// landing mid PTT capture (voice UI listening) is deferred to the end of
+  /// the voice turn, not dropped: tearing down now would cut the audio being
+  /// spoken, but skipping outright could leave a possibly-stale socket alive
+  /// with no recovery (e.g. system wake during locked listening). teardown
   /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat
   /// the stale socket as already-warm and no-op).
   private func forceRewarm(reason: String) {
-    guard session != nil, !responding, !minting, !bargeInReplacementInFlight, barState?.isVoiceListening != true else { return }
+    guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }
+    if barState?.isVoiceListening == true {
+      pendingRewarmReason = reason
+      return
+    }
     log("RealtimeHub: \(reason) — re-warming session")
     teardownSession()
     ensureWarm()
+  }
+
+  /// Retry a rewarm deferred by forceRewarm once the voice turn has ended.
+  private func firePendingRewarm() {
+    guard let reason = pendingRewarmReason else { return }
+    forceRewarm(reason: reason)
   }
 
   /// System woke from sleep — proactively replace a possibly-stale socket so the first PTT
@@ -419,6 +437,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     session = s
     sessionProvider = provider
     sessionAuth = auth
+    // A brand-new session IS the rebuild a deferred rewarm wanted — also covers
+    // restartSessionForBargeIn, which replaces the session without teardownSession.
+    pendingRewarmReason = nil
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
     // AVSpeech is only a no-audio fallback.
     if pcmPlayer == nil {
@@ -440,6 +461,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     sessionAuth = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     clearBargeInReplacementState()
+    pendingRewarmReason = nil  // the rebuild that follows any teardown is what the deferral wanted
   }
 
   private func clearBargeInReplacementState() {
@@ -698,6 +720,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // warm session (and its context) so the next real turn is instant and in-context.
     session?.abandonInputTurn()
     exitVoiceUI(clearResponseGlow: true)
+    firePendingRewarm()
   }
 
   // MARK: - RealtimeHubSessionDelegate
@@ -1148,7 +1171,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       turnRecorded = true
       FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
     }
+    // Captured before exitVoiceUI clears it: a turn-done delivered late — after
+    // the user already began the next capture — must not fire the pending
+    // rewarm mid-capture; it stays parked for the next clean end of turn.
+    let wasMidCapture = barState?.isVoiceListening == true
     exitVoiceUI()
+    if !wasMidCapture { firePendingRewarm() }
   }
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {

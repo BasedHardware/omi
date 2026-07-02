@@ -53,19 +53,29 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("output: installMessage)"))
   }
 
-  func testForceRewarmIsIdleGatedIncludingBargeInReplacement() throws {
+  func testForceRewarmIsIdleGatedAndDefersWhileVoiceListening() throws {
     let source = try realtimeHubControllerSource()
 
     // Shared idle-only re-warm used by system wake and provider-change
-    // refresh; the guard also skips an in-flight barge-in replacement and
-    // active PTT capture (listening), so async callers can't drop live audio.
+    // refresh; the guard also skips an in-flight barge-in replacement. A
+    // request landing mid PTT capture (listening) is deferred to the end of
+    // the voice turn — never dropped — so async callers can't cut live audio
+    // and a wake during locked listening can't leave a stale socket forever.
     XCTAssertTrue(source.contains("private func forceRewarm(reason: String) {"))
     XCTAssertTrue(
-      source.contains(
-        "guard session != nil, !responding, !minting, !bargeInReplacementInFlight, barState?.isVoiceListening != true else { return }"
-      ))
+      source.contains("guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }"))
+    XCTAssertTrue(source.contains("if barState?.isVoiceListening == true {"))
+    XCTAssertTrue(source.contains("pendingRewarmReason = reason"))
     XCTAssertTrue(source.contains("forceRewarm(reason: \"system woke (dropping possibly-stale socket)\")"))
     XCTAssertTrue(source.contains("forceRewarm(reason: \"local agent provider availability changed\")"))
+    // Deferred requests retry at both clean end-of-turn points — except when a
+    // late turn-done raced a new capture — and any teardown or fresh session
+    // clears them (the rebuild is what the deferral wanted).
+    XCTAssertTrue(source.contains("private func firePendingRewarm() {"))
+    XCTAssertTrue(source.contains("let wasMidCapture = barState?.isVoiceListening == true"))
+    XCTAssertTrue(source.contains("if !wasMidCapture { firePendingRewarm() }"))
+    XCTAssertTrue(source.contains("exitVoiceUI(clearResponseGlow: true)\n    firePendingRewarm()"))
+    XCTAssertTrue(source.contains("pendingRewarmReason = nil"))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {
