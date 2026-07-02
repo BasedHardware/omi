@@ -318,10 +318,10 @@ enum MemoryExportExecutor {
     }
 
     if let hint = destination.assistedOverlayHint,
-      let fields = destination.assistedSetupFields(key: key)
+      let sections = destination.assistedSetupSections(key: key)
     {
       CloudConnectorGuidanceOverlay.shared.presentFieldCopyCard(
-        title: hint.title, subtitle: hint.subtitle, fields: fields, near: nil)
+        title: hint.title, subtitle: hint.subtitle, sections: sections, near: nil)
       return Outcome(
         taskTitle:
           "Opened \(destination.title) — copy each value from the on-screen card into the form.",

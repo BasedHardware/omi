@@ -263,11 +263,10 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         copyTitle: nil,
         copyText: nil,
         steps: [
-          "Open ChatGPT → Settings → Apps → Advanced, enable Developer mode",
-          "Create app → name it “Omi Memory” and paste the server URL below",
-          "Authentication: OAuth. In Advanced OAuth settings set Client ID “\(cloudOAuthClientID ?? "")”, leave Client Secret blank, and set token auth method “\(cloudTokenAuthMethod ?? "none")”",
-          "Auth URL: \(Self.mcpAuthorizeURL) · Token URL: \(Self.mcpTokenURL)",
-          "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
+          "Open ChatGPT → Settings → Apps → Advanced, then enable Developer mode",
+          "Click Create app, then fill the first visible fields: Name “Omi Memory”, Connection / server URL, and Authentication OAuth",
+          "Paste OAuth Client ID “\(cloudOAuthClientID ?? "")”, leave Client Secret blank, set token auth method “\(cloudTokenAuthMethod ?? "none")”, Auth URL, and Token URL",
+          "Click Create app, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
         ],
         openURL: URL(string: "https://chatgpt.com/#settings/Connectors"),
         openTitle: "Open ChatGPT"
@@ -508,34 +507,59 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   /// Field-by-field payload for assisted cloud setup — rendered as copy rows on
   /// the on-screen guidance card so the user transfers one value at a time.
   func assistedSetupFields(key: String) -> [CloudConnectorCopyField]? {
+    assistedSetupSections(key: key).map(CloudConnectorCopySection.flattenedFields)
+  }
+
+  /// Sectioned field payload for assisted cloud setup. Use sections when the
+  /// provider form hides some fields behind an advanced disclosure.
+  func assistedSetupSections(key: String) -> [CloudConnectorCopySection]? {
     guard let setup = mcpSetup(key: key) else { return nil }
     switch self {
     case .claude:
       // Public OAuth client: match the manual setup copy and native automation.
       // Claude may render a secret field, but the backend expects it to stay blank.
       return [
-        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
-        CloudConnectorCopyField(
-          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
-        CloudConnectorCopyField(
-          id: "oauth_client_id", label: "OAuth Client ID", value: cloudOAuthClientID ?? ""),
-        CloudConnectorCopyField(
-          id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+        CloudConnectorCopySection(
+          id: "connector_fields",
+          title: "",
+          fields: [
+            CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+            CloudConnectorCopyField(
+              id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+            CloudConnectorCopyField(
+              id: "oauth_client_id", label: "OAuth Client ID", value: cloudOAuthClientID ?? ""),
+            CloudConnectorCopyField(
+              id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+          ]),
       ]
     case .chatgpt:
       // Public PKCE client: the backend rejects token requests that carry a
       // client secret, so the form's Client Secret field must stay empty.
       return [
-        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
-        CloudConnectorCopyField(
-          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
-        CloudConnectorCopyField(id: "authentication", label: "Authentication", value: "OAuth"),
-        CloudConnectorCopyField(
-          id: "oauth_client_id", label: "OAuth Client ID", value: Self.chatgptOAuthClientID),
-        CloudConnectorCopyField(
-          id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
-        CloudConnectorCopyField(id: "auth_url", label: "Auth URL", value: Self.mcpAuthorizeURL),
-        CloudConnectorCopyField(id: "token_url", label: "Token URL", value: Self.mcpTokenURL),
+        CloudConnectorCopySection(
+          id: "visible_fields",
+          title: "Main fields",
+          fields: [
+            CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+            CloudConnectorCopyField(
+              id: "server_url", label: "Connection / server URL", value: setup.serverURL),
+            CloudConnectorCopyField(id: "authentication", label: "Authentication", value: "OAuth"),
+          ]),
+        CloudConnectorCopySection(
+          id: "advanced_oauth_settings",
+          title: "Advanced OAuth settings",
+          fields: [
+            CloudConnectorCopyField(
+              id: "oauth_client_id", label: "OAuth Client ID", value: Self.chatgptOAuthClientID),
+            CloudConnectorCopyField(
+              id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+            CloudConnectorCopyField(
+              id: "token_auth_method", label: "Token auth method", value: cloudTokenAuthMethod ?? "none",
+              masksValue: false),
+            CloudConnectorCopyField(id: "auth_url", label: "Auth URL", value: Self.mcpAuthorizeURL),
+            CloudConnectorCopyField(
+              id: "token_url", label: "Token URL", value: Self.mcpTokenURL, masksValue: false),
+          ]),
       ]
     default:
       return nil
@@ -553,7 +577,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt:
       return (
         "Finish in ChatGPT",
-        "Turn on Developer mode in Settings → Apps, then copy each value into the connector form."
+        "In Settings → Apps → Advanced, enable Developer mode. Then click Create app and fill the fields below."
       )
     default:
       return nil
