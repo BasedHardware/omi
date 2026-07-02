@@ -5,6 +5,7 @@ import SwiftUI
 /// automatic replies. Mirrors the iMessage Replies tab; Telegram has no local DB,
 /// so all data flows through TelegramInboxStore -> TelegramClientService (MTProto).
 struct TelegramInboxPage: View {
+  static let telegramBlue = Color(red: 0.15, green: 0.63, blue: 0.92)
   @ObservedObject private var store = TelegramInboxStore.shared
   @State private var composeText: String = ""
   @State private var passcode: String = ""
@@ -161,24 +162,46 @@ struct TelegramInboxPage: View {
   }
 
   private func composeBar(for chat: TelegramChat) -> some View {
-    HStack(spacing: 8) {
+    let accent = Self.telegramBlue
+    let canSend = !composeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    return HStack(alignment: .bottom, spacing: 10) {
       Button {
         Task { await store.generateDraft() }
       } label: {
         Image(systemName: "sparkles")
+          .font(.system(size: 15))
+          .foregroundStyle(accent)
+          .frame(width: 32, height: 32)
+          .background(Circle().fill(accent.opacity(0.12)))
       }
+      .buttonStyle(.plain)
       .help("Draft a reply in your voice")
 
       TextField("Message", text: $composeText, axis: .vertical)
-        .textFieldStyle(.roundedBorder)
+        .textFieldStyle(.plain)
         .lineLimit(1...4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+          RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.quaternary.opacity(0.5))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .stroke(.secondary.opacity(0.15), lineWidth: 1)
+        )
         .onSubmit(sendComposed)
 
-      Button("Send", action: sendComposed)
-        .buttonStyle(.borderedProminent)
-        .disabled(composeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      Button(action: sendComposed) {
+        Image(systemName: "arrow.up.circle.fill")
+          .font(.system(size: 28))
+          .foregroundStyle(canSend ? accent : Color.secondary.opacity(0.5))
+      }
+      .buttonStyle(.plain)
+      .disabled(!canSend)
     }
-    .padding(10)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 10)
+    .overlay(alignment: .top) { Divider().overlay(Color.secondary.opacity(0.15)) }
     .onChange(of: store.selectedChatID) { composeText = "" }
     .onChange(of: store.preDrafts[chat.chatID]) { _, newValue in
       // Surface a fresh pre-draft in the compose bar for review + edit.

@@ -70,7 +70,7 @@ struct WhatsAppInboxPage: View {
       } else {
         ScrollView {
           LazyVStack(spacing: 0) {
-            ForEach(store.chats) { chat in
+            ForEach(Array(store.chats.enumerated()), id: \.element.id) { idx, chat in
               ConversationRow(
                 chat: chat, isSelected: chat.id == store.selectedChatID,
                 accent: Self.whatsappGreen,
@@ -78,6 +78,9 @@ struct WhatsAppInboxPage: View {
               )
               .contentShape(Rectangle())
               .onTapGesture { store.selectedChatID = chat.id }
+              if idx < store.chats.count - 1 {
+                Divider().overlay(OmiColors.textTertiary.opacity(0.18)).padding(.leading, 62)
+              }
             }
           }
         }
@@ -266,10 +269,13 @@ private struct ChatDetailView: View {
         Text(infoText).scaledFont(size: 11).foregroundColor(accent)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
-      HStack(alignment: .bottom, spacing: 8) {
+      HStack(alignment: .bottom, spacing: 10) {
         Button { Task { await generateDraft(force: true) } } label: {
           Image(systemName: "sparkles")
+            .font(.system(size: 15))
             .foregroundColor(isDrafting ? OmiColors.textTertiary : accent)
+            .frame(width: 32, height: 32)
+            .background(Circle().fill(accent.opacity(0.12)))
         }
         .buttonStyle(.plain)
         .help("Draft a reply with Omi")
@@ -278,40 +284,45 @@ private struct ChatDetailView: View {
         ZStack(alignment: .leading) {
           if draft.isEmpty && !isDrafting {
             Text("Message").scaledFont(size: 13).foregroundColor(OmiColors.textTertiary)
-              .padding(.leading, 12)
+              .padding(.leading, 14)
           }
           if isDrafting {
             HStack(spacing: 6) {
               ProgressView().controlSize(.small)
               Text("Omi is drafting…").scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
-            }.padding(.leading, 12)
+            }.padding(.leading, 14)
           }
           TextEditor(text: $draft)
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textPrimary)
             .scrollContentBackground(.hidden)
-            .frame(minHeight: 20, maxHeight: 90)
-            .padding(.horizontal, 8)
+            .frame(minHeight: 22, maxHeight: 90)
+            .padding(.horizontal, 10)
             .opacity(isDrafting ? 0 : 1)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 7)
         .background(
-          RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(OmiColors.textTertiary.opacity(0.4), lineWidth: 1)
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .stroke(OmiColors.textTertiary.opacity(0.15), lineWidth: 1)
         )
 
         Button { Task { await send() } } label: {
           Image(systemName: "arrow.up.circle.fill")
-            .font(.system(size: 26))
-            .foregroundColor(canSend ? accent : OmiColors.textTertiary)
+            .font(.system(size: 28))
+            .foregroundColor(canSend ? accent : OmiColors.textTertiary.opacity(0.5))
         }
         .buttonStyle(.plain)
         .disabled(!canSend)
       }
     }
-    .padding(.horizontal, 12)
+    .padding(.horizontal, 14)
     .padding(.vertical, 10)
     .background(OmiColors.backgroundPrimary)
+    .overlay(alignment: .top) { Divider().overlay(OmiColors.textTertiary.opacity(0.15)) }
   }
 
   private var canSend: Bool {
@@ -399,13 +410,26 @@ private struct ChatBubbleView: View {
 
   @State private var loadedImage: NSImage?
 
+  private var showGutter: Bool { isGroup && !bubble.isFromMe }
+
   var body: some View {
-    HStack {
+    HStack(alignment: .bottom, spacing: 6) {
       if bubble.isFromMe { Spacer(minLength: 60) }
+      if showGutter {
+        // Avatar gutter for group senders — shown at the start of a run, else a
+        // spacer keeps consecutive bubbles aligned under it.
+        if showSender {
+          Avatar(name: bubble.senderName ?? "?", size: 26, imageData: bubble.senderImage)
+        } else {
+          Color.clear.frame(width: 26, height: 26)
+        }
+      }
       VStack(alignment: bubble.isFromMe ? .trailing : .leading, spacing: 2) {
         if showSender, let sender = bubble.senderName {
-          Text(sender).scaledFont(size: 10).foregroundColor(OmiColors.textTertiary)
-            .padding(.leading, 12)
+          Text(sender)
+            .scaledFont(size: 11, weight: .semibold)
+            .foregroundColor(Self.senderColor(for: sender))
+            .padding(.leading, 4)
         }
         if let path = bubble.imagePath {
           imageAttachment(path: path)
@@ -416,6 +440,19 @@ private struct ChatBubbleView: View {
       }
       if !bubble.isFromMe { Spacer(minLength: 60) }
     }
+  }
+
+  /// Stable, readable per-sender color so "who said what" is clear at a glance in
+  /// group chats. Deterministic from the name so a sender keeps the same color.
+  private static func senderColor(for name: String) -> Color {
+    let palette: [Color] = [
+      Color(red: 0.40, green: 0.71, blue: 1.00), Color(red: 0.53, green: 0.85, blue: 0.55),
+      Color(red: 1.00, green: 0.71, blue: 0.40), Color(red: 0.98, green: 0.55, blue: 0.60),
+      Color(red: 0.72, green: 0.64, blue: 0.98), Color(red: 0.42, green: 0.86, blue: 0.82),
+      Color(red: 0.96, green: 0.80, blue: 0.36),
+    ]
+    let h = abs(name.hashValue)
+    return palette[h % palette.count]
   }
 
   @ViewBuilder

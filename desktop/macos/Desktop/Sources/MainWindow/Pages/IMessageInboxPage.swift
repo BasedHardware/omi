@@ -70,13 +70,16 @@ struct IMessageInboxPage: View {
       } else {
         ScrollView {
           LazyVStack(spacing: 0) {
-            ForEach(store.chats) { chat in
+            ForEach(Array(store.chats.enumerated()), id: \.element.id) { idx, chat in
               ConversationRow(
                 chat: chat, isSelected: chat.id == store.selectedChatID,
                 draftReady: store.preDrafts[chat.id] != nil
               )
               .contentShape(Rectangle())
               .onTapGesture { store.selectedChatID = chat.id }
+              if idx < store.chats.count - 1 {
+                Divider().overlay(OmiColors.textTertiary.opacity(0.18)).padding(.leading, 62)
+              }
             }
           }
         }
@@ -257,10 +260,13 @@ private struct ChatDetailView: View {
         Text(errorText).scaledFont(size: 11).foregroundColor(.orange)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
-      HStack(alignment: .bottom, spacing: 8) {
+      HStack(alignment: .bottom, spacing: 10) {
         Button { Task { await generateDraft(force: true) } } label: {
           Image(systemName: "sparkles")
+            .font(.system(size: 15))
             .foregroundColor(isDrafting ? OmiColors.textTertiary : accent)
+            .frame(width: 32, height: 32)
+            .background(Circle().fill(accent.opacity(0.12)))
         }
         .buttonStyle(.plain)
         .help("Draft a reply with Omi")
@@ -269,40 +275,45 @@ private struct ChatDetailView: View {
         ZStack(alignment: .leading) {
           if draft.isEmpty && !isDrafting {
             Text("iMessage").scaledFont(size: 13).foregroundColor(OmiColors.textTertiary)
-              .padding(.leading, 12)
+              .padding(.leading, 14)
           }
           if isDrafting {
             HStack(spacing: 6) {
               ProgressView().controlSize(.small)
               Text("Omi is drafting…").scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
-            }.padding(.leading, 12)
+            }.padding(.leading, 14)
           }
           TextEditor(text: $draft)
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textPrimary)
             .scrollContentBackground(.hidden)
-            .frame(minHeight: 20, maxHeight: 90)
-            .padding(.horizontal, 8)
+            .frame(minHeight: 22, maxHeight: 90)
+            .padding(.horizontal, 10)
             .opacity(isDrafting ? 0 : 1)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 7)
         .background(
-          RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(OmiColors.textTertiary.opacity(0.4), lineWidth: 1)
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .stroke(OmiColors.textTertiary.opacity(0.15), lineWidth: 1)
         )
 
         Button { Task { await send() } } label: {
           Image(systemName: "arrow.up.circle.fill")
-            .font(.system(size: 26))
-            .foregroundColor(canSend ? accent : OmiColors.textTertiary)
+            .font(.system(size: 28))
+            .foregroundColor(canSend ? accent : OmiColors.textTertiary.opacity(0.5))
         }
         .buttonStyle(.plain)
         .disabled(!canSend)
       }
     }
-    .padding(.horizontal, 12)
+    .padding(.horizontal, 14)
     .padding(.vertical, 10)
     .background(OmiColors.backgroundPrimary)
+    .overlay(alignment: .top) { Divider().overlay(OmiColors.textTertiary.opacity(0.15)) }
   }
 
   private var canSend: Bool {

@@ -290,6 +290,7 @@ actor WhatsAppReaderService {
 
     var chats: [WhatsAppChat] = []
     let resolver = IMessageContactResolver.shared
+    let thumbMap = Self.profileThumbMap()
     for (chatID, recs) in byChat {
       let sorted = recs.sorted { $0.date < $1.date }
       guard let latest = sorted.last else { continue }
@@ -307,7 +308,9 @@ actor WhatsAppReaderService {
         if let handle = latest.handle ?? Self.handle(fromJID: chatID) {
           title = await resolver.displayName(for: handle) ?? groupName ?? Self.prettyHandle(handle)
           personRef = handle
-          avatar = await resolver.imageData(for: handle)
+          // Prefer the saved Contacts photo; fall back to WhatsApp's own profile thumb.
+          avatar =
+            await resolver.imageData(for: handle) ?? Self.profileThumb(for: chatID, in: thumbMap)
         } else {
           title = groupName ?? "Unknown"
           personRef = title
@@ -315,6 +318,8 @@ actor WhatsAppReaderService {
       } else {
         title = groupName ?? "Group Chat"
         personRef = chatID
+        // Groups have no Contacts entry — use WhatsApp's cached group photo.
+        avatar = Self.profileThumb(for: chatID, in: thumbMap)
       }
 
       let members = isGroup ? (membersByChat[chatID] ?? [:]) : [:]
@@ -323,7 +328,7 @@ actor WhatsAppReaderService {
         guard !r.text.isEmpty || r.imagePath != nil else { continue }
         var senderImg: Data? = nil
         if isGroup, !r.isFromMe, let h = r.handle {
-          senderImg = await resolver.imageData(for: h)
+          senderImg = await resolver.imageData(for: h) ?? Self.profileThumb(for: h, in: thumbMap)
         }
         let bubbleText = r.text.isEmpty ? "" : Self.resolveMentions(in: r.text, members: members)
         bubbles.append(
@@ -343,6 +348,38 @@ actor WhatsAppReaderService {
 
     chats.sort { $0.lastDate > $1.lastDate }
     return Array(chats.prefix(maxChats))
+  }
+
+  // MARK: - Profile photos
+
+  /// WhatsApp caches contact/group profile thumbnails under `Media/Profile/` as
+  /// `<jid-local-part>-<id>.thumb` (96×96 JPEG). Build a one-shot map of
+  /// local-part → file path so per-chat avatar lookup is O(1) (no per-chat
+  /// directory scan). Only ~dozens of files exist, so this is cheap.
+  private static func profileThumbMap() -> [String: String] {
+    let dir = WhatsAppPermissionPolicy.messageMediaDirectoryURL
+      .deletingLastPathComponent()  // .../shared/Message -> .../shared
+      .appendingPathComponent("Media/Profile", isDirectory: true)
+    guard
+      let files = try? FileManager.default.contentsOfDirectory(
+        at: dir, includingPropertiesForKeys: nil)
+    else { return [:] }
+    var map: [String: String] = [:]
+    for f in files where f.pathExtension == "thumb" {
+      // "<localPart>-<id>.thumb" — key on the part before the first dash.
+      let base = f.deletingPathExtension().lastPathComponent
+      guard let dash = base.firstIndex(of: "-") else { continue }
+      let localPart = String(base[..<dash])
+      if !localPart.isEmpty { map[localPart] = f.path }
+    }
+    return map
+  }
+
+  /// The WhatsApp profile-thumb image data for a chat JID, if cached.
+  private static func profileThumb(for jid: String, in map: [String: String]) -> Data? {
+    let localPart = jid.split(separator: "@").first.map(String.init) ?? jid
+    guard let path = map[localPart] else { return nil }
+    return try? Data(contentsOf: URL(fileURLWithPath: path))
   }
 
   // MARK: - Row → record
