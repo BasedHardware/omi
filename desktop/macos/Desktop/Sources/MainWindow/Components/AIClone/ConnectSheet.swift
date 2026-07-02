@@ -929,6 +929,12 @@ struct ConnectSheet: View {
                                 .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textSecondary)
                         }
+                        // plan §8: rate-limit + daily-sent counter.
+                        // Visible in the connect sheet so the
+                        // user knows how close they are to the
+                        // per-hour cap and whether Telegram has
+                        // placed a temporary cooldown.
+                        rateLimitBadge
                     }
                     Spacer()
                     Button("Sign out") { signOutUserAccount() }
@@ -1006,6 +1012,41 @@ struct ConnectSheet: View {
         sessionGeneratorProcess = nil
         generatingSession = false
         sessionGeneratorError = "Cancelled."
+    }
+
+    /// plan §8: rate-limit + daily-sent counter badge, shown
+    /// next to the "Logged in as" text. Renders different
+    /// content based on rate-limit state:
+    /// - blocked (Telegram FLOOD_WAIT active): red warning
+    ///   with the remaining seconds
+    /// - near cap (>=80% of max): yellow warning
+    /// - normal: neutral "X / 30 sent this hour"
+    @ViewBuilder
+    private var rateLimitBadge: some View {
+        let rl = config.telegramRateLimit
+        if rl.isBlocked {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(size: 10)
+                    .foregroundColor(OmiColors.error)
+                Text("Telegram cooldown: \(rl.secondsUntilNextSlot)s")
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.error)
+            }
+        } else if rl.isNearCap {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .scaledFont(size: 10)
+                    .foregroundColor(OmiColors.warning)
+                Text(rl.formatted)
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.warning)
+            }
+        } else {
+            Text(rl.formatted)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textSecondary)
+        }
     }
 
     /// plan §8: "this is your personal account" banner + ToS

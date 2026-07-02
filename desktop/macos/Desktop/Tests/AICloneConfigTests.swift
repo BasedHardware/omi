@@ -424,3 +424,43 @@ final class AICloneConfigTests: XCTestCase {
         try? config.setTelegramUserSession(session2)
         XCTAssertEqual(try? AICloneKeychain.get(.telegramUserSession), session2)
     }
+
+
+    // MARK: - RateLimitDisplay (plan §8)
+
+    func testRateLimitDisplayFormatted() {
+        let rl = RateLimitDisplay(maxPerHour: 30, inWindowCount: 3, isBlocked: false)
+        XCTAssertEqual(rl.formatted, "3 / 30 sent this hour")
+    }
+
+    func testRateLimitDisplayIsNearCapAt80Percent() {
+        // 80% of 30 is 24. So 24 in-window should be near cap.
+        let near = RateLimitDisplay(maxPerHour: 30, inWindowCount: 24)
+        XCTAssertTrue(near.isNearCap)
+        let ok = RateLimitDisplay(maxPerHour: 30, inWindowCount: 23)
+        XCTAssertFalse(ok.isNearCap)
+    }
+
+    func testRateLimitDisplayBlockedIsAlwaysNearCap() {
+        // Even one send + blocked should flag as near-cap so
+        // the user gets the warning. This is the cubic
+        // review 4617059500 P1 protection: the local gate
+        // must be visible to the user when Telegram has
+        // placed a cooldown on the account.
+        let rl = RateLimitDisplay(maxPerHour: 30, inWindowCount: 1, isBlocked: true, secondsUntilNextSlot: 60)
+        XCTAssertTrue(rl.isNearCap)
+    }
+
+    func testRateLimitDisplayZeroMaxPerHourNotConsideredNearCap() {
+        // Defensive: if the plugin reports 0 max, the percent
+        // calc would be NaN. Treat 0 max as "unknown" -- not
+        // near cap.
+        let rl = RateLimitDisplay(maxPerHour: 0, inWindowCount: 0)
+        XCTAssertFalse(rl.isNearCap)
+    }
+
+    func testAICloneConfigRateLimitStartsEmpty() {
+        let config = AICloneConfig(defaults: customDefaults)
+        XCTAssertEqual(config.telegramRateLimit, .empty)
+        XCTAssertEqual(config.telegramMessagesSentToday, 0)
+    }

@@ -189,13 +189,36 @@ async def health():
 
 @app.get("/status", dependencies=[Depends(require_bearer)])
 async def status():
-    """Telethon connection state. Bearer-gated."""
+    """Telethon connection state + rate-limit state. Bearer-gated.
+
+    plan §8: the response carries the rate-limit state so the
+    desktop can show a "Sent X/30 this hour" indicator and
+    warn the user near the cap. Also exposes the current
+    cooldown (FLOOD_WAIT-blocked) so the UI can show a clear
+    "Telegram asked us to wait Xs" message.
+
+    Daily counter (plan §8: "messages sent today"): the daily
+    count is computed from simple_storage's audit log so it
+    survives plugin restarts. The in-memory
+    `default_rate_limit` only covers the rolling 60-min window
+    -- a separate daily count is needed for the "messages sent
+    today" cosmetic counter.
+    """
+    rate = flood_control.default_rate_limit
+    rl_state = {
+        "max_per_hour": rate.max_per_hour,
+        "in_window_count": rate.in_window_count(),
+        "is_blocked": rate.is_blocked(),
+        "seconds_until_next_slot": rate.seconds_until_next_slot(),
+    }
     if _client is None:
         return {
             "connected": False,
             "account_phone": None,
             "account_name": None,
             "device_label": None,
+            "rate_limit": rl_state,
+            "messages_sent_today": _messages_sent_today(),
         }
     connected = await _client.is_connected()
     return {
@@ -203,7 +226,39 @@ async def status():
         "account_phone": _account_meta.get("phone"),
         "account_name": _account_meta.get("name"),
         "device_label": _account_meta.get("device_label"),
+        "rate_limit": rl_state,
+        "messages_sent_today": _messages_sent_today(),
     }
+
+
+def _messages_sent_today() -> int:
+    """Count of outbound sends today (UTC day). plan §8: "Daily
+    'messages sent today' counter on the plugin card". The
+    count is computed from the per-chat send timestamps
+    already in simple_storage -- we don't add a separate
+    counter to avoid duplicating state. Any message where
+    role == "ai" with a timestamp >= today's UTC midnight
+    counts.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    midnight_ts = midnight.timestamp()
+    count = 0
+    for chat_id, chat in simple_storage.chats.items():
+        for msg in chat.get("recent_messages", []):
+            if msg.get("role") != "ai":
+                continue
+            ts = msg.get("ts")
+            if ts is None:
+                continue
+            try:
+                if float(ts) >= midnight_ts:
+                    count += 1
+            except (ValueError, TypeError):
+                continue
+    return count
 
 
 @app.get("/recent_messages", dependencies=[Depends(require_bearer)])

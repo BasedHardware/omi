@@ -26,6 +26,31 @@ import Combine
 /// UserDefaults copy. Migration is idempotent — re-running on an already-
 /// migrated machine is a no-op.
 ///
+/// Display snapshot of the user-account plugin's rate-limit
+/// state. Populated by polling /status (every ~30s) and
+/// surfaced in the Connect sheet's "Reply as me" section.
+/// plan §8: ban-warning + rate-limit visibility.
+struct RateLimitDisplay: Equatable {
+    var maxPerHour: Int = 30
+    var inWindowCount: Int = 0
+    var isBlocked: Bool = false
+    var secondsUntilNextSlot: Int = 0
+
+    static let empty = RateLimitDisplay()
+
+    /// "3 / 30 sent this hour" -- what the user sees at a glance.
+    var formatted: String {
+        return "\(inWindowCount) / \(maxPerHour) sent this hour"
+    }
+
+    /// True when the user is approaching the cap (>= 80%) or
+    /// currently blocked. Drives the warning banner color.
+    var isNearCap: Bool {
+        if isBlocked { return true }
+        return maxPerHour > 0 && inWindowCount >= Int(Double(maxPerHour) * 0.8)
+    }
+}
+
 /// Published via @Published so SwiftUI views update reactively when these
 /// change (e.g. when the user saves new values from a settings sheet).
 @MainActor
@@ -77,6 +102,14 @@ final class AICloneConfig: ObservableObject {
     /// the session is connected. Surfaced to the UI as a
     /// "logged in as Alice (+1...)" badge.
     @Published var telegramAccountMeta: [String: String] = [:]
+    /// plan §8: rate-limit state surfaced from the user-account
+    /// plugin's /status endpoint. The desktop uses this to show
+    /// "X/30 messages sent this hour" + a warning when the
+    /// account is blocked by a Telegram FLOOD_WAIT.
+    @Published var telegramRateLimit: RateLimitDisplay = .empty
+    /// Daily count of AI replies sent. plan §8: "Daily 'messages
+    /// sent today' counter on the plugin card."
+    @Published var telegramMessagesSentToday: Int = 0
 
     /// Set the Telethon session string (from session_string_generator.py
     /// subprocess stdout). The session lives in Keychain (encrypted

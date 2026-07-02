@@ -203,6 +203,80 @@ class TestBearerAuth:
         assert data["connected"] is True
         assert data["account_phone"] == "+15550001111"
         assert data["account_name"] == "Choguun Test"
+        # plan §8: /status also exposes rate_limit state and the
+        # daily sent counter so the desktop can surface them.
+        assert "rate_limit" in data
+        rl = data["rate_limit"]
+        assert "max_per_hour" in rl
+        assert "in_window_count" in rl
+        assert "is_blocked" in rl
+        assert "seconds_until_next_slot" in rl
+        assert "messages_sent_today" in data
+        assert data["messages_sent_today"] >= 0
+
+    def test_status_rate_limit_reflects_recorded_sends(self, mock_app, monkeypatch):
+        # Pre-fill the rate limit and confirm /status surfaces it.
+        import flood_control
+
+        rl = flood_control.RateLimit(max_per_hour=5, window_seconds=3600)
+        for _ in range(3):
+            rl.record_send()
+        monkeypatch.setattr(flood_control, "default_rate_limit", rl, raising=False)
+        client, _, _ = mock_app
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.status_code == 200
+        data = r.json()
+        assert data["rate_limit"]["max_per_hour"] == 5
+        assert data["rate_limit"]["in_window_count"] == 3
+        assert data["rate_limit"]["is_blocked"] is False
+        assert data["rate_limit"]["seconds_until_next_slot"] == 0
+
+    def test_status_rate_limit_reflects_blocked_state(self, mock_app, monkeypatch):
+        import flood_control
+
+        rl = flood_control.RateLimit(max_per_hour=10, window_seconds=3600)
+        rl.block_for_seconds(120)
+        monkeypatch.setattr(flood_control, "default_rate_limit", rl, raising=False)
+        client, _, _ = mock_app
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.status_code == 200
+        data = r.json()
+        assert data["rate_limit"]["is_blocked"] is True
+        # seconds_until_next_slot returns the remaining cooldown
+        # (≈ 120 since the fake clock doesn't advance).
+        assert 100 <= data["rate_limit"]["seconds_until_next_slot"] <= 120
+
+    def test_status_messages_sent_today_counts_ai_messages(self, mock_app):
+        # plan §8: daily "messages sent today" counter. The
+        # endpoint computes the count from simple_storage's
+        # chat ring buffers, counting role == "ai" messages
+        # with a timestamp >= today's UTC midnight.
+        import time
+        import simple_storage
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        midnight_ts = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+        simple_storage.chats.clear()
+        simple_storage.chats["c1"] = {
+            "chat_id": "c1",
+            "recent_messages": [
+                {"role": "ai", "text": "m1", "ts": midnight_ts + 100},
+                {"role": "ai", "text": "m2", "ts": midnight_ts + 200},
+                {"role": "human", "text": "m3", "ts": midnight_ts + 300},
+                {"role": "ai", "text": "old", "ts": midnight_ts - 1000},
+                {"role": "ai", "text": "no-ts"},
+            ],
+        }
+        client, _, _ = mock_app
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.status_code == 200
+        # 2 ai messages today (m1, m2). The "old" one is
+        # before midnight. The "no-ts" one is excluded
+        # (no timestamp = no day attribution). The "human"
+        # one is excluded (we count AI sends only).
+        assert r.json()["messages_sent_today"] == 2
 
     def test_recent_messages_requires_bearer(self, mock_app):
         client, _, _ = mock_app
