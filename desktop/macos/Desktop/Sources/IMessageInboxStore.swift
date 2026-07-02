@@ -29,6 +29,12 @@ final class IMessageInboxStore: ObservableObject {
   func setAutoReply(_ enabled: Bool, for chatGUID: String) {
     if enabled {
       autoReplyChats.insert(chatGUID)
+      // If the chat already has an unanswered inbound message, reply to it now
+      // instead of waiting for the contact's next new message — that's what a user
+      // expects when they flip the toggle on for a waiting thread.
+      if let chat = chats.first(where: { $0.chatGUID == chatGUID }), chat.awaitingReply {
+        Task { await autoReply(chat) }
+      }
     } else {
       autoReplyChats.remove(chatGUID)
     }
