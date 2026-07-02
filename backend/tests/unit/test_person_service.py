@@ -50,7 +50,7 @@ def test_context_assembles_profile_facts_and_conversations():
         ],
     }
     with patch.object(ps.users_db, 'get_person', return_value=None), patch.object(
-        ps.users_db, 'get_person_by_name', return_value=person
+        ps.users_db, 'get_people_by_name', return_value=[person]
     ), patch.object(
         ps.memories_db, 'get_memories_by_subject_entity', return_value=[{'content': 'Alice just adopted a dog'}]
     ), patch.object(
@@ -71,7 +71,7 @@ def test_context_assembles_profile_facts_and_conversations():
 
 def test_unknown_person_is_honest():
     with patch.object(ps.users_db, 'get_person', return_value=None), patch.object(
-        ps.users_db, 'get_person_by_name', return_value=None
+        ps.users_db, 'get_people_by_name', return_value=[]
     ), patch.object(ps.users_db, 'get_person_by_handle', return_value=None):
         out = ps.get_person_context('uid', 'Nobody')
     assert "don't have anyone" in out.lower()
@@ -81,3 +81,25 @@ def test_resolve_prefers_id_then_name_then_handle():
     with patch.object(ps.users_db, 'get_person', return_value={'id': 'p9', 'name': 'ById'}) as by_id:
         assert ps.resolve_person('uid', 'p9')['name'] == 'ById'
         by_id.assert_called_once()
+
+
+def test_resolve_ambiguous_name_does_not_guess():
+    # Two people share the display name — resolve must NOT pick one arbitrarily.
+    matches = [{'id': 'a', 'name': 'Sam'}, {'id': 'b', 'name': 'Sam'}]
+    with patch.object(ps.users_db, 'get_person', return_value=None), patch.object(
+        ps.users_db, 'get_people_by_name', return_value=matches
+    ), patch.object(ps.users_db, 'get_person_by_handle', return_value=None):
+        resolved = ps.resolve_person('uid', 'Sam')
+        assert ps.is_ambiguous(resolved)
+        # The context call surfaces a disambiguation ask instead of leaking a contact.
+        out = ps.get_person_context('uid', 'Sam')
+        assert 'multiple people' in out.lower()
+
+
+def test_resolve_single_name_match_resolves():
+    with patch.object(ps.users_db, 'get_person', return_value=None), patch.object(
+        ps.users_db, 'get_people_by_name', return_value=[{'id': 'a', 'name': 'Sam'}]
+    ):
+        resolved = ps.resolve_person('uid', 'Sam')
+        assert not ps.is_ambiguous(resolved)
+        assert resolved['id'] == 'a'

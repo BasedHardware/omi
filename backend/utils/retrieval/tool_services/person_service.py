@@ -8,7 +8,7 @@ the reply drafter so both share one implementation.
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import database.conversations as conversations_db
 import database.memories as memories_db
@@ -19,6 +19,30 @@ from models.transcript_segment import TranscriptSegment
 
 logger = logging.getLogger(__name__)
 
+
+class AmbiguousPerson:
+    """Sentinel returned by resolve_person when a NAME matches more than one person.
+
+    Display names are not unique, so we must not pick an arbitrary match. Callers
+    detect this (via isinstance / is_ambiguous) and ask the user to disambiguate
+    with an unambiguous identifier (phone number or email).
+    """
+
+    def __init__(self, name: str, count: int):
+        self.name = name
+        self.count = count
+
+    def message(self) -> str:
+        return (
+            f"There are multiple people named '{self.name}'. "
+            f"Please specify a phone number or email to identify who you mean."
+        )
+
+
+def is_ambiguous(resolved) -> bool:
+    return isinstance(resolved, AmbiguousPerson)
+
+
 # Facts and message snippets may quote text written by other people (e.g. iMessage
 # contacts). They are untrusted data: information only, never instructions to follow.
 UNTRUSTED_DATA_NOTICE = (
@@ -28,21 +52,35 @@ UNTRUSTED_DATA_NOTICE = (
 )
 
 
-def resolve_person(uid: str, name_or_id: str) -> Optional[dict]:
-    """Resolve a person by document id, then display name, then handle."""
+def resolve_person(uid: str, name_or_id: str) -> Union[dict, AmbiguousPerson, None]:
+    """Resolve a person by document id, then display name, then handle.
+
+    Returns:
+      - a person dict on an unambiguous match (id, single name match, or handle),
+      - an ``AmbiguousPerson`` sentinel when the NAME matches more than one person
+        (callers must disambiguate — never pick arbitrarily),
+      - ``None`` when nothing matches.
+
+    Resolution by explicit id and by handle (phone/email) is unambiguous and always
+    wins directly; only the name step can be ambiguous.
+    """
     if not name_or_id:
         return None
     person = users_db.get_person(uid, name_or_id)
     if person:
         return person
-    person = users_db.get_person_by_name(uid, name_or_id)
-    if person:
-        return person
+    matches = users_db.get_people_by_name(uid, name_or_id)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        return AmbiguousPerson(name_or_id, len(matches))
     return users_db.get_person_by_handle(uid, name_or_id)
 
 
 def get_person_context(uid: str, name_or_id: str, max_conversations: int = 5, max_memories: int = 20) -> str:
     person = resolve_person(uid, name_or_id)
+    if is_ambiguous(person):
+        return person.message()
     if not person:
         return f"I don't have anyone matching '{name_or_id}' in your people yet."
 

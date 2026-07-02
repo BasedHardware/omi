@@ -577,6 +577,25 @@ def get_person_by_name(uid: str, name: str):
     return None
 
 
+def get_people_by_name(uid: str, name: str) -> list[dict]:
+    """Return ALL people matching a display name (no .limit(1)).
+
+    Display names are not unique — distinct people can share a saved name. This
+    helper returns every match so callers can disambiguate instead of silently
+    picking an arbitrary first match (a cross-contact privacy risk).
+    """
+    if not name:
+        return []
+    people_ref = db.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('name', '==', name))
+    result = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        data.setdefault('id', doc.id)
+        result.append(data)
+    return result
+
+
 def get_people_by_ids(uid: str, person_ids: list[str]):
     """Fetch people docs by ID using db.get_all().
 
@@ -625,25 +644,19 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str):
     """Idempotently resolve a chat-app contact to a Person.
 
     Contacts are identified by a normalized handle (e.g. an iMessage phone/email).
-    Resolution order: existing handle → existing person with same display name
-    (merge the handle in) → create a new person. The person id is seeded from the
-    handle so concurrent ingests converge on the same document.
+    Resolution is by handle IDENTITY only: existing handle → create a new person.
+    The person id is seeded from the handle so concurrent ingests converge on the
+    same document.
+
+    We deliberately do NOT merge by display name. Distinct people can share a saved
+    name, so a name-based merge would silently fold a handle-discovered contact into
+    an unrelated (possibly manually-saved) person — a cross-contact privacy leak.
+    The display name is still stored as the person's name on CREATE, but never used
+    to merge.
     """
     existing = get_person_by_handle(uid, handle)
     if existing:
         return existing
-
-    if display_name:
-        by_name = get_person_by_name(uid, display_name)
-        if by_name:
-            handles = list(by_name.get('handles') or [])
-            if handle and handle not in handles:
-                person_ref = db.collection('users').document(uid).collection('people').document(by_name['id'])
-                # Atomic merge — ArrayUnion avoids losing a handle under concurrent ingests.
-                person_ref.update({'handles': firestore.ArrayUnion([handle]), 'updated_at': datetime.now(timezone.utc)})
-                handles.append(handle)
-                by_name['handles'] = handles
-            return by_name
 
     person_id = document_id_from_seed(f'{uid}:imessage:{handle}')
     person_data = {

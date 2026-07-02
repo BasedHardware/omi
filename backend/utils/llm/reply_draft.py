@@ -12,7 +12,7 @@ from database import conversations as conversations_db
 from database import memories as memories_db
 from database.entities import person_entity_id
 from utils.llm.clients import get_llm
-from utils.retrieval.tool_services.person_service import resolve_person
+from utils.retrieval.tool_services.person_service import resolve_person, is_ambiguous
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,10 @@ def _order_thread(thread: List[dict]) -> List[dict]:
 def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[str] = None) -> dict:
     thread = _order_thread(thread)
     person = resolve_person(uid, person_ref)
+    if is_ambiguous(person):
+        # Multiple contacts share this name — refuse to draft to an arbitrary one.
+        # Surface the disambiguation ask as the draft so the caller shows it verbatim.
+        return {'draft': person.message(), 'ambiguous': True}
     name = (person or {}).get('name') or person_ref
     relationship = (person or {}).get('relationship')
     summary = (person or {}).get('profile_summary')
