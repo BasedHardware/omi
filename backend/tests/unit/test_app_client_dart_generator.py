@@ -29,6 +29,7 @@ PRIVACY_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'p
 ANNOUNCEMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'announcements_wire.g.dart'
 AUDIO_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'audio_wire.g.dart'
 PAYMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'payments_wire.g.dart'
+MEMORIES_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'memories_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -209,6 +210,20 @@ def test_payments_wire_dart_is_generated_from_app_client_openapi():
     assert 'final String? defaultValue;' in generated
     assert 'defaultValue: _readString(_readAny(json, const ["default"]))' in generated
     assert "'default': defaultValue" in generated
+
+
+def test_memories_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'memories')
+
+    assert MEMORIES_DART_PATH.read_text() == generated
+    assert 'class GeneratedEvidence' in generated
+    assert 'class GeneratedMemoryDB' in generated
+    assert 'layer: _required(_readString(_readAny(json, const ["layer"])), "layer")' in generated
+    assert 'memoryTier: _readString(_readAny(json, const ["memory_tier"])) ?? "long_term"' in generated
+    assert (
+        'captureDeviceIds: _readAny(json, const ["capture_device_ids"]) == null ? null : _readStringList' in generated
+    )
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

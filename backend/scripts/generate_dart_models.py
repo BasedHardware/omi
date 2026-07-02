@@ -147,6 +147,13 @@ SCHEMA_GROUPS = {
             'PaymentMethodStatusResponse',
         ),
     },
+    'memories': {
+        'output': DEFAULT_OUTPUT_DIR / 'memories_wire.g.dart',
+        'schemas': (
+            'Evidence',
+            'MemoryDB',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
