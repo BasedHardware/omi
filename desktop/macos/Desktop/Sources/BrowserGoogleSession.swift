@@ -283,11 +283,7 @@ final class BrowserKeychainCache: @unchecked Sendable {
 }
 
 struct BrowserPythonRunner {
-  struct Result {
-    let stdout: Data
-    let stderr: Data
-    let terminationStatus: Int32
-  }
+  typealias Result = PipeProcessResult
 
   static func run(
     script: String,
@@ -301,83 +297,18 @@ struct BrowserPythonRunner {
       throw BrowserPythonRunnerError.pythonNotFound
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: pythonPath)
-    process.arguments = ["-c", script] + arguments
-
-    let pipe = Pipe()
-    let errPipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = errPipe
-    let inputPipe = Pipe()
-    if stdinData != nil {
-      process.standardInput = inputPipe
-    }
-
-    var outputData = Data()
-    var errData = Data()
-    let outputSem = DispatchSemaphore(value: 0)
-    let errSem = DispatchSemaphore(value: 0)
-    let dataLock = NSLock()
-    let terminationSem = DispatchSemaphore(value: 0)
-    process.terminationHandler = { _ in
-      terminationSem.signal()
-    }
-
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-      let data = handle.availableData
-      if data.isEmpty {
-        pipe.fileHandleForReading.readabilityHandler = nil
-        outputSem.signal()
-      } else {
-        dataLock.lock()
-        outputData.append(data)
-        dataLock.unlock()
-      }
-    }
-    errPipe.fileHandleForReading.readabilityHandler = { handle in
-      let data = handle.availableData
-      if data.isEmpty {
-        errPipe.fileHandleForReading.readabilityHandler = nil
-        errSem.signal()
-      } else {
-        dataLock.lock()
-        errData.append(data)
-        dataLock.unlock()
-      }
-    }
-
     do {
-      try process.run()
-      if let stdinData {
-        inputPipe.fileHandleForWriting.write(stdinData)
-        try? inputPipe.fileHandleForWriting.close()
-      }
-      if terminationSem.wait(timeout: .now() + .seconds(timeoutSeconds)) == .timedOut {
-        if process.isRunning {
-          process.terminate()
-        }
-        if terminationSem.wait(timeout: .now() + .seconds(3)) == .timedOut, process.isRunning {
-          kill(process.processIdentifier, SIGKILL)
-          _ = terminationSem.wait(timeout: .now() + .seconds(2))
-        }
-        throw BrowserPythonRunnerError.timedOut
-      }
-    } catch let error as BrowserPythonRunnerError {
-      throw error
+      return try PipeProcessRunner.run(
+        executableURL: URL(fileURLWithPath: pythonPath),
+        arguments: ["-c", script] + arguments,
+        stdinData: stdinData,
+        timeoutSeconds: TimeInterval(timeoutSeconds)
+      )
+    } catch PipeProcessRunnerError.timedOut {
+      throw BrowserPythonRunnerError.timedOut
     } catch {
       throw BrowserPythonRunnerError.launchFailed(error.localizedDescription)
     }
-
-    _ = outputSem.wait(timeout: .now() + .seconds(5))
-    _ = errSem.wait(timeout: .now() + .seconds(5))
-
-    dataLock.lock()
-    let stdout = outputData
-    let stderr = errData
-    dataLock.unlock()
-
-    return Result(stdout: stdout, stderr: stderr, terminationStatus: process.terminationStatus)
   }
 }
 

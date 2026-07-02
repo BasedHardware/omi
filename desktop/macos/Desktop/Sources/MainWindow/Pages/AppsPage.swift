@@ -802,16 +802,15 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     private func refreshAppleNotesMetrics() async {
-        do {
-            let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
-
+        let status = await AppleNotesReaderService.shared.connectionStatus(maxResults: 250)
+        switch status {
+        case .connected(let noteCount, _):
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-            metrics.sourceCount = notes.count
+            metrics.sourceCount = noteCount
             metrics.availabilityText = "Private notes accessible"
             metricsByID["apple-notes"] = metrics
-        } catch {
-            let reason = (error as? AppleNotesReaderError)?.reasonCode ?? "unknown"
-            log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reason)")
+        case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
+            log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
         }
     }
 
@@ -1260,9 +1259,9 @@ private final class ImportConnectorSheetModel: ObservableObject {
         do {
             return try await runAppleNotesImport()
         } catch let error as AppleNotesReaderError {
-            switch error {
-            case .storeNotFound, .authorizationDenied, .invalidSelectedFolder, .schemaUnavailable, .storeReadFailed:
-                break
+            guard error.shouldPromptForFolderSelection else {
+                errorMessage = error.localizedDescription
+                return nil
             }
             let granted = await selectAppleNotesFolder()
             guard granted else {

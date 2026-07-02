@@ -44,6 +44,48 @@ enum AppleNotesReaderError: LocalizedError {
       return "store_read_failed"
     }
   }
+
+  var shouldPromptForFolderSelection: Bool {
+    switch self {
+    case .storeNotFound, .authorizationDenied, .invalidSelectedFolder:
+      return true
+    case .schemaUnavailable, .storeReadFailed:
+      return false
+    }
+  }
+}
+
+enum AppleNotesConnectionStatus: Equatable {
+  case connected(noteCount: Int, verifiedAt: Date)
+  case needsAccess(message: String, reasonCode: String)
+  case error(message: String, reasonCode: String)
+
+  var isConnected: Bool {
+    if case .connected = self { return true }
+    return false
+  }
+}
+
+enum AppleNotesReadOutcome: Equatable {
+  case readable(noteCount: Int)
+  case needsAccess(message: String, reasonCode: String)
+  case error(message: String, reasonCode: String)
+
+  static func classify(noteCount: Int?, error: AppleNotesReaderError?) -> AppleNotesReadOutcome {
+    if let noteCount {
+      return .readable(noteCount: noteCount)
+    }
+
+    guard let error else {
+      return .error(message: "Apple Notes data store could not be read.", reasonCode: "unknown")
+    }
+
+    let message = error.localizedDescription
+    if error.shouldPromptForFolderSelection {
+      return .needsAccess(message: message, reasonCode: error.reasonCode)
+    }
+    return .error(message: message, reasonCode: error.reasonCode)
+  }
 }
 
 actor AppleNotesReaderService {
@@ -73,6 +115,26 @@ actor AppleNotesReaderService {
       let classified = Self.classifyReadError(error, path: storeURL.path)
       log("AppleNotesReaderService: Notes read failed code=\(classified.reasonCode) path=\(storeURL.path): \(error)")
       throw classified
+    }
+  }
+
+  func connectionStatus(maxResults: Int = 1, selectedFolderPath: String? = nil) async -> AppleNotesConnectionStatus {
+    do {
+      let notes = try await readRecentNotes(maxResults: maxResults, selectedFolderPath: selectedFolderPath)
+      return .connected(noteCount: notes.count, verifiedAt: Date())
+    } catch let error as AppleNotesReaderError {
+      let outcome = Self.classifyReadOutcome(noteCount: nil, error: error)
+      switch outcome {
+      case .readable(let noteCount):
+        return .connected(noteCount: noteCount, verifiedAt: Date())
+      case .needsAccess(let message, let reasonCode):
+        return .needsAccess(message: message, reasonCode: reasonCode)
+      case .error(let message, let reasonCode):
+        return .error(message: message, reasonCode: reasonCode)
+      }
+    } catch {
+      let classified = Self.classifyReadError(error, path: selectedFolderPath ?? "")
+      return .error(message: classified.localizedDescription, reasonCode: classified.reasonCode)
     }
   }
 
@@ -155,6 +217,10 @@ actor AppleNotesReaderService {
     }
 
     return .storeReadFailed(path: path, reason: localized)
+  }
+
+  nonisolated static func classifyReadOutcome(noteCount: Int?, error: AppleNotesReaderError?) -> AppleNotesReadOutcome {
+    AppleNotesReadOutcome.classify(noteCount: noteCount, error: error)
   }
 
   private func openReadOnlyStore(at storeURL: URL) throws -> DatabaseQueue {
@@ -376,15 +442,19 @@ actor AppleNotesReaderService {
       let selectedFolderURL = URL(fileURLWithPath: selectedFolderPath)
       if selectedFolderURL.lastPathComponent == "NoteStore.sqlite" {
         candidates.append(selectedFolderURL)
+      } else if let resolvedFolder = try? Self.resolveSelectedFolder(selectedFolderURL, fileManager: fm, homeDirectory: home) {
+        candidates.append(
+          resolvedFolder.appendingPathComponent("NoteStore.sqlite", isDirectory: false)
+        )
+        candidates.append(
+          resolvedFolder
+            .appendingPathComponent("Accounts", isDirectory: true)
+            .appendingPathComponent("LocalAccount", isDirectory: true)
+            .appendingPathComponent("NoteStore.sqlite", isDirectory: false)
+        )
       }
       candidates.append(
         selectedFolderURL.appendingPathComponent("NoteStore.sqlite", isDirectory: false)
-      )
-      candidates.append(
-        selectedFolderURL.appendingPathComponent(
-          "NoteStore.sqlite-wal",
-          isDirectory: false
-        ).deletingLastPathComponent().appendingPathComponent("NoteStore.sqlite")
       )
       candidates.append(
         selectedFolderURL

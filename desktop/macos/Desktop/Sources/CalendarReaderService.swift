@@ -26,6 +26,20 @@ enum CalendarConnectionStatus: Equatable {
   }
 }
 
+struct CalendarFetchParameters: Equatable {
+  let daysBack: Int
+  let daysForward: Int
+  let maxResults: Int
+
+  static func normalized(daysBack: Int, daysForward: Int, maxResults: Int) -> CalendarFetchParameters {
+    CalendarFetchParameters(
+      daysBack: min(max(daysBack, 0), 3650),
+      daysForward: min(max(daysForward, 0), 3650),
+      maxResults: min(max(maxResults, 1), 2500)
+    )
+  }
+}
+
 enum CalendarReaderError: LocalizedError, Equatable {
   case noBrowserFound
   case notSignedIn
@@ -94,21 +108,67 @@ enum CalendarFailureClass: String, Equatable {
   case network = "network"
   case unknown = "unknown"
 
+  var plainFallbackSummary: String {
+    switch self {
+    case .noBrowser:
+      return "No supported browser with a readable session was found."
+    case .notSignedIn:
+      return "No browser is signed into Google. Sign into calendar.google.com and try again."
+    case .sessionExpired:
+      return "Your Google session expired. Reload calendar.google.com to refresh it."
+    case .decryptFailed:
+      return "browser session could not be decrypted"
+    case .network:
+      return "please check your connection and try again"
+    case .unknown:
+      return "unexpected error"
+    }
+  }
+
   var asError: CalendarReaderError {
     asError(summary: nil)
   }
 
+  func detailFragment(from summary: String?) -> String? {
+    guard let raw = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+      return nil
+    }
+
+    switch self {
+    case .network:
+      let prefix = "Could not reach Google Calendar"
+      if raw.hasPrefix(prefix) {
+        let tail = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        return tail.isEmpty ? nil : tail
+      }
+      return raw
+    case .decryptFailed:
+      if raw == "Your browser session could not be read." {
+        return nil
+      }
+      return raw
+    case .noBrowser, .notSignedIn, .sessionExpired:
+      return nil
+    case .unknown:
+      return raw
+    }
+  }
+
   func asError(summary: String?) -> CalendarReaderError {
+    func detailOr(_ fallback: String) -> String {
+      detailFragment(from: summary) ?? fallback
+    }
+
     switch self {
     case .noBrowser: return .noBrowserFound
     case .notSignedIn: return .notSignedIn
     case .sessionExpired: return .sessionExpired
     case .decryptFailed:
-      return .cookieDecryptionFailed(summary ?? "browser session could not be decrypted")
+      return .cookieDecryptionFailed(detailOr("browser session could not be decrypted"))
     case .network:
-      return .networkError(summary ?? "please check your connection and try again")
+      return .networkError(detailOr("please check your connection and try again"))
     case .unknown:
-      return .networkError(summary ?? "unexpected error")
+      return .networkError(detailOr("unexpected error"))
     }
   }
 }
@@ -137,7 +197,7 @@ enum CalendarOutcomeParser {
     let cls = CalendarFailureClass(rawValue: json["error_class"] as? String ?? "") ?? .unknown
     let summary =
       (json["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-      ?? cls.asError.errorDescription ?? "Unknown error"
+      ?? cls.plainFallbackSummary
     return .failure(cls, summary: summary, attempts: attempts)
   }
 
@@ -395,6 +455,12 @@ actor CalendarReaderService {
   private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
     -> [CalendarEvent]
   {
+    let parameters = CalendarFetchParameters.normalized(
+      daysBack: daysBack,
+      daysForward: daysForward,
+      maxResults: maxResults
+    )
+
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
     let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "CalendarReaderService")
@@ -582,7 +648,7 @@ actor CalendarReaderService {
       result = try BrowserPythonRunner.run(
         script: pythonScript,
         arguments: [
-          String(daysBack), String(daysForward), String(maxResults),
+          String(parameters.daysBack), String(parameters.daysForward), String(parameters.maxResults),
         ],
         stdinData: Data(configJSON.utf8)
       )

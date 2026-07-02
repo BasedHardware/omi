@@ -49,6 +49,22 @@ Work top to bottom. Don't skip the probe or the fixture test.
       (philosophy §3, §4)
 - [ ] Drive UI status and any "Connected" badge off this probe, never off a
       stored one-time-success latch.
+- [ ] Expose a semantic automation action for the probe (for example,
+      `calendar_read_probe`) so coding agents can self-test success and failure
+      classifications in a named bundle without clicking through the UI.
+- [ ] Treat "zero items returned" as connected when the real path succeeded.
+      Empty data is not the same as a failed connector.
+- [ ] Clamp probe/read parameters before they cross process or network
+      boundaries, and test the boundary behavior.
+- [ ] For file-backed local connectors such as Apple Notes, preserve legacy
+      selected parent folders by resolving them through the same canonical
+      folder logic used for new selections. Treat zero readable items as
+      connected, and keep path/access failures separate from schema/read
+      failures so the UI only reopens folder selection when a new folder can
+      actually fix the problem.
+- [ ] Expose a semantic automation probe (for example
+      `apple_notes_read_probe`) that returns the same stable classifications the
+      UI uses, including whether folder selection is an appropriate recovery.
 
 ## 6. Sanitized diagnostics for the corpus
 
@@ -64,9 +80,8 @@ Work top to bottom. Don't skip the probe or the fixture test.
 
 ---
 
-**Known follow-up:** `GmailReaderService.swift` duplicates the exact
-browser-cookie + Python-decrypt + last-writer-wins pattern this checklist fixes
-for calendar. It has the same class of bug and is the next candidate. A shared
+**Known follow-up:** Calendar and Gmail now both classify browser-cookie
+attempts instead of using last-writer-wins diagnostics. A shared
 `BrowserGoogleSession` helper (cookie discovery + decrypt + classify) would let
-both connectors share the hardened path — worth doing once a second consumer
-justifies the extraction.
+both connectors share the hardened path — worth doing once the duplicated shape
+stabilizes.
