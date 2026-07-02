@@ -484,6 +484,7 @@ def get_memory_summary_rating(
 
 @_firebase_router.post('/v1/users/analytics/chat_message', tags=['v1'])
 def set_chat_message_analytics(
+    request: Request,
     message_id: str,
     value: int,
     reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
@@ -1115,6 +1116,7 @@ class PaywallStatusResponse(BaseModel):
 
 @_firebase_router.get('/v1/users/me/paywall', tags=['users'], response_model=PaywallStatusResponse)
 def get_user_paywall_status(
+    request: Request,
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     platform: Optional[str] = Query(None),
 ):
@@ -1527,7 +1529,7 @@ def get_mentor_notification_settings(request: Request):
 
 
 @_firebase_router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
-def update_mentor_notification_settings(data: MentorNotificationSettingsUpdate):
+def update_mentor_notification_settings(request: Request, data: MentorNotificationSettingsUpdate):
     """
     Update user's mentor notification frequency preference.
 
