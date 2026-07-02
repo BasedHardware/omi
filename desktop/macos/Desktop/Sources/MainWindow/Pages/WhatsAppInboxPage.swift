@@ -542,22 +542,18 @@ private struct Avatar: View {
           .resizable()
           .aspectRatio(contentMode: .fill)
       } else {
+        // WhatsApp-style default display picture (gray person silhouette) for anyone
+        // without a photo, rather than initials of an opaque code.
         Circle()
           .fill(OmiColors.backgroundSecondary)
           .overlay(
-            Text(initials)
-              .scaledFont(size: size * 0.38, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
+            Image(systemName: "person.fill")
+              .font(.system(size: size * 0.5))
+              .foregroundColor(OmiColors.textTertiary)
           )
       }
     }
     .frame(width: size, height: size)
     .clipShape(Circle())
-  }
-
-  private var initials: String {
-    let parts = name.split(separator: " ").prefix(2)
-    let letters = parts.compactMap { $0.first }.map(String.init).joined()
-    return letters.isEmpty ? "?" : letters.uppercased()
   }
 }

@@ -529,9 +529,9 @@ private struct Avatar: View {
         Circle()
           .fill(OmiColors.backgroundSecondary)
           .overlay(
-            Text(initials)
-              .scaledFont(size: size * 0.38, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
+            Image(systemName: "person.fill")
+              .font(.system(size: size * 0.5))
+              .foregroundColor(OmiColors.textTertiary)
           )
       }
     }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GRDB
 
@@ -274,6 +275,17 @@ actor WhatsAppReaderService {
       return map
     }
 
+    // Reverse: @lid local part → phone digits, so a group sender who's only known
+    // by an opaque @lid can still be shown as a phone number rather than an
+    // unreadable "~tag" (when we have a 1:1 chat that reveals their number).
+    var lidToPhone: [String: String] = [:]
+    for (phoneJID, lid) in lidByChat {
+      guard let lidLP = lid.split(separator: "@").first.map(String.init),
+        let phone = Self.handle(fromJID: phoneJID)
+      else { continue }
+      lidToPhone[lidLP] = phone
+    }
+
     // WhatsApp profile push-names (JID local part → self-set display name). The
     // only readable name for `@lid` senders whose message metadata is an encoded
     // blob (e.g. "IAA=") or an opaque id.
@@ -348,7 +360,11 @@ actor WhatsAppReaderService {
           personRef = handle
           // Prefer the saved Contacts photo; else WhatsApp's own profile pic, looked
           // up by the person's @lid (1:1 pics aren't keyed by phone JID).
-          avatar = await resolver.imageData(for: handle)
+          // Contacts photo first, but only if it actually decodes — some AddressBook
+          // blobs aren't renderable images; discard those and fall back to WhatsApp's
+          // own profile pic (looked up by the person's @lid; 1:1 pics aren't keyed by
+          // phone JID).
+          avatar = Self.validImage(await resolver.imageData(for: handle))
           if avatar == nil, let lid = lidByChat[chatID] {
             avatar = Self.profileThumb(for: lid, in: thumbMap)
           }
@@ -373,10 +389,16 @@ actor WhatsAppReaderService {
         if isGroup, !r.isFromMe, let h = r.handle {
           senderImg = await resolver.imageData(for: h) ?? Self.profileThumb(for: h, in: thumbMap)
           // Prefer WhatsApp's real profile push-name over an unsaved ~tag/opaque id.
-          if sName == nil || sName!.hasPrefix("~") || sName!.hasPrefix("("),
-            let real = Self.pushName(for: h, in: pushNames)
-          {
+          let looksLikeTag = sName == nil || sName!.hasPrefix("~") || sName!.hasPrefix("(")
+          if looksLikeTag, let real = Self.pushName(for: h, in: pushNames) {
             sName = real
+          } else if looksLikeTag {
+            // No saved name and no push-name: show a phone number (mapped from the
+            // sender's @lid) instead of an unreadable opaque "~tag".
+            let lidLP = h.split(separator: "@").first.map(String.init) ?? h
+            if let phone = lidToPhone[lidLP] {
+              sName = Self.prettyHandle(phone)
+            }
           }
         }
         let bubbleText = r.text.isEmpty ? "" : Self.resolveMentions(in: r.text, members: members)
@@ -429,6 +451,14 @@ actor WhatsAppReaderService {
     let localPart = jid.split(separator: "@").first.map(String.init) ?? jid
     guard let path = map[localPart] else { return nil }
     return try? Data(contentsOf: URL(fileURLWithPath: path))
+  }
+
+  /// Returns `data` only if it decodes to a real image, else nil. Guards against
+  /// AddressBook blobs that aren't renderable (which would otherwise win over a
+  /// working WhatsApp profile pic and then show as a blank/monogram).
+  private static func validImage(_ data: Data?) -> Data? {
+    guard let data, NSImage(data: data) != nil else { return nil }
+    return data
   }
 
   /// A real display name for a group sender from WhatsApp's profile push-name

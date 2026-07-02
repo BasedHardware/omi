@@ -233,20 +233,15 @@ private struct TelegramAvatar: View {
         Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
       } else {
         ZStack {
-          TelegramInboxPage.telegramBlue.opacity(0.25)
-          Text(initials).font(.system(size: size * 0.4, weight: .semibold))
-            .foregroundStyle(.primary)
+          TelegramInboxPage.telegramBlue.opacity(0.2)
+          Image(systemName: "person.fill")
+            .font(.system(size: size * 0.5))
+            .foregroundStyle(.secondary)
         }
       }
     }
     .frame(width: size, height: size)
     .clipShape(Circle())
-  }
-
-  private var initials: String {
-    let parts = name.split(separator: " ").prefix(2)
-    let s = parts.compactMap { $0.first }.map(String.init).joined()
-    return s.isEmpty ? "?" : s.uppercased()
   }
 }
 
