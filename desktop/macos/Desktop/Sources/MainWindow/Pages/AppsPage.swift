@@ -135,7 +135,7 @@ struct AppsPage: View {
                 // self-gated and skip when empty.
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
-                        if !searchText.isEmpty || hasActiveFilters {
+                        if hasActiveFilters {
                             // Show filtered/search results in a flat grid
                             if appProvider.isSearching {
                                 // Loading state for category filter
@@ -180,7 +180,7 @@ struct AppsPage: View {
                                 )
 
                                 // Infinite scroll: load more when reaching bottom
-                                if appProvider.hasMoreCategoryApps {
+                                if appProvider.hasMoreFilteredApps {
                                     HStack {
                                         Spacer()
                                         if appProvider.isLoadingMore {
@@ -194,7 +194,7 @@ struct AppsPage: View {
                                                 .frame(height: 1)
                                                 .onAppear {
                                                     Task {
-                                                        await appProvider.loadMoreCategoryApps()
+                                                        await appProvider.loadMoreFilteredApps()
                                                     }
                                                 }
                                         }
@@ -259,9 +259,7 @@ struct AppsPage: View {
             // Clear filters when searching
             if !newValue.isEmpty {
                 viewAllSection = nil
-                if appProvider.selectedCategory != nil {
-                    appProvider.clearCategoryFilter()
-                }
+                appProvider.clearCategoryFilter()
             }
             Task {
                 // Debounce search
@@ -371,6 +369,7 @@ struct AppsPage: View {
                 Button(action: {
                     viewAllSection = nil
                     appProvider.clearCategoryFilter()
+                    Task { await appProvider.searchApps() }
                 }) {
                     HStack {
                         Text("All Categories")
@@ -386,7 +385,7 @@ struct AppsPage: View {
                     Button(action: {
                         viewAllSection = nil
                         appProvider.selectedCategory = category.id
-                        Task { await appProvider.fetchAppsForCategory(category.id) }
+                        Task { await appProvider.searchApps() }
                     }) {
                         HStack {
                             Text(category.title)
@@ -436,7 +435,7 @@ struct AppsPage: View {
     }
 
     private var hasActiveFilters: Bool {
-        appProvider.selectedCategory != nil || viewAllSection != nil
+        appProvider.hasActiveFilters || viewAllSection != nil
     }
 
     private var selectedCategoryLabel: String {
@@ -447,7 +446,7 @@ struct AppsPage: View {
         return "Category"
     }
 
-    /// Apps for the selected category (from API) or search results or "See more" section
+    /// Apps for the selected filter/search result set or "See more" section.
     private var filteredApps: [OmiApp] {
         // "See more" section takes priority
         if let section = viewAllSection {
@@ -458,10 +457,7 @@ struct AppsPage: View {
             default: return []
             }
         }
-        if appProvider.selectedCategory != nil {
-            return appProvider.categoryFilteredApps ?? []
-        }
-        return appProvider.apps
+        return appProvider.filteredApps ?? []
     }
 
     private var filterResultsTitle: String {
