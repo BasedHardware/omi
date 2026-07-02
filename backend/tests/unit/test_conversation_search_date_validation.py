@@ -57,6 +57,7 @@ _stubs = [
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.conversations.factory',
+    'utils.conversations.analytics',
     'utils.conversations.render',
     'utils.conversations.process_conversation',
     'utils.conversations.search',
