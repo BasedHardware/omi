@@ -20,11 +20,12 @@ Future<List<ServerMessage>> getMessagesServer({String? appId, bool dropdownSelec
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var decodedBody = jsonDecode(body) as List<dynamic>;
-    if (decodedBody.isEmpty) {
+    var messages = (jsonDecode(body) as List<dynamic>)
+        .map((message) => ServerMessage.fromGeneratedWireJson(message as Map<String, dynamic>))
+        .toList();
+    if (messages.isEmpty) {
       return [];
     }
-    var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
     Logger.debug('getMessages length: ${messages.length}');
     // Debug: Check if any messages have ratings
     var ratedMessages = messages.where((m) => m.rating != null).toList();
@@ -49,7 +50,7 @@ Future<List<ServerMessage>> clearChatServer({String? appId}) async {
   );
   if (response == null) throw Exception('Failed to delete chat');
   if (response.statusCode == 200) {
-    return [ServerMessage.fromJson(jsonDecode(response.body))];
+    return [ServerMessage.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>)];
   } else {
     throw Exception('Failed to delete chat');
   }
@@ -119,7 +120,7 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
   ).then((response) {
     if (response == null) throw Exception('Failed to send message');
     if (response.statusCode == 200) {
-      return ServerMessage.fromJson(jsonDecode(response.body));
+      return ServerMessage.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
     } else {
       throw Exception('Failed to send message');
     }
@@ -158,8 +159,10 @@ Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) 
     var response = await makeMultipartApiCall(url: url, files: files);
 
     if (response.statusCode == 200) {
-      Logger.debug('uploadFileServer response body: ${jsonDecode(response.body)}');
-      return MessageFile.fromJsonList(jsonDecode(response.body));
+      Logger.debug('uploadFileServer response body: ${response.body}');
+      return (jsonDecode(response.body) as List<dynamic>)
+          .map((file) => MessageFile.fromGenerated(wire.GeneratedFileChat.fromJson(file as Map<String, dynamic>)))
+          .toList();
     } else {
       Logger.debug('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
       throw Exception('Failed to upload file. Status code: ${response.statusCode}');
