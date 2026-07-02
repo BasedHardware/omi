@@ -173,6 +173,10 @@ def _merge_required_promotion_duplicate(
     for evidence in item.evidence:
         evidence_by_id.setdefault(evidence.evidence_id, evidence)
     merged_evidence_ids = [evidence.evidence_id for evidence in evidence_by_id.values()]
+    merge_idempotency_key = deterministic_contract_id(
+        "canonical-required-promotion-duplicate-merge",
+        {"uid": uid, "source_memory_id": item.memory_id, "target_memory_id": existing.memory_id},
+    )
     merge_operation = _ensure_required_promotion_update_operation(
         uid=uid,
         target_memory_id=existing.memory_id,
@@ -184,12 +188,8 @@ def _merge_required_promotion_duplicate(
             "result_status": LifecycleState.active.value,
         },
         control=control,
-        source_packet_id=f"promotion_merge_{run_id}",
+        source_packet_id=f"promotion_merge_{merge_idempotency_key}",
         db_client=db_client,
-    )
-    merge_idempotency_key = deterministic_contract_id(
-        "canonical-required-promotion-duplicate-merge",
-        {"uid": uid, "source_memory_id": item.memory_id, "target_memory_id": existing.memory_id},
     )
     merge_result = apply_long_term_patch_firestore(
         uid=uid,
@@ -237,6 +237,10 @@ def _merge_required_promotion_duplicate(
         }
     )
     supersede_control = _read_control_state(uid, db_client=db_client)
+    supersede_idempotency_key = deterministic_contract_id(
+        "canonical-required-promotion-duplicate-supersede",
+        {"uid": uid, "source_memory_id": item.memory_id, "target_memory_id": existing.memory_id},
+    )
     supersede_operation = _ensure_required_promotion_update_operation(
         uid=uid,
         target_memory_id=item.memory_id,
@@ -247,12 +251,8 @@ def _merge_required_promotion_duplicate(
             "result_status": LifecycleState.superseded.value,
         },
         control=supersede_control,
-        source_packet_id=f"promotion_merge_supersede_{run_id}",
+        source_packet_id=f"promotion_merge_supersede_{supersede_idempotency_key}",
         db_client=db_client,
-    )
-    supersede_idempotency_key = deterministic_contract_id(
-        "canonical-required-promotion-duplicate-supersede",
-        {"uid": uid, "source_memory_id": item.memory_id, "target_memory_id": existing.memory_id},
     )
     supersede_result = apply_long_term_patch_firestore(
         uid=uid,

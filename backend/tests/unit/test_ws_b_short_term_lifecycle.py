@@ -6,7 +6,7 @@ import os
 import sys
 import importlib
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -588,6 +588,121 @@ def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
     assert short_stored["ledger_commit_id"] != initial_short_commit
     assert short_stored["promotion"]["status"] == "merged"
     assert short_stored["promotion"]["target_memory_id"] == existing_id
+
+
+def test_required_promotion_merges_multiple_sources_in_same_run(monkeypatch):
+    uid = "uid-canonical-required-merge-multiple"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
+
+    existing_id = write_canonical_extraction_memory(
+        uid,
+        {
+            "id": "existing-long-term-multi",
+            "content": "User prefers launch checklists",
+            "memory_tier": MemoryTier.long_term.value,
+        },
+        db_client=db,
+    )
+    short_ids = []
+    for source_id in ["manual-required-multi-a", "manual-required-multi-b"]:
+        payload = required_promotion_payload(
+            {
+                "id": source_id,
+                "content": "User prefers launch checklists",
+                "manually_added": True,
+            },
+            source_surface="mcp",
+        )
+        short_ids.append(write_canonical_extraction_memory(uid, payload, db_client=db))
+
+    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-multi")
+    existing_stored = db.docs[f"users/{uid}/memory_items/{existing_id}"]
+
+    assert report.trigger_reason == "required_promotion"
+    assert report.promoted_memory_ids == [existing_id, existing_id]
+    assert existing_stored["corroboration_count"] == 2
+    for short_id in short_ids:
+        short_stored = db.docs[f"users/{uid}/memory_items/{short_id}"]
+        assert short_stored["status"] == MemoryItemStatus.superseded.value
+        assert short_stored["promotion"]["status"] == "merged"
+        assert short_stored["promotion"]["target_memory_id"] == existing_id
+
+
+def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_run_ids(monkeypatch):
+    uid = "uid-canonical-required-merge-retry"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
+
+    existing_id = write_canonical_extraction_memory(
+        uid,
+        {
+            "id": "existing-long-term-retry",
+            "content": "User prefers launch checklists",
+            "memory_tier": MemoryTier.long_term.value,
+        },
+        db_client=db,
+    )
+    required_payload = required_promotion_payload(
+        {
+            "id": "manual-required-retry",
+            "content": "User prefers launch checklists",
+            "manually_added": True,
+        },
+        source_surface="mcp",
+    )
+    short_id = write_canonical_extraction_memory(uid, required_payload, db_client=db)
+
+    import utils.memory.short_term_promotion as short_term_promotion_mod
+
+    real_apply = short_term_promotion_mod.apply_long_term_patch_firestore
+    failed_once = False
+
+    def flaky_apply(**kwargs):
+        nonlocal failed_once
+        patch_payload = kwargs.get("patch_payload") or {}
+        if (
+            not failed_once
+            and patch_payload.get("target_memory_id") == short_id
+            and patch_payload.get("result_status") == "superseded"
+        ):
+            failed_once = True
+            raise RuntimeError("injected supersede failure")
+        return real_apply(**kwargs)
+
+    with patch("utils.memory.short_term_promotion.apply_long_term_patch_firestore", side_effect=flaky_apply):
+        with pytest.raises(RuntimeError, match="injected supersede failure"):
+            run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-retry-1")
+
+    existing_after_failure = db.docs[f"users/{uid}/memory_items/{existing_id}"]
+    short_after_failure = db.docs[f"users/{uid}/memory_items/{short_id}"]
+    assert existing_after_failure["corroboration_count"] == 1
+    assert short_after_failure["status"] == MemoryItemStatus.active.value
+
+    retry = run_canonical_short_term_promotion(
+        uid,
+        db_client=db,
+        now=NOW + timedelta(hours=1),
+        run_id="promo-required-retry-2",
+    )
+    existing_after_retry = db.docs[f"users/{uid}/memory_items/{existing_id}"]
+    short_after_retry = db.docs[f"users/{uid}/memory_items/{short_id}"]
+
+    assert retry.promoted_memory_ids == [existing_id]
+    assert existing_after_retry["corroboration_count"] == 1
+    assert existing_after_retry["ledger_commit_id"] == existing_after_failure["ledger_commit_id"]
+    assert short_after_retry["status"] == MemoryItemStatus.superseded.value
+    assert short_after_retry["promotion"]["status"] == "merged"
 
 
 def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch):
