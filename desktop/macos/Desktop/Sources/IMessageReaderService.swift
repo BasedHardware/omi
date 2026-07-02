@@ -62,8 +62,18 @@ actor IMessageReaderService {
   static let shared = IMessageReaderService()
 
   /// `~/Library/Messages/chat.db` — an FDA-protected SQLite (WAL) store.
+  ///
+  /// Non-production builds honor the `aiCloneChatDbPathOverride` default so test
+  /// harnesses (named `omi-*` bundles without Full Disk Access) can point the reader
+  /// at a snapshot copy of chat.db. Never active on the production bundle.
   private var chatDatabaseURL: URL {
-    FileManager.default.homeDirectoryForCurrentUser
+    if AppBuild.isNonProduction,
+      let override = UserDefaults.standard.string(forKey: "aiCloneChatDbPathOverride"),
+      !override.isEmpty
+    {
+      return URL(fileURLWithPath: override)
+    }
+    return FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent("Library/Messages/chat.db", isDirectory: false)
   }
 
@@ -199,18 +209,17 @@ actor IMessageReaderService {
           // Prefer the plain `text` column; when it's null/empty the body lives in the
           // binary `attributedBody` (an archived NSAttributedString written by the
           // rich-text editor), so decode that instead. Skip only if both are unusable.
-          let messageText: String
+          let rawText: String?
           if let raw = row["text"] as? String,
             !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           {
-            messageText = raw
-          } else if let blob: Data = row["attributed_body"],
-            let decoded = Self.decodeAttributedBody(blob)
-          {
-            messageText = decoded
+            rawText = raw
+          } else if let blob: Data = row["attributed_body"] {
+            rawText = Self.decodeAttributedBody(blob)
           } else {
-            return nil
+            rawText = nil
           }
+          guard let rawText, let messageText = Self.sanitizeBody(rawText) else { return nil }
 
           let isFromMe =
             ((row["is_from_me"] as? Int64) ?? Int64(row["is_from_me"] as? Int ?? 0)) == 1
@@ -246,6 +255,23 @@ actor IMessageReaderService {
       log("IMessageReaderService: Failed to open chat.db read-only: \(error)")
       throw IMessageReaderError.fullDiskAccessDenied
     }
+  }
+
+  /// Normalize a raw message body for downstream consumers. Attachments embed the
+  /// object-replacement character (U+FFFC) in the text; a body that is *only*
+  /// attachments becomes the explicit "[attachment]" placeholder (so reply pairing
+  /// keeps the turn), while captioned attachments just lose the marker glyphs.
+  private static func sanitizeBody(_ raw: String) -> String? {
+    let stripped =
+      raw
+      .replacingOccurrences(of: "\u{FFFC}", with: " ")
+      .replacingOccurrences(of: "\u{FFFD}", with: " ")
+      .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    if stripped.isEmpty {
+      return raw.contains("\u{FFFC}") ? "[attachment]" : nil
+    }
+    return stripped
   }
 
   /// Extract the plain-string content from a message's `attributedBody` blob.
