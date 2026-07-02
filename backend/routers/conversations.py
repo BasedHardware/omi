@@ -297,7 +297,7 @@ def get_conversations_count(
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
     source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
     if status_list and source_list:
-        # Firestore allows a single `in` filter per query.
+        # Combining status+source `in` filters would need a composite index; keep them exclusive.
         raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
     count = conversations_db.get_conversations_count(
         uid,
