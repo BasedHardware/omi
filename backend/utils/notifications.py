@@ -332,7 +332,7 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
         invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
         if invalid_tokens:
             logger.error(f"Removing {len(invalid_tokens)} invalid tokens")
-            notification_db.remove_bulk_tokens(invalid_tokens)
+            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
 
     except Exception as e:
         logger.error(f"Error sending bulk notification: {e}")
