@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import List, Optional
 
@@ -8,6 +9,8 @@ import database.calendar_meetings as calendar_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.other import endpoints as auth
 from utils.request_validation import CalendarMeetingsLimit
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -101,4 +104,9 @@ def list_calendar_meetings(
 ):
     """List calendar meetings within a date range"""
     meetings = calendar_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)
-    return [CalendarMeetingContext(**m) for m in meetings]
+    # Skip any malformed stored meeting rather than 500 the whole list, so one bad
+    # record cannot hide every other meeting the user has.
+    return CalendarMeetingContext.from_records(
+        meetings,
+        on_error=lambda record, exc: logger.warning('Skipping malformed calendar meeting for uid=%s: %s', uid, exc),
+    )
