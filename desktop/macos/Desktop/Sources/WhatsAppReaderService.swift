@@ -327,6 +327,7 @@ actor WhatsAppReaderService {
           Self.sanitizedName(row["cname"] as? String)
           ?? Self.sanitizedName(row["fname"] as? String)
           ?? Self.sanitizedName(pushNames[digits])
+          ?? Self.senderPhone(for: memberJID, lidToPhone: lidToPhone)
           ?? Self.prettyHandle(digits)
         map[chatJID, default: [:]][digits] = name
       }
@@ -388,17 +389,15 @@ actor WhatsAppReaderService {
         var sName: String? = (isGroup && !r.isFromMe) ? r.senderName : nil
         if isGroup, !r.isFromMe, let h = r.handle {
           senderImg = await resolver.imageData(for: h) ?? Self.profileThumb(for: h, in: thumbMap)
-          // Prefer WhatsApp's real profile push-name over an unsaved ~tag/opaque id.
+          // Resolve the best label for an unsaved sender (a "~tag" or opaque id):
+          // real push-name → a full phone number → a clean generic (never a
+          // cryptic "~code").
           let looksLikeTag = sName == nil || sName!.hasPrefix("~") || sName!.hasPrefix("(")
-          if looksLikeTag, let real = Self.pushName(for: h, in: pushNames) {
-            sName = real
-          } else if looksLikeTag {
-            // No saved name and no push-name: show a phone number (mapped from the
-            // sender's @lid) instead of an unreadable opaque "~tag".
-            let lidLP = h.split(separator: "@").first.map(String.init) ?? h
-            if let phone = lidToPhone[lidLP] {
-              sName = Self.prettyHandle(phone)
-            }
+          if looksLikeTag {
+            sName =
+              Self.pushName(for: h, in: pushNames)
+              ?? Self.senderPhone(for: h, lidToPhone: lidToPhone)
+              ?? sName
           }
         }
         let bubbleText = r.text.isEmpty ? "" : Self.resolveMentions(in: r.text, members: members)
@@ -451,6 +450,27 @@ actor WhatsAppReaderService {
     let localPart = jid.split(separator: "@").first.map(String.init) ?? jid
     guard let path = map[localPart] else { return nil }
     return try? Data(contentsOf: URL(fileURLWithPath: path))
+  }
+
+  /// A numeric label for an unsaved group sender — always something, never a
+  /// cryptic "~tag" or a generic word.
+  ///  - Bare-phone handle (`<digits>`, from `@s.whatsapp.net`) → `+<digits>`.
+  ///  - `@lid` handle with a 1:1 chat → that dialable `+<phone>`.
+  ///  - `@lid` with no known phone (WhatsApp LID privacy hides it) → the raw
+  ///    numeric id WhatsApp has for them, `+<lid digits>`. Not dialable, but it's
+  ///    the only number on file and stays stable per person.
+  private static func senderPhone(for handle: String, lidToPhone: [String: String]) -> String? {
+    if !handle.contains("@") {
+      let digits = handle.filter { $0.isNumber }
+      return digits.count >= 6 ? "+\(digits)" : nil
+    }
+    let lidLP = handle.split(separator: "@").first.map(String.init) ?? handle
+    if let phone = lidToPhone[lidLP] {
+      let digits = phone.filter { $0.isNumber }
+      if digits.count >= 6 { return "+\(digits)" }
+    }
+    let idDigits = lidLP.filter { $0.isNumber }
+    return idDigits.count >= 6 ? "+\(idDigits)" : nil
   }
 
   /// Returns `data` only if it decodes to a real image, else nil. Guards against
