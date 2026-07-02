@@ -43,7 +43,12 @@ def _render_env_vars(env_entries: dict[str, Any]) -> str:
     for name, entry in env_entries.items():
         if not isinstance(entry, dict):
             raise ValueError(f'Cloud Run env {name} must be a mapping')
-        lines.append(f'{name}={_runtime_value(name, entry)}')
+        value = _runtime_value(name, entry, allow_missing=bool(entry.get('provisional')))
+        if value is None:
+            # Provisional entry with no value in this environment (e.g. a service
+            # not yet deployed there) — omit the env var entirely.
+            continue
+        lines.append(f'{name}={value}')
     return '\n'.join(lines)
 
 
@@ -70,7 +75,7 @@ def _render_flags(flag_entries: dict[str, Any]) -> str:
     return ' '.join(flags)
 
 
-def _runtime_value(name: str, entry: dict[str, Any]) -> str:
+def _runtime_value(name: str, entry: dict[str, Any], *, allow_missing: bool = False) -> str | None:
     if 'value' in entry:
         return str(entry['value'])
     env_var = entry.get('env_var')
@@ -78,6 +83,8 @@ def _runtime_value(name: str, entry: dict[str, Any]) -> str:
         value = os.environ.get(env_var, '')
         if value:
             return value
+        if allow_missing:
+            return None
         raise ValueError(f'{name} requires ${env_var} to be set')
     raise ValueError(f'{name} must define value or env_var')
 
