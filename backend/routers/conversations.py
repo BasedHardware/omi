@@ -289,11 +289,16 @@ def get_conversations_count(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
+    sources: Optional[str] = Query(None, description="Comma-separated source filter (e.g. friend,omi)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
+    source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
+    if status_list and source_list:
+        # Firestore allows a single `in` filter per query.
+        raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
     count = conversations_db.get_conversations_count(
         uid,
         include_discarded=include_discarded,
@@ -302,7 +307,12 @@ def get_conversations_count(
         end_date=end_date,
         folder_id=folder_id,
         starred=starred,
+        sources=source_list,
     )
+    if source_list:
+        # Echo the filter so clients can tell this backend applied it (older
+        # backends ignore the unknown param and return the unfiltered total).
+        return {'count': count, 'sources': source_list}
     return {'count': count}
 
 
