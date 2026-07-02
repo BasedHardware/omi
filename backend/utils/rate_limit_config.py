@@ -71,6 +71,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Memory batch writes — each request can create up to 100 memories, so the
     # per-request cap is intentionally tighter than memories:create.
     "memories:batch": (30, 3600),
+    # Memory import ingest writes source artifacts only; candidate extraction is
+    # server-owned and rate-limited separately by worker scheduling.
+    "memory_imports:batch": (60, 3600),
     # Memory mutations — lightweight Firestore writes
     "memories:modify": (120, 3600),
     # Memory review queue — lightweight read/resolve workflow over review artifacts

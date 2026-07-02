@@ -1836,10 +1836,9 @@ extension APIClient {
   /// Max memories per POST /v3/memories/batch call. Must match the
   /// `MEMORIES_BATCH_MAX` constant in backend/routers/memories.py.
   static let memoriesBatchMaxSize = 100
+  static let memoryImportBatchMaxSize = 100
 
-  /// Creates many memories in a single HTTP call. Used by the onboarding
-  /// local-file import flow to avoid fanning out N requests and tripping
-  /// Cloud Armor's per-Authorization 120/min throttle.
+  /// Creates many product memories in a single HTTP call.
   ///
   /// Caller is responsible for chunking input into groups of at most
   /// `memoriesBatchMaxSize`. Returns the created count from the server.
@@ -1853,6 +1852,14 @@ extension APIClient {
     }
     let body = BatchRequest(memories: memories)
     return try await post("v3/memories/batch", body: body)
+  }
+
+  func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse {
+    precondition(
+      batch.items.count <= Self.memoryImportBatchMaxSize,
+      "createMemoryImportBatch received \(batch.items.count) artifacts, max is \(Self.memoryImportBatchMaxSize)"
+    )
+    return try await post("v3/memory-imports/batch", body: batch, includeBYOK: false)
   }
 
   /// Deletes a memory by ID
@@ -2032,6 +2039,116 @@ struct BatchMemoriesResponse: Decodable {
   struct BatchMemory: Decodable {
     let id: String
     let content: String
+  }
+}
+
+struct ImportEvidenceBatch: Encodable {
+  let sourceType: String
+  let importRunId: String?
+  let sourceAccountHash: String?
+  let importerVersion: String
+  let extractorVersion: String?
+  let items: [ImportEvidenceBatchItem]
+
+  init(
+    sourceType: String,
+    importRunId: String? = nil,
+    sourceAccountHash: String? = nil,
+    importerVersion: String = "desktop-import-v1",
+    extractorVersion: String? = nil,
+    items: [ImportEvidenceBatchItem]
+  ) {
+    self.sourceType = sourceType
+    self.importRunId = importRunId
+    self.sourceAccountHash = sourceAccountHash
+    self.importerVersion = importerVersion
+    self.extractorVersion = extractorVersion
+    self.items = items
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case sourceType = "source_type"
+    case importRunId = "import_run_id"
+    case sourceAccountHash = "source_account_hash"
+    case importerVersion = "importer_version"
+    case extractorVersion = "extractor_version"
+    case items
+  }
+}
+
+struct ImportEvidenceBatchItem: Encodable, Hashable {
+  let externalId: String?
+  let occurredAt: Date?
+  let title: String?
+  let snippet: String?
+  let content: String?
+  let contentHash: String?
+  let metadata: [String: String]
+  let clientDeviceId: String?
+
+  init(
+    externalId: String? = nil,
+    occurredAt: Date? = nil,
+    title: String? = nil,
+    snippet: String? = nil,
+    content: String? = nil,
+    contentHash: String? = nil,
+    metadata: [String: String] = [:],
+    clientDeviceId: String? = nil
+  ) {
+    self.externalId = externalId
+    self.occurredAt = occurredAt
+    self.title = title
+    self.snippet = snippet
+    self.content = content
+    self.contentHash = contentHash
+    self.metadata = metadata
+    self.clientDeviceId = clientDeviceId
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case externalId = "external_id"
+    case occurredAt = "occurred_at"
+    case title
+    case snippet
+    case content
+    case contentHash = "content_hash"
+    case metadata
+    case clientDeviceId = "client_device_id"
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encodeIfPresent(externalId, forKey: .externalId)
+    if let occurredAt {
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      try container.encode(formatter.string(from: occurredAt), forKey: .occurredAt)
+    }
+    try container.encodeIfPresent(title, forKey: .title)
+    try container.encodeIfPresent(snippet, forKey: .snippet)
+    try container.encodeIfPresent(content, forKey: .content)
+    try container.encodeIfPresent(contentHash, forKey: .contentHash)
+    try container.encode(metadata, forKey: .metadata)
+    try container.encodeIfPresent(clientDeviceId, forKey: .clientDeviceId)
+  }
+}
+
+struct ImportEvidenceBatchResponse: Decodable {
+  let runId: String
+  let artifactsReceived: Int
+  let artifactsCreated: Int
+  let artifactsDeduped: Int
+  let candidatesCreated: Int
+  let status: String
+
+  enum CodingKeys: String, CodingKey {
+    case runId = "run_id"
+    case artifactsReceived = "artifacts_received"
+    case artifactsCreated = "artifacts_created"
+    case artifactsDeduped = "artifacts_deduped"
+    case candidatesCreated = "candidates_created"
+    case status
   }
 }
 

@@ -4,6 +4,7 @@ import XCTest
 private struct BulkCapturedRequest {
     let url: URL
     let method: String
+    let headers: [String: String]
     let body: Data?
 }
 
@@ -35,7 +36,11 @@ private final class BulkURLCapture: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         if let url = request.url {
             BulkURLCapture.record(
-                BulkCapturedRequest(url: url, method: request.httpMethod ?? "GET", body: Self.bodyData(from: request)))
+                BulkCapturedRequest(
+                    url: url,
+                    method: request.httpMethod ?? "GET",
+                    headers: request.allHTTPHeaderFields ?? [:],
+                    body: Self.bodyData(from: request)))
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -68,17 +73,19 @@ private final class BulkURLCapture: URLProtocol, @unchecked Sendable {
     }
 }
 
-private actor FakeMemoryBatchAPI: MemoryBatchCreating {
-    private let outcomes: [Result<BatchMemoriesResponse, Error>]
+private actor FakeImportEvidenceAPI: ImportEvidenceBatchCreating {
+    private let outcomes: [Result<ImportEvidenceBatchResponse, Error>]
     private var index = 0
     private var calls = 0
+    private var batches: [ImportEvidenceBatch] = []
 
-    init(outcomes: [Result<BatchMemoriesResponse, Error>]) {
+    init(outcomes: [Result<ImportEvidenceBatchResponse, Error>]) {
         self.outcomes = outcomes
     }
 
-    func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse {
+    func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse {
         calls += 1
+        batches.append(batch)
         let outcome = outcomes[min(index, outcomes.count - 1)]
         index += 1
         switch outcome {
@@ -91,6 +98,34 @@ private actor FakeMemoryBatchAPI: MemoryBatchCreating {
 
     func callCount() -> Int {
         calls
+    }
+
+    func capturedBatches() -> [ImportEvidenceBatch] {
+        batches
+    }
+}
+
+private actor FakeMemoryBatchAPI: MemoryBatchCreating {
+    private var calls = 0
+    private var memories: [MemoryBatchItem] = []
+
+    func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse {
+        calls += 1
+        self.memories.append(contentsOf: memories)
+        return BatchMemoriesResponse(
+            memories: memories.enumerated().map { index, item in
+                BatchMemoriesResponse.BatchMemory(id: "legacy-\(index)", content: item.content)
+            },
+            createdCount: memories.count
+        )
+    }
+
+    func callCount() -> Int {
+        calls
+    }
+
+    func capturedMemories() -> [MemoryBatchItem] {
+        memories
     }
 }
 
@@ -128,30 +163,34 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         return client
     }
 
-    func testDeleteAllMemoriesScopeThrowsBeforeNetworkRequest() async {
+    func testDeleteAllMemoriesDefaultScopeUsesUnscopedEndpoint() async {
         let client = await makeClient()
 
         await XCTAssertThrowsErrorAsync({ try await client.deleteAllMemories(scope: .defaultAccess) }) { error in
-            guard case APIError.unsupportedTierScopedBulkMutation(_) = error else {
-                XCTFail("Expected unsupportedTierScopedBulkMutation, got \(error)")
+            guard case let APIError.httpError(statusCode, _) = error, statusCode == 500 else {
+                XCTFail("Expected httpError 500 from captured request, got \(error)")
                 return
             }
         }
-        XCTAssertEqual(BulkURLCapture.capturedRequests.count, 0)
+        XCTAssertEqual(BulkURLCapture.capturedRequests.count, 1)
+        XCTAssertEqual(BulkURLCapture.capturedRequests.first?.method, "DELETE")
+        XCTAssertEqual(BulkURLCapture.capturedRequests.first?.url.path, "/v3/memories")
     }
 
-    func testUpdateAllMemoriesVisibilityScopeThrowsBeforeNetworkRequest() async {
+    func testUpdateAllMemoriesVisibilityDefaultScopeUsesUnscopedEndpoint() async {
         let client = await makeClient()
 
         await XCTAssertThrowsErrorAsync({
             try await client.updateAllMemoriesVisibility(scope: .defaultAccess, visibility: "private")
         }) { error in
-            guard case APIError.unsupportedTierScopedBulkMutation(_) = error else {
-                XCTFail("Expected unsupportedTierScopedBulkMutation, got \(error)")
+            guard case let APIError.httpError(statusCode, _) = error, statusCode == 500 else {
+                XCTFail("Expected httpError 500 from captured request, got \(error)")
                 return
             }
         }
-        XCTAssertEqual(BulkURLCapture.capturedRequests.count, 0)
+        XCTAssertEqual(BulkURLCapture.capturedRequests.count, 1)
+        XCTAssertEqual(BulkURLCapture.capturedRequests.first?.method, "PATCH")
+        XCTAssertEqual(BulkURLCapture.capturedRequests.first?.url.path, "/v3/memories/visibility")
     }
 
     func testMarkAllMemoriesReadScopeThrowsBeforeNetworkRequest() async {
@@ -166,39 +205,40 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         XCTAssertEqual(BulkURLCapture.capturedRequests.count, 0)
     }
 
-    func testMemoryBatchItemEncodesImportMetadata() throws {
-        let item = MemoryBatchItem(
+    func testImportEvidenceBatchItemEncodesSourceArtifactMetadata() throws {
+        let item = ImportEvidenceBatchItem(
+            externalId: "chatgpt:memory:1",
+            occurredAt: Date(timeIntervalSince1970: 1_782_950_400.123),
+            title: "ChatGPT Memory Import",
+            snippet: "The user prefers concise updates.",
             content: "The user prefers concise updates.",
-            visibility: "private",
-            category: .system,
-            tags: ["chatgpt", "import"],
-            headline: "ChatGPT Memory Import",
-            source: "chatgpt_memory_log",
-            windowTitle: "ChatGPT export"
+            metadata: ["window_title": "ChatGPT export"]
         )
 
         let data = try JSONEncoder().encode(item)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
+        XCTAssertEqual(object["external_id"] as? String, "chatgpt:memory:1")
+        XCTAssertEqual(object["occurred_at"] as? String, "2026-07-02T00:00:00.123Z")
+        XCTAssertEqual(object["title"] as? String, "ChatGPT Memory Import")
+        XCTAssertEqual(object["snippet"] as? String, "The user prefers concise updates.")
         XCTAssertEqual(object["content"] as? String, "The user prefers concise updates.")
-        XCTAssertEqual(object["category"] as? String, "system")
-        XCTAssertEqual(object["source"] as? String, "chatgpt_memory_log")
-        XCTAssertEqual(object["window_title"] as? String, "ChatGPT export")
-        XCTAssertNil(object["windowTitle"])
+        let metadata = try XCTUnwrap(object["metadata"] as? [String: String])
+        XCTAssertEqual(metadata["window_title"], "ChatGPT export")
     }
 
-    func testCreateMemoriesBatchRoutesOneRequestWithChunkPayload() async throws {
+    func testCreateMemoryImportBatchRoutesOneRequestWithArtifactPayload() async throws {
         let client = await makeClient()
-        let item = MemoryBatchItem(
+        let item = ImportEvidenceBatchItem(
+            externalId: "gmail:m1",
+            title: "Omi",
+            snippet: "The user works on Omi.",
             content: "The user works on Omi.",
-            visibility: "private",
-            category: .system,
-            tags: ["import"],
-            headline: "Omi",
-            source: "test"
+            metadata: ["import_kind": "email"]
         )
+        let batch = ImportEvidenceBatch(sourceType: "gmail", items: [item])
 
-        await XCTAssertThrowsErrorAsync({ try await client.createMemoriesBatch([item]) }) { error in
+        await XCTAssertThrowsErrorAsync({ try await client.createMemoryImportBatch(batch) }) { error in
             guard case let APIError.httpError(statusCode, _) = error, statusCode == 500 else {
                 XCTFail("Expected httpError 500, got \(error)")
                 return
@@ -207,13 +247,18 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
 
         let request = try XCTUnwrap(BulkURLCapture.capturedRequests.first)
         XCTAssertEqual(request.method, "POST")
-        XCTAssertEqual(request.url.path, "/v3/memories/batch")
+        XCTAssertEqual(request.url.path, "/v3/memory-imports/batch")
+        XCTAssertNil(request.headers["X-BYOK-OpenAI"])
+        XCTAssertNil(request.headers["X-BYOK-Anthropic"])
+        XCTAssertNil(request.headers["X-BYOK-Gemini"])
+        XCTAssertNil(request.headers["X-BYOK-Deepgram"])
 
         let body = try XCTUnwrap(request.body)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let memories = try XCTUnwrap(json["memories"] as? [[String: Any]])
-        XCTAssertEqual(memories.count, 1)
-        XCTAssertEqual(memories.first?["source"] as? String, "test")
+        XCTAssertEqual(json["source_type"] as? String, "gmail")
+        let items = try XCTUnwrap(json["items"] as? [[String: Any]])
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?["external_id"] as? String, "gmail:m1")
     }
 
     func testChunkedUsesMemoryBatchMaxSizeBoundaries() {
@@ -226,25 +271,33 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         XCTAssertEqual(chunks[1], [APIClient.memoriesBatchMaxSize, APIClient.memoriesBatchMaxSize + 1])
     }
 
-    func testOnboardingMemoryBatchImportRetriesRateLimitedChunk() async {
-        let item = MemoryBatchItem(
+    func testOnboardingImportEvidenceRetriesRateLimitedChunk() async {
+        let item = ImportEvidenceBatchItem(
+            title: "Verification",
+            snippet: "The user likes local verification.",
             content: "The user likes local verification.",
-            visibility: "private",
-            category: .system,
-            tags: ["import"],
-            headline: "Verification",
-            source: "test"
+            metadata: ["import_kind": "profile"]
         )
-        let api = FakeMemoryBatchAPI(
+        let api = FakeImportEvidenceAPI(
             outcomes: [
                 .failure(APIError.httpError(statusCode: 429)),
-                .success(BatchMemoriesResponse(memories: [], createdCount: 1)),
+                .success(
+                    ImportEvidenceBatchResponse(
+                        runId: "run1",
+                        artifactsReceived: 1,
+                        artifactsCreated: 1,
+                        artifactsDeduped: 0,
+                        candidatesCreated: 0,
+                        status: "received")),
             ])
         let recorder = SleepRecorder()
 
-        let result = await OnboardingMemoryBatchImportService.save(
+        let result = await OnboardingImportEvidenceService.save(
             [item],
+            sourceType: "test",
             logPrefix: "test",
+            importRunId: "test-run-1",
+            sourceAccountHash: "source-hash-1",
             apiClient: api,
             sleep: { delay in await recorder.sleep(delay) }
         )
@@ -255,27 +308,38 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         let delays = await recorder.recordedDelays()
         XCTAssertEqual(callCount, 2)
         XCTAssertEqual(delays, [2])
+        let batches = await api.capturedBatches()
+        XCTAssertEqual(batches.map(\.importRunId), ["test-run-1", "test-run-1"])
+        XCTAssertEqual(batches.map(\.sourceAccountHash), ["source-hash-1", "source-hash-1"])
     }
 
-    func testOnboardingMemoryBatchImportRetriesTransientNetworkError() async {
-        let item = MemoryBatchItem(
+    func testOnboardingImportEvidenceRetriesTransientNetworkError() async {
+        let item = ImportEvidenceBatchItem(
+            title: "Resilient Import",
+            snippet: "The user wants resilient onboarding imports.",
             content: "The user wants resilient onboarding imports.",
-            visibility: "private",
-            category: .system,
-            tags: ["import"],
-            headline: "Resilient Import",
-            source: "test"
+            metadata: ["import_kind": "profile"]
         )
-        let api = FakeMemoryBatchAPI(
+        let api = FakeImportEvidenceAPI(
             outcomes: [
                 .failure(URLError(.timedOut)),
-                .success(BatchMemoriesResponse(memories: [], createdCount: 1)),
+                .success(
+                    ImportEvidenceBatchResponse(
+                        runId: "run1",
+                        artifactsReceived: 1,
+                        artifactsCreated: 1,
+                        artifactsDeduped: 0,
+                        candidatesCreated: 0,
+                        status: "received")),
             ])
         let recorder = SleepRecorder()
 
-        let result = await OnboardingMemoryBatchImportService.save(
+        let result = await OnboardingImportEvidenceService.save(
             [item],
+            sourceType: "test",
             logPrefix: "test",
+            importRunId: "test-run-2",
+            sourceAccountHash: "source-hash-2",
             apiClient: api,
             sleep: { delay in await recorder.sleep(delay) }
         )
@@ -286,6 +350,82 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         let delays = await recorder.recordedDelays()
         XCTAssertEqual(callCount, 2)
         XCTAssertEqual(delays, [2])
+        let batches = await api.capturedBatches()
+        XCTAssertEqual(batches.map(\.importRunId), ["test-run-2", "test-run-2"])
+        XCTAssertEqual(batches.map(\.sourceAccountHash), ["source-hash-2", "source-hash-2"])
+    }
+
+    func testOnboardingImportEvidenceFallsBackToLegacyBatchOnlyForLegacyUsers() async {
+        let item = ImportEvidenceBatchItem(
+            title: "Legacy Import",
+            snippet: "The legacy user keeps legacy memory behavior.",
+            content: "The legacy user keeps legacy memory behavior.",
+            metadata: ["import_kind": "profile"]
+        )
+        let legacyMemory = MemoryBatchItem(
+            content: "The legacy user keeps legacy memory behavior.",
+            tags: ["gmail", "onboarding"],
+            headline: "Legacy Import",
+            source: "gmail"
+        )
+        let api = FakeImportEvidenceAPI(
+            outcomes: [
+                .failure(APIError.httpError(statusCode: 403, detail: "memory_import_requires_canonical")),
+            ])
+        let legacyApi = FakeMemoryBatchAPI()
+
+        let result = await OnboardingImportEvidenceService.save(
+            [item],
+            sourceType: "gmail",
+            logPrefix: "test",
+            importRunId: "test-run-legacy",
+            sourceAccountHash: "source-hash-legacy",
+            legacyMemories: [legacyMemory],
+            apiClient: api,
+            legacyApiClient: legacyApi,
+            sleep: { _ in }
+        )
+
+        XCTAssertEqual(result.saved, 1)
+        XCTAssertEqual(result.failed, 0)
+        let importCallCount = await api.callCount()
+        let legacyCallCount = await legacyApi.callCount()
+        let legacyContents = await legacyApi.capturedMemories().map(\.content)
+        XCTAssertEqual(importCallCount, 1)
+        XCTAssertEqual(legacyCallCount, 1)
+        XCTAssertEqual(legacyContents, [legacyMemory.content])
+    }
+
+    func testOnboardingImportEvidenceDoesNotFallbackWhenCanonicalNotReady() async {
+        let item = ImportEvidenceBatchItem(
+            title: "Canonical Not Ready",
+            snippet: "Canonical failures should fail closed.",
+            content: "Canonical failures should fail closed.",
+            metadata: ["import_kind": "profile"]
+        )
+        let legacyMemory = MemoryBatchItem(content: "Should not write legacy")
+        let api = FakeImportEvidenceAPI(
+            outcomes: [
+                .failure(APIError.httpError(statusCode: 503, detail: "memory_import_canonical_not_ready")),
+            ])
+        let legacyApi = FakeMemoryBatchAPI()
+
+        let result = await OnboardingImportEvidenceService.save(
+            [item],
+            sourceType: "gmail",
+            logPrefix: "test",
+            importRunId: "test-run-not-ready",
+            sourceAccountHash: "source-hash-not-ready",
+            legacyMemories: [legacyMemory],
+            apiClient: api,
+            legacyApiClient: legacyApi,
+            sleep: { _ in }
+        )
+
+        XCTAssertEqual(result.saved, 0)
+        XCTAssertEqual(result.failed, 1)
+        let legacyCallCount = await legacyApi.callCount()
+        XCTAssertEqual(legacyCallCount, 0)
     }
 }
 

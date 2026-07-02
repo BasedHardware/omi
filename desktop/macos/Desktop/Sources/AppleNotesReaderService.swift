@@ -366,19 +366,27 @@ actor AppleNotesReaderService {
       }
       let profileSummary = parsed["profile"] as? String ?? ""
 
-      let memoryItems = memoryStrings.map { memory in
-        MemoryBatchItem(
+      let artifacts = memoryStrings.map { memory in
+        ImportEvidenceBatchItem(
+            title: "Apple Notes Insight",
+            snippet: memory,
             content: memory,
-            visibility: "private",
-            category: .system,
-            tags: ["apple_notes", "import", "profile"],
-            headline: "Apple Notes Insight",
-            source: "apple_notes"
+            metadata: ["import_kind": "profile"]
         )
       }
-      let saveResult = await OnboardingMemoryBatchImportService.save(
-        memoryItems,
-        logPrefix: "AppleNotesReaderService"
+      let legacyMemories = memoryStrings.map { memory in
+        MemoryBatchItem(
+          content: memory,
+          tags: ["apple_notes", "onboarding"],
+          headline: "Apple Notes Insight",
+          source: "apple_notes"
+        )
+      }
+      let saveResult = await OnboardingImportEvidenceService.save(
+        artifacts,
+        sourceType: "apple_notes",
+        logPrefix: "AppleNotesReaderService",
+        legacyMemories: legacyMemories
       )
 
       return (saveResult.saved, profileSummary)
@@ -401,28 +409,45 @@ actor AppleNotesReaderService {
 
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = "MMM d, yyyy"
-    let memoryItems = notesToSave.map { note in
+    let artifacts = notesToSave.map { note in
       var content = note.title
       if !note.summary.isEmpty {
         content += "\n\n" + note.summary
       }
 
+      return ImportEvidenceBatchItem(
+        externalId: "apple_notes:\(note.id)",
+        occurredAt: note.modifiedAt,
+        title: note.title,
+        snippet: note.summary,
+        content: content,
+        metadata: [
+          "import_kind": "note",
+          "window_title": "Apple Notes — \(dateFormatter.string(from: note.modifiedAt))",
+        ]
+      )
+    }
+    let legacyMemories = notesToSave.map { note in
+      var content = note.title
+      if !note.summary.isEmpty {
+        content += "\n\n" + note.summary
+      }
       return MemoryBatchItem(
         content: content,
-        visibility: "private",
-        category: .system,
-        tags: ["apple_notes", "import", "note"],
+        tags: ["apple_notes", "onboarding", "note"],
         headline: note.title,
         source: "apple_notes",
         windowTitle: "Apple Notes — \(dateFormatter.string(from: note.modifiedAt))"
       )
     }
 
-    let result = await OnboardingMemoryBatchImportService.save(
-      memoryItems,
-      logPrefix: "AppleNotesReaderService"
+    let result = await OnboardingImportEvidenceService.save(
+      artifacts,
+      sourceType: "apple_notes",
+      logPrefix: "AppleNotesReaderService",
+      legacyMemories: legacyMemories
     )
-    log("AppleNotesReaderService: Saved \(result.saved) notes as memories (\(result.failed) failed)")
+    log("AppleNotesReaderService: Saved \(result.saved) notes as import evidence (\(result.failed) failed)")
     return result
   }
 

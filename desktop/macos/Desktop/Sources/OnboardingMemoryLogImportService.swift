@@ -119,18 +119,26 @@ actor OnboardingMemoryLogImportService {
       }
 
       let items = memoryStrings.map { memory in
-        MemoryBatchItem(
+        ImportEvidenceBatchItem(
+            title: source.headline,
+            snippet: memory,
             content: memory,
-            visibility: "private",
-            category: .system,
-            tags: source.tags,
-            headline: source.headline,
-            source: source.memorySource
+            metadata: ["import_kind": "memory_log"]
         )
       }
-      let saveResult = await OnboardingMemoryBatchImportService.save(
+      let legacyMemories = memoryStrings.map { memory in
+        MemoryBatchItem(
+          content: memory,
+          tags: source.tags,
+          headline: source.headline,
+          source: source.memorySource
+        )
+      }
+      let saveResult = await OnboardingImportEvidenceService.save(
         items,
-        logPrefix: "OnboardingMemoryLogImportService"
+        sourceType: source.memorySource,
+        logPrefix: "OnboardingMemoryLogImportService",
+        legacyMemories: legacyMemories
       )
       if saveResult.failed > 0 {
         log(
