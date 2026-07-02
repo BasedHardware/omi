@@ -64,6 +64,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  var usesPublicCloudOAuthClient: Bool {
+    cloudOAuthClientID != nil && cloudOAuthClientSecret == nil
+  }
+
+  var requiresHostedMCPKeyForSetup: Bool {
+    !usesPublicCloudOAuthClient
+  }
+
   var title: String {
     switch self {
     case .notion: return "Notion"
@@ -243,7 +251,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         steps: [
           "Open Claude → Customize → Connectors → Add custom connector",
           "Copy Name and Remote MCP server URL into the first two Claude fields",
-          "Open Advanced settings, set OAuth Client ID “omi-claude-prod”, and leave OAuth Client Secret blank",
+          "Open Advanced settings, set OAuth Client ID “\(cloudOAuthClientID ?? "")”, and leave OAuth Client Secret blank",
           "Click Add, then Connect. Syncs to Claude desktop + mobile automatically.",
         ],
         openURL: URL(string: "https://claude.ai/customize/connectors?modal=add-custom-connector"),

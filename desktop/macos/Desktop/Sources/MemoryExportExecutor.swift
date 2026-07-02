@@ -33,7 +33,10 @@ enum MemoryExportExecutor {
       throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
     }
 
-    let key = try await MemoryExportService.shared.ensureMCPKey()
+    let key =
+      destination.requiresHostedMCPKeyForSetup
+      ? try await MemoryExportService.shared.ensureMCPKey()
+      : ""
 
     // OpenClaw / Hermes have no setup CLI; the agent doesn't reliably perform the
     // file write. Do it deterministically ourselves (idempotent local write).
@@ -98,9 +101,12 @@ enum MemoryExportExecutor {
       throw ExecutorError.unsupported(destination.title)
     }
 
+    let pasteboardText =
+      destination.requiresHostedMCPKeyForSetup
+      ? "Server URL: \(setup.serverURL)\nKey: \(key)"
+      : "Server URL: \(setup.serverURL)"
     NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(
-      "Server URL: \(setup.serverURL)\nKey: \(key)", forType: .string)
+    NSPasteboard.general.setString(pasteboardText, forType: .string)
 
     if let browser {
       BrowserAutomationTargetResolver.open(openURL, in: browser)
@@ -122,13 +128,18 @@ enum MemoryExportExecutor {
       "provider": "claude",
       "name": "Omi Memory",
       "server_url": setup.serverURL,
-      "oauth_client_id": "omi-claude-prod",
+      "oauth_client_id": MemoryExportDestination.claude.cloudOAuthClientID ?? "",
       "submit": true,
     ]
 
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(
-      "Name: Omi Memory\nRemote MCP server URL: \(setup.serverURL)\nOAuth Client ID: omi-claude-prod\nOAuth Client Secret: leave blank",
+      """
+      Name: Omi Memory
+      Remote MCP server URL: \(setup.serverURL)
+      OAuth Client ID: \(MemoryExportDestination.claude.cloudOAuthClientID ?? "")
+      OAuth Client Secret: leave blank
+      """,
       forType: .string)
 
     // For cloud setup, use the user's system default browser. Do not reuse the

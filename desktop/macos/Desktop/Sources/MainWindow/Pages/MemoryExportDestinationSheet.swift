@@ -486,7 +486,7 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
-      if destination == .claude && model.mcpKey == nil {
+      if destination.requiresHostedMCPKeyForSetup && destination == .claude && model.mcpKey == nil {
         await model.generateMCPKey()
       }
     }
@@ -767,7 +767,9 @@ struct MemoryExportDestinationSheet: View {
         mcpCodeRow(
           label: "Server URL", value: MemoryExportDestination.mcpServerURL, copyLabel: "Server URL")
 
-        mcpKeyRow
+        if destination.requiresHostedMCPKeyForSetup {
+          mcpKeyRow
+        }
       }
 
       if let setup, let copyText = setup.copyText, let copyTitle = setup.copyTitle {
@@ -821,7 +823,10 @@ struct MemoryExportDestinationSheet: View {
         .foregroundColor(OmiColors.textSecondary)
         .padding(.top, 2)
 
-      mcpCodeRow(label: "OAuth Client ID", value: "omi-claude-prod", copyLabel: "OAuth Client ID")
+      mcpCodeRow(
+        label: "OAuth Client ID",
+        value: destination.cloudOAuthClientID ?? "",
+        copyLabel: "OAuth Client ID")
 
       Text("Leave OAuth Client Secret blank.")
         .scaledFont(size: 12)

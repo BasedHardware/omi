@@ -343,7 +343,14 @@ def test_generic_env_client_registry_supports_redirect_uri_prefixes(monkeypatch)
 
     client = mcp_oauth.get_client('connector-prefix-test')
     assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/user-connector')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/')
     assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/user-connector?code=1')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth//user-connector')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/../evil')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/%2e%2e/evil')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/%2F/evil')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauthish/user-connector')
 
 
 def test_generic_env_client_rejects_string_public_flag(monkeypatch):

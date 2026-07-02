@@ -116,7 +116,9 @@ enum CloudConnectorFormAutomation {
           aliases: ["authentication", "auth type"]),
         FieldValue(
           label: "Token auth method",
-          value: nonEmptyString(args["token_auth_method"]) ?? "none",
+          value:
+            nonEmptyString(args["token_auth_method"])
+            ?? (clientSecret == nil ? "none" : "client_secret_post"),
           optional: true,
           aliases: ["token auth method", "token authentication method"]),
       ])
@@ -916,8 +918,8 @@ enum CloudConnectorFormAutomation {
 
   private static func defaultOAuthClientID(for provider: String) -> String {
     switch provider {
-    case "chatgpt": return "omi-chatgpt-prod"
-    case "claude": return "omi-claude-prod"
+    case "chatgpt": return MemoryExportDestination.chatgpt.cloudOAuthClientID ?? ""
+    case "claude": return MemoryExportDestination.claude.cloudOAuthClientID ?? ""
     default: return ""
     }
   }
