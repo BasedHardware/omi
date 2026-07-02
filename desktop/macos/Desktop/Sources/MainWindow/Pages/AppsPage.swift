@@ -657,6 +657,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     private let lastSyncedAtKeyPrefix = "appsImportConnectorLastSyncedAt."
     private let lastDeltaCountKeyPrefix = "appsImportConnectorLastDeltaCount."
     private let hasLastDeltaKeyPrefix = "appsImportConnectorHasLastDelta."
+    private let availabilityTextKeyPrefix = "appsImportConnectorAvailabilityText."
     private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
     private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
     private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
@@ -716,6 +717,7 @@ final class ImportConnectorStatusStore: ObservableObject {
         }
         if let availabilityText {
             metrics.availabilityText = availabilityText
+            defaults.set(availabilityText, forKey: availabilityTextKeyPrefix + connectorID)
         }
         metricsByID[connectorID] = metrics
     }
@@ -726,6 +728,7 @@ final class ImportConnectorStatusStore: ObservableObject {
         defaults.removeObject(forKey: lastSyncedAtKeyPrefix + connectorID)
         defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
         defaults.removeObject(forKey: hasLastDeltaKeyPrefix + connectorID)
+        defaults.removeObject(forKey: availabilityTextKeyPrefix + connectorID)
         metricsByID[connectorID] = ConnectorMetrics()
     }
 
@@ -753,6 +756,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             if defaults.bool(forKey: hasLastDeltaKeyPrefix + connector.id) {
                 metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKeyPrefix + connector.id)
             }
+            metrics.availabilityText = defaults.string(forKey: availabilityTextKeyPrefix + connector.id)
 
             metricsByID[connector.id] = metrics
         }
@@ -804,6 +808,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             metrics.sourceCount = result.count
             metrics.lastSyncedAt = result.lastIndexedAt
             metrics.availabilityText = "On-device index"
+            defaults.set("On-device index", forKey: availabilityTextKeyPrefix + "local-files")
             metricsByID["local-files"] = metrics
         } catch {
             log("ImportConnectorStatusStore: Failed to refresh local files metrics: \(error)")
@@ -817,6 +822,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
             metrics.sourceCount = noteCount
             metrics.availabilityText = "Private notes accessible"
+            defaults.set("Private notes accessible", forKey: availabilityTextKeyPrefix + "apple-notes")
             metricsByID["apple-notes"] = metrics
         case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
             log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
