@@ -30,7 +30,7 @@ def build_people_leaderboard(
       "Unknown" rather than being dropped.
 
     Results are ordered most-talked-to first (conversation count, then speaking time),
-    with name as a stable tie-breaker, and truncated to `limit`.
+    with name and then person_id as stable tie-breakers, and truncated to `limit`.
     """
     counts: Dict[str, int] = {}
     seconds: Dict[str, float] = {}
@@ -66,5 +66,7 @@ def build_people_leaderboard(
         )
         for person_id, count in counts.items()
     ]
-    entries.sort(key=lambda e: (-e.conversation_count, -e.speaking_seconds, e.name))
+    # person_id is the final key so the order is fully deterministic even when two
+    # different people share a display name and have identical metrics.
+    entries.sort(key=lambda e: (-e.conversation_count, -e.speaking_seconds, e.name, e.person_id))
     return entries[: max(0, limit)]

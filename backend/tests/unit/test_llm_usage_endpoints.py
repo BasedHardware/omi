@@ -113,6 +113,7 @@ for name in [
 sys.modules["database.conversations"].get_in_progress_conversation = MagicMock()
 sys.modules["database.conversations"].get_conversation = MagicMock()
 sys.modules["database.conversations"].get_conversation_ids = MagicMock(return_value=[])
+sys.modules["database.conversations"].get_conversations_without_photos = MagicMock(return_value=[])
 sys.modules["database.memories"].get_memory_ids = MagicMock(return_value=[])
 
 sys.modules["database.app_review_config"].should_hide_subscription_ui = MagicMock(return_value=False)
