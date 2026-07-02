@@ -9,6 +9,7 @@ from scripts import generate_dart_models
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 GENERATED_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'conversation_wire.g.dart'
+MESSAGES_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'messages_wire.g.dart'
 ACTION_ITEMS_FOLDERS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'action_items_folders_wire.g.dart'
 )
@@ -46,6 +47,21 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
     assert 'items: _required(_readMapList(_readAny(json, const ["items"])), "items")' in generated
+    assert 'class GeneratedSyncJobStartResponse' in generated
+    assert 'class GeneratedSyncJobStatusResponse' in generated
+    assert (
+        'result: _readObject(_readAny(json, const ["result"]), GeneratedSyncLocalFilesResultResponse.fromJson)'
+        in generated
+    )
+
+
+def test_messages_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'messages')
+
+    assert MESSAGES_DART_PATH.read_text() == generated
+    assert 'class GeneratedVoiceMessageTranscriptionResponse' in generated
+    assert 'transcript: _required(_readString(_readAny(json, const ["transcript"])), "transcript")' in generated
 
 
 def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():

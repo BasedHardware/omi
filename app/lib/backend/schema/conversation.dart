@@ -524,12 +524,16 @@ class SyncLocalFilesResponse {
   bool get hasPartialFailure => failedSegments > 0;
 
   factory SyncLocalFilesResponse.fromJson(Map<String, dynamic> json) {
+    return SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse.fromJson(json));
+  }
+
+  factory SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse generated) {
     return SyncLocalFilesResponse(
-      newConversationIds: ((json['new_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
-      updatedConversationIds: ((json['updated_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
-      failedSegments: json['failed_segments'] ?? 0,
-      totalSegments: json['total_segments'] ?? 0,
-      errors: ((json['errors'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      newConversationIds: generated.newMemories ?? [],
+      updatedConversationIds: generated.updatedMemories ?? [],
+      failedSegments: generated.failedSegments,
+      totalSegments: generated.totalSegments,
+      errors: generated.errors ?? [],
     );
   }
 }
@@ -550,12 +554,16 @@ class SyncJobStartResponse {
   });
 
   factory SyncJobStartResponse.fromJson(Map<String, dynamic> json) {
+    return SyncJobStartResponse.fromGenerated(wire.GeneratedSyncJobStartResponse.fromJson(json));
+  }
+
+  factory SyncJobStartResponse.fromGenerated(wire.GeneratedSyncJobStartResponse generated) {
     return SyncJobStartResponse(
-      jobId: json['job_id'] ?? '',
-      status: json['status'] ?? 'queued',
-      totalFiles: json['total_files'] ?? 0,
-      totalSegments: json['total_segments'] ?? 0,
-      pollAfterMs: json['poll_after_ms'] ?? 3000,
+      jobId: generated.jobId,
+      status: generated.status,
+      totalFiles: generated.totalFiles,
+      totalSegments: generated.totalSegments,
+      pollAfterMs: generated.pollAfterMs,
     );
   }
 }
@@ -586,19 +594,19 @@ class SyncJobStatusResponse {
   bool get isPartialFailure => status == 'partial_failure';
 
   factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    SyncLocalFilesResponse? result;
-    if (json['result'] != null) {
-      result = SyncLocalFilesResponse.fromJson(json['result']);
-    }
+    return SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
+  }
+
+  factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {
     return SyncJobStatusResponse(
-      jobId: json['job_id'] ?? '',
-      status: json['status'] ?? 'unknown',
-      totalSegments: json['total_segments'] ?? 0,
-      processedSegments: json['processed_segments'] ?? 0,
-      successfulSegments: json['successful_segments'] ?? 0,
-      failedSegments: json['failed_segments'] ?? 0,
-      result: result,
-      error: json['error'],
+      jobId: generated.jobId,
+      status: generated.status,
+      totalSegments: generated.totalSegments,
+      processedSegments: generated.processedSegments,
+      successfulSegments: generated.successfulSegments,
+      failedSegments: generated.failedSegments,
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      error: generated.error,
     );
   }
 }

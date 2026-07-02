@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -198,8 +199,10 @@ Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language})
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final transcript = data['transcript'] ?? '';
+        final data = wire.GeneratedVoiceMessageTranscriptionResponse.fromJson(
+          jsonDecode(response.body) as Map<String, dynamic>,
+        );
+        final transcript = data.transcript;
         if (transcript.isNotEmpty) {
           transcripts.add(transcript);
         }

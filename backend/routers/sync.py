@@ -26,6 +26,7 @@ from utils.executors import (
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from pydub import AudioSegment
 
@@ -111,6 +112,33 @@ AUDIO_SAMPLE_RATE = 16000
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter()
+
+
+class SyncLocalFilesResultResponse(BaseModel):
+    new_memories: list[str] = Field(default_factory=list)
+    updated_memories: list[str] = Field(default_factory=list)
+    failed_segments: int = 0
+    total_segments: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class SyncJobStartResponse(BaseModel):
+    job_id: str
+    status: str
+    total_files: int
+    total_segments: int
+    poll_after_ms: int
+
+
+class SyncJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    total_segments: int = 0
+    processed_segments: int = 0
+    successful_segments: int = 0
+    failed_segments: int = 0
+    result: SyncLocalFilesResultResponse | None = None
+    error: str | None = None
 
 
 def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -1446,7 +1474,7 @@ def _download_staged_files(blob_paths: list) -> bool:
     return True
 
 
-@router.post("/v2/sync-local-files")
+@router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -1563,7 +1591,7 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-@router.get("/v2/sync-local-files/{job_id}")
+@router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)

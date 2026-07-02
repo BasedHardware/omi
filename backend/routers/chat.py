@@ -25,6 +25,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
+from pydantic import BaseModel
 
 import database.chat as chat_db
 import database.conversations as conversations_db
@@ -84,6 +85,11 @@ _WS_IDLE_TIMEOUT_S = 60
 # Hard body-size cap for octet-stream uploads (200 MB).
 # Prevents memory exhaustion from oversized payloads regardless of budget.
 _MAX_PCM_BODY_BYTES = 200_000_000
+
+
+class VoiceMessageTranscriptionResponse(BaseModel):
+    transcript: str
+    language: Optional[str] = None
 
 
 def _parse_context_keywords(raw: Optional[str]) -> List[str]:
@@ -445,7 +451,16 @@ def get_messages(
     return messages
 
 
-@router.post("/v2/voice-messages")
+@router.post(
+    "/v2/voice-messages",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-sent event stream of chat message chunks.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
@@ -499,7 +514,7 @@ def create_voice_message_stream(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post("/v2/voice-message/transcribe")
+@router.post("/v2/voice-message/transcribe", response_model=VoiceMessageTranscriptionResponse)
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),

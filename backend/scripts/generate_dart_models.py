@@ -31,7 +31,14 @@ SCHEMA_GROUPS = {
             'CalendarEventLink',
             'Conversation',
             'SearchConversationsResponse',
+            'SyncLocalFilesResultResponse',
+            'SyncJobStartResponse',
+            'SyncJobStatusResponse',
         ),
+    },
+    'messages': {
+        'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
+        'schemas': ('VoiceMessageTranscriptionResponse',),
     },
     'action_items_folders': {
         'output': DEFAULT_OUTPUT_DIR / 'action_items_folders_wire.g.dart',

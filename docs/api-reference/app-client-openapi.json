@@ -11289,6 +11289,135 @@
         "title": "SyncBatchRequest",
         "type": "object"
       },
+      "SyncJobStartResponse": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "poll_after_ms": {
+            "title": "Poll After Ms",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_files": {
+            "title": "Total Files",
+            "type": "integer"
+          },
+          "total_segments": {
+            "title": "Total Segments",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "total_files",
+          "total_segments",
+          "poll_after_ms"
+        ],
+        "title": "SyncJobStartResponse",
+        "type": "object"
+      },
+      "SyncJobStatusResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "failed_segments": {
+            "default": 0,
+            "title": "Failed Segments",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "processed_segments": {
+            "default": 0,
+            "title": "Processed Segments",
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncLocalFilesResultResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "successful_segments": {
+            "default": 0,
+            "title": "Successful Segments",
+            "type": "integer"
+          },
+          "total_segments": {
+            "default": 0,
+            "title": "Total Segments",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "SyncJobStatusResponse",
+        "type": "object"
+      },
+      "SyncLocalFilesResultResponse": {
+        "properties": {
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "failed_segments": {
+            "default": 0,
+            "title": "Failed Segments",
+            "type": "integer"
+          },
+          "new_memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "New Memories",
+            "type": "array"
+          },
+          "total_segments": {
+            "default": 0,
+            "title": "Total Segments",
+            "type": "integer"
+          },
+          "updated_memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updated Memories",
+            "type": "array"
+          }
+        },
+        "title": "SyncLocalFilesResultResponse",
+        "type": "object"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -12890,6 +13019,57 @@
         "title": "UsageStats",
         "type": "object"
       },
+      "UserDataExportResponse": {
+        "properties": {
+          "action_items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "chat_messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Chat Messages",
+            "type": "array"
+          },
+          "conversations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conversations",
+            "type": "array"
+          },
+          "memories": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "people": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "profile": {
+            "additionalProperties": true,
+            "title": "Profile",
+            "type": "object"
+          }
+        },
+        "title": "UserDataExportResponse",
+        "type": "object"
+      },
       "UserLanguageResponse": {
         "properties": {
           "language": {
@@ -13336,6 +13516,30 @@
           "status"
         ],
         "title": "VerifyPhoneNumberResponse",
+        "type": "object"
+      },
+      "VoiceMessageTranscriptionResponse": {
+        "properties": {
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "transcript": {
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "title": "VoiceMessageTranscriptionResponse",
         "type": "object"
       },
       "WebhookType": {
@@ -35142,7 +35346,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserDataExportResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40414,10 +40620,12 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SyncJobStartResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40499,7 +40707,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SyncJobStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40584,11 +40794,14 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "MP3 audio stream."
           },
           "401": {
             "$ref": "#/components/responses/Error401"
@@ -40661,7 +40874,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceMessageTranscriptionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40742,11 +40957,13 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "Server-sent event stream of chat message chunks."
           },
           "401": {
             "$ref": "#/components/responses/Error401"

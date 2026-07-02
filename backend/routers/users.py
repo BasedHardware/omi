@@ -155,6 +155,15 @@ class UserWebhooksStatusResponse(BaseModel):
     day_summary: bool
 
 
+class UserDataExportResponse(BaseModel):
+    profile: Dict[str, Any] = Field(default_factory=dict)
+    conversations: List[Dict[str, Any]] = Field(default_factory=list)
+    memories: List[Dict[str, Any]] = Field(default_factory=list)
+    people: List[Dict[str, Any]] = Field(default_factory=list)
+    action_items: List[Dict[str, Any]] = Field(default_factory=list)
+    chat_messages: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class StoreRecordingPermissionResponse(BaseModel):
     store_recording_permission: bool
 
@@ -1668,7 +1677,7 @@ def get_llm_top_features(
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
-@router.get('/v1/users/export', tags=['v1'])
+@router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
     return StreamingResponse(

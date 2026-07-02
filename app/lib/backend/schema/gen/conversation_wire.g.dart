@@ -594,6 +594,126 @@ class GeneratedSearchConversationsResponse {
   }
 }
 
+class GeneratedSyncLocalFilesResultResponse {
+  final List<String>? errors;
+  final int failedSegments;
+  final List<String>? newMemories;
+  final int totalSegments;
+  final List<String>? updatedMemories;
+
+  const GeneratedSyncLocalFilesResultResponse({
+    this.errors,
+    required this.failedSegments,
+    this.newMemories,
+    required this.totalSegments,
+    this.updatedMemories,
+  });
+
+  factory GeneratedSyncLocalFilesResultResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncLocalFilesResultResponse(
+      errors: _readAny(json, const ["errors"]) == null ? null : _readStringList(_readAny(json, const ["errors"])),
+      failedSegments: _readInt(_readAny(json, const ["failed_segments"])) ?? 0,
+      newMemories: _readAny(json, const ["new_memories"]) == null ? null : _readStringList(_readAny(json, const ["new_memories"])),
+      totalSegments: _readInt(_readAny(json, const ["total_segments"])) ?? 0,
+      updatedMemories: _readAny(json, const ["updated_memories"]) == null ? null : _readStringList(_readAny(json, const ["updated_memories"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'errors': errors,
+      'failed_segments': failedSegments,
+      'new_memories': newMemories,
+      'total_segments': totalSegments,
+      'updated_memories': updatedMemories,
+    };
+  }
+}
+
+class GeneratedSyncJobStartResponse {
+  final String jobId;
+  final int pollAfterMs;
+  final String status;
+  final int totalFiles;
+  final int totalSegments;
+
+  const GeneratedSyncJobStartResponse({
+    required this.jobId,
+    required this.pollAfterMs,
+    required this.status,
+    required this.totalFiles,
+    required this.totalSegments,
+  });
+
+  factory GeneratedSyncJobStartResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncJobStartResponse(
+      jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id"),
+      pollAfterMs: _required(_readInt(_readAny(json, const ["poll_after_ms"])), "poll_after_ms"),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      totalFiles: _required(_readInt(_readAny(json, const ["total_files"])), "total_files"),
+      totalSegments: _required(_readInt(_readAny(json, const ["total_segments"])), "total_segments"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'job_id': jobId,
+      'poll_after_ms': pollAfterMs,
+      'status': status,
+      'total_files': totalFiles,
+      'total_segments': totalSegments,
+    };
+  }
+}
+
+class GeneratedSyncJobStatusResponse {
+  final String? error;
+  final int failedSegments;
+  final String jobId;
+  final int processedSegments;
+  final GeneratedSyncLocalFilesResultResponse? result;
+  final String status;
+  final int successfulSegments;
+  final int totalSegments;
+
+  const GeneratedSyncJobStatusResponse({
+    this.error,
+    required this.failedSegments,
+    required this.jobId,
+    required this.processedSegments,
+    this.result,
+    required this.status,
+    required this.successfulSegments,
+    required this.totalSegments,
+  });
+
+  factory GeneratedSyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncJobStatusResponse(
+      error: _readString(_readAny(json, const ["error"])),
+      failedSegments: _readInt(_readAny(json, const ["failed_segments"])) ?? 0,
+      jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id"),
+      processedSegments: _readInt(_readAny(json, const ["processed_segments"])) ?? 0,
+      result: _readObject(_readAny(json, const ["result"]), GeneratedSyncLocalFilesResultResponse.fromJson),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      successfulSegments: _readInt(_readAny(json, const ["successful_segments"])) ?? 0,
+      totalSegments: _readInt(_readAny(json, const ["total_segments"])) ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'error': error,
+      'failed_segments': failedSegments,
+      'job_id': jobId,
+      'processed_segments': processedSegments,
+      'result': result?.toJson(),
+      'status': status,
+      'successful_segments': successfulSegments,
+      'total_segments': totalSegments,
+    };
+  }
+}
+
 dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
     if (json.containsKey(name)) return json[name];

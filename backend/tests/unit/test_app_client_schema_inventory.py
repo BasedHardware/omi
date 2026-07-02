@@ -112,6 +112,20 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
         'get_store_recording_permission_v1_users_store_recording_permission_get',
     ) not in unmodeled_operations
     assert ('GET', '/v1/users/language', 'get_user_language_v1_users_language_get') not in unmodeled_operations
+    assert ('GET', '/v1/users/export', 'export_all_user_data_v1_users_export_get') not in unmodeled_operations
+    assert ('POST', '/v2/sync-local-files', 'sync_local_files_v2_v2_sync_local_files_post') not in unmodeled_operations
+    assert ('POST', '/v2/tts/synthesize', 'tts_synthesize_v2_tts_synthesize_post') not in unmodeled_operations
+    assert (
+        'POST',
+        '/v2/voice-message/transcribe',
+        'transcribe_voice_message_v2_voice_message_transcribe_post',
+    ) not in unmodeled_operations
+    assert (
+        'POST',
+        '/v2/voice-messages',
+        'create_voice_message_stream_v2_voice_messages_post',
+    ) not in unmodeled_operations
+    assert report['app_used_unmodeled_success_response_count'] == 0
     assert report['app_used_unmodeled_success_response_count'] == len(report['app_used_unmodeled_success_responses'])
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
