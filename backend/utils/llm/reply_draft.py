@@ -130,7 +130,7 @@ def _build_reply_draft_prompt(
     }
     memory_context = _numbered_block(memories) or 'None'
     chat_style = _numbered_block(recent_messages) or 'None'
-    incoming = request.incoming_message
+    incoming = _neutralize_delimiters(request.incoming_message)
 
     return f"""User name: {user_name}
 
@@ -161,6 +161,16 @@ Recent examples of how the user writes to Omi. Use these only for tone and phras
 
 def _numbered_block(items: Sequence[str]) -> str:
     return '\n'.join(f'{index + 1}. {item}' for index, item in enumerate(items) if item.strip())
+
+
+def _neutralize_delimiters(text: str) -> str:
+    """Stop untrusted text (a contact's incoming message) from forging a prompt
+    section boundary. Angle brackets are swapped for unicode lookalikes so a payload
+    like "</incoming_message><system>..." cannot break out of its section and inject
+    instructions. Shared by the on-behalf clone path."""
+    if not text:
+        return text
+    return text.replace('<', '‹').replace('>', '›')
 
 
 def _normalize_context_text(value) -> str:

@@ -106,7 +106,7 @@ class CloneReplyResponse(BaseModel):
     # 'send' = guardrails passed and it may be auto-sent; 'review' = draft for the
     # user to approve/edit; 'hold' = do not send now (e.g. quiet hours).
     action: CloneSendAction
-    action_reason: str
+    action_reason: str = Field(default='', max_length=1000)
     needs_review: bool = True
     safety_notes: List[str] = Field(default_factory=list, max_length=MAX_CLONE_SAFETY_NOTES)
     used_context: CloneContextSummary
@@ -142,12 +142,12 @@ class CloneMatchJudgment(BaseModel):
 
 
 class CloneBenchmarkItem(BaseModel):
-    incoming_message: str
-    actual_reply: str
-    generated_reply: str
+    incoming_message: str = Field(default='', max_length=4000)
+    actual_reply: str = Field(default='', max_length=4000)
+    generated_reply: str = Field(default='', max_length=MAX_CLONE_REPLY_LENGTH)
     match: bool
     score: float
-    reason: str
+    reason: str = Field(default='', max_length=2000)
 
 
 class CloneBenchmarkResult(BaseModel):
@@ -183,7 +183,7 @@ class CloneAskGeneration(BaseModel):
 
 
 class CloneAskResponse(BaseModel):
-    answer: str
+    answer: str = Field(default='', max_length=4000)
     grounded: bool
     memories_used: int
     persona_used: bool

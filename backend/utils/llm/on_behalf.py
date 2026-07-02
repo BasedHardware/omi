@@ -39,6 +39,7 @@ from utils.llm.reply_draft import (
     MAX_MEMORY_CONTEXT_CHARS,
     MAX_RECENT_CHAT_CHARS,
     _append_bounded_context,
+    _neutralize_delimiters,
     _numbered_block,
     _normalize_context_text,
 )
@@ -95,16 +96,6 @@ def answer_personal_question(uid: str, request: CloneAskRequest) -> CloneAskResp
         memories_used=len(memories),
         persona_used=persona_prompt is not None,
     )
-
-
-def _neutralize_delimiters(text: str) -> str:
-    """Stop untrusted text (a contact's incoming message, thread history, a typed
-    question) from forging a prompt section boundary. Angle brackets are swapped for
-    unicode lookalikes so a payload like "</incoming_message><system>..." cannot break
-    out of its section and inject instructions into the clone."""
-    if not text:
-        return text
-    return text.replace('<', '‹').replace('>', '›')
 
 
 def _build_ask_prompt(user_name: str, question: str, memories: Sequence[str], persona_prompt: Optional[str]) -> str:

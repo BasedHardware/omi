@@ -36,14 +36,31 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+from collections import deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Set
 
 OMI_API_BASE_URL = os.environ.get("OMI_API_BASE_URL", "https://api.omi.me").rstrip("/")
 OMI_AUTH_TOKEN = os.environ.get("OMI_AUTH_TOKEN", "")
 CLONE_MODE = os.environ.get("CLONE_MODE", "review").strip().lower()
 CLONE_ALLOWLIST = [c.strip() for c in os.environ.get("CLONE_ALLOWLIST", "").split(",") if c.strip()]
 CLONE_REVIEW_QUEUE = Path(os.environ.get("CLONE_REVIEW_QUEUE", str(Path.home() / ".omi" / "clone_review_queue.jsonl")))
+
+# Bounded dedup so a replayed/duplicate watch event isn't drafted (and possibly
+# auto-sent) twice.
+_MAX_SEEN_EVENTS = 1024
+_seen_event_keys: Deque[str] = deque()
+_seen_event_set: Set[str] = set()
+
+
+def _already_handled(key: str) -> bool:
+    if key in _seen_event_set:
+        return True
+    _seen_event_set.add(key)
+    _seen_event_keys.append(key)
+    if len(_seen_event_keys) > _MAX_SEEN_EVENTS:
+        _seen_event_set.discard(_seen_event_keys.popleft())
+    return False
 
 
 def _api_base_url_error() -> Optional[str]:
@@ -141,6 +158,9 @@ def _handle_event(event: Dict[str, Any]) -> None:
     chat_id = str(event.get("chatID") or event.get("chat_id") or "")
     incoming = (event.get("text") or "").strip()
     if not chat_id or not incoming:
+        return
+    dedup_key = str(event.get("messageID") or event.get("message_id") or event.get("id") or f"{chat_id}:{incoming}")
+    if _already_handled(dedup_key):
         return
 
     reply = _draft_reply(event)
