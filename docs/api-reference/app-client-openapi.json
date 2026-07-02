@@ -14250,13 +14250,17 @@
       "UserWebhookUrlResponse": {
         "properties": {
           "url": {
-            "title": "Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           }
         },
-        "required": [
-          "url"
-        ],
         "title": "UserWebhookUrlResponse",
         "type": "object"
       },
@@ -20486,7 +20490,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppReview"
+                  },
+                  "title": "Response App Reviews V1 Apps  App Id  Reviews Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"

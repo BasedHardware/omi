@@ -123,3 +123,11 @@ def test_valid_url_sets():
         result = users_mod.set_user_webhook_endpoint(wtype='audio_bytes', data={'url': 'http://x'}, uid='u1')
     assert result['status'] == 'ok'
     setdb.assert_called_once()
+
+
+def test_get_missing_webhook_url_validates_as_nullable_response():
+    with patch.object(users_mod, 'get_user_webhook_db', return_value=None):
+        result = users_mod.get_user_webhook_endpoint(wtype='audio_bytes', uid='u1')
+
+    assert result == {'url': None}
+    assert users_mod.UserWebhookUrlResponse.model_validate(result).url is None

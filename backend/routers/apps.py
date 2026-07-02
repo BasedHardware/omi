@@ -122,7 +122,7 @@ from utils.request_validation import (
     normalize_required_webhook_url,
     parse_form_json,
 )
-from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel
+from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel, AppReview
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
     get_twitter_profile,
@@ -1188,10 +1188,10 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}/reviews', tags=['v1'])
+@router.get('/v1/apps/{app_id}/reviews', tags=['v1'], response_model=List[AppReview])
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
-    reviews = [details for details in reviews.values() if details['review']]
+    reviews = [details for details in reviews.values() if details.get('review')]
     return reviews
 
 

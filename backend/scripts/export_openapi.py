@@ -911,11 +911,11 @@ def main() -> int:
         generated = stable_json(generate_openapi(args.surface))
         if args.print:
             sys.stdout.write(generated)
-        elif args.write:
+        elif args.write is not None:
             path = resolve_spec_path(args.surface, args.write)
             write_spec(path, generated)
             print(f'wrote {path}')
-        elif args.check:
+        elif args.check is not None:
             path = resolve_spec_path(args.surface, args.check)
             check_spec(path, generated)
             print(f'{path} is up to date')

@@ -156,7 +156,7 @@ class UserWebhooksStatusResponse(BaseModel):
 
 
 class UserWebhookUrlResponse(BaseModel):
-    url: str
+    url: Optional[str] = None
 
 
 class UserDataExportResponse(BaseModel):

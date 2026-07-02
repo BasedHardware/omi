@@ -227,10 +227,74 @@ def _scan_marker_routes(text: str, marker: str, *, must_start_with: str | None =
     return routes
 
 
+def _mask_dart_comments(text: str) -> str:
+    chars = list(text)
+    cursor = 0
+    in_string: str | None = None
+    in_line_comment = False
+    in_block_comment = False
+
+    while cursor < len(chars):
+        char = chars[cursor]
+        next_char = chars[cursor + 1] if cursor + 1 < len(chars) else ''
+
+        if in_line_comment:
+            if char == '\n':
+                in_line_comment = False
+            else:
+                chars[cursor] = ' '
+            cursor += 1
+            continue
+
+        if in_block_comment:
+            if char == '*' and next_char == '/':
+                chars[cursor] = ' '
+                chars[cursor + 1] = ' '
+                cursor += 2
+                in_block_comment = False
+            else:
+                if char != '\n':
+                    chars[cursor] = ' '
+                cursor += 1
+            continue
+
+        if in_string:
+            if char == '\\' and cursor + 1 < len(chars):
+                cursor += 2
+                continue
+            if char == in_string:
+                in_string = None
+            cursor += 1
+            continue
+
+        if char in ("'", '"'):
+            in_string = char
+            cursor += 1
+            continue
+
+        if char == '/' and next_char == '/':
+            chars[cursor] = ' '
+            chars[cursor + 1] = ' '
+            cursor += 2
+            in_line_comment = True
+            continue
+
+        if char == '/' and next_char == '*':
+            chars[cursor] = ' '
+            chars[cursor + 1] = ' '
+            cursor += 2
+            in_block_comment = True
+            continue
+
+        cursor += 1
+
+    return ''.join(chars)
+
+
 def scan_app_routes() -> list[AppRoute]:
     routes: list[AppRoute] = []
     for path in sorted(APP_API_DIR.glob('*.dart')):
-        text = path.read_text()
+        text = _mask_dart_comments(path.read_text())
         env_routes = _scan_marker_routes(text, 'Env.apiBaseUrl', must_start_with='v')
         base_routes = [
             route
@@ -335,6 +399,7 @@ def build_report(spec_path: Path) -> dict[str, Any]:
         for operation in openapi_operations
         if operation.normalized_path in app_route_paths and operation.unmodeled_success_response
     ]
+    unmodeled_operations = [operation for operation in openapi_operations if operation.unmodeled_success_response]
     return {
         'dart_schema_dirs': [
             str(APP_SCHEMA_DIR.relative_to(ROOT_DIR)),
@@ -347,6 +412,8 @@ def build_report(spec_path: Path) -> dict[str, Any]:
         'openapi_path_count': len(openapi_paths),
         'openapi_paths': openapi_paths,
         'openapi_operations': [operation.to_report() for operation in openapi_operations],
+        'unmodeled_success_response_count': len(unmodeled_operations),
+        'unmodeled_success_responses': [operation.to_report() for operation in unmodeled_operations],
         'app_used_unmodeled_success_response_count': len(app_used_unmodeled_operations),
         'app_used_unmodeled_success_responses': [operation.to_report() for operation in app_used_unmodeled_operations],
         'app_route_count': len(app_routes),
@@ -389,6 +456,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='fail when app-used OpenAPI operations expose untyped object/empty JSON success responses',
     )
+    parser.add_argument(
+        '--fail-on-any-unmodeled-openapi-object-response',
+        action='store_true',
+        help='fail when any app-client OpenAPI operation exposes an untyped object/empty JSON success response',
+    )
     return parser.parse_args()
 
 
@@ -412,6 +484,13 @@ def main() -> int:
         ]
         print('App-used unmodeled OpenAPI success responses: ' + ', '.join(operations), flush=True)
         return 1
+    if args.fail_on_any_unmodeled_openapi_object_response and report['unmodeled_success_responses']:
+        operations = [
+            f"{item['method']} {item['path']} ({item['operation_id']})"
+            for item in report['unmodeled_success_responses']
+        ]
+        print('Unmodeled OpenAPI success responses: ' + ', '.join(operations), flush=True)
+        return 1
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
@@ -423,11 +502,12 @@ def main() -> int:
     print(f"Local non-REST schema files: {report['local_non_rest_schema_file_count']}")
     print(f"OpenAPI schemas in app-client spec: {report['openapi_schema_count']}")
     print(f"OpenAPI paths in app-client spec: {report['openapi_path_count']}")
+    print(f"Unmodeled OpenAPI success responses: {report['unmodeled_success_response_count']}")
     print(f"App-used unmodeled OpenAPI success responses: {report['app_used_unmodeled_success_response_count']}")
     print(f"Flutter REST routes found: {report['app_route_count']}")
     if report['uncovered_app_route_prefixes']:
         print('Uncovered Flutter REST route prefixes: ' + ', '.join(report['uncovered_app_route_prefixes']))
-    for item in report['app_used_unmodeled_success_responses']:
+    for item in report['unmodeled_success_responses']:
         print(f"- unmodeled {item['method']} {item['path']} ({item['operation_id']})")
     for item in report['remaining_manual_dart_json_schema_files']:
         classes = ', '.join(item['classes']) or '(no classes found)'

@@ -166,9 +166,6 @@ class ChartData {
 
   static ChartData? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
-    if (!json.containsKey('chart_type') || !json.containsKey('datasets') || !json.containsKey('title')) {
-      return null;
-    }
     return ChartData.fromGenerated(wire.GeneratedChartData.fromJson(json));
   }
 

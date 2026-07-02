@@ -17,6 +17,9 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     unmodeled_operations = {
         (item['method'], item['path'], item['operation_id']) for item in report['app_used_unmodeled_success_responses']
     }
+    all_unmodeled_operations = {
+        (item['method'], item['path'], item['operation_id']) for item in report['unmodeled_success_responses']
+    }
 
     assert 'app/lib/backend/schema/conversation.dart' in generated_backed_paths
     assert 'app/lib/backend/schema/action_item.dart' in generated_backed_paths
@@ -34,6 +37,11 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert ('GET', '/v1/app-categories', 'get_app_categories_v1_app_categories_get') not in unmodeled_operations
     assert ('POST', '/v1/app/generate', 'generate_app_endpoint_v1_app_generate_post') not in unmodeled_operations
     assert ('GET', '/v2/apps', 'get_apps_v2_v2_apps_get') not in unmodeled_operations
+    assert (
+        'GET',
+        '/v1/apps/{app_id}/reviews',
+        'app_reviews_v1_apps__app_id__reviews_get',
+    ) not in all_unmodeled_operations
     assert ('GET', '/v2/apps/search', 'search_apps_v2_apps_search_get') not in unmodeled_operations
     assert (
         'DELETE',
@@ -134,6 +142,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     ) not in unmodeled_operations
     assert report['app_used_unmodeled_success_response_count'] == 0
     assert report['remaining_manual_dart_json_schema_file_count'] == 0
+    assert report['unmodeled_success_response_count'] == len(report['unmodeled_success_responses'])
     assert report['app_used_unmodeled_success_response_count'] == len(report['app_used_unmodeled_success_responses'])
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
@@ -149,3 +158,31 @@ def test_inventory_normalizes_interpolated_dart_route_segments():
     assert '/v2/messages/{param}/report' in routes_by_file['messages.dart']
     assert '/v1/apps/{param}' in routes_by_file['apps.dart']
     assert '/v1/conversations/{param}/reprocess' in routes_by_file['conversations.dart']
+
+
+def test_inventory_route_parser_handles_comments_queries_and_nested_interpolation():
+    source = """
+// '${Env.apiBaseUrl}v1/commented'
+/* '${Env.apiBaseUrl}v1/block-commented' */
+final app = '${Env.apiBaseUrl}v1/apps/${appData['id']}?tab=$tab';
+final reprocess = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}';
+final onlyBase = _baseUrl;
+"""
+    masked = inventory_app_client_schemas._mask_dart_comments(source)
+
+    assert inventory_app_client_schemas._scan_marker_routes(
+        masked,
+        'Env.apiBaseUrl',
+        must_start_with='v',
+    ) == [
+        "v1/apps/${appData['id']}?tab=$tab",
+        "v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}",
+    ]
+    assert inventory_app_client_schemas._scan_marker_routes(masked, '_baseUrl', must_start_with='/') == []
+    assert inventory_app_client_schemas.normalize_app_route("v1/apps/${appData['id']}?tab=$tab") == '/v1/apps/{param}'
+    assert (
+        inventory_app_client_schemas.normalize_app_route(
+            "v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}"
+        )
+        == '/v1/conversations/{param}/reprocess'
+    )

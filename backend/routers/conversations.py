@@ -44,7 +44,6 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
@@ -1059,6 +1058,8 @@ def search_conversations_endpoint(
     tags=['conversations'],
 )
 def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
+
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
