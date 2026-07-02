@@ -5,6 +5,8 @@ import 'package:collection/collection.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/gen/people_wire.g.dart' as people_wire;
+import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as subscription_wire;
 import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -195,7 +197,8 @@ Future<Person?> createPerson(String name) async {
   if (response == null) return null;
   Logger.debug('createPerson response: ${response.body}');
   if (response.statusCode == 200) {
-    return Person.fromJson(jsonDecode(response.body));
+    return Person.fromGenerated(
+        people_wire.GeneratedPerson.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
   }
   return null;
 }
@@ -211,8 +214,10 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
   if (response.statusCode == 200) {
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
-      json['color_idx'] = idx % speakerColors.length;
-      return Person.fromJson(json);
+      return Person.fromGenerated(
+        people_wire.GeneratedPerson.fromJson(json as Map<String, dynamic>),
+        colorIdx: idx % speakerColors.length,
+      );
     }).toList();
     // sort by name
     people.sort((a, b) => a.name.compareTo(b.name));
@@ -366,7 +371,9 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   if (response == null) return null;
   Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {
-    return UserUsageResponse.fromJson(jsonDecode(response.body));
+    return UserUsageResponse.fromGenerated(
+      subscription_wire.GeneratedUserUsageResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   return null;
 }
@@ -451,7 +458,9 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
   if (response == null) return null;
   Logger.debug('getUserSubscription response: ${response.body}');
   if (response.statusCode == 200) {
-    return UserSubscriptionResponse.fromJson(jsonDecode(response.body));
+    return UserSubscriptionResponse.fromGenerated(
+      subscription_wire.GeneratedUserSubscriptionResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   return null;
 }
