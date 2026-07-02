@@ -56,7 +56,7 @@ def merge():
     for _name in [
         "delete_conversation_audio_files",
         "list_audio_chunks",
-        "storage_client",
+        "_get_storage_client",
         "private_cloud_sync_bucket",
         "_get_extension_for_path",
     ]:
