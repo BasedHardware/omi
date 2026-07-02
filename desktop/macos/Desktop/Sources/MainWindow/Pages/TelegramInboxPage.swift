@@ -8,6 +8,9 @@ struct TelegramInboxPage: View {
   @StateObject private var store = TelegramInboxStore()
   @State private var composeText: String = ""
   @State private var passcode: String = ""
+  @State private var phone: String = ""
+  @State private var code: String = ""
+  @State private var password: String = ""
 
   var body: some View {
     Group {
@@ -33,33 +36,51 @@ struct TelegramInboxPage: View {
         .font(.title2).bold()
 
       switch store.connection {
-      case .needsTelegramDesktop:
-        Text("Install and sign in to Telegram Desktop first — Omi reads your session locally to reply on your behalf.")
-          .multilineTextAlignment(.center)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: 380)
+      case .codeSent:
+        Text("Enter the login code Telegram just sent to your app.")
+          .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 380)
+        TextField("Login code", text: $code)
+          .textFieldStyle(.roundedBorder).frame(maxWidth: 200)
+          .onSubmit { store.submitCode(code) }
+        Button("Verify") { store.submitCode(code) }
+          .buttonStyle(.borderedProminent)
+          .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
+      case .passwordRequired:
+        Text("Your account has two-factor auth. Enter your Telegram password (used once, to sign in).")
+          .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 380)
+        SecureField("2FA password", text: $password)
+          .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+          .onSubmit { store.submitPassword(password) }
+        Button("Sign in") { store.submitPassword(password) }
+          .buttonStyle(.borderedProminent)
+          .disabled(password.isEmpty)
       case .needsPasscode:
         Text("Enter your Telegram Desktop Local Passcode to unlock your session. It stays on this Mac.")
-          .multilineTextAlignment(.center)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: 380)
+          .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 380)
         SecureField("Local Passcode", text: $passcode)
-          .textFieldStyle(.roundedBorder)
-          .frame(maxWidth: 260)
-        Button("Unlock") { store.connect(passcode: passcode) }
+          .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+        Button("Unlock") { store.connectViaDesktop(passcode: passcode) }
           .buttonStyle(.borderedProminent)
       case .connecting:
         ProgressView("Connecting…")
       case .error(let msg):
         Text(msg).foregroundStyle(.red).frame(maxWidth: 380).multilineTextAlignment(.center)
-        Button("Try Again") { store.connect() }.buttonStyle(.borderedProminent)
-      default:
-        Text("Omi will use your existing Telegram Desktop session — no login code needed. Your session never leaves this Mac.")
-          .multilineTextAlignment(.center)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: 380)
-        Button("Connect Telegram") { store.connect() }
+        Button("Try Again") { store.sendCode(phone: phone) }
+          .buttonStyle(.bordered)
+          .disabled(phone.trimmingCharacters(in: .whitespaces).isEmpty)
+      default:  // .disconnected
+        Text("Sign in to reply on your behalf. Your session stays on this Mac.")
+          .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 380)
+        TextField("Phone (e.g. +14155551234)", text: $phone)
+          .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+          .onSubmit { store.sendCode(phone: phone) }
+        Button("Send code") { store.sendCode(phone: phone) }
           .buttonStyle(.borderedProminent)
+          .disabled(phone.trimmingCharacters(in: .whitespaces).isEmpty)
+        if store.telegramDesktopAvailable {
+          Button("Use Telegram Desktop session instead") { store.connectViaDesktop() }
+            .buttonStyle(.link).font(.caption)
+        }
       }
     }
     .padding(40)

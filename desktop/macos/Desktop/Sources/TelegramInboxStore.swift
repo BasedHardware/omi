@@ -7,9 +7,10 @@ import SwiftUI
 @MainActor
 final class TelegramInboxStore: ObservableObject {
   enum ConnectionState: Equatable {
-    case needsTelegramDesktop  // no local tdata to bootstrap from
-    case disconnected  // tdata present, not yet connected
-    case needsPasscode  // Telegram Desktop Local Passcode required
+    case disconnected  // not connected — show phone entry (or Telegram Desktop option)
+    case needsPasscode  // Telegram Desktop Local Passcode required (tdata path)
+    case codeSent  // phone-login: waiting for the SMS/app login code
+    case passwordRequired  // phone-login: 2FA password needed
     case connecting
     case connected
     case error(String)
@@ -33,9 +34,8 @@ final class TelegramInboxStore: ObservableObject {
 
   init() {
     autoReplyChats = Set(UserDefaults.standard.stringArray(forKey: Self.autoReplyDefaultsKey) ?? [])
-    if !TelegramClientService.telegramDesktopPresent() {
-      connection = .needsTelegramDesktop
-    }
+    // Default: .disconnected — phone-code login works regardless of whether
+    // Telegram Desktop tdata exists (native macOS Telegram has none).
   }
 
   var selectedChat: TelegramChat? {
@@ -70,14 +70,42 @@ final class TelegramInboxStore: ObservableObject {
       connection = .error("Telegram helper is unavailable.")
       return
     }
-    // "ready" (emitted by the helper on startup) drives the next step.
+    // Drive the initial connect directly rather than waiting for the helper's
+    // one-shot "ready": the helper is a shared singleton, so a prior view's store
+    // may have already consumed "ready". Commands are queued to the helper's stdin
+    // and processed once it's up, so sending connect now is safe on cold start too.
+    if TelegramClientService.hasSession {
+      connection = .connecting
+      TelegramClientService.shared.connect()
+    }
   }
 
-  /// User tapped Connect. Bootstrap the session from Telegram Desktop's tdata.
-  func connect(passcode: String? = nil) {
+  /// Phone-code login step 1: request a login code for this phone number.
+  func sendCode(phone: String) {
+    connection = .connecting
+    TelegramClientService.shared.sendCode(phone: phone)
+  }
+
+  /// Phone-code login step 2: submit the code Telegram sent.
+  func submitCode(_ code: String) {
+    connection = .connecting
+    TelegramClientService.shared.signIn(code: code)
+  }
+
+  /// Phone-code login step 3 (only if 2FA is on): submit the account password.
+  func submitPassword(_ password: String) {
+    connection = .connecting
+    TelegramClientService.shared.signInPassword(password)
+  }
+
+  /// Telegram Desktop path: bootstrap the session from local tdata (no login code).
+  func connectViaDesktop(passcode: String? = nil) {
     connection = .connecting
     TelegramClientService.shared.bootstrap(passcode: passcode)
   }
+
+  /// Whether the Telegram Desktop tdata path is available (offer it as an option).
+  var telegramDesktopAvailable: Bool { TelegramClientService.telegramDesktopPresent() }
 
   func disconnect() {
     TelegramClientService.shared.shutdown()
@@ -91,18 +119,23 @@ final class TelegramInboxStore: ObservableObject {
   private func handle(_ event: TelegramHelperEvent) {
     switch event.event {
     case "ready":
-      // Reconnect silently if we already have a session; otherwise wait for Connect.
-      if TelegramClientService.hasSession {
+      // Cold start: if a session exists, connect. (start() also drives this for the
+      // singleton-already-running case; connect is safe to receive more than once.)
+      if TelegramClientService.hasSession, connection != .connected, connection != .connecting {
         connection = .connecting
         TelegramClientService.shared.connect()
       }
     case "bootstrapped", "connected":
       connection = .connected
       TelegramClientService.shared.startListening()
+    case "code_sent":
+      connection = .codeSent
+    case "password_required":
+      connection = .passwordRequired
     case "auth_needed":
       switch event.reason {
       case "passcode_required": connection = .needsPasscode
-      default: connection = TelegramClientService.telegramDesktopPresent() ? .disconnected : .needsTelegramDesktop
+      default: connection = .disconnected
       }
     case "listening":
       connection = .connected

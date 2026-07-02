@@ -85,6 +85,8 @@ class Helper:
         self.client = None  # telethon.TelegramClient
         self.me = None
         self._listening = False
+        self._login_phone = None
+        self._login_hash = None
 
     # --- session helpers ---------------------------------------------------
 
@@ -152,6 +154,52 @@ class Helper:
             return
         self.client = client
         self.me = await client.get_me()
+        emit({"event": "connected", "me": self._me_dict()})
+
+    # --- phone-code login (no tdata; e.g. native macOS Telegram users) ------
+
+    async def send_code(self, phone: str) -> None:
+        """Step 1: request a login code. Keeps a live client for sign_in."""
+        from telethon import TelegramClient
+        from telethon.sessions import StringSession
+
+        self._login_phone = phone
+        client = TelegramClient(StringSession(), self.api_id, self.api_hash)
+        await client.connect()
+        sent = await client.send_code_request(phone)
+        self._login_hash = sent.phone_code_hash
+        self.client = client  # reused by sign_in
+        emit({"event": "code_sent"})
+
+    async def sign_in(self, code: str) -> None:
+        """Step 2: sign in with the code; may require a 2FA password."""
+        from telethon.errors import SessionPasswordNeededError
+
+        if self.client is None:
+            emit({"event": "error", "message": "no login in progress", "fatal": False})
+            return
+        try:
+            await self.client.sign_in(
+                self._login_phone, code, phone_code_hash=getattr(self, "_login_hash", None)
+            )
+        except SessionPasswordNeededError:
+            emit({"event": "password_required"})
+            return
+        await self._finish_login()
+
+    async def sign_in_password(self, password: str) -> None:
+        """Step 3 (only if 2FA): finish sign-in with the account password."""
+        if self.client is None:
+            emit({"event": "error", "message": "no login in progress", "fatal": False})
+            return
+        await self.client.sign_in(password=password)
+        await self._finish_login()
+
+    async def _finish_login(self) -> None:
+        from telethon.sessions import StringSession
+
+        self._write_session(StringSession.save(self.client.session))
+        self.me = await self.client.get_me()
         emit({"event": "connected", "me": self._me_dict()})
 
     # --- reading -----------------------------------------------------------
@@ -238,6 +286,12 @@ class Helper:
             await self.bootstrap(cmd["tdata_path"], cmd.get("passcode"))
         elif name == "connect":
             await self.connect()
+        elif name == "send_code":
+            await self.send_code(str(cmd["phone"]))
+        elif name == "sign_in":
+            await self.sign_in(str(cmd["code"]))
+        elif name == "sign_in_password":
+            await self.sign_in_password(str(cmd["password"]))
         elif name == "start_listening":
             await self.start_listening(int(cmd.get("backfill_days", 90)))
         elif name == "send":

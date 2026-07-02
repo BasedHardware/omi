@@ -563,6 +563,9 @@ struct DashboardPage: View {
             HomeAIChoiceButton(title: "Messages", brand: .imessage, isConnected: isImportConnectorConnected("imessage")) {
                 navigate(to: .replies)
             }
+            HomeAIChoiceButton(title: "Telegram", brand: .telegram, isConnected: isImportConnectorConnected("telegram")) {
+                navigate(to: .telegram)
+            }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
                 openAppsPage()
             }

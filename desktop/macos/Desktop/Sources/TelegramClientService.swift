@@ -180,6 +180,9 @@ final class TelegramClientService: @unchecked Sendable {
   }
 
   func connect() { send(command: ["cmd": "connect"]) }
+  func sendCode(phone: String) { send(command: ["cmd": "send_code", "phone": phone]) }
+  func signIn(code: String) { send(command: ["cmd": "sign_in", "code": code]) }
+  func signInPassword(_ password: String) { send(command: ["cmd": "sign_in_password", "password": password]) }
   func startListening(backfillDays: Int = 90) {
     send(command: ["cmd": "start_listening", "backfill_days": backfillDays])
   }
