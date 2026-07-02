@@ -1,3 +1,0 @@
-{
-  "change": "Fixed OpenClaw memory setup so Omi can use OpenClaw's bundled Node runtime when updating MCP config"
-}
