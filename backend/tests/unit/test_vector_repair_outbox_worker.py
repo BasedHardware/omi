@@ -1,5 +1,14 @@
 from datetime import datetime, timezone
 import json
+import sys
+import types
+
+google_stub = sys.modules.setdefault("google", types.ModuleType("google"))
+cloud_stub = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
+firestore_stub = sys.modules.setdefault("google.cloud.firestore", types.ModuleType("google.cloud.firestore"))
+firestore_stub.transactional = lambda func: func
+google_stub.cloud = cloud_stub
+cloud_stub.firestore = firestore_stub
 
 from database.memory_vector_repair_pinecone_adapter import (
     VECTOR_REPAIR_PINECONE_NAMESPACE,
@@ -126,7 +135,8 @@ class _FakeQuery:
         if op == "==":
             return data.get(field) == value
         if op == "<=":
-            return data.get(field) <= value
+            field_value = data.get(field)
+            return field_value is not None and field_value <= value
         raise AssertionError(f"unexpected op {op}")
 
 
@@ -380,6 +390,81 @@ class TestWorkerCore:
         assert db.store["users/u1/memory_outbox/available"]["status"] == "completed"
         assert db.store["users/u1/memory_outbox/available"]["action"] == "repair"
         assert db.store["users/u1/memory_outbox/available"]["updated_at"] == now.isoformat()
+
+    def test_firestore_reader_reclaims_expired_in_progress_lease_after_expiry_only(self):
+        now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+        before_expiry = datetime(2026, 6, 19, 11, 59, tzinfo=timezone.utc)
+        after_expiry = datetime(2026, 6, 19, 12, 1, tzinfo=timezone.utc)
+        path = "users/u1/memory_outbox/expired-lease"
+        db = _FakeFirestore(
+            {
+                path: _record(
+                    record_id="expired-lease",
+                    outbox_path=path,
+                    status="in_progress",
+                    available_at=before_expiry.isoformat(),
+                    lease_owner="old-worker",
+                    lease_expires_at=now.isoformat(),
+                )
+            }
+        )
+
+        not_yet = lease_vector_repair_purge_outbox_records(
+            db_client=db,
+            uid="u1",
+            worker_id="worker-a",
+            limit=10,
+            lease_seconds=30,
+            now=before_expiry,
+        )
+        reclaimed = lease_vector_repair_purge_outbox_records(
+            db_client=db,
+            uid="u1",
+            worker_id="worker-b",
+            limit=10,
+            lease_seconds=30,
+            now=after_expiry,
+        )
+
+        assert not_yet == []
+        assert [record["record_id"] for record in reclaimed] == ["expired-lease"]
+        assert reclaimed[0]["status"] == "pending"
+        assert db.store[path]["status"] == "in_progress"
+        assert db.store[path]["lease_owner"] == "worker-b"
+        assert db.store[path]["leased_at"] == after_expiry.isoformat()
+
+    def test_firestore_reader_never_reclaims_completed_or_dead_letter_records(self):
+        now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+        expired = datetime(2026, 6, 19, 11, 0, tzinfo=timezone.utc).isoformat()
+        db = _FakeFirestore(
+            {
+                "users/u1/memory_outbox/completed": _record(
+                    record_id="completed",
+                    status="completed",
+                    available_at=expired,
+                    lease_expires_at=expired,
+                ),
+                "users/u1/memory_outbox/dead": _record(
+                    record_id="dead",
+                    status="dead_letter",
+                    available_at=expired,
+                    lease_expires_at=expired,
+                ),
+            }
+        )
+
+        leased = lease_vector_repair_purge_outbox_records(
+            db_client=db,
+            uid="u1",
+            worker_id="worker-a",
+            limit=10,
+            lease_seconds=30,
+            now=now,
+        )
+
+        assert leased == []
+        assert db.store["users/u1/memory_outbox/completed"]["status"] == "completed"
+        assert db.store["users/u1/memory_outbox/dead"]["status"] == "dead_letter"
 
     def test_firestore_reader_claim_uses_transaction_when_client_supports_it(self):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)

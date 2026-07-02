@@ -117,6 +117,23 @@ final class StartupWarmupPolicyTests: XCTestCase {
         )
     }
 
+    func testAPIKeyFetchFailureDoesNotBlockFutureWaiters() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let serviceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/APIKeyService.swift")
+        let source = try String(contentsOf: serviceURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            source.contains("fetchTask = nil"),
+            "A failed API key fetch must clear fetchTask so later Calendar waits can retry"
+        )
+        XCTAssertTrue(
+            source.contains("key fetch completed without loaded keys, retrying once"),
+            "waitForKeys() must retry after awaiting a failed completed fetch"
+        )
+    }
+
     func testChatPromptContextWarmupWaitsUntilAfterDeferredWarmupStarts() {
         XCTAssertGreaterThan(
             StartupWarmupPolicy.chatPromptContextWarmupDelay,

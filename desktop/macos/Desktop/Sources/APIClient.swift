@@ -253,7 +253,7 @@ actor APIClient {
   }
 
   /// Report a managed realtime turn's token usage so the backend can price it and record
-  /// it into the llm_usage ledger (counts toward quota). Fire-and-forget; failures are
+  /// it into the llm_usage cost ledger. Fire-and-forget; failures are
   /// logged and dropped (the backend reconciler is the eventual safety net). Only called
   /// for managed (ephemeral) sessions — BYOK users pay the provider directly.
   func reportRealtimeUsage(
@@ -1509,8 +1509,10 @@ struct ServerMemory: Decodable, Identifiable {
     let memoryIdValue = try container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
     case let (.some(id), .some(memoryId)) where id != memoryId:
-      throw ServerMemoryAliasDecodeError.conflict(
-        "id", id, "memory_id", memoryId, codingPath: container.codingPath)
+      // Legacy docs stored memory_id = conversation_id; a mismatched alias must
+      // not reject the row — one bad row used to blank the whole memories list.
+      // Silent by design: long-time accounts have thousands of these per sync.
+      self.id = id
     case let (.some(id), _):
       self.id = id
     case let (_, .some(memoryId)):
@@ -4619,7 +4621,9 @@ extension APIClient {
     sender: String,
     appId: String? = nil,
     sessionId: String? = nil,
-    metadata: String? = nil
+    metadata: String? = nil,
+    clientMessageId: String? = nil,
+    messageSource: String = "desktop_chat"
   ) async throws -> SaveMessageResponse {
     struct SaveRequest: Encodable {
       let text: String
@@ -4627,9 +4631,18 @@ extension APIClient {
       let app_id: String?
       let session_id: String?
       let metadata: String?
+      let client_message_id: String?
+      let message_source: String
     }
     let body = SaveRequest(
-      text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
+      text: text,
+      sender: sender,
+      app_id: appId,
+      session_id: sessionId,
+      metadata: metadata,
+      client_message_id: clientMessageId,
+      message_source: messageSource
+    )
     return try await post("v2/desktop/messages", body: body)
   }
 
@@ -4921,10 +4934,14 @@ struct InitialMessageResponse: Codable {
 struct SaveMessageResponse: Codable {
   let id: String
   let createdAt: Date
+  let sessionId: String?
+  let created: Bool?
 
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
+    case sessionId = "session_id"
+    case created
   }
 }
 

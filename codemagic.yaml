@@ -184,6 +184,7 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
+          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -428,6 +429,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
+          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
+          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -579,6 +582,7 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
+          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -981,6 +985,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
+          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
+          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
 
     artifacts:
@@ -1129,6 +1135,7 @@ workflows:
           shorebird patch ios \
             --flavor prod -- \
             --export-options-plist=$HOME/export_options.plist
+          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1897,6 +1904,8 @@ workflows:
           # Should use bump version automatically by CI
           shorebird patch android \
             --flavor prod
+          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
+          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
@@ -2628,11 +2637,11 @@ workflows:
             fi
           fi
 
-          if [ -n "$ED_SIGNATURE" ]; then
-            echo "EdDSA signature: $ED_SIGNATURE"
-          else
-            echo "WARNING: Could not generate EdDSA signature — Sparkle auto-update will not work"
+          if [ -z "$ED_SIGNATURE" ]; then
+            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work"
+            exit 1
           fi
+          echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
 
       - name: Create GitHub release
@@ -2745,7 +2754,7 @@ workflows:
           RELEASE_JSON=$(python3 -c "
           import json, os
           data = {
-            'version':      os.environ['BUILD_NAME'],
+            'version':      os.environ['VERSION'],
             'build_number': int(os.environ['BUILD_NUMBER']),
             'download_url': os.environ.get('DOWNLOAD_URL', ''),
             'ed_signature': os.environ.get('ED_SIGNATURE', ''),

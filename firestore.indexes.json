@@ -66,6 +66,16 @@
       ]
     },
     {
+      "collectionGroup": "memory_outbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "event_type", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "lease_expires_at", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "conversations",
       "queryScope": "COLLECTION",
       "fields": [
