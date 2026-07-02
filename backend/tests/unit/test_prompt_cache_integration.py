@@ -672,7 +672,7 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     source = source.replace("import anthropic", "")
     source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
     source = source.replace("from models.structured import Structured", "")
-    source = source.replace("from utils.byok import get_byok_key", "")
+    source = source.replace("from utils.byok import get_byok_key, get_byok_custom_provider", "")
     source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
 
     # Create a fake anthropic module with AsyncAnthropic
@@ -690,6 +690,7 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
         "PydanticOutputParser": MagicMock(),
         "Structured": MagicMock(),
         "get_byok_key": MagicMock(return_value=None),
+        "get_byok_custom_provider": MagicMock(return_value=None),
         "get_usage_callback": MagicMock(return_value=[]),
         "List": list,
     }
