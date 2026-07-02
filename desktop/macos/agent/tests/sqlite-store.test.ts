@@ -19,7 +19,7 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(8);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(9);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
@@ -40,6 +40,107 @@ describe("SqliteAgentStore", () => {
     ]);
     expect(tableNames(store)).not.toContain("desktop_action_queue");
 
+    store.close();
+  });
+
+  it("enforces one active execution-authority attempt per run in SQLite", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "running",
+      mode: "act",
+    });
+
+    store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "acp",
+      adapterInstanceId: "worker-1",
+    });
+    expect(() => store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 2,
+      status: "queued",
+      adapterId: "acp",
+      adapterInstanceId: "worker-2",
+    })).toThrow();
+
+    expect(() => store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 3,
+      status: "failed",
+      adapterId: "acp",
+      adapterInstanceId: "worker-3",
+    })).not.toThrow();
+    expect(store.allRows("SELECT attempt_no, status FROM run_attempts ORDER BY attempt_no")).toEqual([
+      expect.objectContaining({ attempt_no: 1, status: "running" }),
+      expect.objectContaining({ attempt_no: 3, status: "failed" }),
+    ]);
+    store.close();
+  });
+
+  it("repairs legacy duplicate active attempts before installing the authority index", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "running",
+      mode: "act",
+    });
+
+    store.execute("DROP INDEX run_attempts_one_active_per_run_uq");
+    store.execute("DELETE FROM schema_migrations WHERE version = 9");
+    store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "acp",
+      adapterInstanceId: "worker-1",
+    });
+    store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 2,
+      status: "queued",
+      adapterId: "acp",
+      adapterInstanceId: "worker-2",
+    });
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 900 });
+
+    expect(store.allRows("SELECT attempt_no, status, completed_at_ms FROM run_attempts ORDER BY attempt_no")).toEqual([
+      expect.objectContaining({ attempt_no: 1, status: "orphaned", completed_at_ms: 900 }),
+      expect.objectContaining({ attempt_no: 2, status: "queued" }),
+    ]);
+    expect(store.getRow("SELECT type, payload_json FROM events WHERE attempt_id = (SELECT attempt_id FROM run_attempts WHERE attempt_no = 1)")).toMatchObject({
+      type: "attempt.orphaned",
+      payload_json: expect.stringContaining("\"attemptId\":\"att_"),
+    });
+    expect(JSON.parse(String(store.getRow("SELECT payload_json FROM events").payload_json))).toMatchObject({
+      reason: "active_attempt_authority_migration",
+    });
+    expect(() => store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 3,
+      status: "starting",
+      adapterId: "acp",
+      adapterInstanceId: "worker-3",
+    })).toThrow();
     store.close();
   });
 

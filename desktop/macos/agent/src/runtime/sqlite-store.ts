@@ -45,6 +45,7 @@ const DESKTOP_ARTIFACT_DELIVERIES_MIGRATION_VERSION = 5;
 const DESKTOP_CANDIDATES_MIGRATION_VERSION = 6;
 const DESKTOP_CONTEXT_ACCESS_LOG_MIGRATION_VERSION = 7;
 const DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION = 8;
+const ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION = 9;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -207,6 +208,10 @@ CREATE INDEX run_attempts_run_idx
 
 CREATE INDEX run_attempts_active_idx
   ON run_attempts(status, created_at_ms);
+
+CREATE UNIQUE INDEX run_attempts_one_active_per_run_uq
+  ON run_attempts(run_id)
+  WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling');
 
 CREATE TABLE events (
   event_seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -403,6 +408,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION)) {
       runDesktopAttentionOverridesMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION)) {
+      runActiveAttemptAuthorityMigration(this.db, this.nowMs());
     }
   }
 
@@ -1575,6 +1583,69 @@ function runDesktopAttentionOverridesMigration(db: Pick<DatabaseSync, "exec" | "
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runActiveAttemptAuthorityMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    const repairedAttempts = db.prepare(`
+      SELECT a.attempt_id, a.run_id, r.session_id
+      FROM run_attempts a
+      JOIN runs r ON r.run_id = a.run_id
+      WHERE a.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+        AND EXISTS (
+          SELECT 1
+          FROM run_attempts newer
+          WHERE newer.run_id = a.run_id
+            AND newer.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+            AND newer.attempt_no > a.attempt_no
+        )
+      ORDER BY a.run_id ASC, a.attempt_no ASC
+    `).all() as Row[];
+    db.prepare(`
+      UPDATE run_attempts
+      SET status = ?,
+          completed_at_ms = COALESCE(completed_at_ms, ?),
+          updated_at_ms = ?
+      WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+        AND EXISTS (
+          SELECT 1
+          FROM run_attempts newer
+          WHERE newer.run_id = run_attempts.run_id
+            AND newer.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+            AND newer.attempt_no > run_attempts.attempt_no
+        );
+    `).run("orphaned", appliedAtMs, appliedAtMs);
+    for (const attempt of repairedAttempts) {
+      db.prepare(
+        `INSERT INTO events (
+          event_id, session_id, run_id, attempt_id, type, retention_class,
+          visibility, payload_json, created_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        generateAgentId("event"),
+        text(attempt.session_id),
+        text(attempt.run_id),
+        text(attempt.attempt_id),
+        "attempt.orphaned",
+        "core",
+        "internal",
+        JSON.stringify({
+          attemptId: text(attempt.attempt_id),
+          reason: "active_attempt_authority_migration",
+        }),
+        appliedAtMs,
+      );
+    }
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS run_attempts_one_active_per_run_uq
+        ON run_attempts(run_id)
+        WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling');
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION,
       appliedAtMs,
     );
   });
