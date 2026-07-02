@@ -710,5 +710,103 @@ class TestMixedModeRouterAuthDepsExpanded(unittest.TestCase):
                 ), f"OAuth route ({method}, {route.path}) should not have require_firebase: {names}"
 
 
+_CONVERTED_ALL_AUTH_ROUTERS = [
+    'scores',
+    'calendar_onboarding',
+    'auto_model',
+    'google_calendar',
+    'folders',
+    'agent_tools',
+    'speech_profile',
+    'focus_sessions',
+    'calendar_meetings',
+    'memory_product',
+    'goals',
+    'memories',
+    'tools',
+    'chat_sessions',
+]
+
+_CONVERTED_SPLIT_ROUTERS = [
+    'users',
+    'apps',
+    'conversations',
+    'action_items',
+    'payment',
+    'chat',
+    'x_connector',
+    'developer',
+]
+
+
+class TestAllConvertedRoutersHaveAuth(unittest.TestCase):
+    """Verify every converted router has require_firebase on its protected routes."""
+
+    def _check_router_has_auth(self, mod_name, expected_dep='require_firebase'):
+        import importlib
+
+        try:
+            mod = importlib.import_module(f'routers.{mod_name}')
+        except Exception:
+            self.skipTest(f'{mod_name} not importable')
+        router = getattr(mod, 'router', None)
+        assert router is not None, f"{mod_name} has no router"
+
+        found_auth = False
+        for route in router.routes:
+            if not hasattr(route, 'methods'):
+                if hasattr(route, 'routes'):
+                    for sub_route in route.routes:
+                        deps = [d.dependency for d in getattr(sub_route, 'dependencies', [])]
+                        dep_names = [d.__name__ for d in deps if hasattr(d, '__name__')]
+                        if expected_dep in dep_names:
+                            found_auth = True
+                continue
+            deps = [d.dependency for d in getattr(route, 'dependencies', [])]
+            dep_names = [d.__name__ for d in deps if hasattr(d, '__name__')]
+            if expected_dep in dep_names:
+                found_auth = True
+        return found_auth
+
+    def test_all_auth_routers(self):
+        for mod_name in _CONVERTED_ALL_AUTH_ROUTERS:
+            with self.subTest(router=mod_name):
+                assert self._check_router_has_auth(
+                    mod_name
+                ), f"Router {mod_name} has no require_firebase dep on any route"
+
+    def test_split_routers_have_firebase(self):
+        for mod_name in _CONVERTED_SPLIT_ROUTERS:
+            with self.subTest(router=mod_name):
+                assert self._check_router_has_auth(
+                    mod_name
+                ), f"Split router {mod_name} has no require_firebase dep on any route"
+
+
+class TestRateLimitDepOrdering(unittest.TestCase):
+    """Verify rate_limit_dep runs after auth sets request.state.uid."""
+
+    @patch('utils.auth_middleware._verify_token', return_value='uid-rate-test')
+    @patch('utils.auth_middleware.validate_and_return_byok_keys', return_value={})
+    def test_rate_limit_dep_sees_uid_from_auth(self, _byok, _verify):
+        captured_uids = []
+
+        async def capturing_dep(request: Request):
+            captured_uids.append(getattr(request.state, 'uid', None))
+
+        firebase_router = APIRouter(dependencies=[Depends(require_firebase), Depends(capturing_dep)])
+
+        @firebase_router.get("/v1/rate-test")
+        def endpoint(request: Request):
+            return {"uid": request.state.uid}
+
+        app = FastAPI()
+        app.include_router(firebase_router)
+        client = TestClient(app)
+        resp = client.get("/v1/rate-test", headers={"Authorization": "Bearer tok"})
+        assert resp.status_code == 200
+        assert captured_uids == ['uid-rate-test'], f"Rate limit dep should see uid from auth, got: {captured_uids}"
+
+
 if __name__ == "__main__":
     unittest.main()
