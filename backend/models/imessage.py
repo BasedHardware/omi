@@ -68,3 +68,17 @@ class IMessageDraftResponse(BaseModel):
     # disambiguation ask, NOT a sendable reply. Clients must surface it and must
     # never auto-send it.
     ambiguous: bool = False
+
+
+class IMessageContact(BaseModel):
+    name: str
+    handles: List[str] = []
+
+
+class IMessageContactsSyncRequest(BaseModel):
+    contacts: List[IMessageContact] = []
+
+
+class IMessageContactsSyncResponse(BaseModel):
+    success: bool = True
+    people_upserted: int = 0

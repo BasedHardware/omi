@@ -15,7 +15,10 @@ import logging
 
 from fastapi import APIRouter, Depends
 
+from database import users as users_db
 from models.imessage import (
+    IMessageContactsSyncRequest,
+    IMessageContactsSyncResponse,
     IMessageDraftRequest,
     IMessageDraftResponse,
     IMessageIngestRequest,
@@ -24,7 +27,7 @@ from models.imessage import (
     IMessageStatus,
 )
 from utils import imessage_connector
-from utils.executors import llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.llm import reply_draft
 from utils.other import endpoints as auth
 
@@ -63,3 +66,10 @@ async def imessage_draft_reply(req: IMessageDraftRequest, uid: str = Depends(aut
     thread = [m.dict() for m in req.thread]
     result = await run_blocking(llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent)
     return IMessageDraftResponse(draft=result['draft'], ambiguous=result.get('ambiguous', False))
+
+
+@router.post('/v1/imessage/contacts/sync', response_model=IMessageContactsSyncResponse, tags=['imessage'])
+async def imessage_contacts_sync(req: IMessageContactsSyncRequest, uid: str = Depends(auth.get_current_user_uid)):
+    contacts = [c.dict() for c in req.contacts]
+    count = await run_blocking(db_executor, users_db.import_contacts, uid, contacts)
+    return IMessageContactsSyncResponse(people_upserted=count)
