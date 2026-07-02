@@ -448,6 +448,75 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "apple_notes_read_probe",
+      summary: "Probe Apple Notes access without importing or saving memories",
+      params: ["folderPath", "maxResults", "remember"]
+    ) { params in
+      let maxResults = min(max(intParam(params["maxResults"], default: 20), 1), 250)
+      let folderPath = params["folderPath"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let remember = boolParam(params["remember"], default: false)
+
+      do {
+        let selectedFolderPath: String?
+        if let folderPath, !folderPath.isEmpty {
+          let resolved = try await AppleNotesReaderService.shared.validateSelectedFolder(
+            path: folderPath,
+            remember: remember
+          )
+          selectedFolderPath = resolved.path
+        } else {
+          selectedFolderPath = nil
+        }
+
+        let status = await AppleNotesReaderService.shared.connectionStatus(
+          maxResults: maxResults,
+          selectedFolderPath: selectedFolderPath
+        )
+        switch status {
+        case .connected(let noteCount, _):
+          let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+            maxResults: 1,
+            selectedFolderPath: selectedFolderPath
+          )
+          return [
+            "ok": "true",
+            "classification": "readable",
+            "noteCount": "\(noteCount)",
+            "selectedFolderPath": selectedFolderPath ?? "",
+            "firstTitle": notes.first?.title ?? "",
+          ]
+        case .needsAccess(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "true",
+          ]
+        case .error(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "false",
+          ]
+        }
+      } catch let error as AppleNotesReaderError {
+        return [
+          "ok": "false",
+          "classification": error.reasonCode,
+          "message": error.localizedDescription,
+          "needsFolderSelection": "\(error.shouldPromptForFolderSelection)",
+        ]
+      } catch {
+        return [
+          "ok": "false",
+          "classification": "unknown_error",
+          "message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
       name: "delete_conversation",
       summary: "Delete conversation with cascade (API + conversationDeleted notification)",
       params: ["id"]

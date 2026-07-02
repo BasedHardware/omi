@@ -95,7 +95,28 @@ final class CalendarOutcomeParserTests: XCTestCase {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .unknown)
-    XCTAssertFalse(summary.isEmpty)
+    XCTAssertEqual(summary, cls.plainFallbackSummary)
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(error.errorDescription, "Couldn't reach Google Calendar: unexpected error")
+  }
+
+  func testUnknownErrorClassPreservesPythonSummary() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "something_new",
+      "summary": "New failure mode from Python helper.",
+      "attempts": [],
+    ]
+    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected failure")
+    }
+    XCTAssertEqual(cls, .unknown)
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(error, .networkError("New failure mode from Python helper."))
+    XCTAssertEqual(
+      error.errorDescription,
+      "Couldn't reach Google Calendar: New failure mode from Python helper."
+    )
   }
 
   func testNetworkSummarySurvivesFinalErrorMapping() {

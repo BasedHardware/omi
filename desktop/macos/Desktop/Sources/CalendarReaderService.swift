@@ -151,8 +151,10 @@ enum CalendarFailureClass: String, Equatable {
         return nil
       }
       return raw
-    case .noBrowser, .notSignedIn, .sessionExpired, .unknown:
+    case .noBrowser, .notSignedIn, .sessionExpired:
       return nil
+    case .unknown:
+      return raw
     }
   }
 
