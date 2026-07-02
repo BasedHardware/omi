@@ -7,12 +7,14 @@ on:
     paths:
       - 'backend/**'
       - 'docs/api-reference/openapi.json'
+      - 'docs/api-reference/app-client-openapi.json'
       - 'docs/docs.json'
       - '.github/workflows/openapi-contract.yml'
   pull_request:
     paths:
       - 'backend/**'
       - 'docs/api-reference/openapi.json'
+      - 'docs/api-reference/app-client-openapi.json'
       - 'docs/docs.json'
       - '.github/workflows/openapi-contract.yml'
   workflow_dispatch:
@@ -44,3 +46,7 @@ jobs:
       - name: Check committed OpenAPI contract
         working-directory: backend
         run: scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+
+      - name: Check committed app-client OpenAPI contract
+        working-directory: backend
+        run: scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json
