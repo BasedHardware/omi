@@ -4,7 +4,10 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from tests.unit.twilio_stub import install_twilio_stub, prepare_twilio_service_import
+try:
+    from tests.unit.twilio_stub import install_twilio_stub, prepare_twilio_service_import
+except ModuleNotFoundError:
+    from twilio_stub import install_twilio_stub, prepare_twilio_service_import
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')

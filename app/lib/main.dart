@@ -25,6 +25,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
@@ -290,8 +291,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
           create: (context) => CaptureProvider(),
-          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
-              (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
+          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
+            final externalActions = ProviderCaptureExternalActions(
+              conversationProvider: conversation,
+              messageProvider: message,
+              peopleProvider: people,
+              usageProvider: usage,
+            );
+            return (previous?..updateExternalActions(externalActions)) ??
+                CaptureProvider(externalActions: externalActions);
+          },
         ),
         ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(
           create: (context) => LocalRecordingsProvider(),

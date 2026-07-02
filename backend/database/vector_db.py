@@ -1,20 +1,36 @@
+from __future__ import annotations
+
 import json
 import os
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import List
 
 from pinecone import Pinecone
 
+from database import projection_repair
+from database.memory_vector_metadata import (
+    build_archive_memory_vector_filter,
+    build_default_memory_vector_filter,
+    build_memory_vector_metadata,
+    parse_memory_search_vector_hit,
+    parse_search_vector_hit,
+    strip_null_metadata_values,
+)
 from models.conversation_metadata import ConversationMetadataKeys, metadata_list
+from models.product_memory import MemoryItem
+from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 import logging
 
 logger = logging.getLogger(__name__)
 
-if os.getenv('PINECONE_API_KEY') is not None:
-    pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
-    index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
+_pinecone_api_key = os.getenv('PINECONE_API_KEY')
+_pinecone_index_name = os.getenv('PINECONE_INDEX_NAME')
+if _pinecone_api_key and _pinecone_index_name:
+    pc = Pinecone(api_key=_pinecone_api_key)
+    index = pc.Index(_pinecone_index_name)
 else:
     index = None
 
@@ -55,10 +71,35 @@ def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[
     logger.info(f'upsert_vectors {res}')
 
 
-def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
-    filter_data = {'uid': uid}
+def _created_at_filter(starts_at: int = None, ends_at: int = None):
+    if starts_at is None and ends_at is None:
+        return None
+    if starts_at is not None and not isinstance(starts_at, int):
+        return None
+    if ends_at is not None and not isinstance(ends_at, int):
+        return None
+    if starts_at is not None and ends_at is not None and starts_at > ends_at:
+        return None
+
+    created_at = {}
     if starts_at is not None:
-        filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
+        created_at['$gte'] = starts_at
+    if ends_at is not None:
+        created_at['$lte'] = ends_at
+    return created_at
+
+
+def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
+    if index is None:
+        return []
+
+    filter_data = {'uid': uid}
+    created_at = _created_at_filter(starts_at, ends_at)
+    if (starts_at is not None or ends_at is not None) and created_at is None:
+        logger.warning('Skipping conversation vector search with invalid date filter')
+        return []
+    if created_at is not None:
+        filter_data['created_at'] = created_at
 
     xq = embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
@@ -156,7 +197,40 @@ def delete_vector(uid: str, conversation_id: str):
 MEMORIES_NAMESPACE = "ns2"
 
 
-def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
+def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = None) -> dict:
+    """Return the legacy ns2 memory-search filter with an explicit memory schema barrier.
+
+    Legacy memory vectors in ``ns2`` do not carry ``memory_schema_version``. memory
+    vectors intentionally do, so every legacy search path must exclude that
+    field before top-k is selected. This prevents memory Short-term, Long-term,
+    Archive, stale-revision, or tombstoned candidates from occupying legacy
+    result slots or being hydrated as legacy memories.
+    """
+    filter_data = {
+        '$and': [
+            {'uid': {'$eq': uid}},
+            {'memory_schema_version': {'$exists': False}},
+        ]
+    }
+    if subject_entity_id:
+        filter_data['$and'].append({'subject_entity_id': {'$eq': subject_entity_id}})
+    return filter_data
+
+
+@dataclass(frozen=True)
+class VectorCandidateQueryResult:
+    hits: List[SearchVectorHit] = field(default_factory=list)
+    rejected_count: int = 0
+
+
+def upsert_memory_vector(
+    uid: str,
+    memory_id: str,
+    content: str,
+    category: str,
+    subject_entity_id: str | None = None,
+    projection_metadata: dict | None = None,
+):
     """
     Upsert a memory embedding to Pinecone.
     """
@@ -175,6 +249,16 @@ def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
             "created_at": int(datetime.now(timezone.utc).timestamp()),
         },
     }
+    data["metadata"].update(
+        strip_null_metadata_values(
+            projection_metadata
+            or memory_projection_metadata(
+                {'id': memory_id, 'category': category, 'subject_entity_id': subject_entity_id, 'status': 'accepted'}
+            )
+        )
+    )
+    if subject_entity_id:
+        data["metadata"]["subject_entity_id"] = subject_entity_id
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vector {memory_id} {res}')
     return vector
@@ -200,25 +284,44 @@ def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
     vectors = embeddings.embed_documents(contents)
 
     now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload = [
-        {
-            "id": f"{uid}-{item['memory_id']}",
-            "values": vectors[i],
-            "metadata": {
-                "uid": uid,
-                "memory_id": item['memory_id'],
-                "category": item['category'],
-                "created_at": now_ts,
-            },
+    payload = []
+    for i, item in enumerate(items):
+        metadata = {
+            "uid": uid,
+            "memory_id": item['memory_id'],
+            "category": item['category'],
+            "created_at": now_ts,
         }
-        for i, item in enumerate(items)
-    ]
+        metadata.update(
+            strip_null_metadata_values(
+                item.get('projection_metadata')
+                or memory_projection_metadata(
+                    {
+                        'id': item['memory_id'],
+                        'category': item['category'],
+                        'subject_entity_id': item.get('subject_entity_id'),
+                        'status': item.get('status', 'accepted'),
+                    }
+                )
+            )
+        )
+        if item.get('subject_entity_id'):
+            metadata['subject_entity_id'] = item['subject_entity_id']
+        payload.append(
+            {
+                "id": f"{uid}-{item['memory_id']}",
+                "values": vectors[i],
+                "metadata": metadata,
+            },
+        )
     res = index.upsert(vectors=payload, namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vectors_batch count={len(payload)} {res}')
     return len(payload)
 
 
-def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit: int = 5) -> List[dict]:
+def find_similar_memories(
+    uid: str, content: str, threshold: float = 0.85, limit: int = 5, subject_entity_id: str | None = None
+) -> List[dict]:
     """
     Find memories similar to the given content.
     Returns list of matches with similarity scores.
@@ -229,7 +332,7 @@ def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit
         return []
 
     vector = embeddings.embed_query(content)
-    filter_data = {'uid': uid}
+    filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
     xc = index.query(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
@@ -271,13 +374,125 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
         return []
 
     vector = embeddings.embed_query(query)
-    filter_data = {'uid': uid}
+    filter_data = build_legacy_memory_vector_filter(uid)
 
     xc = index.query(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
     )
 
     return [match['metadata'].get('memory_id') for match in xc.get('matches', [])]
+
+
+def query_memory_vector_candidates(
+    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
+) -> VectorCandidateQueryResult:
+    """Query existing ns2 for memory candidates using strict tier-safe metadata filters.
+
+    The returned hits are vector candidates only. Product callers must still
+    hydrate authoritative ``memory_items`` and run the memory search gateway before
+    returning any memory to a user or integration.
+    """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping memory memory vector candidate search')
+        return VectorCandidateQueryResult()
+
+    vector = embeddings.embed_query(query)
+    filter_data = (
+        build_archive_memory_vector_filter(uid)
+        if mode == SearchMode.archive_explicit
+        else build_default_memory_vector_filter(uid)
+    )
+    response = index.query(
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        include_values=False,
+        filter=filter_data,
+        namespace=MEMORIES_NAMESPACE,
+    )
+
+    hits: List[SearchVectorHit] = []
+    rejected_count = 0
+    for match in response.get('matches', []):
+        parsed = parse_search_vector_hit(match)
+        if parsed.hit is None:
+            rejected_count += 1
+            continue
+        hits.append(parsed.hit)
+    return VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
+
+
+def upsert_canonical_memory_vector(
+    item: MemoryItem,
+    *,
+    projection_commit_id: str | None = None,
+) -> List[float] | None:
+    """Upsert one canonical-cohort memory vector using neutral id + neutral metadata."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping canonical memory vector upsert')
+        return None
+
+    content = (item.content or "").strip()
+    if not content:
+        logger.warning('canonical memory vector upsert skipped: empty content memory_id=%s', item.memory_id)
+        return None
+
+    commit_id = projection_commit_id or item.ledger_commit_id
+    if not commit_id:
+        logger.warning(
+            'canonical memory vector upsert skipped: missing projection_commit_id memory_id=%s', item.memory_id
+        )
+        return None
+
+    vector = embeddings.embed_query(content)
+    vector_updated_at = datetime.now(timezone.utc)
+    metadata = build_memory_vector_metadata(
+        item,
+        projection_commit_id=commit_id,
+        vector_updated_at=vector_updated_at,
+    )
+    data = {
+        "id": item.memory_id,
+        "values": vector,
+        "metadata": metadata,
+    }
+    res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
+    logger.info('upsert_canonical_memory_vector %s %s', item.memory_id, res)
+    return vector
+
+
+def query_memory_vector_candidates(
+    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
+) -> VectorCandidateQueryResult:
+    """Query ns2 for canonical neutral-metadata memory vector candidates."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
+        return VectorCandidateQueryResult()
+
+    vector = embeddings.embed_query(query)
+    filter_data = (
+        build_archive_memory_vector_filter(uid)
+        if mode == SearchMode.archive_explicit
+        else build_default_memory_vector_filter(uid)
+    )
+    response = index.query(
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        include_values=False,
+        filter=filter_data,
+        namespace=MEMORIES_NAMESPACE,
+    )
+
+    hits: List[SearchVectorHit] = []
+    rejected_count = 0
+    for match in response.get('matches', []):
+        parsed = parse_memory_search_vector_hit(match)
+        if parsed.hit is None:
+            rejected_count += 1
+            continue
+        hits.append(parsed.hit)
+    return VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
 
 
 def delete_memory_vector(uid: str, memory_id: str):
@@ -291,6 +506,51 @@ def delete_memory_vector(uid: str, memory_id: str):
     vector_id = f'{uid}-{memory_id}'
     result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
     logger.info(f'delete_memory_vector {vector_id} {result}')
+
+
+def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None):
+    return projection_repair.enqueue_projection_repairs(
+        uid,
+        {
+            'commit_id': source_commit_id or 'manual',
+            'mutations': [{'type': reason, 'fact_id': fact_id}],
+        },
+    )
+
+
+def memory_projection_metadata(memory: dict, source_commit_id: str | None = None) -> dict:
+    return projection_repair.projection_metadata_for_fact(memory, source_commit_id=source_commit_id)
+
+
+def repair_memory_projection(uid: str, memory: dict | None) -> str:
+    if not memory or projection_repair.projection_action_for_fact(memory) == 'delete':
+        memory_id = (memory or {}).get('id')
+        if memory_id:
+            delete_memory_vector(uid, memory_id)
+        return 'delete'
+
+    upsert_memory_vector(
+        uid,
+        memory['id'],
+        memory.get('content', ''),
+        memory.get('category', 'system'),
+        subject_entity_id=memory.get('subject_entity_id'),
+        projection_metadata=memory_projection_metadata(memory),
+    )
+    return projection_repair.projection_action_for_fact(memory)
+
+
+def reconcile_projections(uid: str, facts: List[dict], vector_fact_ids: List[str]) -> dict:
+    return projection_repair.reconcile_memory_projection(uid, facts, vector_fact_ids)
+
+
+def process_projection_repair_queue(uid: str, fact_loader, limit: int = 100) -> dict:
+    return projection_repair.process_projection_repairs(
+        uid,
+        fact_loader=fact_loader,
+        repair_func=repair_memory_projection,
+        limit=limit,
+    )
 
 
 # ==========================================
@@ -610,6 +870,29 @@ def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]):
     for i in range(0, len(vector_ids), 1000):
         index.delete(ids=vector_ids[i : i + 1000], namespace="ns1")
     logger.info(f'delete_conversation_vectors_batch count={len(vector_ids)}')
+
+
+def delete_pinecone_memory_vectors_by_id(vector_ids: List[str]) -> int:
+    """Delete ns2 memory vectors by exact Pinecone id.
+
+    Supports legacy ``{uid}-{memory_id}``, memory ``memvec:…``, and canonical neutral ``mem_…`` ids.
+    Used by canonical account-delete purge; legacy batch delete keeps ``{uid}-{id}`` scheme unchanged.
+    """
+    if index is None:
+        logger.warning("Pinecone index not initialized, skipping memory vector delete by id")
+        return 0
+    if not vector_ids:
+        return 0
+    total_deleted = 0
+    for i in range(0, len(vector_ids), 1000):
+        chunk = vector_ids[i : i + 1000]
+        try:
+            index.delete(ids=chunk, namespace=MEMORIES_NAMESPACE)
+            total_deleted += len(chunk)
+        except Exception:
+            logger.warning("delete_pinecone_memory_vectors_by_id chunk failed chunk=%d", i // 1000)
+    logger.info("delete_pinecone_memory_vectors_by_id total_deleted=%d", total_deleted)
+    return total_deleted
 
 
 def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:

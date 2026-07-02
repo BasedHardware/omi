@@ -73,6 +73,10 @@ flutter test           # same thing
 flutter test test/unit/  # specific directory
 ```
 
+`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL`.
+Set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/` for local backend tests, or
+`OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default.
+
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
@@ -120,4 +124,3 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
 - agent-flutter (Marionette) for programmatic UI interaction — see root AGENTS.md for setup
-

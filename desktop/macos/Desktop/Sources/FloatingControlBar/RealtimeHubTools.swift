@@ -69,6 +69,34 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
+  private static func localAgentProviderInstruction() -> String {
+    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes]
+    let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
+    let available = availability.filter(\.isAvailable).map(\.provider)
+    let unavailable = availability.filter { !$0.isAvailable }
+
+    if unavailable.isEmpty {
+      return "If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \"openclaw\" or \"hermes\". Treat those as available local providers, not as sessions to inspect."
+    }
+
+    var parts: [String] = []
+    if !available.isEmpty {
+      let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
+      parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+    }
+    let missingText = unavailable
+      .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+      .joined(separator: " ")
+    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    return parts.joined(separator: " ")
+  }
+
+  private static func availableDirectedProviderRawValues() -> [String] {
+    [AgentPillsManager.DirectedProvider.openclaw, .hermes]
+      .filter { LocalAgentProviderDetector.isAvailable($0) }
+      .map(\.rawValue)
+  }
+
   private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
@@ -184,8 +212,7 @@ enum RealtimeHubTools {
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
-    - If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \
-    "openclaw" or "hermes". Treat those as available local providers, not as sessions to inspect.
+    - \(localAgentProviderInstruction())
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
     and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \
     You are fully capable; do it directly, even when the ask is long or open-ended. Do \
@@ -205,9 +232,37 @@ enum RealtimeHubTools {
     """
   }
 
-  /// OpenAI Realtime GA `session.tools` entries. Static `let` — built once, not rebuilt on
-  /// every session (re)connect that reads it.
-  static let openAITools: [[String: Any]] = [
+  /// OpenAI Realtime GA `session.tools` entries.
+  static var openAITools: [[String: Any]] {
+    openAITools(availableDirectedProviders: availableDirectedProviderRawValues())
+  }
+
+  static func openAITools(availableDirectedProviders: [String]) -> [[String: Any]] {
+    let providerProperty: [String: Any]? = availableDirectedProviders.isEmpty ? nil : [
+      "type": "string",
+      "enum": availableDirectedProviders,
+      "description": "Optional available local provider to run this background agent through.",
+    ]
+    return baseOpenAITools(providerProperty: providerProperty)
+  }
+
+  private static func baseOpenAITools(providerProperty: [String: Any]?) -> [[String: Any]] {
+    var spawnAgentProperties: [String: Any] = [
+      "brief": [
+        "type": "string", "description": "A clear, self-contained brief of the task.",
+      ],
+      "title": [
+        "type": "string",
+        "description":
+          "A short Title Case label for the task pill (≤ ~5 words, no trailing "
+          + "punctuation), e.g. 'Draft Launch Email'.",
+      ],
+    ]
+    if let providerProperty {
+      spawnAgentProperties["provider"] = providerProperty
+    }
+
+    return [
       [
         "type": "function",
         "name": HubTool.askHigherModel.rawValue,
@@ -557,22 +612,7 @@ enum RealtimeHubTools {
           + "schedule/automate something for them, or any multi-step work. Returns immediately; the agent works on its own.",
         "parameters": [
           "type": "object",
-          "properties": [
-            "brief": [
-              "type": "string", "description": "A clear, self-contained brief of the task.",
-            ],
-            "title": [
-              "type": "string",
-              "description":
-                "A short Title Case label for the task pill (≤ ~5 words, no trailing "
-                + "punctuation), e.g. 'Draft Launch Email'.",
-            ],
-            "provider": [
-              "type": "string",
-              "enum": ["openclaw", "hermes"],
-              "description": "Optional local provider to run this background agent through.",
-            ],
-          ],
+          "properties": spawnAgentProperties,
           "required": ["brief"],
         ],
       ],
@@ -595,11 +635,17 @@ enum RealtimeHubTools {
           "required": ["x", "y"],
         ],
       ],
-  ]
+    ]
+  }
 
   /// Gemini Live `setup.tools[0].functionDeclarations` entries (same surface). Derived once
   /// from `openAITools`.
-  static let geminiFunctionDeclarations: [[String: Any]] = openAITools.map { tool in
+  static var geminiFunctionDeclarations: [[String: Any]] {
+    geminiFunctionDeclarations(availableDirectedProviders: availableDirectedProviderRawValues())
+  }
+
+  static func geminiFunctionDeclarations(availableDirectedProviders: [String]) -> [[String: Any]] {
+    openAITools(availableDirectedProviders: availableDirectedProviders).map { tool in
       // Gemini wants {name, description, parameters} without the OpenAI "type" wrapper.
       var decl: [String: Any] = [
         "name": tool["name"] as? String ?? "",
@@ -613,6 +659,7 @@ enum RealtimeHubTools {
       }
       return decl
     }
+  }
 
   /// Recursively uppercase every `type` value in a JSON-schema dict so it matches Gemini's
   /// Schema enum (object → OBJECT, string → STRING, …).

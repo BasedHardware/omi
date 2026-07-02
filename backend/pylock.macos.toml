@@ -277,6 +277,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/48/ce/13508a1ec3f8bb981
 wheels = [{ url = "https://files.pythonhosted.org/packages/d7/ee/bf0adb559ad3c786f12bcbc9296b3f5675f529199bef03e2df281fa1fadb/email_validator-2.2.0-py3-none-any.whl", upload-time = 2024-06-20T11:30:28Z, size = 33521, hashes = { sha256 = "561977c2d73ce3611850a06fa56b414621e0c8faa9d66f2611407d87465da631" } }]
 
 [[packages]]
+name = "execnet"
+version = "2.1.2"
+sdist = { url = "https://files.pythonhosted.org/packages/bf/89/780e11f9588d9e7128a3f87788354c7946a9cbb1401ad38a48c4db9a4f07/execnet-2.1.2.tar.gz", upload-time = 2025-11-12T09:56:37Z, size = 166622, hashes = { sha256 = "63d83bfdd9a23e35b9c6a3261412324f964c2ec8dcd8d3c6916ee9373e0befcd" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl", upload-time = 2025-11-12T09:56:36Z, size = 40708, hashes = { sha256 = "67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec" } }]
+
+[[packages]]
 name = "executing"
 version = "2.0.1"
 sdist = { url = "https://files.pythonhosted.org/packages/08/41/85d2d28466fca93737592b7f3cc456d1cfd6bcd401beceeba17e8e792b50/executing-2.0.1.tar.gz", upload-time = 2023-10-29T10:17:13Z, size = 836501, hashes = { sha256 = "35afe2ce3affba8ee97f2d69927fa823b08b472b7b994e36a52a964b93d16147" } }
@@ -1154,10 +1160,22 @@ sdist = { url = "https://files.pythonhosted.org/packages/08/ba/45911d754e8eba3d5
 wheels = [{ url = "https://files.pythonhosted.org/packages/29/16/c8a903f4c4dffe7a12843191437d7cd8e32751d5de349d45d3fe69544e87/pytest-8.4.1-py3-none-any.whl", upload-time = 2025-06-18T05:48:03Z, size = 365474, hashes = { sha256 = "539c70ba6fcead8e78eebbf1115e8b589e7565830d7d006a8723f19ac8a0afb7" } }]
 
 [[packages]]
+name = "pytest-asyncio"
+version = "1.3.0"
+sdist = { url = "https://files.pythonhosted.org/packages/90/2c/8af215c0f776415f3590cac4f9086ccefd6fd463befeae41cd4d3f193e5a/pytest_asyncio-1.3.0.tar.gz", upload-time = 2025-11-10T16:07:47Z, size = 50087, hashes = { sha256 = "d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/e5/35/f8b19922b6a25bc0880171a2f1a003eaeb93657475193ab516fd87cac9da/pytest_asyncio-1.3.0-py3-none-any.whl", upload-time = 2025-11-10T16:07:45Z, size = 15075, hashes = { sha256 = "611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5" } }]
+
+[[packages]]
 name = "pytest-httpserver"
 version = "1.1.5"
 sdist = { url = "https://files.pythonhosted.org/packages/50/17/ad187f46998814014f7cda309de700b87c0eb4b2e111e18bc8c819be7116/pytest_httpserver-1.1.5.tar.gz", upload-time = 2026-02-14T13:27:23Z, size = 70974, hashes = { sha256 = "dc3d82e1fe00e491829d8939c549bf4bd9b39a260f87113c619b9d517c2f8ff1" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/ec/df/0bdf90b84c6a586a9fd2b509523a3ab26b1cc1b1dba2fb62a32e4411ea9e/pytest_httpserver-1.1.5-py3-none-any.whl", upload-time = 2026-02-14T13:27:22Z, size = 23330, hashes = { sha256 = "ee83feb587ab652c0c6729598db2820e9048233bac8df756818b7845a1621d0a" } }]
+
+[[packages]]
+name = "pytest-xdist"
+version = "3.8.0"
+sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791eb921115fca8e44e596a13efeda518b9d845a619450/pytest_xdist-3.8.0.tar.gz", upload-time = 2025-07-01T13:30:59Z, size = 88069, hashes = { sha256 = "7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", upload-time = 2025-07-01T13:30:56Z, size = 46396, hashes = { sha256 = "202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88" } }]
 
 [[packages]]
 name = "python-dateutil"

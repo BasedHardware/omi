@@ -7,13 +7,53 @@ subcollections, where filters, batch operations, get_all, etc.
 """
 
 import sys
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Optional
 
 from fake_firestore import MockFirestore
+from fake_firestore.document import FakeDocumentReference, NotFound, apply_transformations, get_by_path
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
+_original_document_set = None
+
+
+def _patch_document_merge_preserves_subcollections():
+    """
+    Match Firestore's behavior when setting fields on a parent document that
+    already has nested subcollection data. fake-firestore stores child
+    collections inside the parent dict and can overwrite them on merge sets
+    when the parent document was not explicitly written yet.
+    """
+    global _original_document_set
+    if _original_document_set is not None:
+        return
+
+    _original_document_set = FakeDocumentReference.set
+
+    def _set(self, data: dict, merge: bool = False, timeout: Optional[float] = None) -> None:
+        if not merge:
+            return _original_document_set(self, data, merge=merge, timeout=timeout)
+
+        payload = deepcopy(data)
+        try:
+            self.update(payload)
+            return None
+        except NotFound:
+            try:
+                document = get_by_path(self._data, self._path)
+            except KeyError:
+                return _original_document_set(self, data, merge=False, timeout=timeout)
+
+            if not isinstance(document, dict):
+                return _original_document_set(self, data, merge=False, timeout=timeout)
+
+            apply_transformations(document, payload)
+            self._written_docs.add(tuple(self._path))
+            return None
+
+    FakeDocumentReference.set = _set
 
 
 def get_mock_firestore() -> MockFirestore:
@@ -26,6 +66,7 @@ def get_mock_firestore() -> MockFirestore:
 def setup_fake_firestore() -> MockFirestore:
     """Create and register the global MockFirestore singleton."""
     global _mock_store
+    _patch_document_merge_preserves_subcollections()
     _mock_store = MockFirestore()
     return _mock_store
 

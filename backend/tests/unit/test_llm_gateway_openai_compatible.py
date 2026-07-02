@@ -6,6 +6,8 @@ from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import FakeChatCompletionProvider
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies
+from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
+from utils.llm.gateway_client import _chat_structured_payload
 
 LANE_ID = 'omi:auto:chat-structured'
 
@@ -47,6 +49,53 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert provider.calls[0].request['temperature'] == 0
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
+
+
+def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        request = _chat_structured_payload(
+            'Extract action items.',
+            ActionItemsExtraction,
+            feature='conversation_action_items.extract.shadow',
+        )
+        response = TestClient(app).post('/v1/chat/completions', json=request, headers=auth_headers())
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    forwarded_schema = provider.calls[0].request['response_format']['json_schema']['schema']
+    assert forwarded_schema['required'] == ['action_items']
+    action_item_schema = forwarded_schema['$defs']['ExtractedActionItem']
+    assert action_item_schema['additionalProperties'] is False
+    assert action_item_schema['required'] == ['description', 'due_at']
+    assert 'default' not in action_item_schema['properties']['due_at']
+
+
+def test_chat_completions_forwards_conversation_structure_extraction_strict_schema(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        request = _chat_structured_payload(
+            'Extract conversation structure.',
+            ConversationStructureExtraction,
+            feature='conversation_structure.extract.shadow',
+        )
+        response = TestClient(app).post('/v1/chat/completions', json=request, headers=auth_headers())
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    forwarded_schema = provider.calls[0].request['response_format']['json_schema']['schema']
+    assert forwarded_schema['required'] == ['title', 'overview', 'emoji', 'category']
+    category_schema = forwarded_schema['properties']['category']
+    assert category_schema['type'] == 'string'
+    assert 'enum' in category_schema
+    assert '$ref' not in category_schema
+    assert category_schema['description'] == 'A category for this conversation'
 
 
 def test_chat_completions_rejects_unknown_auto_lane(monkeypatch):

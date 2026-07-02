@@ -11,6 +11,7 @@ import database.users as users_db
 from models.conversation import Conversation
 from models.daily_summary_payload import DailySummaryPayload
 from models.structured import Structured
+from models.structured_extraction import StructuredExtraction
 from models.other import Person
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
@@ -20,6 +21,12 @@ from utils.log_sanitizer import sanitize, sanitize_validation_error
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_structured(response: Structured | StructuredExtraction) -> Structured:
+    if isinstance(response, StructuredExtraction):
+        return response.to_structured()
+    return response
 
 
 def _basic_daily_summary(
@@ -77,16 +84,18 @@ def get_message_structure(
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | get_llm('external_structure') | parser
 
-    response = chain.invoke(
-        {
-            'language_code': language_code,
-            'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
-            'text': text,
-            'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
-            'format_instructions': parser.get_format_instructions(),
-        }
+    response = _coerce_structured(
+        chain.invoke(
+            {
+                'language_code': language_code,
+                'response_language': response_language,
+                'started_at': started_at.isoformat(),
+                'tz': tz,
+                'text': text,
+                'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
+                'format_instructions': parser.get_format_instructions(),
+            }
+        )
     )
 
     for event in response.events or []:
@@ -114,7 +123,9 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       Text: ```{text}```
       '''.replace('    ', '').strip()
 
-    response = get_llm('external_structure').with_structured_output(Structured).invoke(prompt)
+    response = _coerce_structured(
+        get_llm('external_structure').with_structured_output(StructuredExtraction).invoke(prompt)
+    )
 
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
@@ -205,10 +216,13 @@ def generate_comprehensive_daily_summary(
         (c.finished_at - c.started_at).total_seconds() / 60 for c in non_discarded if c.finished_at and c.started_at
     )
 
-    # Extract ALL locations from non-discarded conversations
+    # Extract ALL locations from non-discarded conversations.
+    # latitude/longitude are required floats on the Geolocation model, so guarding on
+    # their truthiness wrongly drops a valid coordinate of exactly 0.0 (for example
+    # longitude 0.0 on the prime meridian). Guard on the geolocation's presence instead.
     locations = []
     for c in non_discarded:
-        if c.geolocation and c.geolocation.latitude and c.geolocation.longitude:
+        if c.geolocation:
             # Convert UTC time to user's local timezone
             local_time = None
             if c.started_at:

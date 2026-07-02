@@ -69,15 +69,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     static let notchCompactSideWidth: CGFloat = 30
     static let notchActiveSideWidth: CGFloat = 42
-    static let notchChromeHeight: CGFloat = 34
+    static let defaultNotchChromeHeight: CGFloat = 34
+    static var notchChromeHeight: CGFloat { defaultNotchChromeHeight }
     static let notchActivationHeight: CGFloat = 17
     static let notchGlowOutsetX: CGFloat = 24
     static let notchGlowOutsetBottom: CGFloat = 24
     static let notchConversationBottomPadding: CGFloat = 18
     static let notchInputPanelVerticalPadding: CGFloat = 46
     static let notchInputPanelMinimumContentHeight: CGFloat = 40
-    static let notchInputPanelHeight: CGFloat =
-        notchChromeHeight + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
     /// Extra vertical budget added on top of the input editor when notch mode
     /// renders the "Back / Omi Chat" header above the input (agent pills present).
     /// Header row (32pt) + VStack top padding (8) + spacing (8) = 48pt.
@@ -91,14 +90,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let responseStreamingResizeStep: CGFloat = 56
     private static let legacyPillGlowOutsetX: CGFloat = 22
     private static let legacyPillGlowOutsetY: CGFloat = 18
-    static let notchCompactSize = NSSize(
-        width: notchHiddenCenterWidth + notchCompactSideWidth * 2,
-        height: notchChromeHeight
-    )
-    static let notchActiveSize = NSSize(
-        width: notchHiddenCenterWidth + notchActiveSideWidth * 2,
-        height: notchChromeHeight
-    )
     static func notchAgentListHeight(agentCount: Int) -> CGFloat {
         let visibleCount = min(max(0, agentCount), notchAgentListMaxVisibleAgents)
         guard visibleCount > 0 else { return 0 }
@@ -122,6 +113,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationSpacing: CGFloat = 8
     private static let askOmiAnimationDuration: TimeInterval = 0.055
     private static let askOmiSettleDelay: TimeInterval = 0.065
+    private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
     /// Minimum window height when AI response first appears.
@@ -157,9 +149,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
     private var frameAnimationToken: Int = 0
+    private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
 
     private var notchModeEnabled: Bool {
-        ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screenForPlacement)
+        Self.screenHasCameraHousing(screenForPlacement)
     }
     var usesNotchIslandForCurrentScreen: Bool { notchModeEnabled }
     private var screenForPlacement: NSScreen? {
@@ -179,12 +172,24 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var notchHiddenCenterWidthForCurrentScreen: CGFloat {
         Self.notchHiddenCenterWidth(for: screenForPlacement)
     }
+    private var notchChromeHeightForCurrentScreen: CGFloat {
+        Self.notchChromeHeight(for: screenForPlacement)
+    }
+    private var notchInputPanelHeightForCurrentScreen: CGFloat {
+        Self.notchInputPanelHeight(for: screenForPlacement)
+    }
     private func notchSize(active: Bool) -> NSSize {
         let sideWidth = active ? Self.notchActiveSideWidth : Self.notchCompactSideWidth
         return notchSize(sideWidth: sideWidth)
     }
     private func notchSize(sideWidth: CGFloat) -> NSSize {
-        return NSSize(width: notchHiddenCenterWidthForCurrentScreen + sideWidth * 2, height: Self.notchChromeHeight)
+        return NSSize(width: notchHiddenCenterWidthForCurrentScreen + sideWidth * 2, height: notchChromeHeightForCurrentScreen)
+    }
+    private func notchSize(sideWidth: CGFloat, for screen: NSScreen) -> NSSize {
+        NSSize(
+            width: Self.notchHiddenCenterWidth(for: screen) + sideWidth * 2,
+            height: Self.notchChromeHeight(for: screen)
+        )
     }
     private func responseGlowWindowSize(forSurfaceSize size: NSSize, usesNotchIsland: Bool) -> NSSize {
         if usesNotchIsland {
@@ -208,7 +213,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func notchHoverMenuWindowSize(agentCount: Int) -> NSSize {
         NSSize(
             width: max(collapsedBarSize.width, Self.notchExpandedWidth),
-            height: Self.notchChromeHeight
+            height: notchChromeHeightForCurrentScreen
                 + Self.notchHoverMenuHeight(agentCount: agentCount)
                 + Self.notchGlowOutsetBottom
         )
@@ -226,13 +231,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return frame.width
     }
     private var notchCollapsedSize: NSSize {
-        NSSize(width: notchHiddenCenterWidthForCurrentScreen + notchSideWidth * 2, height: Self.notchChromeHeight)
+        NSSize(width: notchHiddenCenterWidthForCurrentScreen + notchSideWidth * 2, height: notchChromeHeightForCurrentScreen)
+    }
+    private func notchCollapsedSize(for screen: NSScreen) -> NSSize {
+        notchSize(sideWidth: notchSideWidth, for: screen)
     }
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
-    private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
+    private var inputChromeHeight: CGFloat { notchModeEnabled ? notchChromeHeightForCurrentScreen : 50 }
     private var inputPanelHeight: CGFloat {
-        let base = notchModeEnabled ? Self.notchInputPanelHeight : 120
+        let base = notchModeEnabled ? notchInputPanelHeightForCurrentScreen : 120
         // When notch mode renders the "Back / Omi Chat" header (agent pills
         // present), the input panel needs additional vertical room so the
         // header + editor + padding all fit. (Codex P2 — input/send clipping.)
@@ -253,12 +261,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
         backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
-        let initialSize = ShortcutSettings.shared.notchModeEnabled
-            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+        let initialSize = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
             ? NSSize(
                 width: FloatingControlBarWindow.notchHiddenCenterWidth(for: NSScreen.main ?? NSScreen.screens.first)
                     + FloatingControlBarWindow.notchCompactSideWidth * 2,
-                height: FloatingControlBarWindow.notchChromeHeight
+                height: FloatingControlBarWindow.notchChromeHeight(for: NSScreen.main ?? NSScreen.screens.first)
             )
             : FloatingControlBarWindow.minBarSize
         let initialRect = NSRect(origin: .zero, size: initialSize)
@@ -274,8 +281,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = ShortcutSettings.shared.notchModeEnabled
-            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first) ? .statusBar : .floating
+        self.level = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+            ? .statusBar
+            : .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.acceptsMouseMovedEvents = true
@@ -304,6 +312,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else {
             centerOnMainScreen()
         }
+        scheduleStartupDisplayRevalidation()
     }
 
     /// Clamp `rect` so it stays entirely inside `visible`. visibleFrame already
@@ -333,6 +342,37 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             return screen.safeAreaInsets.top > 0
         }
         return false
+    }
+
+    static func notchChromeHeight(for screen: NSScreen?) -> CGFloat {
+        guard let screen else { return notchChromeHeight }
+        if #available(macOS 12.0, *) {
+            return notchChromeHeight(
+                topSafeAreaInset: screen.safeAreaInsets.top,
+                auxiliaryTopLeftArea: screen.auxiliaryTopLeftArea,
+                auxiliaryTopRightArea: screen.auxiliaryTopRightArea
+            )
+        }
+        return notchChromeHeight
+    }
+
+    static func notchChromeHeight(
+        topSafeAreaInset: CGFloat,
+        auxiliaryTopLeftArea: NSRect?,
+        auxiliaryTopRightArea: NSRect?
+    ) -> CGFloat {
+        let auxiliaryHeights = [auxiliaryTopLeftArea, auxiliaryTopRightArea]
+            .compactMap { area -> CGFloat? in
+                guard let area, !area.isEmpty, area.height > 0 else { return nil }
+                return area.height
+            }
+        let measuredHeight = max(topSafeAreaInset, auxiliaryHeights.max() ?? 0)
+        guard measuredHeight > 0 else { return notchChromeHeight }
+        return max(notchChromeHeight, measuredHeight)
+    }
+
+    static func notchInputPanelHeight(for screen: NSScreen?) -> CGFloat {
+        notchChromeHeight(for: screen) + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
     }
 
     static func notchHiddenCenterWidth(for screen: NSScreen?) -> CGFloat {
@@ -462,7 +502,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.validatePositionOnScreenChange()
+                self?.validatePositionOnScreenChange(reason: "screen_parameters_changed")
             }
         }
 
@@ -494,7 +534,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else if state.isVoiceListening {
             size = notchSize(active: true)
         } else if state.currentNotification != nil {
-            size = NSSize(width: Self.notificationWidth, height: Self.notchChromeHeight + Self.notificationSpacing + Self.notificationHeight)
+            size = NSSize(
+                width: Self.notificationWidth,
+                height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.notificationHeight
+            )
         } else {
             size = collapsedBarSize
         }
@@ -509,7 +552,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let defaultWidth = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
+            let panelHeight = usesNotchIsland ? notchInputPanelHeightForCurrentScreen : 120
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
             let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
             return NSSize(width: width, height: contentHeight)
@@ -519,7 +562,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
         if state.currentNotification != nil {
             let barHeight = usesNotchIsland
-                ? Self.notchChromeHeight
+                ? notchChromeHeightForCurrentScreen
                 : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
             return NSSize(
                 width: Self.notificationWidth,
@@ -537,21 +580,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let size: NSSize
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
-            let chromeHeight = usesNotchIsland ? Self.notchChromeHeight : 50
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
+            let chromeHeight = usesNotchIsland ? Self.notchChromeHeight(for: screen) : 50
+            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight(for: screen) : 120
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
-            size = usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
+            size = usesNotchIsland ? notchSize(sideWidth: Self.notchActiveSideWidth, for: screen) : Self.voiceBarSize
         } else if state.currentNotification != nil {
             let barHeight = usesNotchIsland
-                ? Self.notchChromeHeight
+                ? Self.notchChromeHeight(for: screen)
                 : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
             size = NSSize(
                 width: Self.notificationWidth,
                 height: barHeight + Self.notificationSpacing + Self.notificationHeight
             )
         } else {
-            size = usesNotchIsland ? notchCollapsedSize : Self.minBarSize
+            size = usesNotchIsland ? notchCollapsedSize(for: screen) : Self.minBarSize
         }
         let windowSize = responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: usesNotchIsland)
         return NSRect(
@@ -670,8 +713,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
               state.currentNotification == nil
         else { return true }
 
-        let mode: NotchPointerMode = state.isNotchHoverMenuVisible ? .openMenuRetention : .activationOnly
-        return notchPointerContains(localPoint: point, mode: mode)
+        let chromeHeight = state.isNotchHoverMenuVisible
+            ? max(Self.notchActivationHeight, frame.height - Self.notchGlowOutsetBottom)
+            : notchChromeHeightForCurrentScreen
+        return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: point,
+            windowSize: frame.size,
+            chromeHeight: chromeHeight,
+            horizontalOutset: Self.notchGlowOutsetX
+        )
     }
 
     private func observeNotchAgentPills() {
@@ -755,8 +805,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let currentVisible = currentScreen?.visibleFrame ?? .zero
         let targetVisible = targetScreen.visibleFrame
 
-        let targetUsesNotchIsland = ShortcutSettings.shared.notchModeEnabled
-            && Self.screenHasCameraHousing(targetScreen)
+        let targetUsesNotchIsland = Self.screenHasCameraHousing(targetScreen)
 
         if targetUsesNotchIsland {
             growOutFromNotch(on: targetScreen)
@@ -1052,8 +1101,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private func animateNotchReveal(from sourceSize: NSSize, to targetSize: NSSize, duration: TimeInterval) {
-        let startWidth = max(Self.notchCompactSize.width, min(sourceSize.width, targetSize.width))
-        let startHeight = max(Self.notchChromeHeight, min(sourceSize.height, targetSize.height))
+        let startWidth = max(notchSize(active: false).width, min(sourceSize.width, targetSize.width))
+        let startHeight = max(notchChromeHeightForCurrentScreen, min(sourceSize.height, targetSize.height))
         let widthProgress = targetSize.width > 0 ? startWidth / targetSize.width : 1
         let heightProgress = targetSize.height > 0 ? startHeight / targetSize.height : 1
         let startProgress = min(1, max(0.001, min(widthProgress, heightProgress)))
@@ -1419,7 +1468,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard !state.showingAIConversation else { return }
         state.currentNotification = notification
         let barHeight = notchModeEnabled
-            ? Self.notchChromeHeight
+            ? notchChromeHeightForCurrentScreen
             : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
         let targetSize = NSSize(
             width: Self.notificationWidth,
@@ -1543,9 +1592,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private var topInsetForPillFallback: CGFloat {
-        ShortcutSettings.shared.notchModeEnabled
-            ? Self.topInsetWhenNotchModeFallsBackToPill
-            : Self.topInset
+        Self.topInsetWhenNotchModeFallsBackToPill
     }
 
     /// Center the bar near the top of the main screen.
@@ -1556,7 +1603,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        if ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screen) {
+        if Self.screenHasCameraHousing(screen) {
             let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: true)
             self.setFrame(targetFrame, display: true, animate: false)
             log("FloatingControlBarWindow: centered notch island at \(targetFrame.origin) on screen \(screen.frame)")
@@ -1578,11 +1625,25 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
     /// fully visible on any screen.
-    private func validatePositionOnScreenChange() {
+    private func scheduleStartupDisplayRevalidation() {
+        startupDisplayRevalidationWorkItems.forEach { $0.cancel() }
+        startupDisplayRevalidationWorkItems = Self.startupDisplayRevalidationDelays.map { delay in
+            let workItem = DispatchWorkItem { [weak self] in
+                Task { @MainActor in
+                    self?.validatePositionOnScreenChange(reason: "startup_display_revalidation")
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+            return workItem
+        }
+    }
+
+    private func validatePositionOnScreenChange(reason: String) {
+        guard !isUserDragging else { return }
         updateNotchIslandState()
         // Non-draggable mode: always restore to default position on screen change
         if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
-            log("FloatingControlBarWindow: non-draggable mode, re-centering after monitor change")
+            log("FloatingControlBarWindow: re-centering after display revalidation reason=\(reason) usesNotch=\(notchModeEnabled)")
             centerOnMainScreen()
             return
         }
@@ -1597,12 +1658,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if let targetScreen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(barFrame) }) {
             let clamped = FloatingControlBarWindow.clamp(barFrame, to: targetScreen.visibleFrame)
             if clamped != barFrame {
-                log("FloatingControlBarWindow: clamping bar \(barFrame) to \(targetScreen.visibleFrame) after monitor change")
+                log("FloatingControlBarWindow: clamping bar \(barFrame) to \(targetScreen.visibleFrame) after display revalidation reason=\(reason)")
                 self.setFrameOrigin(clamped.origin)
                 UserDefaults.standard.set(NSStringFromPoint(clamped.origin), forKey: FloatingControlBarWindow.positionKey)
             }
         } else {
-            log("FloatingControlBarWindow: bar frame \(barFrame) does not intersect any visible screen, re-centering")
+            log("FloatingControlBarWindow: bar frame \(barFrame) does not intersect any visible screen, re-centering reason=\(reason)")
             UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
             centerOnMainScreen()
         }
@@ -2526,6 +2587,28 @@ class FloatingControlBarManager {
                 provider.stopAgent()
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
+            let availability = LocalAgentProviderDetector.availability(for: directive.provider)
+            guard availability.isAvailable else {
+                let assistantText = availability.setupPrompt
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: assistantText,
+                    logLabel: "floating-agent-provider-unavailable"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentResponse(
+                        userText: message,
+                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)
+                }
+                return
+            }
             let pill = AgentPillsManager.shared.spawnFromUserQuery(
                 directive.rewrittenQuery,
                 model: selectedFloatingModel,
@@ -2544,6 +2627,7 @@ class FloatingControlBarManager {
             case .visible:
                 completeVisibleAgentHandoff(
                     .init(originalRequest: message, agentTask: directive.rewrittenQuery),
+                    pill: pill,
                     assistantMessage: recordedTurn.assistant,
                     assistantText: assistantText,
                     barWindow: barWindow
@@ -2576,6 +2660,7 @@ class FloatingControlBarManager {
             case .visible:
                 completeVisibleAgentHandoff(
                     handoff,
+                    pill: pill,
                     assistantMessage: recordedTurn.assistant,
                     assistantText: assistantText,
                     barWindow: barWindow
@@ -2605,7 +2690,7 @@ class FloatingControlBarManager {
         let decision = await AgentPillsManager.classify(message)
         routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
-            _ = AgentPillsManager.shared.spawnFromUserQuery(
+            let pill = AgentPillsManager.shared.spawnFromUserQuery(
                 message,
                 model: selectedFloatingModel,
                 fromVoice: presentation.fromVoice,
@@ -2618,16 +2703,20 @@ class FloatingControlBarManager {
             let assistantText = ack?.isEmpty == false
                 ? "\(ack!) I started a background agent\(titleSuffix) for that."
                 : "I started a background agent\(titleSuffix) for that."
-            provider.recordCompletedTurn(
+            let recordedTurn = provider.recordCompletedTurn(
                 userText: message,
                 assistantText: assistantText,
                 logLabel: "floating-agent"
             )
             switch presentation {
             case .visible:
-                // Tear down the inline state we set up for the thinking spinner.
-                barWindow.state.aiInputText = ""
-                barWindow.closeAIConversation()
+                completeVisibleAgentHandoff(
+                    .init(originalRequest: message, agentTask: message),
+                    pill: pill,
+                    assistantMessage: recordedTurn.assistant,
+                    assistantText: assistantText,
+                    barWindow: barWindow
+                )
             case .voiceOnly:
                 barWindow.state.currentQueryFromVoice = false
                 barWindow.state.isVoiceResponseActive = false
@@ -2665,15 +2754,73 @@ class FloatingControlBarManager {
 
     private func completeVisibleAgentHandoff(
         _ handoff: AgentPillsManager.FloatingAgentHandoff,
+        pill: AgentPill,
         assistantMessage: ChatMessage?,
         assistantText: String,
+        barWindow: FloatingControlBarWindow
+    ) {
+        var message = assistantMessage ?? ChatMessage(text: assistantText, sender: .ai)
+        message.isStreaming = false
+        let toolUseId = "floating-agent-\(pill.id.uuidString)"
+        if !message.contentBlocks.contains(where: { block in
+            if case .toolCall(_, let name, _, let existingToolUseId, _, _) = block {
+                return name == "spawn_agent" && existingToolUseId == toolUseId
+            }
+            return false
+        }) {
+            let details = Self.agentHandoffToolDetails(task: handoff.agentTask, title: pill.title)
+            let input = ToolCallInput(
+                summary: pill.title,
+                details: details
+            )
+            let output = """
+            Agent started as a floating agent pill.
+            id: \(pill.id.uuidString)
+            title: \(pill.title)
+            status: \(pill.status.displayLabel)
+            """
+            message.contentBlocks.append(
+                .toolCall(
+                    id: UUID().uuidString,
+                    name: "spawn_agent",
+                    status: .completed,
+                    toolUseId: toolUseId,
+                    input: input,
+                    output: output
+                )
+            )
+        }
+        completeVisibleAgentResponse(
+            userText: handoff.originalRequest,
+            assistantMessage: message,
+            barWindow: barWindow
+        )
+    }
+
+    private static func agentHandoffToolDetails(task: String, title: String) -> String {
+        let payload: [String: String] = [
+            "brief": task,
+            "title": title,
+        ]
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+            let json = String(data: data, encoding: .utf8)
+        else {
+            return "brief: \(task)\ntitle: \(title)"
+        }
+        return json
+    }
+
+    private func completeVisibleAgentResponse(
+        userText: String,
+        assistantMessage: ChatMessage,
         barWindow: FloatingControlBarWindow
     ) {
         chatCancellable?.cancel()
         chatCancellable = nil
         barWindow.state.aiInputText = ""
-        barWindow.state.displayedQuery = handoff.originalRequest
-        barWindow.state.currentAIMessage = assistantMessage ?? ChatMessage(text: assistantText, sender: .ai)
+        barWindow.state.displayedQuery = userText
+        barWindow.state.currentAIMessage = assistantMessage
         barWindow.state.isAILoading = false
         barWindow.state.present(.mainResponse)
         barWindow.state.currentQueryFromVoice = false
@@ -2962,7 +3109,7 @@ class FloatingControlBarManager {
     }
 
     /// Screen / visual cues that, when present in a query, trigger a screenshot capture.
-    private static let screenshotCues = [
+    nonisolated private static let screenshotCues = [
         // explicit screen references
         "screen", "on my display", "what's on", "whats on", "on display",
         "look at", "looking at", "do you see", "can you see", "what do you see",
@@ -2988,7 +3135,7 @@ class FloatingControlBarManager {
 
     /// Action/command cues that force the Haiku router to run (never skip to chat).
     /// Missing one wrongly forces an agent task into inline chat, so this errs broad.
-    private static let routerActionCues = [
+    nonisolated private static let routerActionCues = [
         "open ", "close ", "send", "post ", "reply", "email", "e-mail", "message",
         "text ", " dm ", "write", "draft", "build", "create", "make ", "generate",
         "compile", "go to", "go through", "navigate", "browse", "browser", "tab ",
@@ -3000,7 +3147,7 @@ class FloatingControlBarManager {
     ]
 
     /// Leading words that mark an obviously-conversational query safe to skip the router.
-    private static let routerChatStarters: Set<String> = [
+    nonisolated private static let routerChatStarters: Set<String> = [
         "what", "what's", "whats", "who", "who's", "whos", "when", "where", "why",
         "how", "how's", "hows", "which", "whose", "is", "are", "am", "was", "were",
         "do", "does", "did", "can", "could", "should", "would", "will", "hey", "hi",

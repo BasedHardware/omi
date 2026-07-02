@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 
 /// Pure-data helpers for the ring-buffer storage protocol (firmware 3.0.20+,
 /// omi PR #7216). Kept free of BLE/connection state so they can be unit-tested.

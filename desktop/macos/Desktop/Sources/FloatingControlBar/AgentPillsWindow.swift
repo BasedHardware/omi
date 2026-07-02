@@ -162,7 +162,7 @@ final class AgentPillsWindow: NSPanel, NSWindowDelegate {
       let pill = manager.pills.first(where: { $0.id == id })
     else { return 0 }
     switch pill.status {
-    case .done, .failed: return 170
+    case .done, .stopped, .failed: return 170
     default: return 110
     }
   }

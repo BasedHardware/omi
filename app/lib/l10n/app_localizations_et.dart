@@ -1712,12 +1712,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'SEADET',
-      one: 'SEADE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -9365,6 +9360,17 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
 
   @override
+  String get memoryThisDevice => 'See seade';
+  @override
+  String get memoryThisIphone => 'See iPhone';
+  @override
+  String get memoryThisPhone => 'See telefon';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Kuidas Omi\'t kasutada';
 
   @override

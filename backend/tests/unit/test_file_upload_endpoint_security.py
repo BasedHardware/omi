@@ -160,17 +160,20 @@ class TestCleanupV2:
     def test_cleanup_on_upload_failure(self):
         """Temp file removed even when upload raises exception."""
 
+        temp_paths = []
+
         def failing_upload(fp):
+            temp_paths.append(fp)
             raise RuntimeError("upload service unavailable")
 
         with pytest.raises(RuntimeError):
             simulate_upload_endpoint([UploadFile("test.txt")], failing_upload)
 
-        import glob
-
-        # No orphan temp files with our UUID pattern
-        leftovers = glob.glob(f"{tempfile.gettempdir()}/test_*")
-        assert len(leftovers) == 0
+        # The endpoint must clean up the exact temp file it created, regardless
+        # of unrelated files that may already exist in the shared system tempdir.
+        assert temp_paths
+        for tf in temp_paths:
+            assert not tf.exists()
 
     def test_multiple_files_all_cleaned(self):
         """Multiple file uploads — all temp files cleaned."""

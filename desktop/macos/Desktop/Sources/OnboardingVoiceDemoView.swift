@@ -16,6 +16,7 @@ struct OnboardingVoiceDemoView: View {
     @State private var waitingForResponse = false
     @State private var showContinue = false
     @State private var previousTranscriptionMode: ShortcutSettings.PTTTranscriptionMode?
+    @State private var outputReadiness: SystemAudioMuteController.OutputReadiness = .unavailable
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,7 +53,10 @@ struct OnboardingVoiceDemoView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                if !observedShortcutPress {
+                if outputReadiness.shouldAskUserToTurnUpVolume {
+                    volumeWarning
+                        .transition(.opacity)
+                } else if !observedShortcutPress {
                     VStack(spacing: 12) {
                         Text("Hold the shortcut, speak, then release")
                             .font(.system(size: 13))
@@ -101,6 +105,7 @@ struct OnboardingVoiceDemoView: View {
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
             resetFloatingBarConversation()
+            refreshOutputReadiness()
             if let barState = FloatingControlBarManager.shared.barState {
                 PushToTalkManager.shared.setup(barState: barState)
             }
@@ -115,7 +120,12 @@ struct OnboardingVoiceDemoView: View {
             resetFloatingBarConversation()
             PushToTalkManager.shared.cleanup()
         }
+        .task {
+            await pollOutputReadiness()
+        }
         .onChange(of: pttManager.state) { _, newState in
+            refreshOutputReadiness()
+            guard !outputReadiness.shouldAskUserToTurnUpVolume else { return }
             if newState != .idle {
                 observedShortcutPress = true
             }
@@ -126,6 +136,51 @@ struct OnboardingVoiceDemoView: View {
                 waitingForResponse = true
                 Task { await waitForResponse() }
             }
+        }
+    }
+
+    private var volumeWarning: some View {
+        VStack(spacing: 12) {
+            Text(volumeWarningTitle)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(OmiColors.textPrimary)
+                .multilineTextAlignment(.center)
+
+            Text("Turn up your Mac volume so you can hear Omi respond, then try push-to-talk.")
+                .font(.system(size: 13))
+                .foregroundColor(OmiColors.textTertiary)
+                .multilineTextAlignment(.center)
+
+            Button(action: refreshOutputReadiness) {
+                Text("I turned it up")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.white)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(18)
+        .frame(maxWidth: 420)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(OmiColors.backgroundSecondary)
+        )
+        .padding(.top, 4)
+    }
+
+    private var volumeWarningTitle: String {
+        switch outputReadiness {
+        case .muted:
+            return "Your Mac volume is muted"
+        case .zeroVolume:
+            return "Your Mac volume is at 0"
+        case .audible, .unavailable:
+            return ""
         }
     }
 
@@ -171,6 +226,18 @@ struct OnboardingVoiceDemoView: View {
         barState.chatHistory = []
         barState.isVoiceFollowUp = false
         barState.voiceFollowUpTranscript = ""
+    }
+
+    private func refreshOutputReadiness() {
+        outputReadiness = SystemAudioMuteController.shared.defaultOutputReadiness()
+    }
+
+    @MainActor
+    private func pollOutputReadiness() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            refreshOutputReadiness()
+        }
     }
 
     private func keyCap(_ label: String) -> some View {

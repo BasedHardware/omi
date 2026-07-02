@@ -95,10 +95,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
-                            if (hasActiveMethod) ...[
-                              _buildActiveMethodCard(provider),
-                              const SizedBox(height: 24),
-                            ],
+                            if (hasActiveMethod) ...[_buildActiveMethodCard(provider), const SizedBox(height: 24)],
                             Text(
                               context.l10n.availablePaymentMethods,
                               style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
@@ -143,11 +140,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
           Expanded(
             child: Text(
               context.l10n.morePaymentMethodsComingSoon,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 15,
-                fontWeight: FontWeight.w400,
-              ),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 15, fontWeight: FontWeight.w400),
             ),
           ),
         ],

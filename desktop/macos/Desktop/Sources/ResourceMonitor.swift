@@ -155,11 +155,11 @@ class ResourceMonitor {
     let bufferStatus = await VideoChunkEncoder.shared.getBufferStatus()
     components["videoEncoder_frameCount"] = bufferStatus.frameCount
     components["videoEncoder_maxBufferFrames"] = bufferStatus.maxBufferFrames
-    components["videoEncoder_isFFmpegRunning"] = bufferStatus.isFFmpegRunning
+    components["videoEncoder_isEncoderRunning"] = bufferStatus.isEncoderRunning
     components["videoEncoder_consecutiveWriteFailures"] = bufferStatus.consecutiveWriteFailures
     components["videoEncoder_restartCount"] = bufferStatus.encoderRestartCount
     components["videoEncoder_emergencyResetCount"] = bufferStatus.emergencyResetCount
-    components["videoEncoder_ffmpegNotReadyCount"] = bufferStatus.ffmpegNotReadyCount
+    components["videoEncoder_writerNotReadyCount"] = bufferStatus.writerNotReadyCount
     if let age = bufferStatus.oldestFrameAge {
       components["videoEncoder_oldestFrameAgeSec"] = Int(age)
     }
@@ -367,9 +367,9 @@ class ResourceMonitor {
     onMemoryPressureTrimTranscript?()
 
     Task {
-      // Flush VideoChunkEncoder and await completion. If ffmpeg is wedged, the
-      // encoder's watchdog will kill it; ResourceMonitor records the reset counters
-      // in component diagnostics so hang/memory Sentry events can be correlated.
+      // Flush VideoChunkEncoder and await completion; ResourceMonitor records
+      // reset counters in component diagnostics so hang/memory Sentry events can
+      // be correlated.
       _ = try? await VideoChunkEncoder.shared.flushCurrentChunk()
 
       // Clear focus assistant pending tasks specifically

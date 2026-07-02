@@ -420,6 +420,155 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "memories_qa_export",
+      summary: "Export memory counts by tier from the live API (local QA automation)",
+      params: ["limit"]
+    ) { params in
+      let limit = Int(params["limit"] ?? "") ?? 50
+      let memories = try await APIClient.shared.getMemories(limit: limit, offset: 0)
+      let shortCount = memories.filter { $0.tier == .shortTerm }.count
+      let longCount = memories.filter { $0.tier == .longTerm }.count
+      let samples: [[String: String]] = memories.prefix(12).map { memory in
+        [
+          "id": memory.id,
+          "tier": memory.tier.rawValue,
+          "tierIsExplicit": memory.tierIsExplicit ? "true" : "false",
+          "content": String(memory.content.prefix(90)),
+          "conversationId": memory.conversationId ?? "",
+        ]
+      }
+      let samplesData = try JSONSerialization.data(withJSONObject: samples)
+      let samplesJson = String(data: samplesData, encoding: .utf8) ?? "[]"
+      return [
+        "total": "\(memories.count)",
+        "short_term": "\(shortCount)",
+        "long_term": "\(longCount)",
+        "samples_json": samplesJson,
+      ]
+    }
+
+    register(
+      name: "apple_notes_read_probe",
+      summary: "Probe Apple Notes access without importing or saving memories",
+      params: ["folderPath", "maxResults", "remember"]
+    ) { params in
+      let maxResults = min(max(intParam(params["maxResults"], default: 20), 1), 250)
+      let folderPath = params["folderPath"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let remember = boolParam(params["remember"], default: false)
+
+      do {
+        let selectedFolderPath: String?
+        if let folderPath, !folderPath.isEmpty {
+          let resolved = try await AppleNotesReaderService.shared.validateSelectedFolder(
+            path: folderPath,
+            remember: remember
+          )
+          selectedFolderPath = resolved.path
+        } else {
+          selectedFolderPath = nil
+        }
+
+        let status = await AppleNotesReaderService.shared.connectionStatus(
+          maxResults: maxResults,
+          selectedFolderPath: selectedFolderPath
+        )
+        switch status {
+        case .connected(let noteCount, _):
+          return [
+            "ok": "true",
+            "classification": "readable",
+            "noteCount": "\(noteCount)",
+            "folderSelected": selectedFolderPath == nil ? "false" : "true",
+          ]
+        case .needsAccess(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "true",
+          ]
+        case .error(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "false",
+          ]
+        }
+      } catch let error as AppleNotesReaderError {
+        return [
+          "ok": "false",
+          "classification": error.reasonCode,
+          "message": error.localizedDescription,
+          "needsFolderSelection": "\(error.shouldPromptForFolderSelection)",
+        ]
+      } catch {
+        return [
+          "ok": "false",
+          "classification": "unknown_error",
+          "message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
+      name: "delete_conversation",
+      summary: "Delete conversation with cascade (API + conversationDeleted notification)",
+      params: ["id"]
+    ) { params in
+      guard let id = params["id"], !id.isEmpty else {
+        return ["error": "missing 'id'"]
+      }
+      try await APIClient.shared.deleteConversation(id: id)
+      await MainActor.run {
+        if let appState = AppState.current {
+          appState.deleteConversationLocally(id)
+        } else {
+          NotificationCenter.default.post(
+            name: .conversationDeleted,
+            object: nil,
+            userInfo: ["conversationId": id]
+          )
+        }
+      }
+      return ["deleted": id]
+    }
+
+    register(
+      name: "capture_main_window_png",
+      summary: "Write PNG of the frontmost Omi window (in-process capture)",
+      params: ["path"]
+    ) { params in
+      guard let path = params["path"], !path.isEmpty else {
+        return ["error": "missing 'path'"]
+      }
+      return await MainActor.run { () -> [String: String] in
+        guard
+          let window = NSApp.windows.first(where: {
+            $0.isVisible && $0.title.range(of: "omi", options: .caseInsensitive) != nil
+          }),
+          let contentView = window.contentView
+        else {
+          return ["error": "no_visible_window"]
+        }
+        let bounds = contentView.bounds
+        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+          return ["error": "bitmap_rep_failed"]
+        }
+        contentView.cacheDisplay(in: bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+          return ["error": "png_encode_failed"]
+        }
+        do {
+          try data.write(to: URL(fileURLWithPath: path))
+          return ["path": path, "bytes": "\(data.count)"]
+        } catch {
+          return ["error": error.localizedDescription]
+        }
+      }
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]
@@ -481,6 +630,119 @@ final class DesktopAutomationActionRegistry {
       summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
     ) { _ in
       await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
+    }
+
+    register(
+      name: "calendar_read_probe",
+      summary: "Read Google Calendar through the real connector path and return classified status",
+      params: ["daysBack", "daysForward", "maxResults"]
+    ) { params in
+      let requestedDaysBack = intParam(params["daysBack"], default: 1)
+      let requestedDaysForward = intParam(params["daysForward"], default: 1)
+      let requestedMaxResults = intParam(params["maxResults"], default: 1)
+      let normalized = CalendarFetchParameters.normalized(
+        daysBack: requestedDaysBack,
+        daysForward: requestedDaysForward,
+        maxResults: requestedMaxResults
+      )
+
+      do {
+        let events = try await CalendarReaderService.shared.readEvents(
+          daysBack: normalized.daysBack,
+          daysForward: normalized.daysForward,
+          maxResults: normalized.maxResults
+        )
+        return [
+          "status": "connected",
+          "classification": "readable",
+          "eventCount": "\(events.count)",
+          "daysBack": "\(normalized.daysBack)",
+          "daysForward": "\(normalized.daysForward)",
+          "maxResults": "\(normalized.maxResults)",
+        ]
+      } catch let error as CalendarReaderError {
+        let classification: String
+        switch error {
+        case .noBrowserFound:
+          classification = "no_browser"
+        case .notSignedIn:
+          classification = "not_signed_in"
+        case .sessionExpired:
+          classification = "session_expired"
+        case .cookieDecryptionFailed:
+          classification = "decrypt_failed"
+        case .configurationError:
+          classification = "configuration"
+        case .networkError:
+          classification = "network"
+        case .pythonNotFound:
+          classification = "python_not_found"
+        }
+        return [
+          "status": "error",
+          "classification": classification,
+          "message": error.errorDescription ?? "\(error)",
+          "daysBack": "\(normalized.daysBack)",
+          "daysForward": "\(normalized.daysForward)",
+          "maxResults": "\(normalized.maxResults)",
+        ]
+      }
+    }
+
+    register(
+      name: "gmail_read_probe",
+      summary: "Read Gmail through the real connector path and return classified status",
+      params: ["maxResults", "query"]
+    ) { params in
+      let requestedMaxResults = intParam(params["maxResults"], default: 1)
+      let maxResults = min(max(requestedMaxResults, 1), 500)
+      let rawQuery = params["query"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let query = rawQuery.isEmpty ? "newer_than:1d" : rawQuery
+
+      do {
+        let emails = try await GmailReaderService.shared.readRecentEmails(
+          maxResults: maxResults,
+          query: query
+        )
+        return [
+          "status": "connected",
+          "classification": "readable",
+          "emailCount": "\(emails.count)",
+          "maxResults": "\(maxResults)",
+          "query": query,
+        ]
+      } catch let error as GmailReaderError {
+        let classification: String
+        switch error {
+        case .noBrowserFound:
+          classification = "no_browser"
+        case .noGmailCookies, .notSignedIn:
+          classification = "not_signed_in"
+        case .sessionExpired, .authFailed:
+          classification = "session_expired"
+        case .cookieDecryptionFailed:
+          classification = "decrypt_failed"
+        case .networkError:
+          classification = "network"
+        case .pythonNotFound:
+          classification = "python_not_found"
+        }
+        return [
+          "status": "error",
+          "classification": classification,
+          "message": error.errorDescription ?? "\(error)",
+          "maxResults": "\(maxResults)",
+          "query": query,
+        ]
+      } catch {
+        return [
+          "status": "error",
+          "classification": "unknown",
+          "message": error.localizedDescription,
+          "maxResults": "\(maxResults)",
+          "query": query,
+        ]
+      }
     }
 
     register(
@@ -838,42 +1100,21 @@ final class DesktopAutomationBridge {
           statusCode: 500)
       }
     case ("POST", "/gmail-read"):
-      do {
-        let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
-        let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
-        struct GmailReadResult: Codable {
-          let emailCount: Int
-          let memoriesSaved: Int
-          let memoriesFailed: Int
-          let emails: [GmailEmailSummary]
-        }
-        struct GmailEmailSummary: Codable {
-          let from: String
-          let subject: String
-          let snippet: String
-          let date: String
-          let isUnread: Bool
-        }
-        let formatter = ISO8601DateFormatter()
-        let summaries = emails.prefix(50).map { e in
-          GmailEmailSummary(
-            from: e.from, subject: e.subject, snippet: e.snippet,
-            date: formatter.string(from: e.date), isUnread: e.isUnread)
-        }
-        let gmailResult = GmailReadResult(
-          emailCount: emails.count,
-          memoriesSaved: result.saved,
-          memoriesFailed: result.failed,
-          emails: summaries
-        )
-        return jsonResponse(DesktopAutomationResponse(ok: true, result: gmailResult, error: nil))
-      } catch {
-        struct ErrorResult: Codable { let message: String }
-        return jsonResponse(
-          DesktopAutomationResponse(ok: false, result: ErrorResult(message: error.localizedDescription), error: error.localizedDescription),
-          statusCode: 500
-        )
+      struct RemovedRoute: Codable {
+        let message: String
+        let replacement: String
       }
+      return jsonResponse(
+        DesktopAutomationResponse(
+          ok: false,
+          result: RemovedRoute(
+            message: "The legacy Gmail import route was removed because automation responses must not expose email contents or trigger memory writes.",
+            replacement: "Use POST /action with gmail_read_probe for privacy-safe Gmail status checks."
+          ),
+          error: "gmail_read_removed"
+        ),
+        statusCode: 410
+      )
     default:
       return jsonResponse(
         DesktopAutomationResponse<DesktopAutomationSnapshot>(

@@ -11,7 +11,16 @@ from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
 import database.vector_db as vector_db
+from database._client import db as firestore_db
 from models.memories import MemoryDB
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import pin_memory_system
+from utils.memory.chat_memory_adapter import (
+    list_default_chat_memories_decision_text,
+    search_memory_default_chat_memories_vector_decision_text,
+)
+from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.retrieval.hybrid import rrf_rerank
 from utils.retrieval.tools.result_bounds import cap_items_for_llm, bounded_result
 import logging
@@ -144,6 +153,72 @@ def get_memories_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        service = MemoryService(db_client=firestore_db)
+        if start_dt or end_dt:
+            # Date filters present: scan raw canonical pages and apply the date
+            # bounds before paginating, mirroring the legacy DB path which pushes
+            # start_date/end_date into the query. Reading only the first `limit`
+            # page and then filtering would miss matching memories that live on
+            # later pages.
+            max_scan = 5000
+            scan_offset = 0
+            date_filtered: list = []
+            while scan_offset < max_scan:
+                batch = service.read(uid, limit=500, offset=scan_offset)
+                if not batch:
+                    break
+                for memory in batch:
+                    created = memory.created_at
+                    if start_dt and created and created < start_dt:
+                        continue
+                    if end_dt and created and created > end_dt:
+                        continue
+                    date_filtered.append(memory)
+                scan_offset += len(batch)
+                if len(batch) < 500:
+                    break
+            memories = date_filtered[offset : offset + limit]
+        else:
+            memories = service.read(uid, limit=limit, offset=offset)
+        memories_count = len(memories)
+        logger.info(f"📊 get_memories_tool - found {memories_count} canonical memories")
+        if memories_count >= 500:
+            logger.info(f"⚠️ Large number of memories retrieved ({memories_count}). Consider if all are needed.")
+        if not memories:
+            date_info = ""
+            if start_dt and end_dt:
+                date_info = f" between {start_dt.strftime('%Y-%m-%d')} and {end_dt.strftime('%Y-%m-%d')}"
+            elif start_dt:
+                date_info = f" after {start_dt.strftime('%Y-%m-%d')}"
+            elif end_dt:
+                date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
+            msg = (
+                f"No memories found{date_info}. The user may not have any recorded facts or memories yet "
+                "in the system, or the date range may be outside their memory history."
+            )
+            logger.info(f"⚠️ get_memories_tool - {msg}")
+            return msg
+        result = f"User Memories ({len(memories)} total):\n\n{MemoryDB.get_memories_as_str(memories)}"
+        return result.strip()
+
+    default_memories = list_default_chat_memories_decision_text(
+        uid=uid,
+        limit=limit,
+        offset=offset,
+        db_client=firestore_db,
+    )
+    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        logger.info("✅ get_memories_tool - using memory default chat memory list results")
+        return default_memories.text or "No memory default memories found."
+    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        logger.info(
+            "🛑 get_memories_tool - memory chat memory list denied without legacy fallback: "
+            f"{default_memories.fallback_reason}"
+        )
+        return default_memories.text or "No memories available for this request."
+
     # Get memories
     memories = []
     try:
@@ -263,6 +338,41 @@ def search_memories_tool(
 
     # Cap limit at 20
     limit = min(limit, 20)
+
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        if not matches:
+            msg = (
+                f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
+            )
+            logger.info(f"⚠️ search_memories_tool - {msg}")
+            return msg
+        result = f"Found {len(matches)} memories matching '{query}':\n\n"
+        for match in matches:
+            memory = match.memory
+            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            result += (
+                f"- {memory.content} (relevance: {match.score:.2f}, "
+                f"category: {memory.category.value}, date: {date_str})\n"
+            )
+        return result.strip()
+
+    default_memories = search_memory_default_chat_memories_vector_decision_text(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=firestore_db,
+    )
+    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        logger.info("✅ search_memories_tool - using memory default chat memory results")
+        return default_memories.text or f"No memory vector memories found matching '{query}'."
+    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        logger.info(
+            "🛑 search_memories_tool - memory chat memory denied without legacy fallback: "
+            f"{default_memories.fallback_reason}"
+        )
+        return default_memories.text or "No memories available for this request."
 
     try:
         # Over-fetch then rerank: pull more vector candidates than we need so the

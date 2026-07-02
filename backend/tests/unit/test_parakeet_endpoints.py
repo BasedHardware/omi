@@ -23,6 +23,7 @@ _torch_props = MagicMock()
 _torch_props.total_memory = 16 * 1024**3
 _torch.cuda.get_device_properties.return_value = _torch_props
 _torch.cuda.empty_cache = MagicMock()
+_torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
 _torch.inference_mode = lambda: (lambda fn: fn)
 _torch.compile = lambda m: m
 _torch.backends.cudnn = MagicMock()
@@ -35,7 +36,8 @@ sys.modules["nemo"] = _nemo
 sys.modules["nemo.collections"] = _nemo.collections
 sys.modules["nemo.collections.asr"] = _nemo_asr
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
+PARAKEET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../parakeet"))
+sys.path.insert(0, PARAKEET_DIR)
 
 import importlib
 
@@ -50,7 +52,8 @@ if "transcribe" in sys.modules:
 
 if "main" in sys.modules:
     _existing_main = sys.modules["main"]
-    if not hasattr(_existing_main, "__file__") or _existing_main.__file__ is None:
+    _existing_main_file = os.path.abspath(getattr(_existing_main, "__file__", "") or "")
+    if _existing_main_file != os.path.join(PARAKEET_DIR, "main.py"):
         del sys.modules["main"]
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
@@ -60,7 +63,16 @@ from fastapi.testclient import TestClient
 
 
 def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
-    import main as parakeet_main
+    import importlib.util
+
+    parakeet_main = sys.modules.get("main")
+    if parakeet_main is None or os.path.abspath(getattr(parakeet_main, "__file__", "") or "") != os.path.join(
+        PARAKEET_DIR, "main.py"
+    ):
+        spec = importlib.util.spec_from_file_location("main", os.path.join(PARAKEET_DIR, "main.py"))
+        parakeet_main = importlib.util.module_from_spec(spec)
+        sys.modules["main"] = parakeet_main
+        spec.loader.exec_module(parakeet_main)
 
     os.makedirs("_temp", exist_ok=True)
     parakeet_main.start_time = 0.0

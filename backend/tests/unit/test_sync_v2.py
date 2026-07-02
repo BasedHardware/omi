@@ -91,7 +91,7 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'is_hard_restricted' in func_body, "v2 must check hard restriction inline"
+        assert 'get_hard_restriction_status' in func_body, "v2 must check hard restriction inline"
 
     def test_v2_does_not_decode_inline(self):
         """v2 fast path must NOT run decode/VAD inline (#7281)."""
@@ -599,7 +599,7 @@ class TestV2EndpointContract:
     def test_v2_handles_429_hard_restricted(self):
         """v2 must check hard restriction at the top."""
         body = self._get_v2_post_body()
-        assert 'is_hard_restricted' in body and 'uid' in body
+        assert 'get_hard_restriction_status' in body and 'uid' in body
 
     def test_v2_reraises_http_exceptions(self):
         """v2 must re-raise HTTPException from fast-path helpers."""
@@ -1119,6 +1119,15 @@ class TestAsyncCoordinatorScenarios:
         assert 'isinstance(r, asyncio.TimeoutError)' in seg_early
         assert 'Segment timed out' in seg_early
 
+    def test_generic_segment_task_exception_captured(self):
+        """Generic segment task exceptions must be counted in segment_errors."""
+        body = self._get_bg_func_body()
+        seg_section = body[body.index('seg_results = await asyncio.gather') :]
+        seg_early = seg_section[:800]
+        assert 'elif isinstance(r, Exception):' in seg_early
+        assert 'segment_errors.append' in seg_early
+        assert 'Segment failed:' in seg_early
+
     def test_segment_errors_included_in_result(self):
         """segment_errors must be included in the final result sent to mark_job_completed."""
         body = self._get_bg_func_body()
@@ -1281,6 +1290,10 @@ class TestAsyncCoordinatorBehavioral:
             'utils.observability',
             'utils.log_sanitizer',
             'utils.http_client',
+            'utils.request_validation',
+            'utils.sync',
+            'utils.sync.files',
+            'utils.sync.playback',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1324,6 +1337,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].record_speech_ms = MagicMock()
@@ -1334,6 +1348,11 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.byok'].set_byok_keys = MagicMock()
         sys.modules['utils.byok'].get_byok_keys = MagicMock(return_value={})
         sys.modules['utils.analytics'].record_usage = MagicMock()
+        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+        sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
+        sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
+        sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
         sys.modules['models.conversation_enums'].ConversationSource = MagicMock()
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
@@ -1537,8 +1556,12 @@ class TestAsyncCoordinatorBehavioral:
             module.get_wav_duration = MagicMock(return_value=5.0)
             module.users_db = MagicMock()
             module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            module.users_db.get_data_protection_level = MagicMock(return_value=None)
             module.build_person_embeddings_cache = MagicMock(return_value={})
+            module._reprocess_merged_conversations = MagicMock()
             module.record_usage = MagicMock()
+            module.get_timestamp_from_path = MagicMock(side_effect=lambda p: int(p.split('_')[-1].split('.')[0]))
             call_count = [0]
 
             def _process_seg_fails_once(path, uid, response, lock, errors, *args, **kwargs):
@@ -1556,6 +1579,42 @@ class TestAsyncCoordinatorBehavioral:
             result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
             assert result['failed_segments'] == 1
             assert result['total_segments'] == 2
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
+    async def test_generic_segment_task_exception_counts_as_failed_segment(self):
+        """A task-level segment exception must not complete with failed_segments=0."""
+        module, stubs = self._load_sync_module()
+        try:
+            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            module._cleanup_files = MagicMock()
+
+            def _vad_one_segment(path, segmented_paths, errors):
+                segmented_paths.add('/tmp/seg_1700000001.wav')
+
+            module.retrieve_vad_segments = _vad_one_segment
+            module.get_wav_duration = MagicMock(return_value=5.0)
+            module.users_db = MagicMock()
+            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            module.users_db.get_data_protection_level = MagicMock(return_value=None)
+            module.build_person_embeddings_cache = MagicMock(return_value={})
+            module._reprocess_merged_conversations = MagicMock()
+            module.record_usage = MagicMock()
+            module.get_timestamp_from_path = MagicMock(return_value=1700000001)
+            module.sanitize = lambda value: value
+            module.process_segment = MagicMock(side_effect=RuntimeError('executor exploded'))
+
+            await module._run_full_pipeline_background_async(
+                'j-generic-segment-error', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-generic'
+            )
+
+            stubs['sync_jobs'].mark_job_completed.assert_called_once()
+            result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
+            assert result['failed_segments'] == 1
+            assert result['total_segments'] == 1
+            assert result['errors'] == ['Segment failed: executor exploded']
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -1763,6 +1822,10 @@ class TestV2EndpointExecution:
             'utils.observability',
             'utils.log_sanitizer',
             'utils.http_client',
+            'utils.request_validation',
+            'utils.sync',
+            'utils.sync.files',
+            'utils.sync.playback',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1799,11 +1862,17 @@ class TestV2EndpointExecution:
 
         # Set up fair_use defaults
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+        sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
+        sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
+        sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
 
         # Mock auth to return test uid
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
@@ -2168,9 +2237,8 @@ class TestBulkheadExecutors:
         assert 'max_workers=16' in source
         assert 'postprocess_executor = MonitoredThreadPoolExecutor(' in source
         assert 'max_workers=24' in source
-        from utils.executors import storage_executor
-
-        assert storage_executor._max_workers == 128, "storage_executor must have 128 workers (#7376)"
+        assert 'storage_executor = MonitoredThreadPoolExecutor(' in source
+        assert 'max_workers=128' in source
 
     def test_all_executors_in_shutdown(self):
         source = self._read_executors_source()

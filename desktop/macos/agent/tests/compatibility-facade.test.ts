@@ -82,6 +82,52 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("emits structured runtime failures when binding fails before execution", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const sent: OutboundMessage[] = [];
+    adapter.failNextOpenError = new AdapterRuntimeError({
+      code: "adapter_config_invalid",
+      source: "adapter_process",
+      adapterId: "openclaw",
+      retryable: false,
+      userMessage:
+        "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`.",
+      technicalMessage: "OpenClaw config is invalid",
+    });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await facade.handleQuery({
+      ...v1Query({ id: "request-binding-failed", prompt: "fail before execution" }),
+      protocolVersion: 2,
+      requestId: "request-binding-failed",
+      clientId: "client-binding-failed",
+      adapterId: "fake",
+    });
+
+    expect(adapter.executed).toHaveLength(0);
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: "error",
+      message:
+        "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`.",
+      failure: expect.objectContaining({
+        code: "adapter_config_invalid",
+        source: "adapter_process",
+        adapterId: "openclaw",
+        retryable: false,
+      }),
+    }));
+    expect(JSON.parse(store.getRow("SELECT result_json FROM runs").result_json).failure).toMatchObject({
+      code: "adapter_config_invalid",
+      adapterId: "openclaw",
+    });
+    store.close();
+  });
+
   it("selects the sole running request for unscoped tool-call correlation", () => {
     expect(
       selectUnscopedToolCallCorrelation([

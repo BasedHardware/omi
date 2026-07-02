@@ -703,7 +703,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           width: 36,
                           height: 36,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                          ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),

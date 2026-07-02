@@ -15,6 +15,10 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 # Mock heavy dependencies at sys.modules level before importing storage
 sys.modules.setdefault("database._client", MagicMock())
+_firebase_admin = MagicMock()
+_firebase_admin.auth = MagicMock()
+sys.modules.setdefault("firebase_admin", _firebase_admin)
+sys.modules.setdefault("firebase_admin.auth", _firebase_admin.auth)
 
 # We need the real storage module but with mocked GCS client
 _mock_gcs_storage = MagicMock()
@@ -25,6 +29,7 @@ sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
 sys.modules.setdefault("google.cloud.exceptions", MagicMock())
 sys.modules.setdefault("google.oauth2", MagicMock())
 sys.modules.setdefault("google.oauth2.service_account", MagicMock())
+sys.modules.setdefault("google.oauth2.id_token", MagicMock())
 
 # Now import the module under test
 from utils.other import storage as storage_mod
@@ -32,6 +37,10 @@ from utils.other import storage as storage_mod
 
 class TestUploadAudioChunkDataProtectionCache:
     """Tests for the data_protection_level caching in upload_audio_chunk."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_opus_encoding(self, monkeypatch):
+        monkeypatch.setattr(storage_mod, "encode_pcm_to_opus", lambda chunk_data: chunk_data)
 
     def _setup_mock_bucket(self):
         """Set up mock bucket and blob for upload tests."""
@@ -73,7 +82,7 @@ class TestUploadAudioChunkDataProtectionCache:
 
     @patch.object(storage_mod, 'users_db')
     def test_standard_level_uploads_unencrypted(self, mock_users_db):
-        """Standard protection level should upload .bin (no encryption)."""
+        """Standard protection level should upload unencrypted Opus audio."""
         _, mock_blob = self._setup_mock_bucket()
 
         path = storage_mod.upload_audio_chunk(
@@ -84,7 +93,7 @@ class TestUploadAudioChunkDataProtectionCache:
             data_protection_level='standard',
         )
 
-        assert path.endswith('.bin')
+        assert path.endswith('.opus')
         mock_blob.upload_from_string.assert_called_once()
 
     @patch.object(storage_mod, 'encryption')

@@ -91,9 +91,15 @@ for mod_name in [
     "sentry_sdk",
     "database.redis_db",
     "database.auth",
+    "utils.chat",
+    "utils.llm",
+    "utils.llm.clients",
 ]:
     if mod_name not in sys.modules:
         _stub_module(mod_name)
+
+sys.modules["utils.chat"].initial_message_util = MagicMock()
+sys.modules["utils.llm.clients"].get_llm = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
@@ -110,6 +116,8 @@ sys.modules["google.cloud.firestore_v1"].FieldFilter = field_filter_stub.FieldFi
 sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
 redis_stub = sys.modules["database.redis_db"]
+redis_stub.r = MagicMock()
+setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
 # Add backend dir to sys.path
@@ -149,8 +157,15 @@ utils_enc_stub.decrypt = MagicMock(return_value="decrypted")
 endpoints_stub = _stub_module("utils.other.endpoints")
 endpoints_stub.get_current_user_uid = MagicMock()
 endpoints_stub.with_rate_limit = lambda dep, policy: dep
+endpoints_stub.with_rate_limit_context = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
 _stub_module("utils.observability")
+request_validation_stub = _stub_module("utils.request_validation")
+request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
+redis_stub = _stub_module("database.redis_db")
+redis_stub.r = MagicMock()
+setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
+redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
 # ---------------------------------------------------------------------------
 # Import domain-specific database modules
@@ -1720,9 +1735,7 @@ class TestGenerateTitleEndpoint:
             messages=[TitleMessageInput(text='hi', sender='human'), TitleMessageInput(text='hello', sender='ai')],
         )
         mock_get_llm = MagicMock(return_value=mock_llm)
-        llm_clients_stub = types.ModuleType('utils.llm.clients')
-        llm_clients_stub.get_llm = mock_get_llm
-        with patch.dict('sys.modules', {'utils.llm.clients': llm_clients_stub}):
+        with patch('routers.chat_sessions.get_llm', mock_get_llm):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'Project Discussion'}
@@ -1743,9 +1756,7 @@ class TestGenerateTitleEndpoint:
             messages=[TitleMessageInput(text='hi', sender='human')],
         )
         mock_get_llm = MagicMock(return_value=mock_llm)
-        llm_clients_stub = types.ModuleType('utils.llm.clients')
-        llm_clients_stub.get_llm = mock_get_llm
-        with patch.dict('sys.modules', {'utils.llm.clients': llm_clients_stub}):
+        with patch('routers.chat_sessions.get_llm', mock_get_llm):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'New Chat'}

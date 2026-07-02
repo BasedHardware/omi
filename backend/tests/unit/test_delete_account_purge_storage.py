@@ -3,7 +3,8 @@
 Before the fix, _background_wipe_user_data only cleaned Twilio + Firestore, leaving the user's
 Pinecone vectors and GCS conversation recordings behind. The wipe now enumerates IDs (before the
 Firestore delete removes them) and purges Pinecone (conversations/memories/action-items/screen-
-activity) + recordings, each backend isolated so a failure never blocks the Firestore wipe.
+activity) + recordings. Required derived purge failures block the Firestore wipe so deleted
+Firestore IDs do not hide leftover vectors; best-effort recording failures do not block it.
 
 routers/users.py has a heavy import graph, so we install a meta-path finder that auto-stubs the
 database/utils/external namespaces, import routers.users, then drive _background_wipe_user_data
@@ -136,6 +137,12 @@ def _purge_patches(**overrides):
     patchers['delete_user_data'] = patch.object(
         users_service.users_db, 'delete_user_data', create=True, **(overrides.get('delete_user_data') or {})
     )
+    for name in (
+        'mark_user_deletion_wipe_running',
+        'mark_user_deletion_wipe_failed',
+        'mark_user_deletion_wipe_completed',
+    ):
+        patchers[name] = patch.object(users_service.users_db, name, create=True, **(overrides.get(name) or {}))
     started = {name: p.start() for name, p in patchers.items()}
     return patchers, started
 
@@ -176,16 +183,19 @@ def test_id_enumeration_happens_before_firestore_wipe():
     assert order == ['enumerate', 'enumerate', 'wipe'], order
 
 
-def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe():
+def test_pinecone_failure_blocks_firestore_wipe_but_not_best_effort_recordings():
     patchers, m = _purge_patches(delete_conversation_vectors_batch={'side_effect': Exception('pinecone down')})
     try:
         users_service.background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
-    # one backend failing must not stop the rest or the Firestore wipe
+    # Required vector purge failure must not stop other derived purges, but it
+    # must block Firestore deletion because Firestore holds the retryable IDs.
     m['delete_memory_vectors_batch'].assert_called_once()
     m['delete_all_conversation_recordings'].assert_called_once_with('uid1')
-    m['delete_user_data'].assert_called_once_with('uid1')
+    m['delete_user_data'].assert_not_called()
+    m['mark_user_deletion_wipe_failed'].assert_called_with('uid1')
+    m['mark_user_deletion_wipe_completed'].assert_not_called()
 
 
 def test_gcs_failure_does_not_block_firestore_wipe():
@@ -198,13 +208,15 @@ def test_gcs_failure_does_not_block_firestore_wipe():
     m['delete_user_data'].assert_called_once_with('uid1')  # and the failure didn't block the wipe
 
 
-def test_enumeration_failure_is_isolated():
+def test_enumeration_failure_blocks_firestore_wipe():
     patchers, m = _purge_patches(get_conversation_ids={'side_effect': Exception('firestore read error')})
     try:
         users_service.background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
-    # conversation enumeration blew up, but the other backends + the wipe still run
+    # conversation enumeration blew up, but the other backends still run
     m['delete_memory_vectors_batch'].assert_called_once_with('uid1', ['m1'])
     m['delete_all_conversation_recordings'].assert_called_once_with('uid1')
-    m['delete_user_data'].assert_called_once_with('uid1')
+    m['delete_user_data'].assert_not_called()
+    m['mark_user_deletion_wipe_failed'].assert_called_with('uid1')
+    m['mark_user_deletion_wipe_completed'].assert_not_called()
