@@ -194,6 +194,18 @@ def _install_cachetools_stub():
     sys.modules['cachetools'] = cachetools_module
 
 
+def _install_auth_middleware_stub():
+    if 'utils.auth_middleware' in sys.modules:
+        return
+    if importlib.util.find_spec('utils.auth_middleware') is not None:
+        return
+    mod = types.ModuleType('utils.auth_middleware')
+    mod.require_firebase = lambda: None
+    mod.require_firebase_no_byok = lambda: None
+    sys.modules['utils.auth_middleware'] = mod
+
+
 _install_prometheus_client_stub()
 _install_redis_stub()
 _install_cachetools_stub()
+_install_auth_middleware_stub()
