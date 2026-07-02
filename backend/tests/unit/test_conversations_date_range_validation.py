@@ -199,6 +199,11 @@ _surface_routing_stub = ModuleType('utils.memory.surface_routing')
 setattr(_surface_routing_stub, 'pin_memory_system', MagicMock())
 _register_module('utils.memory.surface_routing', _surface_routing_stub)
 
+_apps_stub = ModuleType('utils.apps')
+setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
+setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))
+_register_module('utils.apps', _apps_stub)
+
 _request_validation_stub = ModuleType('utils.request_validation')
 setattr(_request_validation_stub, 'NonNegativeOffset', int)
 setattr(_request_validation_stub, 'PositiveLimit', int)

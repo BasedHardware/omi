@@ -25,7 +25,7 @@ from utils.executors import (
 )
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from pydub import AudioSegment
@@ -141,6 +141,11 @@ class SyncJobStatusResponse(BaseModel):
     error: str | None = None
 
 
+class AudioDownloadPendingResponse(BaseModel):
+    status: str
+    poll_after_ms: int
+
+
 def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     headers = dict(base_headers or {})
     if retry_after is not None:
@@ -193,7 +198,33 @@ def get_audio_signed_urls_endpoint(
 # **********************************************
 
 
-@router.get("/v1/sync/audio/{conversation_id}/{audio_file_id}", tags=['v1'])
+@router.get(
+    "/v1/sync/audio/{conversation_id}/{audio_file_id}",
+    tags=['v1'],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+        202: {
+            "description": "Audio artifact is being prepared.",
+            "model": AudioDownloadPendingResponse,
+        },
+        206: {
+            "description": "Partial audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+    },
+)
 def download_audio_file_endpoint(
     conversation_id: str,
     audio_file_id: str,
@@ -1591,7 +1622,7 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-@router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse)
+@router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)

@@ -47,6 +47,7 @@ SCHEMA_GROUPS = {
             'ChartData',
             'Message',
             'ResponseMessage',
+            'MessageReportResponse',
             'VoiceMessageTranscriptionResponse',
         ),
     },

@@ -181,6 +181,11 @@ class DefaultTaskIntegrationResponse(BaseModel):
     default_app: Optional[str] = Field(description="Default task integration app key")
 
 
+class TaskIntegrationMutationResponse(BaseModel):
+    status: str
+    app_key: str
+
+
 class AsanaWorkspacesResponse(BaseModel):
     workspaces: List[Dict[str, Any]] = Field(default_factory=list)
 
@@ -229,7 +234,9 @@ def set_default_task_integration(request: DefaultTaskIntegrationRequest, uid: st
     return DefaultTaskIntegrationResponse(default_app=request.app_key)
 
 
-@router.put("/v1/task-integrations/{app_key}", tags=['task-integrations'])
+@router.put(
+    "/v1/task-integrations/{app_key}", tags=['task-integrations'], response_model=TaskIntegrationMutationResponse
+)
 def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = Depends(auth.get_current_user_uid)):
     """Save or update a task integration connection."""
     # Convert Pydantic model to dict, excluding None values

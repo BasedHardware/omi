@@ -92,6 +92,10 @@ class VoiceMessageTranscriptionResponse(BaseModel):
     language: Optional[str] = None
 
 
+class MessageReportResponse(BaseModel):
+    message: str
+
+
 def _parse_context_keywords(raw: Optional[str]) -> List[str]:
     if not raw:
         return []
@@ -368,7 +372,7 @@ def send_message(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
+@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:

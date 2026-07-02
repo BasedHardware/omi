@@ -35,6 +35,7 @@ from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
+from models.app import App
 from pydantic import BaseModel
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
@@ -43,6 +44,7 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
+from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
@@ -122,6 +124,19 @@ class SearchConversationsResponse(BaseModel):
     total_pages: int
     current_page: int
     per_page: int
+
+
+class ConversationStatusResponse(BaseModel):
+    status: str
+
+
+class ConversationSuggestedAppsResponse(BaseModel):
+    suggested_apps: List[App]
+    conversation_id: str
+
+
+class ConversationTestPromptResponse(BaseModel):
+    summary: str
 
 
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
@@ -332,14 +347,20 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
     return conversation
 
 
-@router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationStatusResponse
+)
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
 
 
-@router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
+@router.delete(
+    "/v1/conversations/{conversation_id}/calendar-event",
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def unlink_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Unlink a calendar event from a conversation.
@@ -498,7 +519,9 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     return calendar_event
 
 
-@router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/summary", tags=['conversations'], response_model=ConversationStatusResponse
+)
 def patch_conversation_summary(
     conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -510,7 +533,11 @@ def patch_conversation_summary(
     return {'status': 'Ok'}
 
 
-@router.patch("/v1/conversations/{conversation_id}/segments/text", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/segments/text",
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -601,7 +628,11 @@ def set_conversation_events_state(
     return {"status": "Ok"}
 
 
-@router.patch("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
+)
 def set_action_item_status(
     data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
 ):
@@ -661,7 +692,9 @@ def set_action_item_status(
 
 
 @router.patch(
-    "/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations']
+    "/v1/conversations/{conversation_id}/action-items/{action_item_idx}",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
 )
 def update_action_item_description(
     conversation_id: str, data: UpdateActionItemDescriptionRequest, uid=Depends(auth.get_current_user_uid)
@@ -695,7 +728,11 @@ def update_action_item_description(
     return {"status": "Ok"}
 
 
-@router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
+@router.delete(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
+)
 def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
@@ -921,7 +958,11 @@ def assign_segments_bulk(
 # *********************************************
 
 
-@router.patch('/v1/conversations/{conversation_id}/visibility', tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/visibility',
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def set_conversation_visibility(
     conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -938,7 +979,9 @@ def set_conversation_visibility(
     return {"status": "Ok"}
 
 
-@router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationStatusResponse
+)
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
@@ -1010,11 +1053,12 @@ def search_conversations_endpoint(
     )
 
 
-@router.get("/v1/conversations/{conversation_id}/suggested-apps", response_model=dict, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/suggested-apps",
+    response_model=ConversationSuggestedAppsResponse,
+    tags=['conversations'],
+)
 def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    from utils.apps import get_available_apps, get_available_app_by_id_with_reviews
-    from models.app import App
-
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
@@ -1025,8 +1069,6 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
         if app_data:
             app = App(**app_data)
             # Add user-specific data
-            from utils.apps import get_is_user_paid_app
-
             app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
             # Add payment link with user reference
@@ -1044,7 +1086,11 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
     return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
 
 
-@router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
+@router.post(
+    "/v1/conversations/{conversation_id}/test-prompt",
+    response_model=ConversationTestPromptResponse,
+    tags=['conversations'],
+)
 def test_prompt(
     conversation_id: str,
     request: TestPromptRequest,

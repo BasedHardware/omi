@@ -208,6 +208,11 @@ _surface_routing_stub = ModuleType('utils.memory.surface_routing')
 _surface_routing_stub.pin_memory_system = MagicMock()
 _register_module('utils.memory.surface_routing', _surface_routing_stub)
 
+_apps_stub = ModuleType('utils.apps')
+_apps_stub.get_available_app_by_id_with_reviews = MagicMock()
+_apps_stub.get_is_user_paid_app = MagicMock(return_value=False)
+_register_module('utils.apps', _apps_stub)
+
 from fastapi import HTTPException  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 

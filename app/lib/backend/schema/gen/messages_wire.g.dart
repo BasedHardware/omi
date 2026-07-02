@@ -390,6 +390,26 @@ class GeneratedResponseMessage {
   }
 }
 
+class GeneratedMessageReportResponse {
+  final String message;
+
+  const GeneratedMessageReportResponse({
+    required this.message,
+  });
+
+  factory GeneratedMessageReportResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMessageReportResponse(
+      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+    };
+  }
+}
+
 class GeneratedVoiceMessageTranscriptionResponse {
   final String? language;
   final String transcript;

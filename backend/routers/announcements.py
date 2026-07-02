@@ -156,7 +156,16 @@ class DismissAnnouncementRequest(BaseModel):
     cta_clicked: bool = False
 
 
-@router.post("/v1/announcements/{announcement_id}/dismiss", tags=["announcements"])
+class DismissAnnouncementResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post(
+    "/v1/announcements/{announcement_id}/dismiss",
+    tags=["announcements"],
+    response_model=DismissAnnouncementResponse,
+)
 def dismiss_announcement_endpoint(
     announcement_id: str,
     data: DismissAnnouncementRequest,

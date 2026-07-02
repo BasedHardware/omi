@@ -162,6 +162,10 @@ class AppMutationResponse(PydanticBaseModel):
     status: str
 
 
+class AppManifestRefreshResponse(AppMutationResponse):
+    tools_count: int = 0
+
+
 class AppCreateResponse(AppMutationResponse):
     app_id: str
 
@@ -877,7 +881,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     return persona_data
 
 
-@router.patch('/v1/apps/{app_id}', tags=['v1'])
+@router.patch('/v1/apps/{app_id}', tags=['v1'], response_model=AppMutationResponse)
 def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
@@ -940,7 +944,7 @@ def update_app(
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'])
+@router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'], response_model=AppManifestRefreshResponse)
 def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Refresh chat tools manifest for an app.
@@ -1000,7 +1004,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
     return {'status': 'ok', 'tools_count': tools_count}
 
 
-@router.delete('/v1/apps/{app_id}', tags=['v1'])
+@router.delete('/v1/apps/{app_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     if not app:
@@ -1014,7 +1018,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}', tags=['v1'])
+@router.get('/v1/apps/{app_id}', tags=['v1'], response_model=App)
 def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id_with_reviews(app_id, uid)
     app = App(**app) if app else None
@@ -1101,7 +1105,7 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review', tags=['v1'])
+@router.patch('/v1/apps/{app_id}/review', tags=['v1'], response_model=AppMutationResponse)
 def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
@@ -1143,7 +1147,7 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'])
+@router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'], response_model=AppMutationResponse)
 def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -1191,7 +1195,7 @@ def app_reviews(app_id: str):
     return reviews
 
 
-@router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
+@router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'], response_model=AppMutationResponse)
 def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None

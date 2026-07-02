@@ -598,6 +598,476 @@
         "title": "AnnouncementType",
         "type": "string"
       },
+      "App": {
+        "description": "Full App model - includes large/internal fields for detail views.",
+        "properties": {
+          "approved": {
+            "default": false,
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "chat_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Prompt"
+          },
+          "chat_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatTool"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Chat Tools"
+          },
+          "connected_accounts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Connected Accounts",
+            "type": "array"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Disabled"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "external_integration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalIntegration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "image": {
+            "title": "Image",
+            "type": "string"
+          },
+          "installs": {
+            "default": 0,
+            "title": "Installs",
+            "type": "integer"
+          },
+          "is_influencer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Is Influencer"
+          },
+          "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Is Paid"
+          },
+          "is_popular": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Is Popular"
+          },
+          "is_user_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Is User Paid"
+          },
+          "memory_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Prompt"
+          },
+          "money_made": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Money Made"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "official": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Official"
+          },
+          "payment_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Link"
+          },
+          "payment_link_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Link Id"
+          },
+          "payment_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Plan"
+          },
+          "payment_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Price Id"
+          },
+          "payment_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Product Id"
+          },
+          "persona_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Prompt"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0.0,
+            "title": "Price"
+          },
+          "private": {
+            "default": false,
+            "title": "Private",
+            "type": "boolean"
+          },
+          "proactive_notification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProactiveNotification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rating_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0,
+            "title": "Rating Avg"
+          },
+          "rating_count": {
+            "default": 0,
+            "title": "Rating Count",
+            "type": "integer"
+          },
+          "reviews": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppReview"
+            },
+            "title": "Reviews",
+            "type": "array"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "source_code_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Code Url"
+          },
+          "status": {
+            "default": "approved",
+            "title": "Status",
+            "type": "string"
+          },
+          "thumbnail_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Thumbnail Urls"
+          },
+          "thumbnails": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Thumbnails"
+          },
+          "trigger_workflow_memories": {
+            "default": true,
+            "title": "Trigger Workflow Memories",
+            "type": "boolean"
+          },
+          "twitter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Twitter"
+          },
+          "uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uid"
+          },
+          "usage_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Count"
+          },
+          "user_review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category",
+          "author",
+          "description",
+          "image",
+          "capabilities"
+        ],
+        "title": "App",
+        "type": "object"
+      },
       "AppApiKeyResponse": {
         "properties": {
           "created_at": {
@@ -1366,6 +1836,24 @@
         "title": "AppIconGenerationResponse",
         "type": "object"
       },
+      "AppManifestRefreshResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tools_count": {
+            "default": 0,
+            "title": "Tools Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AppManifestRefreshResponse",
+        "type": "object"
+      },
       "AppMigrationResponse": {
         "properties": {
           "message": {
@@ -1514,6 +2002,69 @@
         "title": "AppResult",
         "type": "object"
       },
+      "AppReview": {
+        "properties": {
+          "rated_at": {
+            "format": "date-time",
+            "title": "Rated At",
+            "type": "string"
+          },
+          "responded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responded At"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          },
+          "review": {
+            "title": "Review",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "uid",
+          "rated_at",
+          "score",
+          "review"
+        ],
+        "title": "AppReview",
+        "type": "object"
+      },
       "AppSearchFilters": {
         "properties": {
           "capability": {
@@ -1632,6 +2183,134 @@
           "id"
         ],
         "title": "AppSelectOption",
+        "type": "object"
+      },
+      "AppSubscriptionCancelResponse": {
+        "properties": {
+          "cancel_at_period_end": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel At Period End"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "AppSubscriptionCancelResponse",
+        "type": "object"
+      },
+      "AppSubscriptionDetails": {
+        "properties": {
+          "cancel_at_period_end": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel At Period End"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "AppSubscriptionDetails",
+        "type": "object"
+      },
+      "AppSubscriptionResponse": {
+        "properties": {
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppSubscriptionDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AppSubscriptionResponse",
         "type": "object"
       },
       "AppThumbnailUploadResponse": {
@@ -1906,6 +2585,24 @@
           }
         },
         "title": "AsanaWorkspacesResponse",
+        "type": "object"
+      },
+      "AudioDownloadPendingResponse": {
+        "properties": {
+          "poll_after_ms": {
+            "title": "Poll After Ms",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "poll_after_ms"
+        ],
+        "title": "AudioDownloadPendingResponse",
         "type": "object"
       },
       "AudioFile": {
@@ -3565,6 +4262,27 @@
         "title": "Conversation",
         "type": "object"
       },
+      "ConversationActionItemsResponse": {
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_items",
+          "conversation_id"
+        ],
+        "title": "ConversationActionItemsResponse",
+        "type": "object"
+      },
       "ConversationCreateResponse": {
         "properties": {
           "discarded": {
@@ -3679,6 +4397,53 @@
         ],
         "title": "ConversationStatus",
         "type": "string"
+      },
+      "ConversationStatusResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ConversationStatusResponse",
+        "type": "object"
+      },
+      "ConversationSuggestedAppsResponse": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "suggested_apps": {
+            "items": {
+              "$ref": "#/components/schemas/App"
+            },
+            "title": "Suggested Apps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggested_apps",
+          "conversation_id"
+        ],
+        "title": "ConversationSuggestedAppsResponse",
+        "type": "object"
+      },
+      "ConversationTestPromptResponse": {
+        "properties": {
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "ConversationTestPromptResponse",
+        "type": "object"
       },
       "ConversationVisibility": {
         "enum": [
@@ -5868,6 +6633,24 @@
         "title": "DismissAnnouncementRequest",
         "type": "object"
       },
+      "DismissAnnouncementResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "DismissAnnouncementResponse",
+        "type": "object"
+      },
       "Display": {
         "description": "Controls how/when the announcement is displayed",
         "properties": {
@@ -7350,6 +8133,24 @@
         "title": "IntegrationData",
         "type": "object"
       },
+      "IntegrationMutationResponse": {
+        "properties": {
+          "app_key": {
+            "title": "App Key",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "app_key"
+        ],
+        "title": "IntegrationMutationResponse",
+        "type": "object"
+      },
       "IntegrationResponse": {
         "description": "Response containing integration status",
         "properties": {
@@ -8658,6 +9459,19 @@
           "emoji"
         ],
         "title": "MessageConversationStructured",
+        "type": "object"
+      },
+      "MessageReportResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "MessageReportResponse",
         "type": "object"
       },
       "MessageSender": {
@@ -11795,6 +12609,24 @@
         "title": "TaskIntegrationData",
         "type": "object"
       },
+      "TaskIntegrationMutationResponse": {
+        "properties": {
+          "app_key": {
+            "title": "App Key",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "app_key"
+        ],
+        "title": "TaskIntegrationMutationResponse",
+        "type": "object"
+      },
       "TaskIntegrationsResponse": {
         "description": "Response containing all task integrations",
         "properties": {
@@ -13413,6 +14245,19 @@
           }
         },
         "title": "UserUsageResponse",
+        "type": "object"
+      },
+      "UserWebhookUrlResponse": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "UserWebhookUrlResponse",
         "type": "object"
       },
       "UserWebhooksStatusResponse": {
@@ -16497,7 +17342,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DismissAnnouncementResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -18454,7 +19301,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -18539,7 +19388,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/App"
+                }
               }
             },
             "description": "Successful Response"
@@ -18634,7 +19485,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -18796,7 +19649,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19313,7 +20168,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppManifestRefreshResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19475,7 +20332,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19574,7 +20433,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19713,7 +20574,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppSubscriptionCancelResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19796,7 +20659,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppSubscriptionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -21480,7 +22345,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationActionItemsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -21576,9 +22443,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Set Action Item Status V1 Conversations  Conversation Id  Action Items Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
                 }
               }
             },
@@ -21677,9 +22542,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Update Action Item Description V1 Conversations  Conversation Id  Action Items  Action Item Idx  Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
                 }
               }
             },
@@ -21902,7 +22765,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -22880,7 +23745,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -23161,7 +24028,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -23249,9 +24118,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Conversation Suggested Apps V1 Conversations  Conversation Id  Suggested Apps Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationSuggestedAppsResponse"
                 }
               }
             },
@@ -23349,7 +24216,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -23447,9 +24316,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Test Prompt V1 Conversations  Conversation Id  Test Prompt Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationTestPromptResponse"
                 }
               }
             },
@@ -23543,7 +24410,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -23734,7 +24603,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -28102,7 +28973,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -32410,11 +33283,59 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "audio/wav": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "Audio stream."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioDownloadPendingResponse"
+                }
+              }
+            },
+            "description": "Audio artifact is being prepared."
+          },
+          "206": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "audio/mpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "audio/wav": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Partial audio stream."
           },
           "401": {
             "$ref": "#/components/responses/Error401"
@@ -33258,7 +34179,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskIntegrationMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -34931,7 +35854,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserWebhookUrlResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35027,7 +35952,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35110,7 +36037,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35193,7 +36122,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37900,7 +38831,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37997,7 +38930,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40523,9 +41458,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Report Message V2 Messages  Message Id  Report Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MessageReportResponse"
                 }
               }
             },
@@ -41718,7 +42651,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -41907,7 +42842,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
               }
             },
             "description": "Successful Response"

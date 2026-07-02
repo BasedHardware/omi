@@ -655,7 +655,7 @@ def review_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}', tags=['memories'])
+@router.patch('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def edit_memory(
     memory_id: str,
     value: str,
@@ -681,7 +681,7 @@ def edit_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'])
+@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'], response_model=MemoryMutationResponse)
 def update_memory_visibility(
     memory_id: str,
     value: str,

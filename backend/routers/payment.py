@@ -116,6 +116,26 @@ class PaymentSubscriptionResponse(BaseModel):
     deprecation_message: Optional[str] = None
 
 
+class AppSubscriptionDetails(BaseModel):
+    id: Optional[str] = None
+    status: Optional[str] = None
+    current_period_end: Optional[int] = None
+    cancel_at_period_end: Optional[bool] = None
+    price_id: Optional[str] = None
+    customer_id: Optional[str] = None
+
+
+class AppSubscriptionResponse(BaseModel):
+    subscription: Optional[AppSubscriptionDetails] = None
+
+
+class AppSubscriptionCancelResponse(BaseModel):
+    status: str
+    message: str
+    cancel_at_period_end: Optional[bool] = None
+    current_period_end: Optional[int] = None
+
+
 class PaymentUpgradeSubscriptionResponse(BaseModel):
     status: str
     message: str
@@ -1353,7 +1373,7 @@ def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_
     return {"status": "success"}
 
 
-@router.get("/v1/apps/{app_id}/subscription")
+@router.get("/v1/apps/{app_id}/subscription", response_model=AppSubscriptionResponse)
 def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get user's subscription for a specific app"""
     try:
@@ -1386,7 +1406,7 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
         raise HTTPException(status_code=500, detail="Could not retrieve subscription information")
 
 
-@router.delete("/v1/apps/{app_id}/subscription")
+@router.delete("/v1/apps/{app_id}/subscription", response_model=AppSubscriptionCancelResponse)
 def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Cancel user's subscription for a specific app"""
     try:

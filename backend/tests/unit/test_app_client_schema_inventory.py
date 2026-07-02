@@ -116,6 +116,11 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert ('GET', '/v1/users/language', 'get_user_language_v1_users_language_get') not in unmodeled_operations
     assert ('GET', '/v1/users/export', 'export_all_user_data_v1_users_export_get') not in unmodeled_operations
     assert ('POST', '/v2/sync-local-files', 'sync_local_files_v2_v2_sync_local_files_post') not in unmodeled_operations
+    assert (
+        'POST',
+        '/v2/messages/{message_id}/report',
+        'report_message_v2_messages__message_id__report_post',
+    ) not in unmodeled_operations
     assert ('POST', '/v2/tts/synthesize', 'tts_synthesize_v2_tts_synthesize_post') not in unmodeled_operations
     assert (
         'POST',
@@ -133,3 +138,14 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )
+
+
+def test_inventory_normalizes_interpolated_dart_route_segments():
+    routes = inventory_app_client_schemas.scan_app_routes()
+    routes_by_file = {}
+    for route in routes:
+        routes_by_file.setdefault(route.path.name, set()).add(route.normalized_route)
+
+    assert '/v2/messages/{param}/report' in routes_by_file['messages.dart']
+    assert '/v1/apps/{param}' in routes_by_file['apps.dart']
+    assert '/v1/conversations/{param}/reprocess' in routes_by_file['conversations.dart']

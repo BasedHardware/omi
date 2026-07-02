@@ -35,9 +35,6 @@ CLASS_RE = re.compile(r'^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
 ENUM_RE = re.compile(r'^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
 FROM_JSON_RE = re.compile(r'\b(?:factory|static)?\s*([A-Za-z_][A-Za-z0-9_]*)?\.?fromJson\s*\(')
 TO_JSON_RE = re.compile(r'\btoJson\s*\(')
-ENV_ROUTE_RE = re.compile(r"""Env\.apiBaseUrl\}?(?P<path>v\d+/[^'"$\s]*)""")
-STATIC_BASE_RE = re.compile(r"""_baseUrl\s*=\s*['"]\$\{Env\.apiBaseUrl\}(?P<path>v\d+/[^'"]*)['"]""")
-LOCAL_ROUTE_RE = re.compile(r"""_baseUrl\}?(?P<path>/[^'"$\s]*)""")
 INTERPOLATION_RE = re.compile(r'\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*')
 OPENAPI_PARAM_RE = re.compile(r'\{[^}]+\}')
 GENERATED_WIRE_RE = re.compile(r"""package:omi/backend/schema/gen/[^'"]+_wire\.g\.dart|wire\.Generated""")
@@ -140,8 +137,9 @@ def scan_local_non_rest_schema_files() -> list[DartSchemaFile]:
 
 
 def normalize_app_route(route: str) -> str:
-    route = route.split('?', 1)[0]
     route = INTERPOLATION_RE.sub('{param}', route)
+    route = re.sub(r'(?<=[A-Za-z0-9_-])\{param\}$', '', route)
+    route = route.split('?', 1)[0]
     route = re.sub(r'/+', '/', route)
     return '/' + route.lstrip('/')
 
@@ -159,19 +157,93 @@ def route_prefix(route: str) -> str:
     return '/'
 
 
+def _outer_quote_before(text: str, marker_start: int) -> str | None:
+    for index in range(marker_start - 1, -1, -1):
+        char = text[index]
+        if char not in ("'", '"'):
+            continue
+        backslashes = 0
+        cursor = index - 1
+        while cursor >= 0 and text[cursor] == '\\':
+            backslashes += 1
+            cursor -= 1
+        if backslashes % 2 == 0:
+            return char
+    return None
+
+
+def _dart_string_tail_after_marker(text: str, marker_start: int, marker: str) -> str | None:
+    quote = _outer_quote_before(text, marker_start)
+    if quote is None:
+        return None
+
+    tail: list[str] = []
+    cursor = marker_start + len(marker)
+    if cursor < len(text) and text[cursor] == '}':
+        cursor += 1
+    interpolation_depth = 0
+    while cursor < len(text):
+        char = text[cursor]
+        if interpolation_depth == 0 and char == quote:
+            return ''.join(tail)
+        if char == '$' and cursor + 1 < len(text) and text[cursor + 1] == '{':
+            interpolation_depth += 1
+            tail.append('${')
+            cursor += 2
+            continue
+        if interpolation_depth > 0 and char in ("'", '"'):
+            string_quote = char
+            tail.append(char)
+            cursor += 1
+            while cursor < len(text):
+                nested_char = text[cursor]
+                tail.append(nested_char)
+                cursor += 1
+                if nested_char == '\\' and cursor < len(text):
+                    tail.append(text[cursor])
+                    cursor += 1
+                    continue
+                if nested_char == string_quote:
+                    break
+            continue
+        if interpolation_depth > 0 and char == '{':
+            interpolation_depth += 1
+        elif interpolation_depth > 0 and char == '}':
+            interpolation_depth -= 1
+        tail.append(char)
+        cursor += 1
+    return None
+
+
+def _scan_marker_routes(text: str, marker: str, *, must_start_with: str | None = None) -> list[str]:
+    routes: list[str] = []
+    for match in re.finditer(re.escape(marker), text):
+        route = _dart_string_tail_after_marker(text, match.start(), marker)
+        if route is None:
+            continue
+        if must_start_with is not None and not route.startswith(must_start_with):
+            continue
+        routes.append(route)
+    return routes
+
+
 def scan_app_routes() -> list[AppRoute]:
     routes: list[AppRoute] = []
     for path in sorted(APP_API_DIR.glob('*.dart')):
         text = path.read_text()
-        base_routes = [match.group('path') for match in STATIC_BASE_RE.finditer(text)]
-        for match in ENV_ROUTE_RE.finditer(text):
-            route = match.group('path')
+        env_routes = _scan_marker_routes(text, 'Env.apiBaseUrl', must_start_with='v')
+        base_routes = [
+            route
+            for route in env_routes
+            if re.search(rf"""_baseUrl\s*=\s*['"]\$\{{Env\.apiBaseUrl\}}{re.escape(route)}['"]""", text)
+        ]
+        for route in env_routes:
             routes.append(
                 AppRoute(path=path, route='/' + route.lstrip('/'), normalized_route=normalize_app_route(route))
             )
         for base_route in base_routes:
-            for match in LOCAL_ROUTE_RE.finditer(text):
-                route = base_route.rstrip('/') + match.group('path')
+            for local_route in _scan_marker_routes(text, '_baseUrl', must_start_with='/'):
+                route = base_route.rstrip('/') + local_route
                 routes.append(
                     AppRoute(path=path, route='/' + route.lstrip('/'), normalized_route=normalize_app_route(route))
                 )

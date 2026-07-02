@@ -102,6 +102,11 @@ class ActionItemsSearchResponse(BaseModel):
     action_items: List[ActionItemResponse]
 
 
+class ConversationActionItemsResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+    conversation_id: str
+
+
 class PendingSyncResponse(BaseModel):
     pending_export: List[ActionItemResponse]
     synced_items: List[ActionItemResponse]
@@ -588,7 +593,11 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
 # *****************************
 
 
-@router.get("/v1/conversations/{conversation_id}/action-items", tags=['action-items'])
+@router.get(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationActionItemsResponse,
+    tags=['action-items'],
+)
 def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get all action items for a specific conversation."""
     conversation = conversations_db.get_conversation(uid, conversation_id)

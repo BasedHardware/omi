@@ -181,6 +181,7 @@ Future reportMessageServer(String messageId) async {
   if (response.statusCode != 200) {
     throw Exception('Failed to report message');
   }
+  wire.GeneratedMessageReportResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 }
 
 /// Transcribe audio files sequentially (one request per file) to stay under

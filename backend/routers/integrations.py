@@ -194,6 +194,11 @@ class IntegrationResponse(BaseModel):
     app_key: str = Field(description="Integration app key")
 
 
+class IntegrationMutationResponse(BaseModel):
+    status: str
+    app_key: str
+
+
 class AppleHealthSyncResponse(BaseModel):
     status: str
     app_key: str
@@ -217,7 +222,7 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
         return IntegrationResponse(connected=False, app_key=app_key)
 
 
-@router.put("/v1/integrations/{app_key}", tags=['integrations'])
+@router.put("/v1/integrations/{app_key}", tags=['integrations'], response_model=IntegrationMutationResponse)
 def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(auth.get_current_user_uid)):
     """Save or update an integration connection."""
     # Convert Pydantic model to dict, excluding None values

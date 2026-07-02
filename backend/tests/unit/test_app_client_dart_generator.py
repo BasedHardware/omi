@@ -62,6 +62,7 @@ def test_messages_wire_dart_is_generated_from_app_client_openapi():
     assert MESSAGES_DART_PATH.read_text() == generated
     assert 'class GeneratedMessage' in generated
     assert 'class GeneratedResponseMessage' in generated
+    assert 'class GeneratedMessageReportResponse' in generated
     assert 'class GeneratedFileChat' in generated
     assert 'class GeneratedChartData' in generated
     assert 'class GeneratedVoiceMessageTranscriptionResponse' in generated

@@ -155,6 +155,10 @@ class UserWebhooksStatusResponse(BaseModel):
     day_summary: bool
 
 
+class UserWebhookUrlResponse(BaseModel):
+    url: str
+
+
 class UserDataExportResponse(BaseModel):
     profile: Dict[str, Any] = Field(default_factory=dict)
     conversations: List[Dict[str, Any]] = Field(default_factory=list)
@@ -324,7 +328,7 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 # ***********************************************
 
 
-@router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+@router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'], response_model=UserStatusResponse)
 def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     url = data.get('url')
     if url is None:
@@ -335,18 +339,18 @@ def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+@router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'], response_model=UserWebhookUrlResponse)
 def get_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_user_webhook_db(uid, wtype)}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'])
+@router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'], response_model=UserStatusResponse)
 def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     disable_user_webhook_db(uid, wtype)
     return {'status': 'ok'}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
+@router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'], response_model=UserStatusResponse)
 def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     enable_user_webhook_db(uid, wtype)
     record_dev_webhook_success(uid, wtype.value)
@@ -500,7 +504,7 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     return people
 
 
-@router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
+@router.patch('/v1/users/people/{person_id}/name', tags=['v1'], response_model=UserStatusResponse)
 def update_person_name(
     person_id: str,
     value: str,  # = Field(min_length=2, max_length=40),
@@ -517,7 +521,11 @@ def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_u
     return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}/speech-samples/{sample_index}', tags=['v1'])
+@router.delete(
+    '/v1/users/people/{person_id}/speech-samples/{sample_index}',
+    tags=['v1'],
+    response_model=UserStatusResponse,
+)
 def delete_person_speech_sample_endpoint(
     person_id: str,
     sample_index: int,
