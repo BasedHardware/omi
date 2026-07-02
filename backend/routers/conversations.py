@@ -69,8 +69,6 @@ logger = logging.getLogger(__name__)
 _firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 _public_router = APIRouter()
 router = APIRouter()
-router.include_router(_firebase_router)
-router.include_router(_public_router)
 
 
 def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
@@ -1146,3 +1144,7 @@ def merge_conversations(http_request: Request, request: MergeConversationsReques
         warning=warning_message,
         conversation_ids=request.conversation_ids,
     )
+
+
+router.include_router(_firebase_router)
+router.include_router(_public_router)
