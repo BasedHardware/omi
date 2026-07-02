@@ -46,7 +46,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _PLUGIN_DIR = os.path.abspath(os.path.join(_HERE, ".."))  # plugins/telegram-user-account/
 _PLUGINS_ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))  # plugins/
 _SHARED = os.path.join(_PLUGINS_ROOT, "_shared")
-for _p in (_PLUGIN_DIR, _SHARED):
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))  # repo root
+for _p in (_PLUGIN_DIR, _SHARED, _REPO_ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -108,8 +109,6 @@ class _AutoMockModule(types.ModuleType):
 
 _HEAVY_STUB_NAMES = [
     "anthropic",
-    "httpx",
-    "httpx_sse",
     "langchain",
     "langchain_core",
     "langchain_core.messages",
