@@ -6,6 +6,8 @@ import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
@@ -174,6 +176,22 @@ def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
             )
             continue
     return valid_memories
+
+
+def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
+    """Serialize legacy memories without canonical lifecycle fields.
+
+    ``MemoryDB`` carries ``memory_tier`` plus a computed ``layer`` for canonical
+    memory responses. Returning those through the legacy `/v3/memories` path
+    makes non-cohort desktop clients think the canonical Short-term layer is
+    enabled. Keep the legacy shape intentionally badge-less.
+    """
+
+    body = [jsonable_encoder(memory, exclude={'memory_tier', 'layer'}) for memory in memories]
+    return JSONResponse(
+        content=body,
+        headers={'X-Omi-Memory-Device-Scope-Supported': 'false'},
+    )
 
 
 def _apply_memory_response_headers(http_response: Response, memory_response: V3ComposedResponse) -> None:
@@ -524,10 +542,10 @@ def get_memories(
             device_scope_request=scope_request,
         )
 
-    _set_device_scope_capability_header(response, supported=False)
-
     if memory_runtime.source_decision != 'memory_read':
-        return _legacy_get_memories(uid, limit, offset)
+        return _legacy_memories_response(_legacy_get_memories(uid, limit, offset))
+
+    _set_device_scope_capability_header(response, supported=False)
 
     if memory_runtime.service is None:
         logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
