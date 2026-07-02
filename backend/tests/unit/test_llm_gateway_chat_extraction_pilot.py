@@ -1,46 +1,11 @@
 from __future__ import annotations
 
-import sys
-import types
 import logging
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 import yaml
-
-for module_name in (
-    'database.auth',
-    'database.goals',
-    'database.notifications',
-    'database.redis_db',
-    'database.users',
-):
-    sys.modules.setdefault(module_name, types.ModuleType(module_name))
-
-sys.modules['database.auth'].get_user_name = lambda uid: 'Test User'
-sys.modules['database.redis_db'].add_filter_category_item = lambda *args, **kwargs: None
-
-
-@contextmanager
-def _track_usage(*args, **kwargs):
-    yield
-
-
-usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
-usage_tracker_stub.track_usage = _track_usage
-usage_tracker_stub.Features = types.SimpleNamespace(CHAT='chat')
-sys.modules.setdefault('utils.llm.usage_tracker', usage_tracker_stub)
-
-memory_stub = types.ModuleType('utils.llms.memory')
-memory_stub.get_prompt_memories = lambda uid: ('Test User', '')
-sys.modules.setdefault('utils.llms.memory', memory_stub)
-
-clients_stub = types.ModuleType('utils.llm.clients')
-clients_stub.get_llm = lambda feature: None
-clients_stub.parser = object()
-sys.modules.setdefault('utils.llm.clients', clients_stub)
 
 from utils import byok
 from utils.llm import chat, gateway_client, gateway_observability
