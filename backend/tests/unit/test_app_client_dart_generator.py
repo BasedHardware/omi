@@ -30,6 +30,7 @@ ANNOUNCEMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen
 AUDIO_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'audio_wire.g.dart'
 PAYMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'payments_wire.g.dart'
 MEMORIES_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'memories_wire.g.dart'
+GOALS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'goals_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -224,6 +225,20 @@ def test_memories_wire_dart_is_generated_from_app_client_openapi():
     assert (
         'captureDeviceIds: _readAny(json, const ["capture_device_ids"]) == null ? null : _readStringList' in generated
     )
+
+
+def test_goals_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'goals')
+
+    assert GOALS_DART_PATH.read_text() == generated
+    assert 'class GeneratedGoalResponse' in generated
+    assert 'class GeneratedGoalSuggestionResponse' in generated
+    assert 'class GeneratedAdviceResponse' in generated
+    assert 'class GeneratedGoalHistoryEntryResponse' in generated
+    assert 'class GeneratedGoalDeleteResponse' in generated
+    assert 'goalType: _readString(_readAny(json, const ["goal_type"])) ?? "scale"' in generated
+    assert 'suggestedMax: _readDouble(_readAny(json, const ["suggested_max"])) ?? 10' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

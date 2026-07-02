@@ -425,6 +425,20 @@
         "title": "AdviceAssistantSettings",
         "type": "object"
       },
+      "AdviceResponse": {
+        "description": "Response model for AI-generated advice.",
+        "properties": {
+          "advice": {
+            "title": "Advice",
+            "type": "string"
+          }
+        },
+        "required": [
+          "advice"
+        ],
+        "title": "AdviceResponse",
+        "type": "object"
+      },
       "AgentKeepaliveResponse": {
         "properties": {
           "ok": {
@@ -5352,6 +5366,165 @@
           "target_value"
         ],
         "title": "GoalCreate",
+        "type": "object"
+      },
+      "GoalDeleteResponse": {
+        "description": "Response model for deleting a goal.",
+        "properties": {
+          "deleted_id": {
+            "title": "Deleted Id",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "deleted_id"
+        ],
+        "title": "GoalDeleteResponse",
+        "type": "object"
+      },
+      "GoalHistoryEntryResponse": {
+        "description": "Response model for a goal progress history entry.",
+        "properties": {
+          "date": {
+            "default": "",
+            "title": "Date",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "value": {
+            "default": 0,
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "title": "GoalHistoryEntryResponse",
+        "type": "object"
+      },
+      "GoalResponse": {
+        "description": "Response model for a goal.",
+        "properties": {
+          "advice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advice"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_value": {
+            "default": 0,
+            "title": "Current Value",
+            "type": "number"
+          },
+          "goal_type": {
+            "default": "scale",
+            "title": "Goal Type",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "max_value": {
+            "default": 10,
+            "title": "Max Value",
+            "type": "number"
+          },
+          "min_value": {
+            "default": 0,
+            "title": "Min Value",
+            "type": "number"
+          },
+          "target_value": {
+            "default": 0,
+            "title": "Target Value",
+            "type": "number"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "title": "GoalResponse",
+        "type": "object"
+      },
+      "GoalSuggestionResponse": {
+        "description": "Response model for AI-generated goal suggestion.",
+        "properties": {
+          "reasoning": {
+            "title": "Reasoning",
+            "type": "string"
+          },
+          "suggested_max": {
+            "default": 10,
+            "title": "Suggested Max",
+            "type": "number"
+          },
+          "suggested_min": {
+            "default": 0,
+            "title": "Suggested Min",
+            "type": "number"
+          },
+          "suggested_target": {
+            "title": "Suggested Target",
+            "type": "number"
+          },
+          "suggested_title": {
+            "title": "Suggested Title",
+            "type": "string"
+          },
+          "suggested_type": {
+            "title": "Suggested Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "suggested_title",
+          "suggested_type",
+          "suggested_target",
+          "reasoning"
+        ],
+        "title": "GoalSuggestionResponse",
         "type": "object"
       },
       "GoalType": {
@@ -23823,8 +23996,7 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "additionalProperties": true,
-                      "type": "object"
+                      "$ref": "#/components/schemas/GoalResponse"
                     },
                     {
                       "type": "null"
@@ -23916,9 +24088,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Goal V1 Goals Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GoalResponse"
                 }
               }
             },
@@ -23996,9 +24166,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Current Goal Advice V1 Goals Advice Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AdviceResponse"
                 }
               }
             },
@@ -24077,8 +24245,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/GoalResponse"
                   },
                   "title": "Response Get All Goals V1 Goals All Get",
                   "type": "array"
@@ -24249,9 +24416,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Suggest Goal V1 Goals Suggest Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GoalSuggestionResponse"
                 }
               }
             },
@@ -24338,9 +24503,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Goal V1 Goals  Goal Id  Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GoalDeleteResponse"
                 }
               }
             },
@@ -24438,9 +24601,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Update Goal V1 Goals  Goal Id  Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GoalResponse"
                 }
               }
             },
@@ -24530,9 +24691,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Goal Advice V1 Goals  Goal Id  Advice Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AdviceResponse"
                 }
               }
             },
@@ -24635,8 +24794,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/GoalHistoryEntryResponse"
                   },
                   "title": "Response Get Goal History V1 Goals  Goal Id  History Get",
                   "type": "array"
@@ -24740,9 +24898,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Update Goal Progress V1 Goals  Goal Id  Progress Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GoalResponse"
                 }
               }
             },

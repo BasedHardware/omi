@@ -4,7 +4,7 @@ Handles user goals with AI-powered suggestions and advice.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from enum import Enum
 
@@ -57,17 +57,17 @@ class GoalUpdate(BaseModel):
 class GoalResponse(BaseModel):
     """Response model for a goal."""
 
-    id: str
-    title: str
-    goal_type: str
-    target_value: float
-    current_value: float
-    min_value: float
-    max_value: float
-    unit: Optional[str]
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    id: str = ''
+    title: str = ''
+    goal_type: str = 'scale'
+    target_value: float = 0
+    current_value: float = 0
+    min_value: float = 0
+    max_value: float = 10
+    unit: Optional[str] = None
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     advice: Optional[str] = None
 
 
@@ -77,6 +77,8 @@ class GoalSuggestionResponse(BaseModel):
     suggested_title: str
     suggested_type: str
     suggested_target: float
+    suggested_min: float = 0
+    suggested_max: float = 10
     reasoning: str
 
 
@@ -86,7 +88,22 @@ class AdviceResponse(BaseModel):
     advice: str
 
 
-@router.get('/v1/goals', tags=['goals'])
+class GoalHistoryEntryResponse(BaseModel):
+    """Response model for a goal progress history entry."""
+
+    date: str = ''
+    value: float = 0
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class GoalDeleteResponse(BaseModel):
+    """Response model for deleting a goal."""
+
+    success: bool
+    deleted_id: str
+
+
+@router.get('/v1/goals', tags=['goals'], response_model=Optional[GoalResponse])
 def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
     """Get the current active goal for the user (backward compatibility)."""
     goal = goals_db.get_user_goal(uid)
@@ -99,7 +116,7 @@ def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[
     return goal
 
 
-@router.get('/v1/goals/all', tags=['goals'])
+@router.get('/v1/goals/all', tags=['goals'], response_model=List[GoalResponse])
 def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
     """Get all active goals for the user (up to 4)."""
     goals = goals_db.get_user_goals(uid, limit=4)
@@ -114,7 +131,7 @@ def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
     return goals
 
 
-@router.post('/v1/goals', tags=['goals'])
+@router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a new goal. This will deactivate any existing active goal."""
     goal_data = {
@@ -139,7 +156,7 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
     return created_goal
 
 
-@router.patch('/v1/goals/{goal_id}', tags=['goals'])
+@router.patch('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalResponse)
 def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
@@ -161,7 +178,7 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
     return updated_goal
 
 
-@router.patch('/v1/goals/{goal_id}/progress', tags=['goals'])
+@router.patch('/v1/goals/{goal_id}/progress', tags=['goals'], response_model=GoalResponse)
 def update_goal_progress(
     goal_id: str,
     current_value: float = Query(..., description="New progress value"),
@@ -182,7 +199,7 @@ def update_goal_progress(
     return updated_goal
 
 
-@router.get('/v1/goals/{goal_id}/history', tags=['goals'])
+@router.get('/v1/goals/{goal_id}/history', tags=['goals'], response_model=List[GoalHistoryEntryResponse])
 def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
     """Get progress history for a goal."""
     history = goals_db.get_goal_history(uid, goal_id, days)
@@ -195,7 +212,7 @@ def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(au
     return history
 
 
-@router.delete('/v1/goals/{goal_id}', tags=['goals'])
+@router.delete('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalDeleteResponse)
 def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Delete a goal."""
     success = goals_db.delete_goal(uid, goal_id)
@@ -206,13 +223,13 @@ def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> 
     return {"success": True, "deleted_id": goal_id}
 
 
-@router.get('/v1/goals/suggest', tags=['goals'])
+@router.get('/v1/goals/suggest', tags=['goals'], response_model=GoalSuggestionResponse)
 def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> dict:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     return suggest_goal_llm(uid)
 
 
-@router.get('/v1/goals/{goal_id}/advice', tags=['goals'])
+@router.get('/v1/goals/{goal_id}/advice', tags=['goals'], response_model=AdviceResponse)
 def get_goal_advice(
     goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:
@@ -224,7 +241,7 @@ def get_goal_advice(
         raise HTTPException(status_code=404, detail="Goal not found")
 
 
-@router.get('/v1/goals/advice', tags=['goals'])
+@router.get('/v1/goals/advice', tags=['goals'], response_model=AdviceResponse)
 def get_current_goal_advice(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:

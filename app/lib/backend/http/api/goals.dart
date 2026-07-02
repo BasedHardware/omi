@@ -1,8 +1,45 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/goals_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
+
+String _nowIso() => DateTime.now().toUtc().toIso8601String();
+
+Map<String, dynamic> _goalJsonWithDefaults(Map<String, dynamic> json) {
+  final normalized = Map<String, dynamic>.from(json);
+  normalized['id'] ??= '';
+  normalized['title'] ??= '';
+  normalized['goal_type'] ??= 'scale';
+  normalized['target_value'] ??= 0;
+  normalized['current_value'] ??= 0;
+  normalized['min_value'] ??= 0;
+  normalized['max_value'] ??= 10;
+  normalized['is_active'] ??= true;
+  normalized['created_at'] ??= _nowIso();
+  normalized['updated_at'] ??= _nowIso();
+  return normalized;
+}
+
+Map<String, dynamic> _goalHistoryJsonWithDefaults(Map<String, dynamic> json) {
+  final normalized = Map<String, dynamic>.from(json);
+  normalized['date'] ??= '';
+  normalized['value'] ??= 0;
+  normalized['recorded_at'] ??= _nowIso();
+  return normalized;
+}
+
+Map<String, dynamic> _goalSuggestionJsonWithDefaults(Map<String, dynamic> json) {
+  final normalized = Map<String, dynamic>.from(json);
+  normalized['suggested_title'] ??= '';
+  normalized['suggested_type'] ??= 'scale';
+  normalized['suggested_target'] ??= 10;
+  normalized['suggested_min'] ??= 0;
+  normalized['suggested_max'] ??= 10;
+  normalized['reasoning'] ??= '';
+  return normalized;
+}
 
 /// Goal model
 class Goal {
@@ -33,18 +70,20 @@ class Goal {
   });
 
   factory Goal.fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json));
+    final parsedAt = DateTime.now();
     return Goal(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      goalType: json['goal_type'] ?? 'scale',
-      targetValue: (json['target_value'] ?? 0).toDouble(),
-      currentValue: (json['current_value'] ?? 0).toDouble(),
-      minValue: (json['min_value'] ?? 0).toDouble(),
-      maxValue: (json['max_value'] ?? 10).toDouble(),
-      unit: json['unit'],
-      isActive: json['is_active'] ?? true,
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : DateTime.now(),
+      id: generated.id,
+      title: generated.title,
+      goalType: generated.goalType,
+      targetValue: generated.targetValue,
+      currentValue: generated.currentValue,
+      minValue: generated.minValue,
+      maxValue: generated.maxValue,
+      unit: generated.unit,
+      isActive: generated.isActive,
+      createdAt: generated.createdAt ?? parsedAt,
+      updatedAt: generated.updatedAt ?? parsedAt,
     );
   }
 
@@ -78,10 +117,11 @@ class GoalHistoryEntry {
   GoalHistoryEntry({required this.date, required this.value, required this.recordedAt});
 
   factory GoalHistoryEntry.fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedGoalHistoryEntryResponse.fromJson(_goalHistoryJsonWithDefaults(json));
     return GoalHistoryEntry(
-      date: json['date'] ?? '',
-      value: (json['value'] ?? 0).toDouble(),
-      recordedAt: json['recorded_at'] != null ? DateTime.parse(json['recorded_at']) : DateTime.now(),
+      date: generated.date,
+      value: generated.value,
+      recordedAt: generated.recordedAt ?? DateTime.now(),
     );
   }
 }
@@ -105,13 +145,14 @@ class GoalSuggestion {
   });
 
   factory GoalSuggestion.fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedGoalSuggestionResponse.fromJson(_goalSuggestionJsonWithDefaults(json));
     return GoalSuggestion(
-      suggestedTitle: json['suggested_title'] ?? '',
-      suggestedType: json['suggested_type'] ?? 'scale',
-      suggestedTarget: (json['suggested_target'] ?? 10).toDouble(),
-      suggestedMin: (json['suggested_min'] ?? 0).toDouble(),
-      suggestedMax: (json['suggested_max'] ?? 10).toDouble(),
-      reasoning: json['reasoning'] ?? '',
+      suggestedTitle: generated.suggestedTitle,
+      suggestedType: generated.suggestedType,
+      suggestedTarget: generated.suggestedTarget,
+      suggestedMin: generated.suggestedMin,
+      suggestedMax: generated.suggestedMax,
+      reasoning: generated.reasoning,
     );
   }
 }
@@ -230,7 +271,10 @@ Future<Goal?> updateGoalProgress(String goalId, double currentValue) async {
 Future<bool> deleteGoal(String goalId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/$goalId', headers: {}, method: 'DELETE', body: '');
   if (response == null) return false;
-  return response.statusCode == 200;
+  if (response.statusCode == 200) {
+    return wire.GeneratedGoalDeleteResponse.fromJson(json.decode(response.body) as Map<String, dynamic>).success;
+  }
+  return false;
 }
 
 /// Get AI-suggested goal based on user data
@@ -252,7 +296,7 @@ Future<String?> getGoalAdvice() async {
   Logger.debug('getGoalAdvice response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
-    return decoded['advice'];
+    return wire.GeneratedAdviceResponse.fromJson(decoded as Map<String, dynamic>).advice;
   }
   return null;
 }

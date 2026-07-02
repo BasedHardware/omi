@@ -154,6 +154,16 @@ SCHEMA_GROUPS = {
             'MemoryDB',
         ),
     },
+    'goals': {
+        'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',
+        'schemas': (
+            'GoalResponse',
+            'GoalSuggestionResponse',
+            'AdviceResponse',
+            'GoalHistoryEntryResponse',
+            'GoalDeleteResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
