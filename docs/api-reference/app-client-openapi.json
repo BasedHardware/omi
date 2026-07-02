@@ -10013,6 +10013,38 @@
         "title": "SaveFcmTokenRequest",
         "type": "object"
       },
+      "SearchConversationsResponse": {
+        "properties": {
+          "current_page": {
+            "title": "Current Page",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "per_page": {
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_pages",
+          "current_page",
+          "per_page"
+        ],
+        "title": "SearchConversationsResponse",
+        "type": "object"
+      },
       "SearchRequest": {
         "properties": {
           "end_date": {
@@ -20897,9 +20929,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Search Conversations Endpoint V1 Conversations Search Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SearchConversationsResponse"
                 }
               }
             },

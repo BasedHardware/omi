@@ -45,6 +45,7 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
     assert GENERATED_DART_PATH.read_text() == generated
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
+    assert 'items: _required(_readMapList(_readAny(json, const ["items"])), "items")' in generated
 
 
 def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():

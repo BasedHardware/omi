@@ -562,6 +562,38 @@ class GeneratedConversation {
   }
 }
 
+class GeneratedSearchConversationsResponse {
+  final int currentPage;
+  final List<Map<String, dynamic>> items;
+  final int perPage;
+  final int totalPages;
+
+  const GeneratedSearchConversationsResponse({
+    required this.currentPage,
+    required this.items,
+    required this.perPage,
+    required this.totalPages,
+  });
+
+  factory GeneratedSearchConversationsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSearchConversationsResponse(
+      currentPage: _required(_readInt(_readAny(json, const ["current_page"])), "current_page"),
+      items: _required(_readMapList(_readAny(json, const ["items"])), "items"),
+      perPage: _required(_readInt(_readAny(json, const ["per_page"])), "per_page"),
+      totalPages: _required(_readInt(_readAny(json, const ["total_pages"])), "total_pages"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'current_page': currentPage,
+      'items': items,
+      'per_page': perPage,
+      'total_pages': totalPages,
+    };
+  }
+}
+
 dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
     if (json.containsKey(name)) return json[name];

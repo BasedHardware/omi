@@ -1,7 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from typing import Optional, List
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
@@ -115,6 +115,13 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+
+
+class SearchConversationsResponse(BaseModel):
+    items: List[Dict[str, Any]]
+    total_pages: int
+    current_page: int
+    per_page: int
 
 
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
@@ -965,7 +972,7 @@ def get_shared_conversation_by_id(conversation_id: str):
     return response_dict
 
 
-@router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
+@router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
 def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),

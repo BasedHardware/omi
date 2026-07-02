@@ -30,6 +30,7 @@ SCHEMA_GROUPS = {
             'AudioFile',
             'CalendarEventLink',
             'Conversation',
+            'SearchConversationsResponse',
         ),
     },
     'action_items_folders': {

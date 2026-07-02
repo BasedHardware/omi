@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -91,8 +92,9 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories =
-        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
+    var memories = (jsonDecode(body) as List<dynamic>)
+        .map((conversation) => ServerConversation.fromJson(conversation))
+        .toList();
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true);
   }
@@ -276,8 +278,9 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics:
-          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      speechmatics: (json['speechmatics'] as List<dynamic>)
+          .map((segment) => TranscriptSegment.fromJson(segment))
+          .toList(),
     );
   }
 }
@@ -538,11 +541,9 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   );
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
-    List<dynamic> items = (jsonDecode(response.body))['items'];
-    int currentPage = (jsonDecode(response.body))['current_page'];
-    int totalPages = (jsonDecode(response.body))['total_pages'];
-    var convos = items.map<ServerConversation>((item) => ServerConversation.fromJson(item)).toList();
-    return (convos, currentPage, totalPages);
+    final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final convos = data.items.map<ServerConversation>(ServerConversation.fromJson).toList();
+    return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);
 }
