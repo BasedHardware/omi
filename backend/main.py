@@ -195,6 +195,7 @@ app.add_middleware(BYOKMiddleware)
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(log_executor_health())
+    auto_model.start_model_auto_router()
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(
@@ -234,6 +235,7 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    await auto_model.stop_model_auto_router()
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
 

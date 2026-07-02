@@ -25,6 +25,7 @@ from utils.llm.model_config import (
     _active_profile_name,
     _byok_profile,
     _byok_profile_name,
+    get_dynamic_route_info,
     get_active_profile,
     get_active_profile_name,
     get_all_configured_features,
@@ -34,6 +35,7 @@ from utils.llm.model_config import (
     get_model,
     get_provider,
     get_route_options,
+    is_auto_router_enabled,
     is_anthropic_only_feature,
     is_perplexity_only_feature,
     is_structured_output_feature,
@@ -326,17 +328,23 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     return result
 
 
-def get_qos_info() -> Dict[str, Dict[str, str]]:
+def get_qos_info() -> Dict[str, Dict[str, Any]]:
     """Return full feature→(model, provider) mapping for the active profile (debugging/monitoring)."""
-    info: Dict[str, Dict[str, str]] = {}
+    info: Dict[str, Dict[str, Any]] = {}
     all_features = get_all_configured_features()
     for feature in sorted(all_features):
         model, provider = _get_model_config(feature)
+        route = get_dynamic_route_info(feature)
         info[feature] = {
             'model': model,
             'profile': get_active_profile_name(),
             'provider': provider,
+            'route_source': route.get('source', 'static') if route else 'static',
         }
+        if route:
+            for key in ('reason', 'score', 'fallback_model', 'fallback_provider', 'expires_at'):
+                if key in route:
+                    info[feature][key] = route[key]
     return info
 
 
@@ -346,6 +354,7 @@ logger.info('Model QoS profile=%s (%d features)', get_active_profile_name(), len
 for _feat, (_model, _provider) in sorted(_active_profile.items()):
     logger.info('  QoS %s: %s [%s]', _feat, _model, _provider)
 logger.info('BYOK QoS profile=%s', get_byok_profile_name())
+logger.info('Model auto-router enabled=%s', is_auto_router_enabled())
 
 _so_gemini = {f for f in _active_profile if is_structured_output_feature(f) and _get_model_config(f)[1] == 'gemini'}
 if _so_gemini:
