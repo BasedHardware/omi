@@ -175,16 +175,28 @@ async def chat(
             e,
         )
         return ""
-    except httpx.TransportError as e:
-        # Broader catch for httpx transport errors that aren't
-        # ConnectError or TimeoutException — ReadError, RemoteProtocolError,
-        # WriteError, CloseError, ProtocolError, etc. These can occur
-        # during SSE streaming (mid-response connection drops, malformed
-        # frames, etc.) and the documented resilience contract says
-        # transport errors return "". The narrower ConnectError catch
-        # above is kept for log clarity. (Cubic review 4614064929 P1.)
+    except (httpx.ReadError, httpx.WriteError, httpx.CloseError, httpx.RemoteProtocolError) as e:
+        # Cubic review 4614271733 P2: enumerate the specific TRANSIENT
+        # transport errors that can occur mid-SSE (connection drops,
+        # malformed frames, etc.) instead of catching the broad
+        # `httpx.TransportError` parent class.
+        #
+        # Why not `except httpx.TransportError`? That would also
+        # catch permanent configuration errors that should NOT be
+        # silently swallowed:
+        #   - `httpx.UnsupportedProtocol` — bad URL scheme (e.g.
+        #     "ftp://" or "not a URL at all") — will fail every call.
+        #   - `httpx.ProxyError` — misconfigured proxy — same.
+        #   - `httpx.ProtocolError` — base class; too broad.
+        # These deserve a visible 5xx so the operator can fix the
+        # config, not a silent "" that masks the misconfiguration.
+        # The narrower catch covers the four transient mid-stream
+        # failure modes that the resilience contract promises to
+        # absorb (ReadError, WriteError, CloseError,
+        # RemoteProtocolError). ConnectError and TimeoutException
+        # are caught above.
         logger.error(
-            "persona chat transport error (app_id=%s, uid=%s): %s",
+            "persona chat mid-stream transport error (app_id=%s, uid=%s): %s",
             app_id,
             uid,
             type(e).__name__,

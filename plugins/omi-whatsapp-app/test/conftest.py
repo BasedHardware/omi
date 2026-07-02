@@ -164,6 +164,19 @@ def _whatsapp_sys_modules_isolation():
     if hasattr(main_module, "_seen_wamids"):
         main_module._seen_wamids.clear()
 
+    # Cubic review 4614271733 P3: clear simple_storage's module-level
+    # `users` and `pending_setups` dicts at the start of every test.
+    # Without this, the test_storage_durability tests (and any future
+    # tests that exercise the storage layer) leave entries behind that
+    # pollute subsequent tests' state. Unique keys prevent collisions
+    # TODAY, but order-dependent failures are fragile. Pattern is
+    # consistent with the existing _seen_wamids.clear() reset above.
+    simple_storage_module = our_modules["simple_storage"]
+    if hasattr(simple_storage_module, "users"):
+        simple_storage_module.users.clear()
+    if hasattr(simple_storage_module, "pending_setups"):
+        simple_storage_module.pending_setups.clear()
+
     try:
         yield
     finally:
