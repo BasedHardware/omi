@@ -27,7 +27,7 @@ from services.users.data_export import iter_user_data_export
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
-from database.conversations import get_in_progress_conversation, get_conversation
+from database.conversations import get_in_progress_conversation, get_conversation, get_conversations_without_photos
 from database.redis_db import (
     cache_user_geolocation,
     get_cached_user_geolocation,
@@ -57,11 +57,12 @@ from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
-from models.other import Person, CreatePerson
+from utils.people_leaderboard import build_people_leaderboard, MAX_LEADERBOARD_CONVERSATIONS
+from models.other import Person, CreatePerson, PeopleLeaderboardResponse
 from models.shared import StatusResponse
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 
 from models.users import (
     ChatUsageQuota,
@@ -606,6 +607,42 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
     }
     result = create_person(uid, person_data)
     return result
+
+
+# Declared before the /{person_id} route so "leaderboard" is not captured as a person id.
+@router.get('/v1/users/people/leaderboard', tags=['v1'], response_model=PeopleLeaderboardResponse)
+def get_people_leaderboard(
+    days: int = 90,
+    limit: int = 10,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """People you talk to the most (issue #3808).
+
+    Ranks the identified speakers across your recent conversations by how many
+    conversations you shared and total speaking time, resolving names from your
+    people list. Structured, non-LLM complement to the yearly Wrapped 'top people'.
+    """
+    days = max(1, min(days, 365))
+    limit = max(1, min(limit, 50))
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+    conversations_data = get_conversations_without_photos(
+        uid,
+        limit=MAX_LEADERBOARD_CONVERSATIONS,
+        statuses=['completed'],
+        start_date=start_date,
+        end_date=end_date,
+    )
+    conversations = deserialize_conversations(conversations_data)
+    person_ids = sorted({pid for conv in conversations for pid in conv.get_person_ids()})
+    people = get_people_by_ids(uid, person_ids) if person_ids else []
+    names = {p['id']: p.get('name', '') for p in people}
+    entries = build_people_leaderboard(conversations, names, limit=limit)
+    return PeopleLeaderboardResponse(
+        days=days,
+        conversations_considered=len(conversations),
+        people=entries,
+    )
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)

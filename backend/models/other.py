@@ -44,6 +44,7 @@ class Person(BaseModel):
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
 
+<<<<<<< HEAD
     @classmethod
     def deserialize_many_safe(
         cls,
@@ -61,3 +62,20 @@ class Person(BaseModel):
                 if on_error is not None:
                     on_error(record, exc)
         return parsed
+=======
+
+class PersonLeaderboardEntry(BaseModel):
+    person_id: str
+    name: str
+    conversation_count: int
+    speaking_seconds: float
+    last_talked_at: Optional[datetime] = None
+
+
+class PeopleLeaderboardResponse(BaseModel):
+    # Size of the window scanned and how many conversations it actually considered,
+    # so a client can tell an empty board (no people) from a short history.
+    days: int
+    conversations_considered: int
+    people: List[PersonLeaderboardEntry] = []
+>>>>>>> 8ecf43f8c9 (feat(backend): people-you-talk-to-the-most leaderboard (#3808))
