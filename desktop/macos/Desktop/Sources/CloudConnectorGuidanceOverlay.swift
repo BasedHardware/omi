@@ -428,8 +428,11 @@ private struct CloudConnectorFieldCopyCardView: View {
     let label: String
     let value: String
     var id: String { label }
-    var isSecret: Bool { label.localizedCaseInsensitiveContains("secret") }
-    var displayValue: String { isSecret ? String(repeating: "•", count: 12) : value }
+    var isSecret: Bool { !value.isEmpty && label.localizedCaseInsensitiveContains("secret") }
+    var displayValue: String {
+      if value.isEmpty { return "leave blank" }
+      return isSecret ? String(repeating: "•", count: 12) : value
+    }
   }
 
   let title: String
@@ -494,33 +497,46 @@ private struct CloudConnectorFieldCopyCardView: View {
 
       Text(field.displayValue)
         .font(.system(size: 11, design: .monospaced))
-        .foregroundColor(OmiColors.textSecondary)
+        .italic(field.value.isEmpty)
+        .foregroundColor(field.value.isEmpty ? OmiColors.textTertiary : OmiColors.textSecondary)
         .lineLimit(1)
         .truncationMode(.middle)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-      Button {
-        copy(field)
-      } label: {
-        HStack(spacing: 4) {
-          Image(systemName: copiedFieldID == field.id ? "checkmark" : "doc.on.doc")
-            .scaledFont(size: 9, weight: .bold)
-          Text(copiedFieldID == field.id ? "Copied" : "Copy")
-            .scaledFont(size: 10.5, weight: .semibold)
-        }
-        .foregroundColor(copiedFieldID == field.id ? OmiColors.success : OmiColors.textPrimary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(
-          Capsule().fill(
-            copiedFieldID == field.id
-              ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12)))
-        .contentShape(Capsule())
+      if field.value.isEmpty {
+        Text("—")
+          .scaledFont(size: 10.5, weight: .semibold)
+          .foregroundColor(OmiColors.textTertiary)
+          .padding(.horizontal, 9)
+          .padding(.vertical, 4)
+      } else {
+        copyButton(field)
       }
-      .buttonStyle(.plain)
-      .help("Copy \(field.label)")
     }
     .frame(height: 24)
+  }
+
+  private func copyButton(_ field: Field) -> some View {
+    Button {
+      copy(field)
+    } label: {
+      HStack(spacing: 4) {
+        Image(systemName: copiedFieldID == field.id ? "checkmark" : "doc.on.doc")
+          .scaledFont(size: 9, weight: .bold)
+        Text(copiedFieldID == field.id ? "Copied" : "Copy")
+          .scaledFont(size: 10.5, weight: .semibold)
+      }
+      .foregroundColor(copiedFieldID == field.id ? OmiColors.success : OmiColors.textPrimary)
+      .padding(.horizontal, 9)
+      .padding(.vertical, 4)
+      .background(
+        Capsule().fill(
+          copiedFieldID == field.id
+            ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12)))
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .help("Copy \(field.label)")
   }
 
   private func copy(_ field: Field) {

@@ -28,6 +28,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   static var mcpAuthorizeURL: String { "\(mcpBaseURL)authorize" }
   static var mcpTokenURL: String { "\(mcpBaseURL)token" }
 
+  /// Registered OAuth client for ChatGPT custom connectors on this backend.
+  /// Prod registers `omi-chatgpt-prod` as a PUBLIC PKCE client — the token
+  /// endpoint rejects any client secret for it, so setup must leave the
+  /// secret blank. Dev registers `omi-chatgpt-dev`.
+  static var chatgptOAuthClientID: String {
+    mcpBaseURL.contains("api.omi.me") ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
+  }
+
   var title: String {
     switch self {
     case .notion: return "Notion"
@@ -219,7 +227,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         steps: [
           "Open ChatGPT → Settings → Apps → Advanced, enable Developer mode",
           "Create app → name it “Omi Memory” and paste the server URL below",
-          "Authentication: OAuth. In Advanced OAuth settings set Client ID “omi”, Client Secret to your key, token auth method “client_secret_post”",
+          "Authentication: OAuth. Client ID “\(Self.chatgptOAuthClientID)”, leave Client Secret blank (public PKCE client)",
           "Auth URL: \(Self.mcpAuthorizeURL) · Token URL: \(Self.mcpTokenURL)",
           "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
         ],
@@ -340,9 +348,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         "Name: Omi Memory",
         "Remote MCP server URL: \(setup.serverURL)",
         "Authentication: OAuth",
-        "OAuth Client ID: omi",
-        "OAuth Client Secret: \(key)",
-        "Token auth method: client_secret_post",
+        "OAuth Client ID: \(Self.chatgptOAuthClientID)",
+        "OAuth Client Secret: leave blank (public PKCE client)",
         "Auth URL: \(Self.mcpAuthorizeURL)",
         "Token URL: \(Self.mcpTokenURL)",
       ]
@@ -374,16 +381,20 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       ("provider", rawValue),
       ("name", "Omi Memory"),
       ("server_url", setup.serverURL),
-      ("oauth_client_id", "omi"),
-      ("oauth_client_secret", key),
       ("submit", "true"),
     ]
     if self == .chatgpt {
+      // Public PKCE client — no client secret; the token endpoint rejects one.
       nativeToolArgs.append(contentsOf: [
         ("authentication", "OAuth"),
-        ("token_auth_method", "client_secret_post"),
+        ("oauth_client_id", Self.chatgptOAuthClientID),
         ("auth_url", Self.mcpAuthorizeURL),
         ("token_url", Self.mcpTokenURL),
+      ])
+    } else {
+      nativeToolArgs.append(contentsOf: [
+        ("oauth_client_id", "omi"),
+        ("oauth_client_secret", key),
       ])
     }
     let nativeToolJSON =
@@ -444,13 +455,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         ("OAuth Client Secret", key),
       ]
     case .chatgpt:
+      // Public PKCE client: the backend rejects token requests that carry a
+      // client secret, so the form's Client Secret field must stay empty.
       return [
         ("Name", "Omi Memory"),
         ("Remote MCP server URL", setup.serverURL),
         ("Authentication", "OAuth"),
-        ("OAuth Client ID", "omi"),
-        ("OAuth Client Secret", key),
-        ("Token auth method", "client_secret_post"),
+        ("OAuth Client ID", Self.chatgptOAuthClientID),
+        ("OAuth Client Secret", ""),
         ("Auth URL", Self.mcpAuthorizeURL),
         ("Token URL", Self.mcpTokenURL),
       ]

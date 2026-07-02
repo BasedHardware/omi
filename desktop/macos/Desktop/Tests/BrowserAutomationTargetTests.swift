@@ -40,7 +40,11 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertNotNil(MemoryExportDestination.claude.assistedOverlayHint)
     XCTAssertNil(MemoryExportDestination.gemini.assistedOverlayHint)
     XCTAssertEqual(MemoryExportDestination.claude.assistedSetupFields(key: "k")?.count, 4)
-    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 8)
+    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 7)
+    // Prod ChatGPT client is public PKCE — the secret row must stay blank.
+    XCTAssertEqual(
+      MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.value, "")
     XCTAssertNil(MemoryExportDestination.gemini.assistedSetupFields(key: "k"))
     XCTAssertEqual(MemoryExportDestination.codex.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.claudeCode.mcpExecuteKind, .localAutonomous)
@@ -188,8 +192,13 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertTrue(task?.body.contains("execute javascript") == true)
     XCTAssertTrue(task?.body.contains("Do not install browser extensions") == true)
     XCTAssertTrue(task?.body.contains("Brave Browser") == true)
-    XCTAssertTrue(task?.body.contains("OAuth Client ID: omi") == true)
-    XCTAssertTrue(task?.body.contains("OAuth Client Secret: test-key") == true)
+    // ChatGPT uses the registered public PKCE client — never the per-user key
+    // as a client secret (the token endpoint rejects secrets for public clients).
+    XCTAssertTrue(
+      task?.body.contains("OAuth Client ID: \(MemoryExportDestination.chatgptOAuthClientID)")
+        == true)
+    XCTAssertTrue(task?.body.contains("OAuth Client Secret: leave blank") == true)
+    XCTAssertFalse(task?.body.contains("OAuth Client Secret: test-key") == true)
     XCTAssertTrue(task?.body.contains(MemoryExportDestination.mcpServerURL) == true)
   }
 
