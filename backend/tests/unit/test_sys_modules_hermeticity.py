@@ -27,6 +27,10 @@ SUBSET_FILE = BACKEND_DIR / "tests" / ".single_process_safe_subset"
 
 BACKEND_PREFIXES = ("database.", "utils.", "models.", "routers.", "jobs.", "dependencies")
 
+# Module type names that are unambiguously test fakes regardless of whether a real
+# source file backs the name. Production code never installs these into sys.modules.
+_STUB_TYPE_NAMES = frozenset({"AutoMockModule", "MagicMock", "Mock", "AsyncMock", "NonCallableMagicMock"})
+
 
 def _read_subset() -> list[str]:
     if not SUBSET_FILE.exists():
@@ -45,17 +49,26 @@ def test_single_process_safe_subset_does_not_leak_backend_stubs():
     if not subset:
         pytest.skip("single-process-safe subset is empty (no files migrated yet)")
 
-    # Subprocess harness: snapshot nothing pre-import; run pytest on the subset; then
-    # scan sys.modules for backend-owned entries that are stubs (no real __file__).
+    # In-process harness: run pytest via ``pytest.main`` in the SAME interpreter that
+    # performs the leak scan, so a stub left behind by a subset test is actually
+    # observable. The previous nested-subprocess design scanned the parent while
+    # pytest ran in a child that was already gone — leaks silently vanished.
     harness = textwrap.dedent(f"""
-        import subprocess, sys
-        rc = subprocess.call(
-            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *{subset!r}],
-            cwd={str(BACKEND_DIR)!r},
-        )
-        # Run the scan regardless of pytest rc (a failing test still must not pollute).
-        import importlib.util
+        import sys
+        sys.path.insert(0, {str(BACKEND_DIR)!r})
+        import pytest
+
+        rc = pytest.main(["-q", "-p", "no:cacheprovider", *{subset!r}])
+
+        # Scan sys.modules for backend-owned entries that are stubs shadowing a real
+        # module (or unambiguously a test fake). A deliberately-synthetic module name
+        # with no real backing source (e.g. ``utils._async_tasks_metric_cache`` created
+        # at import time by production code) is NOT a leak — it shadows nothing. A
+        # failing test must still not pollute, so this runs regardless of pytest's rc.
+        import os
+        BACKEND_DIR = {str(BACKEND_DIR)!r}
         PREFIXES = {BACKEND_PREFIXES!r}
+        STUB_TYPE_NAMES = {set(_STUB_TYPE_NAMES)!r}
         leaked = []
         for name in list(sys.modules):
             if not (any(name == p.rstrip('.') or name.startswith(p) for p in PREFIXES)):
@@ -65,20 +78,37 @@ def test_single_process_safe_subset_does_not_leak_backend_stubs():
                 continue
             f = getattr(mod, "__file__", None)
             is_pkg = hasattr(mod, "__path__")
-            is_stub = (f is None) and (not is_pkg)
-            if is_stub:
-                leaked.append((name, type(mod).__name__))
+            type_name = type(mod).__name__
+            is_plain_stub = (f is None) and (not is_pkg)
+            if not is_plain_stub and type_name not in STUB_TYPE_NAMES:
+                continue
+            # Does a real source file back this dotted name? Only flag if it does
+            # (a stub is shadowing a real module) or the type is an obvious fake.
+            rel = name.replace('.', os.sep)
+            real_file = (
+                os.path.exists(os.path.join(BACKEND_DIR, rel + '.py'))
+                or os.path.exists(os.path.join(BACKEND_DIR, rel, '__init__.py'))
+            )
+            if real_file or type_name in STUB_TYPE_NAMES:
+                leaked.append((name, type_name))
         import json
         print("HERMETICITY_RC=" + str(rc))
         print("HERMETICITY_LEAKED=" + json.dumps(sorted(leaked)))
         sys.exit(0)
         """)
-    result = subprocess.run(
-        [sys.executable, "-c", harness],
-        capture_output=True,
-        text=True,
-        cwd=str(BACKEND_DIR),
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", harness],
+            capture_output=True,
+            text=True,
+            cwd=str(BACKEND_DIR),
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(
+            "hermeticity harness timed out after 600s running the single-process-safe subset; "
+            "a subset test likely deadlocked (network wait / thread hang)."
+        )
 
     rc = None
     leaked: list[list[str]] = []
