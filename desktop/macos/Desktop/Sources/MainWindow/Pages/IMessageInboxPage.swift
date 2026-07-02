@@ -7,6 +7,9 @@ import SwiftUI
 struct IMessageInboxPage: View {
   @StateObject private var store = IMessageInboxStore()
 
+  @State private var isSyncingContacts = false
+  @State private var contactSyncStatus: String?
+
   private static let iMessageBlue = Color(red: 0.0, green: 0.478, blue: 1.0)
 
   var body: some View {
@@ -41,11 +44,12 @@ struct IMessageInboxPage: View {
 
   private var conversationList: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HStack {
+      HStack(spacing: 10) {
         Text("Messages")
           .scaledFont(size: 20, weight: .bold)
           .foregroundColor(OmiColors.textPrimary)
         Spacer()
+        syncContactsControl
         Button { Task { await store.load() } } label: {
           Image(systemName: "arrow.clockwise").foregroundColor(OmiColors.textSecondary)
         }
@@ -83,6 +87,50 @@ struct IMessageInboxPage: View {
       }
     }
     .background(OmiColors.backgroundPrimary)
+  }
+
+  /// Reads the full macOS address book and uploads it so the backend can resolve
+  /// inbound handles to People. Shows a spinner while syncing and a brief result.
+  private var syncContactsControl: some View {
+    HStack(spacing: 6) {
+      if let contactSyncStatus {
+        Text(contactSyncStatus)
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
+      }
+      Button { Task { await syncContacts() } } label: {
+        HStack(spacing: 5) {
+          if isSyncingContacts {
+            ProgressView().controlSize(.small)
+          } else {
+            Image(systemName: "person.crop.circle.badge.plus")
+          }
+          Text("Sync Contacts").scaledFont(size: 12)
+        }
+        .foregroundColor(OmiColors.textSecondary)
+      }
+      .buttonStyle(.plain)
+      .disabled(isSyncingContacts)
+      .help("Upload your contacts so Omi can match incoming messages to names.")
+    }
+  }
+
+  private func syncContacts() async {
+    isSyncingContacts = true
+    contactSyncStatus = nil
+    defer { isSyncingContacts = false }
+    let contacts = await IMessageContactResolver.shared.allContacts()
+    guard !contacts.isEmpty else {
+      contactSyncStatus = "No contacts to sync"
+      return
+    }
+    do {
+      let upserted = try await APIClient.shared.imessageSyncContacts(contacts)
+      contactSyncStatus = "Synced \(upserted) contact\(upserted == 1 ? "" : "s")"
+    } catch {
+      contactSyncStatus = "Sync failed"
+    }
   }
 
   private var emptyDetail: some View {

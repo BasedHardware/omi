@@ -49,6 +49,33 @@ actor IMessageContactResolver {
     await resolve(handle).image
   }
 
+  /// Enumerates every unified contact and returns a sync payload per contact for
+  /// upload to the backend. Handles are the raw phone `stringValue`s plus lowercased
+  /// emails — the backend canonicalizes them. Contacts with no usable name AND no
+  /// handles are skipped. Degrades to `[]` if Contacts access isn't granted.
+  func allContacts() async -> [IMessageContactSyncPayload] {
+    guard await ensureAuthorized() else { return [] }
+    let request = CNContactFetchRequest(keysToFetch: Self.keysToFetch)
+    request.sortOrder = .none
+    var payloads: [IMessageContactSyncPayload] = []
+    let ok = (try? store.enumerateContacts(with: request) { contact, _ in
+      var handles: [String] = []
+      for phone in contact.phoneNumbers {
+        let value = phone.value.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !value.isEmpty { handles.append(value) }
+      }
+      for email in contact.emailAddresses {
+        let addr = (email.value as String).lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if !addr.isEmpty { handles.append(addr) }
+      }
+      let name = Self.composeName(contact)
+      // Skip contacts we can't key on at all (no name and no handles).
+      guard name != nil || !handles.isEmpty else { return }
+      payloads.append(IMessageContactSyncPayload(name: name ?? "", handles: handles))
+    }) != nil
+    return ok ? payloads : []
+  }
+
   /// Force a re-check on next lookup (e.g. after contacts or authorization change).
   func resetAuth() {
     authChecked = false

@@ -5602,6 +5602,12 @@ extension APIClient {
     let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent)
     return try await post("v1/imessage/draft-reply", body: body)
   }
+
+  func imessageSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
+    let body = IMessageContactsSyncRequestPayload(contacts: contacts)
+    let resp: IMessageContactsSyncResponsePayload = try await post("v1/imessage/contacts/sync", body: body)
+    return resp.peopleUpserted
+  }
 }
 
 struct XOAuthURLResponse: Decodable {

@@ -111,6 +111,30 @@ struct IMessageStatusPayload: Decodable {
   }
 }
 
+// MARK: - Contact sync
+
+/// One contact from the local macOS address book, POSTed so the backend can
+/// create/update People keyed by phone/email. Handles are sent raw (phone
+/// strings and emails as-is); the backend canonicalizes them.
+struct IMessageContactSyncPayload: Encodable, Sendable {
+  let name: String
+  let handles: [String]
+}
+
+struct IMessageContactsSyncRequestPayload: Encodable {
+  let contacts: [IMessageContactSyncPayload]
+}
+
+struct IMessageContactsSyncResponsePayload: Decodable {
+  let success: Bool
+  let peopleUpserted: Int
+
+  enum CodingKeys: String, CodingKey {
+    case success
+    case peopleUpserted = "people_upserted"
+  }
+}
+
 // MARK: - Reply drafting
 
 struct IMessageDraftMessagePayload: Encodable, Sendable {
