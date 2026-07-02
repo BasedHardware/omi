@@ -67,6 +67,16 @@ redis_db_stub.check_rate_limit = _check_rate_limit
 from utils.rate_limit_config import RATE_POLICIES, get_effective_limit, RATE_LIMIT_BOOST
 
 
+def _drop_stubbed_endpoints_module():
+    endpoints_module = sys.modules.get('utils.other.endpoints')
+    if endpoints_module is None or getattr(endpoints_module, '__file__', None):
+        return
+    sys.modules.pop('utils.other.endpoints', None)
+    parent = sys.modules.get('utils.other')
+    if parent is not None and getattr(parent, 'endpoints', None) is endpoints_module:
+        delattr(parent, 'endpoints')
+
+
 class TestRatePolicies(unittest.TestCase):
     """Validate rate limit policy definitions."""
 
@@ -175,6 +185,7 @@ class TestEnforceRateLimit(unittest.TestCase):
 
     def setUp(self):
         # Import here after stubs are in place
+        _drop_stubbed_endpoints_module()
         from utils.other import endpoints as ep_mod
 
         self.ep = ep_mod
@@ -266,6 +277,7 @@ class TestWithRateLimitWrapper(unittest.TestCase):
     """Test with_rate_limit() wrapper behavior."""
 
     def setUp(self):
+        _drop_stubbed_endpoints_module()
         from utils.other import endpoints as ep_mod
 
         self.ep = ep_mod
@@ -405,6 +417,8 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "goals:extract",
             "dev:conversations",
             "dev:conversations_read",
+            "dev:conversation_detail_read",
+            "dev:conversation_transcript_read",
             "dev:action_items_read",
             "dev:action_items_write",
             "dev:goals_read",
@@ -472,9 +486,33 @@ class TestRouterWiring(unittest.TestCase):
             "dev:memories_read",
             "dev:action_items_read",
             "dev:conversations_read",
+            "dev:conversation_detail_read",
+            "dev:conversation_transcript_read",
             "dev:goals_read",
         ]:
             self.assertIn(policy, source)
+
+    def test_developer_conversation_detail_limit_matches_list_limit(self):
+        self.assertEqual(RATE_POLICIES["dev:conversation_detail_read"], RATE_POLICIES["dev:conversations_read"])
+
+    def test_developer_conversation_reads_split_detail_and_transcript_policies(self):
+        dependencies_source = open("dependencies.py", encoding='utf-8').read()
+        developer_source = open("routers/developer.py", encoding='utf-8').read()
+
+        self.assertIn("policy_name=\"dev:conversation_detail_read\"", dependencies_source)
+        self.assertIn("policy_name=\"dev:conversation_transcript_read\"", dependencies_source)
+        self.assertIn("get_auth_with_conversation_detail_read", developer_source)
+        self.assertIn("check_conversation_transcript_read_limit(auth)", developer_source)
+
+    def test_developer_conversation_reads_emit_sanitized_audit_logs(self):
+        developer_source = open("routers/developer.py", encoding='utf-8').read()
+
+        self.assertIn("developer_api_read operation=%s", developer_source)
+        self.assertIn("auth.app_id or 'unknown_app'", developer_source)
+        self.assertIn("auth.key_id or 'unknown_key'", developer_source)
+        self.assertIn("sanitize(request.headers.get('user-agent'))", developer_source)
+        self.assertNotIn("request.headers.get('Authorization'", developer_source)
+        self.assertNotIn('request.headers.get("Authorization"', developer_source)
 
     def test_goals_router_has_rate_limits(self):
         matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
