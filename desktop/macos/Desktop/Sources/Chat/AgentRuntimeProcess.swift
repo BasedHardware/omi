@@ -580,11 +580,7 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
     ]
-    let adapterSearchDirs = adapterPathDirs + [
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
+    let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
@@ -609,6 +605,12 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let codexAcp = firstExecutable(named: "codex-acp", in: adapterSearchDirs)
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexAcpPath: codexAcp)
+    }
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
@@ -617,6 +619,18 @@ actor AgentRuntimeProcess {
       return "\(shellQuote(nodePath)) \(shellQuote(openClawPath)) acp"
     }
     return "\(shellQuote(openClawPath)) acp"
+  }
+
+  /// The codex-acp bridge is a stdio ACP server itself, so no subcommand is
+  /// appended. Prefer a sibling node binary (npm global installs place one
+  /// next to the script) so the `#!/usr/bin/env node` shebang never depends
+  /// on the minimal adapter PATH.
+  static func codexAdapterCommand(codexAcpPath: String, fileManager: FileManager = .default) -> String {
+    let nodePath = ((codexAcpPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
+    if fileManager.isExecutableFile(atPath: nodePath) {
+      return "\(shellQuote(nodePath)) \(shellQuote(codexAcpPath))"
+    }
+    return shellQuote(codexAcpPath)
   }
 
   private static func shellQuote(_ value: String) -> String {

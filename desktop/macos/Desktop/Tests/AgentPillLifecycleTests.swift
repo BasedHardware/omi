@@ -9,7 +9,8 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("You are running inside a visible floating background agent pill."))
     XCTAssertTrue(source.contains("Do the requested work now; do not merely acknowledge"))
-    XCTAssertTrue(source.contains("systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix"))
+    XCTAssertTrue(source.contains("systemPromptSuffixByPill[pill.id] = systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix"))
+    XCTAssertTrue(source.contains("let systemPromptSuffix = systemPromptSuffixByPill[pill.id] ?? Self.backgroundAgentSystemPromptSuffix"))
     XCTAssertTrue(source.contains("Do not call spawn_agent or delegate_agent just to hand off this same task."))
   }
 
@@ -22,9 +23,22 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
     XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
     XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
-    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent"]"#))
+    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent", "setup_agent_provider"]"#))
     XCTAssertTrue(source.contains("let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
+  }
+
+  func testAgentRunInstallAssistPillMachineryIsGone() throws {
+    let source = try agentPillSource()
+
+    // The agent-run installer was replaced by the deterministic
+    // LocalAgentProviderInstaller (native confirm dialog + Process): no
+    // code-built install brief, no auto-approving installer pill, no
+    // Combine status watcher, and no stale `npm bin -g` probing prose.
+    XCTAssertFalse(source.contains("installAssistBrief"))
+    XCTAssertFalse(source.contains("spawnInstallAssistPill"))
+    XCTAssertFalse(source.contains("installAssistWatchersByPill"))
+    XCTAssertFalse(source.contains("npm bin -g"))
   }
 
   func testProviderCorrectionUsesPreviousFloatingRequestObjective() throws {
@@ -62,7 +76,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
     XCTAssertTrue(source.contains("bridgeHarnessOverride: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
-    XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
+    XCTAssertTrue(agentPillSource.contains("@Published private(set) var bridgeHarnessOverride: AgentHarnessMode?"))
     XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
     XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
     XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
@@ -397,7 +411,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let viewSource = try floatingControlBarViewSource()
 
     XCTAssertTrue(agentSource.contains("@Published var conversationMessages: [ChatMessage] = []"))
-    XCTAssertTrue(agentSource.contains("pill.conversationMessages = displayMessages"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages = pill.providerFallbackNotices + displayMessages"))
     XCTAssertTrue(agentSource.contains("message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty"))
     XCTAssertTrue(viewSource.contains("private var displayedMessages: [ChatMessage]"))
     XCTAssertTrue(viewSource.contains("ChatMessage(id: \"\\(pill.id.uuidString)-query\", text: pill.query, sender: .user)"))
@@ -788,6 +802,218 @@ final class AgentPillLifecycleTests: XCTestCase {
 
                 switch projection.status {
         """))
+  }
+
+  func testProviderStartupFallbackChainOrderAndCap() {
+    // Remaining available providers in fixed [openclaw, hermes, codex] order,
+    // ending with the Omi default agent (nil).
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.openclaw], available: [.openclaw, .hermes, .codex]),
+      [.hermes, .codex, nil])
+
+    // The fixed order wins regardless of the order of `available`.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.hermes], available: [.codex, .openclaw, .hermes]),
+      [.openclaw, .codex, nil])
+
+    // Unavailable providers are never part of the chain.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.hermes], available: [.hermes, .codex]),
+      [.codex, nil])
+
+    // Nothing left → the default agent is the only remaining attempt.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.codex], available: [.codex]),
+      [nil])
+
+    // Attempt cap: requested + at most 2 directed fallbacks + default.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(
+        afterFailed: [.openclaw, .hermes, .codex],
+        available: [.openclaw, .hermes, .codex]),
+      [nil])
+  }
+
+  func testProviderStartupFallbackNeverRunsAfterTaskOutput() throws {
+    let source = try agentPillSource()
+
+    // HARD SAFETY RULE: fallback must be gated on the failed attempt having
+    // produced no output — re-running a partially-executed brief could repeat
+    // side effects (e.g. double-send messages).
+    XCTAssertTrue(source.contains("guard !pill.hasProducedTaskOutput else { return false }"))
+    XCTAssertTrue(source.contains("HARD SAFETY RULE: never fall back once the failed attempt produced"))
+    // The output flag flips as soon as any assistant text or tool/thinking
+    // content block streams in, and startup fallback only applies to initial
+    // runs — follow-up turns must never retry the brief on another provider.
+    XCTAssertTrue(source.contains("pill.markTaskOutputProduced()"))
+    XCTAssertTrue(source.contains("allowStartupFallback: Bool = false"))
+    XCTAssertTrue(source.contains("self.complete(pill: pill, provider: provider, finalText: finalText, allowStartupFallback: true)"))
+    // The failed attempt's terminal projection is cleared eagerly so a stray
+    // publish can't re-fail the retried pill.
+    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.beginRequest("))
+    // The switch is surfaced to the user in the pill chat + activity line.
+    XCTAssertTrue(source.contains("failed to start — continuing with"))
+    XCTAssertTrue(source.contains("AgentPill: provider fallback"))
+  }
+
+  func testProviderStartupFallbackRequiresStructuredStartupFailure() {
+    // ALLOWLIST gate: only a terminal .failed run whose structured failure
+    // the Node runtime tagged phase == "startup" (provably pre-execution) is
+    // eligible for a retry on another provider.
+    XCTAssertNotNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: runtimeFailure(phase: "startup"))))
+
+    // Execution-phase or untagged failures must surface as terminal failures
+    // — the adapter may already have executed side-effecting work.
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: runtimeFailure(phase: "execution"))))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: runtimeFailure(phase: nil))))
+
+    // Timeouts and orphaned runs never fall back: the remote adapter may
+    // still be executing, so a retry would run the brief concurrently twice.
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .timedOut, failure: runtimeFailure(phase: "startup"))))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .orphaned, failure: runtimeFailure(phase: "startup"))))
+
+    // No projection, no structured failure, or a successful run (e.g. a
+    // tool-only run with empty finalText) is never a fallback candidate —
+    // "ended with no error and no result" is a normal terminal failure now.
+    XCTAssertNil(AgentPillsManager.startupFallbackFailure(projection: nil))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: nil)))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .succeeded, failure: runtimeFailure(phase: "startup"))))
+  }
+
+  func testProviderStartupFallbackGateSourceUsesStructuredClassification() throws {
+    let source = try agentPillSource()
+    let failureSource = try agentRuntimeFailureSource()
+
+    // complete() feeds the projection into the pure structured gate; the old
+    // string-based classifier (which treated empty finalText and any
+    // provider.errorMessage as a startup failure) must stay deleted.
+    XCTAssertTrue(source.contains("let startupFailure = Self.startupFallbackFailure("))
+    XCTAssertTrue(source.contains("projection.status == .failed,"))
+    XCTAssertTrue(source.contains("failure.isStartupPhase"))
+    XCTAssertFalse(source.contains("startupFailureText"))
+    XCTAssertFalse(source.contains("return \"Agent ended before reporting a final result\""))
+    // The phase tag rides the structured failure payload from the Node
+    // runtime (agent/src/runtime/failures.ts) into Swift.
+    XCTAssertTrue(failureSource.contains("let phase: String?"))
+    XCTAssertTrue(failureSource.contains("payload[\"phase\"] as? String"))
+    XCTAssertTrue(failureSource.contains("var isStartupPhase: Bool { phase == \"startup\" }"))
+  }
+
+  func testProviderStartupFallbackTearsDownDisplacedAttempt() throws {
+    let source = try agentPillSource()
+    let providerSource = try chatProviderSource()
+
+    // Installing a new attempt must first cancel the displaced run task and
+    // shut the displaced provider's bridge down so its clientId is
+    // unregistered from the shared Node runtime.
+    XCTAssertTrue(
+      source.contains(
+        """
+        runTasksByPill[pill.id]?.cancel()
+                runTasksByPill[pill.id] = nil
+                if let displaced = providersByPill[pill.id] {
+                    Task { await displaced.shutdownBridge() }
+                }
+        """))
+    // Late Combine deliveries from a displaced provider must be dropped: the
+    // sink only forwards messages while its provider is still the pill's
+    // current attempt.
+    XCTAssertTrue(source.contains("guard self.providersByPill[pill.id] === provider else { return }"))
+    XCTAssertTrue(providerSource.contains("func shutdownBridge() async"))
+    XCTAssertTrue(providerSource.contains("await agentBridge.stopAndWaitForExit()"))
+  }
+
+  func testProviderStartupFallbackRetrySkipsBootStagger() throws {
+    let source = try agentPillSource()
+
+    // A fallback retry neither waits behind the queued pill warmups nor
+    // extends the chain other pills wait on; initial spawns keep the stagger.
+    XCTAssertTrue(
+      source.contains("private func startProviderAttempt(for pill: AgentPill, isFallbackRetry: Bool = false)"))
+    XCTAssertTrue(source.contains("let previousBoot = isFallbackRetry ? nil : bootChain"))
+    XCTAssertTrue(
+      source.contains(
+        """
+        if !isFallbackRetry {
+                    bootChain = myBoot
+                }
+        """))
+    XCTAssertTrue(source.contains("startProviderAttempt(for: pill, isFallbackRetry: true)"))
+  }
+
+  func testPillSnapshotExposesCurrentProvider() throws {
+    // After a startup fallback the hub must be able to tell which provider a
+    // pill actually landed on — the snapshot carries it explicitly.
+    let snapshot = AgentPillsManager.Snapshot(
+      id: "pill-1",
+      title: "Test",
+      status: "running",
+      provider: "codex",
+      latestActivity: "Working…",
+      query: "do the thing",
+      createdAt: "2026-07-02T00:00:00Z",
+      completedAt: nil)
+    let data = try JSONEncoder().encode(snapshot)
+    let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+    XCTAssertTrue(json.contains("\"provider\":\"codex\""))
+
+    let source = try agentPillSource()
+    XCTAssertTrue(source.contains("provider: pill.currentDirectedProvider?.rawValue ?? \"omi\""))
+  }
+
+  private func runtimeFailure(phase: String?) -> AgentRuntimeFailure {
+    AgentRuntimeFailure(
+      code: "adapter_process_exited",
+      userMessage: "Codex is not available. Make sure Codex and the codex-acp bridge are installed first, then try again.",
+      technicalMessage: nil,
+      source: "adapter_process",
+      adapterId: "codex",
+      provider: nil,
+      retryable: false,
+      phase: phase)
+  }
+
+  private func fallbackProjection(
+    status: AgentRunProjectionStatus,
+    failure: AgentRuntimeFailure?
+  ) -> AgentRunProjection {
+    AgentRunProjection(
+      surface: .floatingPill(pillId: UUID()),
+      sessionId: nil,
+      runId: nil,
+      attemptId: nil,
+      adapterSessionId: nil,
+      status: status,
+      statusText: nil,
+      errorMessage: failure?.displayMessage,
+      failure: failure,
+      updatedAt: Date(),
+      completedAt: Date(),
+      costUsd: nil,
+      inputTokens: nil,
+      outputTokens: nil)
+  }
+
+  private func agentRuntimeFailureSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeFailure.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {

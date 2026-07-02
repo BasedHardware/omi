@@ -61,6 +61,13 @@ class ChatToolExecutor {
     case "manage_agent_pills":
       return await executeManageAgentPills(toolCall.arguments)
 
+    case "setup_agent_provider":
+      return await executeSetupAgentProvider(
+        toolCall.arguments,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
+
     case "execute_sql":
       return await executeSQL(toolCall.arguments)
 
@@ -469,14 +476,10 @@ class ChatToolExecutor {
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
       .replacingOccurrences(of: " ", with: "")
-    let directedProvider: AgentPillsManager.DirectedProvider?
-    switch providerName {
-    case "openclaw": directedProvider = .openclaw
-    case "hermes": directedProvider = .hermes
-    case "": directedProvider = nil
-    default:
-      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
+    if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
+      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
     }
+    let directedProvider = AgentPillsManager.DirectedProvider(rawValue: providerName)
     if let directedProvider {
       let availability = LocalAgentProviderDetector.availability(for: directedProvider)
       guard availability.isAvailable else {
@@ -498,6 +501,33 @@ class ChatToolExecutor {
     title: \(pill.title)
     status: \(pill.status.displayLabel)
     """
+  }
+
+  /// Install a missing local agent provider through the deterministic
+  /// LocalAgentProviderInstaller: a native confirmation dialog showing the
+  /// exact command is the REAL consent gate, then code runs the official
+  /// install command via Process and verifies with the shared detector — no
+  /// installer agent, so a prompt-injected call can never execute anything
+  /// by itself. Idempotent for already-installed providers.
+  private static func executeSetupAgentProvider(
+    _ args: [String: Any],
+    originatingChatMode: ChatMode?,
+    originatingClientScope: String?
+  ) async -> String {
+    if originatingChatMode == .ask {
+      return "Error: setup_agent_provider is unavailable in Ask mode. Switch to Act mode before installing an agent provider."
+    }
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+      return "Error: setup_agent_provider is unavailable from an existing floating background agent."
+    }
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
+      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
+    }
+    return LocalAgentProviderInstaller.shared.beginInstall(for: provider)
   }
 
   private static func executeManageAgentPills(_ args: [String: Any]) async -> String {

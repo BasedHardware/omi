@@ -17,6 +17,7 @@ describe("adapter selection and activation", () => {
     expect(adapterIdForHarnessMode("hermes")).toBe("hermes");
     expect(adapterIdForHarnessMode("openclaw")).toBe("openclaw");
     expect(adapterIdForHarnessMode("openClaw")).toBe("openclaw");
+    expect(adapterIdForHarnessMode("codex")).toBe("codex");
     expect(() => adapterIdForHarnessMode("unknown")).toThrow("Unknown harness mode: unknown");
   });
 
@@ -25,12 +26,15 @@ describe("adapter selection and activation", () => {
     expect(adapterActivationEnv("pi-mono")).toBe("OMI_AUTH_TOKEN");
     expect(adapterActivationEnv("hermes")).toBe("OMI_HERMES_ADAPTER_COMMAND");
     expect(adapterActivationEnv("openclaw")).toBe("OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(adapterActivationEnv("codex")).toBe("OMI_CODEX_ADAPTER_COMMAND");
 
     expect(adapterIsActivated("acp", {})).toBe(true);
     expect(adapterIsActivated("hermes", {})).toBe(false);
     expect(adapterIsActivated("hermes", { OMI_HERMES_ADAPTER_COMMAND: "  " })).toBe(false);
     expect(adapterIsActivated("hermes", { OMI_HERMES_ADAPTER_COMMAND: "hermes-adapter" })).toBe(true);
     expect(adapterIsActivated("openclaw", { OMI_OPENCLAW_ADAPTER_COMMAND: "openclaw-adapter" })).toBe(true);
+    expect(adapterIsActivated("codex", {})).toBe(false);
+    expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "codex-acp" })).toBe(true);
   });
 
   it("centralizes production adapter profiles and capabilities", () => {
@@ -57,6 +61,15 @@ describe("adapter selection and activation", () => {
       "OpenClaw is not available. Make sure OpenClaw is installed first, then try again."
     );
     expect(adapterActivationError("openclaw")).not.toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(adapterProfile("codex")).toMatchObject({
+      adapterId: "codex",
+      activationEnv: "OMI_CODEX_ADAPTER_COMMAND",
+      capabilities: { supportsTools: true, supportsModelSwitching: false },
+    });
+    expect(adapterActivationError("codex")).toBe(
+      "Codex is not available. Make sure Codex and the codex-acp bridge are installed first, then try again."
+    );
+    expect(adapterActivationError("codex")).not.toContain("OMI_CODEX_ADAPTER_COMMAND");
   });
 
   it("source: daemon registers Hermes/OpenClaw explicitly and does not stamp MCP env as ACP", () => {
@@ -66,8 +79,10 @@ describe("adapter selection and activation", () => {
     expect(indexSource).toContain('defaultAdapterId === "acp"');
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"hermes\"");
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"openclaw\"");
+    expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"codex\"");
     expect(indexSource).toContain('adapterActivationError("hermes")');
     expect(indexSource).toContain('adapterActivationError("openclaw")');
+    expect(indexSource).toContain('adapterActivationError("codex")');
     expect(indexSource).toContain("query.ownerId = queryOwnerId");
     expect(indexSource).toContain('{ name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" }');
     expect(indexSource).not.toContain('{ name: "OMI_ADAPTER_ID", value: "acp" }');

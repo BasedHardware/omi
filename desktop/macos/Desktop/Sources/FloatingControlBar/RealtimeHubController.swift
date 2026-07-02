@@ -288,17 +288,31 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     refreshAboutUserCard()
   }
 
-  /// System woke from sleep — proactively replace a possibly-stale socket so the first PTT
-  /// after sleep doesn't hit a zombie session (commit → no reply → no fallback → hang).
-  /// Only acts when idle: a live session exists and we're neither mid-reply nor mid-mint, so
-  /// this never interrupts an active turn or races a connect already in flight. teardown
-  /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat the stale socket
-  /// as already-warm and no-op).
-  @objc private func systemDidWake() {
-    guard session != nil, !responding, !minting else { return }
-    log("RealtimeHub: system woke — re-warming session (dropping possibly-stale socket)")
+  /// Shared idle-only "drop and rebuild the warm session" used by discrete
+  /// refresh events. Only acts when idle: a live session exists and we're
+  /// neither mid-reply, mid-mint, nor mid barge-in replacement, so this never
+  /// interrupts an active turn or races a connect already in flight. teardown
+  /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat
+  /// the stale socket as already-warm and no-op).
+  private func forceRewarm(reason: String) {
+    guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }
+    log("RealtimeHub: \(reason) — re-warming session")
     teardownSession()
     ensureWarm()
+  }
+
+  /// System woke from sleep — proactively replace a possibly-stale socket so the first PTT
+  /// after sleep doesn't hit a zombie session (commit → no reply → no fallback → hang).
+  @objc private func systemDidWake() {
+    forceRewarm(reason: "system woke (dropping possibly-stale socket)")
+  }
+
+  /// A local agent provider was just installed (or removed) — re-warm the
+  /// session so the tool schema enum and provider instruction, both computed
+  /// at session start, pick up the change. When a turn is in flight the
+  /// change simply lands on the next reconnect.
+  func refreshForLocalAgentProviderChange() {
+    forceRewarm(reason: "local agent provider availability changed")
   }
 
   @objc private func settingsChanged() {
@@ -1014,17 +1028,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
-      let directedProvider: AgentPillsManager.DirectedProvider?
-      switch providerName {
-      case "openclaw": directedProvider = .openclaw
-      case "hermes": directedProvider = .hermes
-      case "": directedProvider = nil
-      default:
+      if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
         session?.sendToolResult(
           callId: callId, name: name,
-          output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
+          output: AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))
         return
       }
+      let directedProvider = AgentPillsManager.DirectedProvider(rawValue: providerName)
       if let directedProvider {
         let availability = LocalAgentProviderDetector.availability(for: directedProvider)
         guard availability.isAvailable else {
@@ -1064,6 +1074,46 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
         output: "Agent started.")
+    case .setupAgentProvider:
+      let setupProviderName = ((arguments["provider"] as? String) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      guard let provider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: AgentPillsManager.DirectedProvider.unsupportedProviderMessage(setupProviderName))
+        return
+      }
+      // Idempotent: the tool is always advertised, so an already-installed
+      // provider just reports ready instead of reinstalling (no dialog).
+      guard !LocalAgentProviderDetector.isAvailable(provider) else {
+        log("RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) already installed")
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "\(provider.displayName) is already installed and ready — no setup needed.")
+        return
+      }
+      // Deterministic code-owned install: LocalAgentProviderInstaller shows a
+      // native confirmation dialog with the exact command (the REAL consent
+      // gate — the prompt-level consent wording is only the first layer) and
+      // runs it via Process. No installer agent, so a prompt-injected tool
+      // call can never execute anything by itself. The tool result returns
+      // immediately; the voice turn never blocks on the dialog.
+      let installMessage = LocalAgentProviderInstaller.shared.beginInstall(for: provider)
+      log("RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) → install confirmation requested")
+      if !audioReceivedThisTurn {
+        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ack = existingAck.isEmpty
+          ? "Please confirm the \(provider.displayName) install in the dialog on screen." : existingAck
+        assistantText = ack
+        barState?.isVoiceResponseActive = true
+        speak(ack)
+      }
+      suppressAssistantOutputForCurrentTurn = true
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: installMessage)
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
       // tool is just an ack — pushing another image here is the broken path (mid-tool-call

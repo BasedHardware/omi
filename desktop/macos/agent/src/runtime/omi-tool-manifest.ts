@@ -273,7 +273,9 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     promptGuidelines: [
       "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
       "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes' instead of treating that name as a session to inspect.",
+      "If the user asks to use OpenClaw, Hermes, or Codex, pass provider='openclaw', 'hermes', or 'codex' instead of treating that name as a session to inspect.",
+      "When the user does not name an agent, pick the connected provider whose strengths clearly match the task — OpenClaw: messaging/channels (WhatsApp, Telegram, Discord) and the user's OpenClaw automations; Hermes: long-running or recurring automations, learned skills, and broad research; Codex: coding, repositories, and terminal/software-engineering work — otherwise omit provider to use Omi's default agent.",
+      "Never pass a provider that is not connected; when the user names an agent, always use that one.",
       "Return immediately after spawning; the pill keeps working in the background.",
     ],
     latency: "async background",
@@ -283,7 +285,7 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
         title: { type: "string", description: "Short Title Case label for the agent pill." },
         provider: {
           type: "string",
-          enum: ["openclaw", "hermes"],
+          enum: ["openclaw", "hermes", "codex"],
           description: "Optional local agent provider to run this pill through.",
         },
       },
@@ -319,6 +321,40 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires Swift floating agent pill registry."],
     adapters: piAndStdio(),
+  },
+  {
+    name: "setup_agent_provider",
+    label: "Setup Agent Provider",
+    description:
+      "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet. Shows the user a native confirmation dialog with the exact install command; nothing downloads or runs until they click Install, then Omi runs the official command itself and verifies the provider binary. Interactive sign-in steps are left to the user. Idempotent: an already-installed provider just reports ready.",
+    promptSnippet: "setup_agent_provider - Install a missing local agent provider (openclaw, hermes, codex)",
+    promptGuidelines: [
+      // Keep this sentence identical to LocalAgentProviderInstaller.consentRule (Swift).
+      "Call setup_agent_provider ONLY after the user explicitly agrees in this conversation to install that provider — never unprompted.",
+      "When a directed provider is reported as not installed, say it needs setup and offer to install it before calling anything.",
+      "The install runs in the background after the user confirms in the native dialog; interactive login/onboarding steps are left to the user.",
+    ],
+    latency: "async background",
+    inputSchema: schema(
+      {
+        provider: {
+          type: "string",
+          enum: ["openclaw", "hermes", "codex"],
+          description: "Local agent provider to install.",
+        },
+      },
+      ["provider"],
+    ),
+    annotations: openWorldWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires Swift LocalAgentProviderInstaller (native confirm dialog)."],
+    // pi-mono ONLY — never advertised on the external omi-tools-stdio MCP
+    // projection: an external MCP client must not be able to trigger software
+    // installs on the user's machine (the native dialog is in-app consent for
+    // in-app conversations, not an authorization surface for third parties).
+    adapters: { "pi-mono": { advertised: true } },
   },
   {
     name: "search_tasks",

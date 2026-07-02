@@ -28,6 +28,10 @@ enum HubTool: String {
   case getTaskAgentStatus = "get_task_agent_status"
   /// Manage floating-bar agent pills. Fast local action.
   case manageAgentPills = "manage_agent_pills"
+  /// Install a missing local agent provider (openclaw/hermes/codex) via the
+  /// deterministic LocalAgentProviderInstaller — native confirmation dialog,
+  /// then a code-run Process. Only after explicit user consent; idempotent.
+  case setupAgentProvider = "setup_agent_provider"
   /// List canonical Omi-managed agent sessions and runs.
   case listAgentSessions = "list_agent_sessions"
   /// Inspect one canonical Omi-managed agent run.
@@ -69,30 +73,44 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
+  private static let directedProviders: [AgentPillsManager.DirectedProvider] = AgentPillsManager.orderedDirectedProviders
+
   private static func localAgentProviderInstruction() -> String {
-    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes]
-    let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
+    localAgentProviderInstruction(
+      availability: directedProviders.map { LocalAgentProviderDetector.availability(for: $0) })
+  }
+
+  /// Availability-parameterized seam (same pattern as
+  /// `openAITools(availableDirectedProviders:)`) so instruction content is
+  /// testable without filesystem-dependent provider detection.
+  static func localAgentProviderInstruction(availability: [LocalAgentProviderAvailability]) -> String {
     let available = availability.filter(\.isAvailable).map(\.provider)
     let unavailable = availability.filter { !$0.isAvailable }
-
-    if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \"openclaw\" or \"hermes\". Treat those as available local providers, not as sessions to inspect."
-    }
 
     var parts: [String] = []
     if !available.isEmpty {
       let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
       parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+      let strengthsText = available
+        .map { "\($0.displayName): \($0.strengths)" }
+        .joined(separator: "; ")
+      parts.append("When the user does not name an agent, pick the provider whose strengths clearly match the task — \(strengthsText) — otherwise omit provider to use Omi's default agent. When the user names an agent, always use that one.")
     }
-    let missingText = unavailable
-      .map { "\($0.provider.displayName): \($0.setupPrompt)" }
-      .joined(separator: " ")
-    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    if unavailable.isEmpty {
+      parts.append("Treat those as available local providers, not as sessions to inspect.")
+    } else {
+      // Compact instruction fragments only — the full user-facing setup
+      // prompt (install command + docs URL) stays on UI/toolError surfaces.
+      let missingText = unavailable
+        .map { "\($0.provider.displayName): not installed — offer to set it up via setup_agent_provider after explicit consent." }
+        .joined(separator: " ")
+      parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and offer to install it: \(missingText) \(LocalAgentProviderInstaller.consentRule)")
+    }
     return parts.joined(separator: " ")
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
-    [AgentPillsManager.DirectedProvider.openclaw, .hermes]
+    directedProviders
       .filter { LocalAgentProviderDetector.isAvailable($0) }
       .map(\.rawValue)
   }
@@ -435,6 +453,28 @@ enum RealtimeHubTools {
             ],
           ],
           "required": ["action"],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.setupAgentProvider.rawValue,
+        "description":
+          "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet. "
+          + "Shows the user a native confirmation dialog with the exact install command; nothing "
+          + "downloads or runs until they click Install, then Omi runs the official command itself, "
+          + "verifies the binary, and reports the result. Interactive sign-in steps are left to the "
+          + "user. Idempotent: an already-installed provider just reports ready. "
+          + LocalAgentProviderInstaller.consentRule,
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "provider": [
+              "type": "string",
+              "enum": AgentPillsManager.orderedDirectedProviders.map(\.rawValue),
+              "description": "Local agent provider to install.",
+            ]
+          ],
+          "required": ["provider"],
         ],
       ],
       [

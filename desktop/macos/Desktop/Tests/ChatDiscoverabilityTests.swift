@@ -157,7 +157,11 @@ final class ChatDiscoverabilityTests: XCTestCase {
     }
 
     func testDesktopCapabilitiesExistInAgentToolDeclarations() throws {
-        let declaredTools = try readToolNames(from: "pi-mono-extension/index.ts")
+        // Swift-backed tool declarations live in the canonical TS manifest —
+        // pi-mono-extension/index.ts and omi-tools-stdio.ts both derive their
+        // tool lists from it (only load_skill stays declared inline).
+        let declaredTools = try readToolNames(from: "agent/src/runtime/omi-tool-manifest.ts")
+            .union(readToolNames(from: "pi-mono-extension/index.ts"))
             .union(readToolNames(from: "agent/src/omi-tools-stdio.ts"))
             .union(Set(readAgentControlManifestEntries().map(\.name)))
 

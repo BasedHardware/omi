@@ -295,7 +295,13 @@ enum DesktopCapabilityRegistry {
       bullets: [
         "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
         "The only way to start a floating-bar subagent is to call spawn_agent; saying you will start one does not start it.",
-        "If the user asks to use OpenClaw or Hermes, call spawn_agent with provider set to openclaw or hermes.",
+        "If the user asks to use OpenClaw, Hermes, or Codex, call spawn_agent with provider set to openclaw, hermes, or codex.",
+        "When the user does not name an agent, pick the connected provider whose strengths clearly match the task — "
+          + AgentPillsManager.orderedDirectedProviders
+            .map { "\($0.displayName): \($0.strengths)" }
+            .joined(separator: "; ")
+          + " — otherwise omit provider to use Omi's default agent.",
+        "Never pass a provider that is not connected; when the user names an agent, always use that one.",
         "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."
       ]),
     Capability(
@@ -307,6 +313,18 @@ enum DesktopCapabilityRegistry {
       bullets: [
         "Use after get_task_agent_status when the user asks to manage the circular floating agent pills.",
         "Actions: list, dismiss with agent_id, or clear_completed."
+      ]),
+    Capability(
+      toolName: "setup_agent_provider",
+      title: "Setup Agent Provider",
+      latency: .asyncBackground,
+      surfaces: [.desktopChat, .realtimeHub],
+      summary: "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet, after the user confirms in a native dialog.",
+      bullets: [
+        LocalAgentProviderInstaller.consentRule,
+        "The user must additionally confirm in a native dialog showing the exact install command — nothing downloads or runs until they click Install.",
+        "Idempotent: an already-installed provider just reports ready without reinstalling.",
+        "Omi runs the official install command itself and verifies the provider binary; interactive sign-in or onboarding steps are left to the user."
       ]),
     Capability(
       toolName: "ask_higher_model",
@@ -414,6 +432,7 @@ enum DesktopCapabilityRegistry {
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
     - You can manage circular floating agent pills with manage_agent_pills after checking status.
     - You can start a background agent with spawn_agent for multi-step work or acting in the user's other apps. Merely saying you will start an agent does not start one; emitting spawn_agent does.
+    - You can install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet with setup_agent_provider; the user must then confirm in a native dialog before anything runs. \(LocalAgentProviderInstaller.consentRule)
     """
   }
 

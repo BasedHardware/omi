@@ -5,6 +5,7 @@ enum AgentHarnessMode: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 extension Optional where Wrapped == AgentHarnessMode {
@@ -19,6 +20,7 @@ enum AgentAdapterId: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 enum AgentRuntimeRouting {
@@ -45,6 +47,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case AgentHarnessMode.openclaw.rawValue, "openClaw":
             return .openclaw
+        case AgentHarnessMode.codex.rawValue:
+            return .codex
         default:
             return nil
         }
@@ -60,6 +64,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case .openclaw:
             return .openclaw
+        case .codex:
+            return .codex
         }
     }
 }
@@ -78,13 +84,17 @@ struct LocalAgentProviderAvailability: Equatable {
         return false
     }
 
+    /// Full setup guidance shown in the bar / returned to the model when the
+    /// provider is missing. Built from the provider's structured install data
+    /// so all providers keep the same shape; the SPOKEN surface stays clean
+    /// (voice only says `setupNeededStatus`).
     var setupPrompt: String {
-        switch provider {
-        case .hermes:
-            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
-        case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+        var prompt = "I don't see \(provider.displayName) installed. Run `\(provider.installCommand)`"
+        if let note = provider.postInstallNote {
+            prompt += ", then \(note)"
         }
+        prompt += ". Or just ask me to install it for you. Install guide: \(provider.installDocsURL)"
+        return prompt
     }
 
     var toolError: String {
@@ -137,7 +147,7 @@ enum LocalAgentProviderDetector {
         fileManager: FileManager,
         homeDirectory: String
     ) -> String? {
-        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
+        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory, fileManager: fileManager) {
             let path = (dir as NSString).appendingPathComponent(name)
             if fileManager.isExecutableFile(atPath: path) {
                 return path
@@ -146,7 +156,12 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
+    /// Shared with AgentRuntimeProcess so detection ("is it installed?") and
+    /// command discovery ("what do we spawn?") can never disagree.
+    static func adapterActivationSearchDirectories(
+        homeDirectory: String,
+        fileManager: FileManager = .default
+    ) -> [String] {
         [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
@@ -154,6 +169,19 @@ enum LocalAgentProviderDetector {
             "\(homeDirectory)/.local/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
-        ]
+            // `npm install -g` under a node version manager lands outside the
+            // fixed directories above.
+            "\(homeDirectory)/.volta/bin",
+            "\(homeDirectory)/Library/pnpm",
+            "\(homeDirectory)/Library/Application Support/fnm/aliases/default/bin",
+        ] + nvmNodeBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager)
+    }
+
+    private static func nvmNodeBinDirectories(homeDirectory: String, fileManager: FileManager) -> [String] {
+        let versionsDir = "\(homeDirectory)/.nvm/versions/node"
+        guard let versions = try? fileManager.contentsOfDirectory(atPath: versionsDir) else { return [] }
+        return versions
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+            .map { "\(versionsDir)/\($0)/bin" }
     }
 }

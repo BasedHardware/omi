@@ -1,0 +1,3 @@
+{
+  "change": "Omi now picks the best connected agent (OpenClaw, Hermes, or Codex) for each background task and automatically falls back to another agent when the chosen one fails to start"
+}

@@ -79,6 +79,11 @@ describe("JsonlCompatibilityFacade", () => {
         provider: "openai",
       }),
     }));
+    // Execution-time failures must NOT be tagged phase "startup" — Swift's
+    // agent-pill startup fallback keys off that tag to decide a retry cannot
+    // duplicate side effects, and this adapter already began executing.
+    const executionError = sent.find((message) => message.type === "error");
+    expect(executionError && "failure" in executionError ? executionError.failure?.phase : undefined).toBeUndefined();
     store.close();
   });
 
@@ -119,11 +124,17 @@ describe("JsonlCompatibilityFacade", () => {
         source: "adapter_process",
         adapterId: "openclaw",
         retryable: false,
+        // Binding happens strictly before executeAttempt, so the kernel tags
+        // the failure phase "startup" — the structured signal Swift's
+        // agent-pill startup fallback requires before retrying the brief on
+        // another provider.
+        phase: "startup",
       }),
     }));
     expect(JSON.parse(store.getRow("SELECT result_json FROM runs").result_json).failure).toMatchObject({
       code: "adapter_config_invalid",
       adapterId: "openclaw",
+      phase: "startup",
     });
     store.close();
   });

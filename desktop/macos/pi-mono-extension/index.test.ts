@@ -986,8 +986,8 @@ function normalizeProjectedSchema(schema: any): Record<string, unknown> {
   return normalized;
 }
 
-test("OMI_TOOLS: exactly 27 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 27);
+test("OMI_TOOLS: exactly 28 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 28);
 });
 
 test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
@@ -1089,6 +1089,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     delegate_agent: ["mode", "parentRunId", "objective"],
     spawn_agent: ["brief"],
     manage_agent_pills: ["action"],
+    setup_agent_provider: ["provider"],
     search_tasks: ["query"],
     complete_task: ["task_id"],
     delete_task: ["task_id"],

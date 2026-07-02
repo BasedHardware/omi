@@ -510,6 +510,9 @@ export class AgentRuntimeKernel {
           source: "runtime",
           adapterId,
           retryable: false,
+          // Registration is checked before any binding/dispatch — provably
+          // pre-execution, so a caller-side retry cannot duplicate work.
+          phase: "startup",
           userMessage: `Adapter not registered: ${adapterId}`,
           technicalMessage: `Adapter not registered: ${adapterId}`,
         };
@@ -568,13 +571,21 @@ export class AgentRuntimeKernel {
         bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
       } catch (error) {
         pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
+        // Binding resolution happens strictly before executeAttempt, so every
+        // failure in this catch is provably pre-execution: tag phase "startup"
+        // (even when the underlying AdapterRuntimeError keeps its own code,
+        // e.g. adapter_process_exited from an ACP subprocess that died while
+        // booting) so caller-side fallback knows no work was dispatched.
         if (isStaleBindingError(error)) {
-          const failure = failureFromError(error, {
-            code: "stale_binding",
-            source: "adapter_process",
-            adapterId: attempt.adapterId,
-            retryable: attemptNo < maxAttempts,
-          });
+          const failure: RuntimeFailure = {
+            ...failureFromError(error, {
+              code: "stale_binding",
+              source: "adapter_process",
+              adapterId: attempt.adapterId,
+              retryable: attemptNo < maxAttempts,
+            }),
+            phase: "startup",
+          };
           this.failAttemptBeforeExecution(attempt, "stale_binding", failure.userMessage, attemptNo < maxAttempts, failure);
           retryReason = "stale_binding";
           resumeFromAttemptId = attempt.attemptId;
@@ -585,12 +596,15 @@ export class AgentRuntimeKernel {
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
-        const failure = failureFromError(error, {
-          code: "binding_failed",
-          source: "adapter_process",
-          adapterId: attempt.adapterId,
-          retryable: false,
-        });
+        const failure: RuntimeFailure = {
+          ...failureFromError(error, {
+            code: "binding_failed",
+            source: "adapter_process",
+            adapterId: attempt.adapterId,
+            retryable: false,
+          }),
+          phase: "startup",
+        };
         this.failAttemptBeforeExecution(attempt, "binding_failed", failure.userMessage, false, failure);
         break;
       }

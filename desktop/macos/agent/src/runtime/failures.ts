@@ -2,6 +2,17 @@ import type { ProductionAdapterId } from "../adapters/interface.js";
 
 export type RuntimeFailureSource = "adapter_process" | "adapter_execution" | "runtime";
 
+/**
+ * Lifecycle phase of a failure. `"startup"` is only set at sites where the
+ * runtime can PROVE the adapter never began executing the prompt (activation
+ * gate, adapter registration, session binding — all strictly before
+ * `executeAttempt` dispatch). Swift's agent-pill startup fallback keys off
+ * this to decide whether re-running the brief on another provider is safe
+ * (no risk of duplicated side effects). Never tag a failure `"startup"` if
+ * execution may have started.
+ */
+export type RuntimeFailurePhase = "startup" | "execution";
+
 export interface RuntimeFailure {
   code: string;
   userMessage: string;
@@ -10,6 +21,7 @@ export interface RuntimeFailure {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  phase?: RuntimeFailurePhase;
 }
 
 export class AdapterRuntimeError extends Error {
@@ -151,6 +163,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
       return "OpenClaw";
     case "hermes":
       return "Hermes";
+    case "codex":
+      return "Codex";
     case "pi-mono":
       return "pi-mono";
     case "acp":

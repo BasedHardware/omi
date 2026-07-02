@@ -162,6 +162,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+    XCTAssertTrue(source.contains(#"env["OMI_CODEX_ADAPTER_COMMAND"]"#))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {
@@ -195,6 +196,39 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let command = AgentRuntimeProcess.openClawAdapterCommand(openClawPath: openClawPath)
 
     XCTAssertEqual(command, "'\(openClawPath)' acp")
+  }
+
+  func testCodexAdapterCommandUsesSiblingNodeWhenAvailable() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let nodePath = tempDir.appendingPathComponent("node").path
+    let codexAcpPath = tempDir.appendingPathComponent("codex-acp").path
+    FileManager.default.createFile(atPath: nodePath, contents: Data("#!/bin/sh\n".utf8))
+    FileManager.default.createFile(atPath: codexAcpPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: nodePath)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexAcpPath)
+
+    let command = AgentRuntimeProcess.codexAdapterCommand(codexAcpPath: codexAcpPath)
+
+    XCTAssertEqual(command, "'\(nodePath)' '\(codexAcpPath)'")
+  }
+
+  func testCodexAdapterCommandFallsBackToLauncherWithoutSiblingNode() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let codexAcpPath = tempDir.appendingPathComponent("codex-acp").path
+    FileManager.default.createFile(atPath: codexAcpPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexAcpPath)
+
+    let command = AgentRuntimeProcess.codexAdapterCommand(codexAcpPath: codexAcpPath)
+
+    XCTAssertEqual(command, "'\(codexAcpPath)'")
   }
 
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {

@@ -1220,6 +1220,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         _ = await ensureBridgeStarted()
     }
 
+    /// Fully release this provider's agent bridge: interrupt any in-flight
+    /// query and unregister the bridge client from the shared Node runtime
+    /// (active requests are resumed with `.stopped`; the shared process stops
+    /// once no clients remain). ChatProvider has no deinit teardown, so a
+    /// provider instance discarded while the app keeps running (e.g. one
+    /// displaced by an agent pill's startup-fallback retry) must call this —
+    /// otherwise its bridge clientId stays registered forever.
+    func shutdownBridge() async {
+        if isSending {
+            stopAgent()
+        }
+        await agentBridge.stopAndWaitForExit()
+        agentBridgeStarted = false
+    }
+
     /// Drop a cached ACP session so the next query recreates it with fresh prompt context.
     func invalidateAgentSession(sessionKey: String) async {
         guard agentBridgeStarted else { return }
@@ -1306,7 +1321,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
             let floatingPillSystemPrompt = buildFloatingBarSystemPrompt(
                 contextString: promptContext,
-                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                excludingToolNames: ["spawn_agent", "delegate_agent", "setup_agent_provider"]
             )
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
                 ? ModelQoS.Claude.defaultSelection
@@ -1314,10 +1329,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
             cachedFloatingPillSystemPrompt = floatingPillSystemPrompt
-            // Hermes and OpenClaw ignore Omi's Claude model aliases, so leave
-            // the model hint nil to avoid recording a model ID in binding metadata
-            // that could trigger spurious context-changed sessions later.
-            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+            // Hermes, OpenClaw, and Codex ignore Omi's Claude model aliases, so
+            // leave the model hint nil to avoid recording a model ID in binding
+            // metadata that could trigger spurious context-changed sessions later.
+            let usesNativeModelChoice =
+                activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+                || activeBridgeHarness == "codex"
             let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
             let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
             await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
@@ -3358,7 +3375,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         if cachedFloatingPillSystemPrompt.isEmpty {
                             cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
                                 contextString: formatMemoriesSection(),
-                                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                                excludingToolNames: ["spawn_agent", "delegate_agent", "setup_agent_provider"]
                             )
                         }
                         systemPrompt = cachedFloatingPillSystemPrompt
@@ -3400,10 +3417,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
 
-            // Query the active bridge with streaming. Hermes and OpenClaw do not
-            // accept Omi's Claude model aliases, so leave model choice to the
-            // harness default when either native adapter is active.
-            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+            // Query the active bridge with streaming. Hermes, OpenClaw, and Codex
+            // do not accept Omi's Claude model aliases, so leave model choice to
+            // the harness default when a native adapter is active.
+            let usesNativeModelChoice =
+                activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+                || activeBridgeHarness == "codex"
             let effectiveRequestModel = usesNativeModelChoice ? nil : (model ?? modelOverride)
 
             // Callbacks for agent bridge
