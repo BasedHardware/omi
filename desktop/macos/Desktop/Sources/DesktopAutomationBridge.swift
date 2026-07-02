@@ -638,6 +638,61 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "calendar_read_probe",
+      summary: "Read Google Calendar through the real connector path and return classified status",
+      params: ["daysBack", "daysForward", "maxResults"]
+    ) { params in
+      let requestedDaysBack = intParam(params["daysBack"], default: 1)
+      let requestedDaysForward = intParam(params["daysForward"], default: 1)
+      let requestedMaxResults = intParam(params["maxResults"], default: 1)
+      let normalized = CalendarFetchParameters.normalized(
+        daysBack: requestedDaysBack,
+        daysForward: requestedDaysForward,
+        maxResults: requestedMaxResults
+      )
+
+      do {
+        let events = try await CalendarReaderService.shared.readEvents(
+          daysBack: normalized.daysBack,
+          daysForward: normalized.daysForward,
+          maxResults: normalized.maxResults
+        )
+        return [
+          "status": "connected",
+          "classification": "readable",
+          "eventCount": "\(events.count)",
+          "daysBack": "\(normalized.daysBack)",
+          "daysForward": "\(normalized.daysForward)",
+          "maxResults": "\(normalized.maxResults)",
+        ]
+      } catch let error as CalendarReaderError {
+        let classification: String
+        switch error {
+        case .noBrowserFound:
+          classification = "no_browser"
+        case .notSignedIn:
+          classification = "not_signed_in"
+        case .sessionExpired:
+          classification = "session_expired"
+        case .cookieDecryptionFailed:
+          classification = "decrypt_failed"
+        case .networkError:
+          classification = "network"
+        case .pythonNotFound:
+          classification = "python_not_found"
+        }
+        return [
+          "status": "error",
+          "classification": classification,
+          "message": error.errorDescription ?? "\(error)",
+          "daysBack": "\(normalized.daysBack)",
+          "daysForward": "\(normalized.daysForward)",
+          "maxResults": "\(normalized.maxResults)",
+        ]
+      }
+    }
+
+    register(
       name: "spatial_overlay_present_instruction",
       summary: "Present the Screen Recording fallback instruction card (dogfood/visual)"
     ) { params in

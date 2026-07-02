@@ -49,6 +49,13 @@ Work top to bottom. Don't skip the probe or the fixture test.
       (philosophy §3, §4)
 - [ ] Drive UI status and any "Connected" badge off this probe, never off a
       stored one-time-success latch.
+- [ ] Expose a semantic automation action for the probe (for example,
+      `calendar_read_probe`) so coding agents can self-test success and failure
+      classifications in a named bundle without clicking through the UI.
+- [ ] Treat "zero items returned" as connected when the real path succeeded.
+      Empty data is not the same as a failed connector.
+- [ ] Clamp probe/read parameters before they cross process or network
+      boundaries, and test the boundary behavior.
 - [ ] For file-backed local connectors such as Apple Notes, preserve legacy
       selected parent folders by resolving them through the same canonical
       folder logic used for new selections. Treat zero readable items as

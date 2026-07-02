@@ -26,6 +26,20 @@ enum CalendarConnectionStatus: Equatable {
   }
 }
 
+struct CalendarFetchParameters: Equatable {
+  let daysBack: Int
+  let daysForward: Int
+  let maxResults: Int
+
+  static func normalized(daysBack: Int, daysForward: Int, maxResults: Int) -> CalendarFetchParameters {
+    CalendarFetchParameters(
+      daysBack: min(max(daysBack, 0), 3650),
+      daysForward: min(max(daysForward, 0), 3650),
+      maxResults: min(max(maxResults, 1), 2500)
+    )
+  }
+}
+
 enum CalendarReaderError: LocalizedError, Equatable {
   case noBrowserFound
   case notSignedIn
@@ -94,14 +108,71 @@ enum CalendarFailureClass: String, Equatable {
   case network = "network"
   case unknown = "unknown"
 
+  /// Plain fallback text for logs and parse-time defaults — never a prefixed
+  /// `errorDescription`, so it can flow through `asError(summary:)` safely.
+  var plainFallbackSummary: String {
+    switch self {
+    case .noBrowser:
+      return "No supported browser with a readable session was found."
+    case .notSignedIn:
+      return "No browser is signed into Google. Sign into calendar.google.com and try again."
+    case .sessionExpired:
+      return "Your Google session expired. Reload calendar.google.com to refresh it."
+    case .decryptFailed:
+      return "browser session could not be decrypted"
+    case .network:
+      return "please check your connection and try again"
+    case .unknown:
+      return "unexpected error"
+    }
+  }
+
   var asError: CalendarReaderError {
+    asError(summary: nil)
+  }
+
+  /// Extract a detail fragment from a Python summary so `errorDescription` can
+  /// add its class-specific prefix exactly once.
+  func detailFragment(from summary: String?) -> String? {
+    guard let raw = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+      return nil
+    }
+
+    switch self {
+    case .network:
+      let prefix = "Could not reach Google Calendar"
+      if raw.hasPrefix(prefix) {
+        let tail = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        return tail.isEmpty ? nil : tail
+      }
+      return raw
+    case .decryptFailed:
+      if raw == "Your browser session could not be read." {
+        return nil
+      }
+      return raw
+    case .noBrowser, .notSignedIn, .sessionExpired:
+      return nil
+    case .unknown:
+      return raw
+    }
+  }
+
+  func asError(summary: String?) -> CalendarReaderError {
+    func detailOr(_ fallback: String) -> String {
+      detailFragment(from: summary) ?? fallback
+    }
+
     switch self {
     case .noBrowser: return .noBrowserFound
     case .notSignedIn: return .notSignedIn
     case .sessionExpired: return .sessionExpired
-    case .decryptFailed: return .cookieDecryptionFailed("browser session could not be decrypted")
-    case .network: return .networkError("please check your connection and try again")
-    case .unknown: return .networkError("unexpected error")
+    case .decryptFailed:
+      return .cookieDecryptionFailed(detailOr("browser session could not be decrypted"))
+    case .network:
+      return .networkError(detailOr("please check your connection and try again"))
+    case .unknown:
+      return .networkError(detailOr("unexpected error"))
     }
   }
 }
@@ -130,7 +201,7 @@ enum CalendarOutcomeParser {
     let cls = CalendarFailureClass(rawValue: json["error_class"] as? String ?? "") ?? .unknown
     let summary =
       (json["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-      ?? cls.asError.errorDescription ?? "Unknown error"
+      ?? cls.plainFallbackSummary
     return .failure(cls, summary: summary, attempts: attempts)
   }
 
@@ -221,8 +292,9 @@ actor CalendarReaderService {
   func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
     -> [CalendarEvent]
   {
-    let events = try fetchCalendarViaCookies(
+    let parameters = CalendarFetchParameters.normalized(
       daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
+    let events = try fetchCalendarViaCookies(parameters: parameters)
     return events.sorted { $0.startTime > $1.startTime }
   }
 
@@ -235,7 +307,8 @@ actor CalendarReaderService {
   /// green result guarantees the whole chain (cookies → auth → API) works.
   func verifyConnection() async -> CalendarConnectionStatus {
     do {
-      _ = try fetchCalendarViaCookies(daysBack: 1, daysForward: 1, maxResults: 1)
+      _ = try fetchCalendarViaCookies(
+        parameters: CalendarFetchParameters.normalized(daysBack: 1, daysForward: 1, maxResults: 1))
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
@@ -454,7 +527,7 @@ actor CalendarReaderService {
 
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
 
-  private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
+  private func fetchCalendarViaCookies(parameters: CalendarFetchParameters) throws
     -> [CalendarEvent]
   {
     // Build browser configs as JSON for Python
@@ -754,7 +827,7 @@ actor CalendarReaderService {
     process.executableURL = URL(fileURLWithPath: pythonPath)
     process.arguments = [
       "-c", pythonScript, configJSON,
-      String(daysBack), String(daysForward), String(maxResults),
+      String(parameters.daysBack), String(parameters.daysForward), String(parameters.maxResults),
     ]
     let pipe = Pipe()
     let errPipe = Pipe()
@@ -829,7 +902,7 @@ actor CalendarReaderService {
       log(
         "CalendarReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
           + "attempts: \(CalendarOutcomeParser.diagnosticsLine(attempts))")
-      throw cls.asError
+      throw cls.asError(summary: summary)
 
     case let .success(eventDicts, browserName):
       log("CalendarReaderService: Got \(eventDicts.count) events from \(browserName)")
