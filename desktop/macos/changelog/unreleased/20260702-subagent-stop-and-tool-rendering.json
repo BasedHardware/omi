@@ -1,3 +1,0 @@
-{
-  "change": "Fixed floating subagent chats so stale completed tool calls do not duplicate around text, and added a Stop control for running subagents"
-}
