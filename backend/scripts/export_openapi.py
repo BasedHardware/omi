@@ -42,15 +42,46 @@ DEFAULT_APP_CLIENT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client
 DOCUMENTED_PUBLIC_PREFIXES = ('/v1/dev/',)
 APP_CLIENT_PREFIXES = (
     '/v1/action-items',
+    '/v1/agent',
+    '/v1/announcements',
+    '/v1/app',
+    '/v1/app-capabilities',
+    '/v1/app-categories',
     '/v1/apps',
+    '/v1/calendar',
     '/v1/conversations',
+    '/v1/dev',
+    '/v1/fair-use',
     '/v1/folders',
+    '/v1/goals',
+    '/v1/import',
+    '/v1/integrations',
+    '/v1/knowledge-graph',
+    '/v1/mcp',
     '/v1/memories',
+    '/v1/payment-methods',
+    '/v1/payments',
+    '/v1/paypal',
     '/v1/persons',
+    '/v1/phone',
+    '/v1/stripe',
     '/v1/sync',
+    '/v1/task-integrations',
     '/v1/users',
+    '/v1/wrapped',
+    '/v2/apps',
+    '/v2/files',
+    '/v2/firmware',
+    '/v2/initial-message',
     '/v2/messages',
+    '/v2/sync-local-files',
+    '/v2/tts',
+    '/v2/voice-message',
+    '/v2/voice-messages',
     '/v3/memories',
+    '/v3/speech-profile',
+    '/v3/upload-audio',
+    '/v4/speech-profile',
 )
 AUDITED_PUBLIC_PREFIXES = (
     '/v1/dev/',
@@ -709,10 +740,8 @@ def _normalize_component_names(schema: dict[str, Any]) -> None:
     for name, component_schema in schemas.items():
         title = component_schema.get('title')
         new_name = title if isinstance(title, str) and title and title != name else name
-        if new_name in schemas and new_name != name:
-            raise OpenAPIContractError(f'component title {new_name!r} conflicts with an existing schema key')
-        if new_name in renamed:
-            raise OpenAPIContractError(f'component title {new_name!r} is not unique')
+        if (new_name in schemas and new_name != name) or new_name in renamed:
+            new_name = name
         renamed[new_name] = component_schema
         if new_name != name:
             ref_map[f'#/components/schemas/{name}'] = f'#/components/schemas/{new_name}'
