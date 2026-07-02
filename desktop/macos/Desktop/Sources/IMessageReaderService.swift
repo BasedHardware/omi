@@ -88,6 +88,50 @@ actor IMessageReaderService {
     }
   }
 
+  /// Incremental fetch for the Messages-tab watcher: messages with ROWID greater
+  /// than `afterROWID` (ascending), plus the current high-water ROWID in the
+  /// database. Unlike `readNewMessages`, this takes an explicit cursor and never
+  /// touches the shared ingest cursor in UserDefaults, so gating the real-time
+  /// watcher can't disturb ingest. `maxROWID` is the DB-wide MAX (not just the
+  /// max among returned rows), so it's a reliable "anything new?" high-water mark
+  /// even when priming with `afterROWID == 0` and a small `limit`.
+  func newMessages(afterROWID: Int64, limit: Int = 1000) throws -> (
+    records: [IMessageRecord], maxROWID: Int64
+  ) {
+    var config = Configuration()
+    config.readonly = true
+
+    let dbQueue: DatabaseQueue
+    do {
+      dbQueue = try DatabaseQueue(
+        path: IMessagePermissionPolicy.chatDatabaseURL.path, configuration: config)
+    } catch {
+      throw IMessageReaderError.accessDenied
+    }
+
+    return try dbQueue.read { db -> (records: [IMessageRecord], maxROWID: Int64) in
+      let dbMax = (try Int64.fetchOne(db, sql: "SELECT MAX(ROWID) FROM message")) ?? afterROWID
+      let rows = try Row.fetchAll(
+        db,
+        sql: """
+            SELECT m.ROWID AS rowid, m.guid AS guid, m.text AS text, m.attributedBody AS body,
+                   m.date AS date, m.is_from_me AS is_from_me, h.id AS handle,
+                   c.guid AS chat_guid, c.chat_identifier AS chat_identifier,
+                   c.display_name AS chat_display_name
+            FROM message m
+            LEFT JOIN handle h ON m.handle_id = h.ROWID
+            LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+            LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+            WHERE m.ROWID > ?
+              AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
+            ORDER BY m.ROWID ASC LIMIT ?
+          """,
+        arguments: [afterROWID, limit])
+      let records = rows.compactMap { Self.record(from: $0) }
+      return (records, dbMax)
+    }
+  }
+
   /// Recent inbound threads awaiting a reply, for the Replies inbox. Does NOT
   /// advance the ingest cursor — this is a read-only view over recent history.
   ///

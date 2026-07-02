@@ -38,7 +38,7 @@
     <key>NSAppleEventsUsageDescription</key>
     <string>Omi needs permission to detect which application is currently active and to send replies you approve through Messages.</string>
     <key>NSContactsUsageDescription</key>
-    <string>Omi uses your contacts to show the names of people you message instead of raw phone numbers.</string>
+    <string>Omi uses your contacts to show names and photos for the people in your Messages threads.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Omi needs microphone access to transcribe your conversations in real-time.</string>
     <key>NSAudioCaptureUsageDescription</key>
