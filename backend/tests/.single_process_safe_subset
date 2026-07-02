@@ -117,3 +117,4 @@ tests/routers/test_users.py
 tests/unit/v3_router_probes/fastapi_route_contract.py
 tests/integration/test_fair_use_api.py
 tests/integration/test_fair_use_live.py
+tests/unit/test_desktop_transcribe.py
