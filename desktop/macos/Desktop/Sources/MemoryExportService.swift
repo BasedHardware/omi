@@ -111,14 +111,16 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   /// - `.localAutonomous`: deterministic local CLI/config/file work.
   /// - `.browserAutonomous`: open the cloud connector in the user's default
   ///   signed-in browser and use native macOS automation, with assisted fallback
-  ///   on blockers.
-  /// - `.assisted`: open/copy only.
+  ///   on blockers. Currently unmapped: ChatGPT/Claude moved to `.assisted`
+  ///   because cross-browser AX automation is too brittle — see
+  ///   docs/cloud-connectors-roadmap.md before mapping anything back here.
+  /// - `.assisted`: deterministic open + copy, with an on-screen guidance card
+  ///   for cloud connectors. The user performs the final paste/click.
   enum MCPExecuteKind { case localAutonomous, browserAutonomous, assisted }
   var mcpExecuteKind: MCPExecuteKind {
     switch self {
-    case .chatgpt, .claude: return .browserAutonomous
     case .claudeCode, .codex, .openclaw, .hermes: return .localAutonomous
-    case .notion, .obsidian, .gemini, .agents: return .assisted
+    case .chatgpt, .claude, .notion, .obsidian, .gemini, .agents: return .assisted
     }
   }
 
@@ -221,7 +223,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
           "Auth URL: \(Self.mcpAuthorizeURL) · Token URL: \(Self.mcpTokenURL)",
           "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
         ],
-        openURL: URL(string: "https://chatgpt.com/"),
+        openURL: URL(string: "https://chatgpt.com/#settings/Connectors"),
         openTitle: "Open ChatGPT"
       )
     case .claudeCode:
@@ -427,6 +429,52 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     lines.append("")
     lines.append("After setup, verify that \(title) shows Omi Memory as connected or available. If a final OAuth consent/connect button appears, click it only when it is clearly for Omi Memory.")
     return (taskTitle, lines.joined(separator: "\n"))
+  }
+
+  /// Field-by-field payload for assisted cloud setup — rendered as copy rows on
+  /// the on-screen guidance card so the user transfers one value at a time.
+  func assistedSetupFields(key: String) -> [(label: String, value: String)]? {
+    guard let setup = mcpSetup(key: key) else { return nil }
+    switch self {
+    case .claude:
+      return [
+        ("Name", "Omi Memory"),
+        ("Remote MCP server URL", setup.serverURL),
+        ("OAuth Client ID", "omi"),
+        ("OAuth Client Secret", key),
+      ]
+    case .chatgpt:
+      return [
+        ("Name", "Omi Memory"),
+        ("Remote MCP server URL", setup.serverURL),
+        ("Authentication", "OAuth"),
+        ("OAuth Client ID", "omi"),
+        ("OAuth Client Secret", key),
+        ("Token auth method", "client_secret_post"),
+        ("Auth URL", Self.mcpAuthorizeURL),
+        ("Token URL", Self.mcpTokenURL),
+      ]
+    default:
+      return nil
+    }
+  }
+
+  /// Short on-screen guidance card shown right after Omi opens the provider page.
+  var assistedOverlayHint: (title: String, subtitle: String)? {
+    switch self {
+    case .claude:
+      return (
+        "Finish in Claude",
+        "Copy each value into the Add custom connector form, then click Add and Connect."
+      )
+    case .chatgpt:
+      return (
+        "Finish in ChatGPT",
+        "Turn on Developer mode in Settings → Apps, then copy each value into the connector form."
+      )
+    default:
+      return nil
+    }
   }
 
   private static func jsonEscaped(_ value: String) -> String {

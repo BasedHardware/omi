@@ -142,6 +142,78 @@ final class CloudConnectorGuidanceOverlay {
     }
   }
 
+  /// Interactive card with one copy button per connector field, for assisted cloud
+  /// setup where the provider's form needs values pasted one at a time. Secrets are
+  /// masked on screen but copy their real value.
+  func presentFieldCopyCard(
+    title: String,
+    subtitle: String,
+    fields: [(label: String, value: String)],
+    near anchor: CGRect?
+  ) {
+    dismissTask?.cancel()
+    window?.close()
+
+    let cardSize = Self.fieldCopyCardSize(fieldCount: fields.count)
+    let screen = Self.screen(forAnchor: anchor)
+    let frame = Self.instructionCardFrame(
+      anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+
+    lastAutomationState = [
+      "visible": "true",
+      "kind": "fieldCopy",
+      "title": title,
+      "subtitle": subtitle,
+      "fieldCount": "\(fields.count)",
+      "fieldLabels": fields.map(\.label).joined(separator: "|"),
+      "panelFrame": Self.string(frame),
+    ]
+
+    let view = CloudConnectorFieldCopyCardView(
+      title: title,
+      subtitle: subtitle,
+      fields: fields.map { CloudConnectorFieldCopyCardView.Field(label: $0.label, value: $0.value) },
+      size: cardSize,
+      onDismiss: { [weak self] in self?.dismiss() })
+    let hostingController = NSHostingController(rootView: view)
+    hostingController.view.frame = CGRect(origin: .zero, size: cardSize)
+
+    let panel = NSPanel(
+      contentRect: frame,
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
+    )
+    panel.contentViewController = hostingController
+    panel.isOpaque = false
+    panel.backgroundColor = .clear
+    panel.hasShadow = false
+    panel.level = .popUpMenu
+    // Copy buttons must receive clicks; .nonactivatingPanel keeps the browser focused.
+    panel.ignoresMouseEvents = false
+    // The card can sit over the provider's form — let the user drag it anywhere
+    // by grabbing any non-button area.
+    panel.isMovableByWindowBackground = true
+    panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    panel.animationBehavior = .none
+    panel.orderFrontRegardless()
+    window = panel
+
+    dismissTask = Task { [weak self] in
+      // Generous window: the user works through several fields (and, for ChatGPT,
+      // may need to enable Developer mode first).
+      try? await Task.sleep(nanoseconds: 240_000_000_000)
+      await MainActor.run {
+        guard !Task.isCancelled else { return }
+        self?.dismiss()
+      }
+    }
+  }
+
+  static func fieldCopyCardSize(fieldCount: Int) -> CGSize {
+    CGSize(width: 460, height: 96 + CGFloat(fieldCount) * 30)
+  }
+
   private static func screen(forAnchor anchor: CGRect?) -> NSScreen {
     if let anchor {
       let overlapping = NSScreen.screens
@@ -199,6 +271,10 @@ final class CloudConnectorGuidanceOverlay {
   func automationState() -> [String: String] {
     var state = lastAutomationState ?? [:]
     state["visible"] = window?.isVisible == true ? "true" : "false"
+    if let window {
+      // Live frame, not the frame at present time — the user can drag the card.
+      state["panelFrame"] = Self.string(window.frame)
+    }
     return state
   }
 
@@ -344,6 +420,120 @@ private struct CloudConnectorInstructionCardView: View {
     .background(SpatialOverlayCardBackground())
     .contentShape(Rectangle())
     .onTapGesture(perform: onDismiss)
+  }
+}
+
+private struct CloudConnectorFieldCopyCardView: View {
+  struct Field: Identifiable {
+    let label: String
+    let value: String
+    var id: String { label }
+    var isSecret: Bool { label.localizedCaseInsensitiveContains("secret") }
+    var displayValue: String { isSecret ? String(repeating: "•", count: 12) : value }
+  }
+
+  let title: String
+  let subtitle: String
+  let fields: [Field]
+  let size: CGSize
+  let onDismiss: () -> Void
+
+  @State private var copiedFieldID: String?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .top, spacing: 13) {
+        SpatialOverlayAccentIcon(systemName: "checklist", diameter: 38)
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+            .scaledFont(size: 13.5, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+          Text(subtitle)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineSpacing(1.5)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Spacer(minLength: 0)
+
+        Button(action: onDismiss) {
+          Image(systemName: "xmark")
+            .scaledFont(size: 10, weight: .bold)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(Color.white.opacity(0.10)))
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Dismiss")
+      }
+
+      VStack(alignment: .leading, spacing: 6) {
+        ForEach(fields) { field in
+          fieldRow(field)
+        }
+      }
+    }
+    .padding(.leading, 16)
+    .padding(.trailing, 12)
+    .padding(.vertical, 15)
+    .frame(width: size.width, height: size.height, alignment: .topLeading)
+    .background(SpatialOverlayCardBackground())
+  }
+
+  private func fieldRow(_ field: Field) -> some View {
+    HStack(spacing: 8) {
+      Text(field.label)
+        .scaledFont(size: 11.5, weight: .medium)
+        .foregroundColor(OmiColors.textTertiary)
+        .lineLimit(1)
+        .frame(width: 152, alignment: .leading)
+
+      Text(field.displayValue)
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundColor(OmiColors.textSecondary)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+      Button {
+        copy(field)
+      } label: {
+        HStack(spacing: 4) {
+          Image(systemName: copiedFieldID == field.id ? "checkmark" : "doc.on.doc")
+            .scaledFont(size: 9, weight: .bold)
+          Text(copiedFieldID == field.id ? "Copied" : "Copy")
+            .scaledFont(size: 10.5, weight: .semibold)
+        }
+        .foregroundColor(copiedFieldID == field.id ? OmiColors.success : OmiColors.textPrimary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(
+          Capsule().fill(
+            copiedFieldID == field.id
+              ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12)))
+        .contentShape(Capsule())
+      }
+      .buttonStyle(.plain)
+      .help("Copy \(field.label)")
+    }
+    .frame(height: 24)
+  }
+
+  private func copy(_ field: Field) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(field.value, forType: .string)
+    copiedFieldID = field.id
+    let copiedID = field.id
+    Task {
+      try? await Task.sleep(nanoseconds: 1_800_000_000)
+      if copiedFieldID == copiedID {
+        copiedFieldID = nil
+      }
+    }
   }
 }
 

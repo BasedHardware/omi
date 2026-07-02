@@ -1,0 +1,3 @@
+{
+  "change": "Made ChatGPT and Claude connector setup more reliable: Omi now opens the page and shows an on-screen card with one-click copy buttons for each setup value, instead of attempting fragile browser automation"
+}

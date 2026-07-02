@@ -32,8 +32,16 @@ final class BrowserAutomationTargetTests: XCTestCase {
   }
 
   func testDestinationModesSeparateCloudBrowserAndLocalSetup() {
-    XCTAssertEqual(MemoryExportDestination.chatgpt.mcpExecuteKind, .browserAutonomous)
-    XCTAssertEqual(MemoryExportDestination.claude.mcpExecuteKind, .browserAutonomous)
+    // ChatGPT/Claude cloud are assisted-first: deterministic open+copy plus an
+    // on-screen guidance card. See docs/cloud-connectors-roadmap.md.
+    XCTAssertEqual(MemoryExportDestination.chatgpt.mcpExecuteKind, .assisted)
+    XCTAssertEqual(MemoryExportDestination.claude.mcpExecuteKind, .assisted)
+    XCTAssertNotNil(MemoryExportDestination.chatgpt.assistedOverlayHint)
+    XCTAssertNotNil(MemoryExportDestination.claude.assistedOverlayHint)
+    XCTAssertNil(MemoryExportDestination.gemini.assistedOverlayHint)
+    XCTAssertEqual(MemoryExportDestination.claude.assistedSetupFields(key: "k")?.count, 4)
+    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 8)
+    XCTAssertNil(MemoryExportDestination.gemini.assistedSetupFields(key: "k"))
     XCTAssertEqual(MemoryExportDestination.codex.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.claudeCode.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.gemini.mcpExecuteKind, .assisted)
@@ -236,7 +244,9 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
   @MainActor
   func testClaudeNativeSetupWaitsForAccessibilityApprovalInsteadOfAgentFallback() {
-    XCTAssertTrue(MemoryExportExecutor.requiresAccessibilityPreflight(.claude))
+    // Assisted-first Claude setup needs no Accessibility preflight; the check
+    // only applies while a destination maps to .browserAutonomous.
+    XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.claude))
     XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.chatgpt))
     XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.codex))
 

@@ -283,8 +283,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       case .autonomous:
         statusMessage = "Omi is setting this up — follow along in the floating bar."
       case .assisted:
-        statusMessage =
-          "Opened \(destination.title) and copied your key — finish with the steps below."
+        statusMessage = outcome.taskTitle
       case .completed:
         // Deterministic local write (OpenClaw/Hermes) — show the result directly.
         statusMessage = outcome.taskTitle
@@ -659,7 +658,7 @@ struct MemoryExportDestinationSheet: View {
         ? "Grant Accessibility"
         : "Do it for me"
     case .assisted:
-      return "Open & copy key"
+      return destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
     }
   }
 
@@ -677,6 +676,10 @@ struct MemoryExportDestinationSheet: View {
           "Omi uses your signed-in browser to set up \(destination.title). If sign-in or permissions block it, Omi will tell you exactly where it stopped."
       }
     case .assisted:
+      if destination.assistedOverlayHint != nil {
+        return
+          "Omi opens \(destination.title) and shows an on-screen card — copy each value with one click and paste it into the form."
+      }
       return
         "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."
     }
@@ -708,6 +711,11 @@ struct MemoryExportDestinationSheet: View {
         Task {
           await model.executeWithOmi(destination: destination)
           statuses[destination] = await MemoryExportService.shared.status(for: destination)
+          // Assisted flow: the user pastes values by hand, so surface the
+          // field-by-field steps instead of leaving them collapsed.
+          if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
+            showManualSetup = true
+          }
         }
       }
       .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
