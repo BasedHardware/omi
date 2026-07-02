@@ -71,6 +71,10 @@ SCHEMA_GROUPS = {
             'TokenResponse',
         ),
     },
+    'people': {
+        'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
+        'schemas': ('Person',),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
