@@ -41,6 +41,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+import utils.mcp_people as mcp_people
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     read_default_read_rollout,
@@ -113,6 +114,7 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+PEOPLE_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["people.write"]}]
 
 
 @dataclass
@@ -238,6 +240,11 @@ TOOL_REQUIRED_SCOPE = {
     "get_goals": "goals.read",
     "get_chat_messages": "chat.read",
     "get_people": "people.read",
+    "get_person": "people.read",
+    "find_person_by_name": "people.read",
+    "create_person": "people.write",
+    "update_person": "people.write",
+    "delete_person": "people.write",
     "get_screen_activity": "screen_activity.read",
     "get_daily_summaries": "conversations.read",
 }
@@ -631,6 +638,64 @@ MCP_TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_person",
+        "description": "Retrieve a single person/contact by ID.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": PEOPLE_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"person_id": {"type": "string", "description": "The ID of the person"}},
+            "required": ["person_id"],
+        },
+    },
+    {
+        "name": "find_person_by_name",
+        "description": "Find a person/contact by their exact name. Returns the person, or null when there is no match.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": PEOPLE_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "The person's name"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "create_person",
+        "description": "Register a known person/contact by name. Idempotent by name (returns the existing person if one already has that name).",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": PEOPLE_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "The person's name"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "update_person",
+        "description": "Rename a person/contact (for example, relabel a speaker Omi identified).",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": PEOPLE_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "person_id": {"type": "string", "description": "The ID of the person to rename"},
+                "name": {"type": "string", "description": "The new name"},
+            },
+            "required": ["person_id", "name"],
+        },
+    },
+    {
+        "name": "delete_person",
+        "description": "Delete a person/contact by ID. Conversations attributed to them fall back to a generic speaker label.",
+        "annotations": DESTRUCTIVE_WRITE_ANNOTATIONS,
+        "securitySchemes": PEOPLE_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"person_id": {"type": "string", "description": "The ID of the person to delete"}},
+            "required": ["person_id"],
+        },
+    },
+    {
         "name": "get_screen_activity",
         "description": (
             "Retrieve the user's desktop screen activity (Rewind) — what apps and windows they used and the OCR'd "
@@ -748,6 +813,13 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         return datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
+
+
+def _person_tool_error(error: mcp_people.PersonError) -> ToolExecutionError:
+    """Map a people orchestration error to the matching MCP/JSON-RPC error code."""
+    if isinstance(error, mcp_people.PersonNotFound):
+        return ToolExecutionError(str(error), code=-32001)
+    return ToolExecutionError(str(error), code=-32602)
 
 
 def execute_tool(
@@ -1273,6 +1345,41 @@ def execute_tool(
 
     elif tool_name == "get_people":
         return {"people": [clean_person(p) for p in users_db.get_people(user_id)]}
+
+    elif tool_name == "get_person":
+        try:
+            person = mcp_people.get_person(user_id, arguments.get("person_id"))
+        except mcp_people.PersonError as e:
+            raise _person_tool_error(e)
+        return {"person": clean_person(person)}
+
+    elif tool_name == "find_person_by_name":
+        try:
+            person = mcp_people.find_person_by_name(user_id, arguments.get("name"))
+        except mcp_people.PersonError as e:
+            raise _person_tool_error(e)
+        return {"person": clean_person(person) if person else None}
+
+    elif tool_name == "create_person":
+        try:
+            person = mcp_people.create_person(user_id, arguments.get("name"))
+        except mcp_people.PersonError as e:
+            raise _person_tool_error(e)
+        return {"success": True, "person": clean_person(person)}
+
+    elif tool_name == "update_person":
+        try:
+            person = mcp_people.update_person(user_id, arguments.get("person_id"), arguments.get("name"))
+        except mcp_people.PersonError as e:
+            raise _person_tool_error(e)
+        return {"success": True, "person": clean_person(person)}
+
+    elif tool_name == "delete_person":
+        try:
+            mcp_people.delete_person(user_id, arguments.get("person_id"))
+        except mcp_people.PersonError as e:
+            raise _person_tool_error(e)
+        return {"success": True}
 
     elif tool_name == "get_screen_activity":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
