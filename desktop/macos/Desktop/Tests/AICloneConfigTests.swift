@@ -138,6 +138,36 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertTrue(config.telegramAccountEnabled)
     }
 
+    func testClearTelegramUserSessionRemovesIt() {
+        // Happy path: session in Keychain, call clear(),
+        // session should be gone.
+        let config = AICloneConfig(defaults: customDefaults)
+        try? AICloneKeychain.set(
+            .telegramUserSession,
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        config.telegramAccountEnabled = true
+        try? config.clearTelegramUserSession()
+        XCTAssertNil(try? AICloneKeychain.get(.telegramUserSession))
+        XCTAssertFalse(config.telegramAccountEnabled)
+    }
+
+    func testSetTelegramUserSessionEmptyIsThrows() {
+        // cubic review 4615559812 P1: the empty-string sign-out
+        // path is `throws` so callers can handle Keychain delete
+        // failures instead of masking them. Pin the throws-ness.
+        let config = AICloneConfig(defaults: customDefaults)
+        // Signature check: the method must be marked `throws` so
+        // callers cannot silently swallow the failure with `try?`
+        // without acknowledging it. We can't introspect Swift
+        // signatures in tests, but we can verify the contract by
+        // attempting the call and expecting no throw on the happy
+        // path (no preexisting entry to delete => no error).
+        try? AICloneKeychain.delete(.telegramUserSession)
+        XCTAssertNoThrow(try config.setTelegramUserSession(""))
+        XCTAssertFalse(config.telegramAccountEnabled)
+    }
+
     // MARK: - Reload from Keychain on init
 
     func testInitLoadsExistingSecretsFromKeychain() {

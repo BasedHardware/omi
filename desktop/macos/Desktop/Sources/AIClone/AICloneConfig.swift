@@ -93,7 +93,23 @@ final class AICloneConfig: ObservableObject {
         if session.isEmpty {
             // Empty string: clear the keychain entry AND flip the
             // enabled flag off. Used by the "Sign out" path.
-            try? AICloneKeychain.delete(.telegramUserSession)
+            //
+            // SECURITY (cubic review 4615559812 P1): MUST NOT swallow
+            // the Keychain delete failure with `try?`. If the OS
+            // refuses the deletion (keychain locked, ACL denied,
+            // disk full), the secret would remain while the UI
+            // claims "signed out". On next launch, init() would
+            // see the session still in Keychain, flip
+            // `telegramAccountEnabled` back on, and the user
+            // would think their session was signed out when
+            // it actually wasn't. Propagate the error so callers
+            // can retry or surface a clear failure to the user.
+            do {
+                try AICloneKeychain.delete(.telegramUserSession)
+            } catch {
+                log("AICloneConfig: failed to delete Telethon session from Keychain during sign-out: \(error)")
+                throw error
+            }
             telegramAccountEnabled = false
             telegramAccountMeta = [:]
             return
@@ -113,8 +129,22 @@ final class AICloneConfig: ObservableObject {
     /// Clear the Telethon session from Keychain. Used by the "Sign
     /// out" path. After this, the user-account plugin can't connect
     /// until a new session is generated.
-    func clearTelegramUserSession() {
-        try? AICloneKeychain.delete(.telegramUserSession)
+    /// Clear the Telethon session from Keychain. Used by the "Sign
+    /// out" path. After this, the user-account plugin can't connect
+    /// until a new session is generated.
+    ///
+    /// cubic review 4615559812 P1: must propagate Keychain delete
+    /// failures (do NOT swallow with `try?`). A failed delete leaves
+    /// the credential on disk while the app reports signed-out, and
+    /// the next launch's init() will flip `telegramAccountEnabled`
+    /// back on. The UI must handle the thrown error.
+    func clearTelegramUserSession() throws {
+        do {
+            try AICloneKeychain.delete(.telegramUserSession)
+        } catch {
+            log("AICloneConfig: failed to delete Telethon session from Keychain: \(error)")
+            throw error
+        }
         telegramAccountEnabled = false
         telegramAccountMeta = [:]
     }

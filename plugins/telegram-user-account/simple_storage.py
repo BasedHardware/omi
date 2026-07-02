@@ -42,6 +42,7 @@ SECURITY (pinned in test/test_session_never_logged.py):
 from __future__ import annotations
 
 import copy
+import itertools
 import json
 import logging
 import os
@@ -72,14 +73,35 @@ chats: dict[str, dict] = {}
 account: dict = {}
 
 
+# Per-process monotonic counter for atomic-write temp filenames.
+# Each save() to the same path gets a unique tmp file so concurrent
+# FastAPI handlers don't race on {pid}.tmp — both writers would
+# truncate the first writer's in-flight data. cubic review
+# 4615559812 P1 (same race was fixed in plugin_discovery.py per
+# cubic review #8682). Imported here so load_storage's reset
+# sees the same empty defaults the storage starts with.
+_tmp_counter = itertools.count(1)
+
+
 def load_storage() -> None:
     """Load USERS_FILE + CHATS_FILE + ACCOUNT_FILE into the in-memory dicts.
 
-    Idempotent: subsequent calls re-read from disk and OVERWRITE the
-    in-memory state. Tests should call this in their fixture if they
-    need a clean slate.
+    Idempotent and clean-slate: each call RESETS ``users``/``chats``/
+    ``account`` to empty dicts FIRST, then loads whatever is on disk.
+    If a storage file has been deleted between calls, its global
+    doesn't keep stale entries from the previous load.
+
+    Tests should call this in their fixture if they need a clean
+    slate (cubic review 4615559812 P1: the previous implementation
+    only overwrote when the JSON file existed, so a deleted file
+    left old in-memory state hanging around).
     """
     global users, chats, account
+    # Reset to empty defaults so a missing file yields empty
+    # state, not "whatever was here from the previous load".
+    users = {}
+    chats = {}
+    account = {}
     for path, target_name in (
         (USERS_FILE, "users"),
         (CHATS_FILE, "chats"),
@@ -88,6 +110,12 @@ def load_storage() -> None:
             if os.path.exists(path):
                 with open(path, "r") as f:
                     payload = json.load(f)
+                if not isinstance(payload, dict):
+                    print(
+                        f"⚠️  {path} is not a dict (got {type(payload).__name__}); " "resetting to empty",
+                        flush=True,
+                    )
+                    continue
                 if target_name == "users":
                     users = payload
                 else:
@@ -97,7 +125,9 @@ def load_storage() -> None:
     try:
         if os.path.exists(ACCOUNT_FILE):
             with open(ACCOUNT_FILE, "r") as f:
-                account = json.load(f)
+                payload = json.load(f)
+            if isinstance(payload, dict):
+                account = payload
     except Exception as e:
         print(f"⚠️  Could not load {ACCOUNT_FILE}: {e}", flush=True)
 
@@ -111,8 +141,16 @@ def _save(path: str, payload: dict) -> None:
     failures are NOT swallowed. The exception propagates so the
     caller can surface a 5xx to the desktop instead of silently
     reporting success.
+
+    The tmp filename uses ``{pid}.{counter}.tmp`` (per-process
+    monotonic counter) instead of just ``{pid}.tmp``. The
+    deterministic-by-pid scheme would race when two FastAPI
+    request handlers save to the same path within one process
+    (concurrent chat reply -> /recent_messages save). cubic review
+    4615559812 P1: adopted the same fix already applied to
+    plugin_discovery.py in PR #8682.
     """
-    tmp = f"{path}.{os.getpid()}.tmp"
+    tmp = f"{path}.{os.getpid()}.{next(_tmp_counter)}.tmp"
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp, "w") as f:

@@ -219,6 +219,40 @@ class TestTelethonClientMethods:
         assert result["name"] == "Choguun Test"
         assert result["device_label"] == "Omi Desktop"
 
+    async def test_connect_raises_when_get_me_returns_none(self, monkeypatch):
+        # cubic review 4615559812 P1: an invalid/revoked Telethon
+        # session returns get_me() == None. The previous code
+        # would crash with AttributeError on me.first_name. The
+        # contract: connect() raises RuntimeError with an
+        # actionable message, AND calls disconnect() first so
+        # the underlying client doesn't leak a connection.
+        client, mock_client = self._make_client(monkeypatch)
+
+        async def async_connect():
+            return None
+
+        mock_client.connect = async_connect
+
+        async def async_get_me():
+            return None  # revoked / invalid session
+
+        mock_client.get_me = async_get_me
+
+        disconnect_calls = []
+
+        async def async_disconnect():
+            disconnect_calls.append(True)
+
+        mock_client.disconnect = async_disconnect
+
+        with pytest.raises(RuntimeError, match="not authorized"):
+            await client.connect()
+        assert disconnect_calls == [True], (
+            "connect() must call disconnect() before raising when "
+            "get_me() returns None — otherwise the underlying "
+            "Telethon client leaks an open connection."
+        )
+
     @pytest.mark.asyncio
     async def test_get_chats_returns_dialogs(self, monkeypatch):
         client, mock_client = self._make_client(monkeypatch)

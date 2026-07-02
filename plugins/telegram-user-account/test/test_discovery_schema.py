@@ -76,8 +76,7 @@ class TestDiscoverySchema:
         # behavior.
         # Verify no overlap with FORBIDDEN.
         assert ALLOWED_DISCOVERY_KEYS.isdisjoint(FORBIDDEN_DISCOVERY_KEYS), (
-            f"ALLOWED and FORBIDDEN keys overlap: "
-            f"{ALLOWED_DISCOVERY_KEYS & FORBIDDEN_DISCOVERY_KEYS}"
+            f"ALLOWED and FORBIDDEN keys overlap: " f"{ALLOWED_DISCOVERY_KEYS & FORBIDDEN_DISCOVERY_KEYS}"
         )
 
     def test_account_metadata_is_optional(self):

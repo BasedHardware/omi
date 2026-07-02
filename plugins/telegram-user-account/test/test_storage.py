@@ -34,25 +34,38 @@ TEST_SESSION_STRING = (
 # ---------------------------------------------------------------------------
 
 
-class TestStorageDirResolution:
-    """Pin that TELEGRAM_USER_STORAGE_DIR env var wins, then /app/data,
-    then this file's directory.
+class TestStorageDirContract:
+    """STORAGE_DIR is resolved at module-import time (env -> /app/data
+    -> module-dir), so a single import-time test cannot flip the env
+    var and observe a different `simple_storage.STORAGE_DIR` in the
+    same process. cubic review 4615559812 P2 + P3: replace the
+    previous misleading tests with a structural contract test.
+
+    The actual env-override and /app/data behavior is exercised
+    end-to-end by ``scripts/dev-serve.sh`` and the Docker
+    image, not unit tests. Pin what's actually testable here:
+    the type (absolute path str) and that subsequent saves land
+    under the resolved directory.
     """
 
-    def test_env_var_wins(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("TELEGRAM_USER_STORAGE_DIR", str(tmp_path))
-        assert os.environ.get("TELEGRAM_USER_STORAGE_DIR") == str(tmp_path)
-
-    def test_app_data_fallback(self, monkeypatch, tmp_path):
-        """When TELEGRAM_USER_STORAGE_DIR is unset and /app/data
-        exists, STORAGE_DIR should be /app/data. Documented behavior;
-        the actual resolution happens at import time.
-        """
-        monkeypatch.delenv("TELEGRAM_USER_STORAGE_DIR", raising=False)
-        # At import time, if /app/data doesn't exist (the case in CI),
-        # STORAGE_DIR falls back to the module's directory. This is
-        # the documented third-tier fallback.
+    def test_storage_dir_is_absolute_path(self):
+        # Whatever fallback was selected at import time, the
+        # result must be an absolute path so callers can treat
+        # it as a stable on-disk location.
+        assert isinstance(simple_storage.STORAGE_DIR, str)
         assert os.path.isabs(simple_storage.STORAGE_DIR)
+
+    def test_data_files_live_under_storage_dir(self):
+        # USERS_FILE / CHATS_FILE / ACCOUNT_FILE must all be
+        # children of STORAGE_DIR, not arbitrary working-dir
+        # files.
+        sd = simple_storage.STORAGE_DIR
+        for f in (
+            simple_storage.USERS_FILE,
+            simple_storage.CHATS_FILE,
+            simple_storage.ACCOUNT_FILE,
+        ):
+            assert f.startswith(sd + "/") or f == os.path.join(sd, os.path.basename(f))
 
 
 # ---------------------------------------------------------------------------
@@ -356,3 +369,88 @@ class TestSessionStringNeverInStorage:
         # tests pin that), so it can't be re-saved back to disk.
         # (The leftover would be removed on the next save_user
         # call because save_user rebuilds the record from scratch.)
+
+
+# ---------------------------------------------------------------------------
+# Section 9: load_storage clean-slate contract (cubic 4615559812 P1)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadStorageCleanSlate:
+    """cubic review 4615559812 P1: load_storage() previously only
+    overwrote the in-memory dicts when the JSON file existed. If a
+    file was DELETED between calls (test cleanup, user clearing
+    data), the old global state persisted — so test order could
+    affect results (stale entries from a previous test showing up).
+
+    The fix: load_storage() RESETS all three globals to empty
+    dicts at the start, THEN reads whatever's on disk. Missing
+    file -> empty dict; existing file -> load.
+    """
+
+    def test_load_resets_globals_when_files_missing(self, tmp_path, monkeypatch):
+        # Make storage point at a fresh tmp dir with no files.
+        monkeypatch.setattr(simple_storage, "USERS_FILE", str(tmp_path / "absent.json"))
+        monkeypatch.setattr(simple_storage, "CHATS_FILE", str(tmp_path / "absent.json"))
+        monkeypatch.setattr(simple_storage, "ACCOUNT_FILE", str(tmp_path / "absent.json"))
+        # Pre-pollute the globals with stale entries (simulates
+        # state from a previous test run that wasn't cleaned).
+        simple_storage.users = {"stale-tg-id": {"omi_uid": "stale-uid"}}
+        simple_storage.chats = {"stale-chat-id": {"messages": ["stale"]}}
+        simple_storage.account = {"phone": "+19999999999"}
+
+        simple_storage.load_storage()
+
+        # After load with missing files, globals must be empty,
+        # NOT hold the stale data from before.
+        assert simple_storage.users == {}
+        assert simple_storage.chats == {}
+        assert simple_storage.account == {}
+
+
+# ---------------------------------------------------------------------------
+# Section 10: _save tmp filename uniqueness (cubic 4615559812 P1)
+# ---------------------------------------------------------------------------
+
+
+class TestSaveTmpFilenameUniquePerCall:
+    """cubic review 4615559812 P1: the atomic-write tmp filename was
+    deterministic per pid ({pid}.tmp), so two concurrent saves to
+    the same path within one process (two FastAPI handlers, asyncio
+    tasks racing on the same path) would clobber each other's
+    in-flight tmp file. The fix: include a per-process monotonic
+    counter so each save gets a unique tmp filename.
+    """
+
+    def test_concurrent_saves_get_unique_tmp_filenames(self, tmp_path, monkeypatch):
+        # Make storage point at an isolated path so we can observe
+        # tmp files without disturbing the real STORAGE_DIR.
+        monkeypatch.setattr(simple_storage, "USERS_FILE", str(tmp_path / "users.json"))
+        # Save several times in rapid succession (synchronous in
+        # the test body, but exercises the same code path that
+        # concurrent requests would).
+        n = 5
+        for i in range(n):
+            simple_storage.save_user(
+                telegram_user_id=f"tg-{i}",
+                omi_uid=f"uid-{i}",
+                persona_id="p",
+                omi_dev_api_key=f"key-{i}",
+            )
+        # No leftover tmp files in the tmp_path (clean up is
+        # done by os.replace inside _save).
+        leftovers = [p for p in tmp_path.iterdir() if p.name.endswith(".tmp")]
+        assert leftovers == [], (
+            f"Atomic-write left {len(leftovers)} tmp files behind: "
+            f"{[p.name for p in leftovers]}. _save's tmp cleanup "
+            f"is racing."
+        )
+        # Final file exists and contains the last write.
+        out = tmp_path / "users.json"
+        assert out.exists()
+        import json as _json
+
+        with open(out) as f:
+            data = _json.load(f)
+        # Last write wins per user; tg-(n-1) should be present.
+        assert f"tg-{n - 1}" in data

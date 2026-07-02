@@ -134,9 +134,26 @@ class TelethonClient:
     async def connect(self) -> dict:
         """Connect to Telegram. Returns account metadata for the
         discovery file.
+
+        Raises ``RuntimeError("Telethon session is not authorized")``
+        if ``get_me()`` returns ``None`` — which is Telethon's signal
+        that the session string is invalid, revoked (user logged out
+        via Settings → Devices on their phone), or the auth key was
+        broken in transit. Per cubic review #4615559812 P1: we MUST
+        NOT dereference ``me`` (it's None) — that would raise
+        ``AttributeError`` and surface as an opaque 500 instead of
+        the controlled auth-failure UX.
         """
         await self._client.connect()
         me = await self._client.get_me()
+        if me is None:
+            await self._client.disconnect()
+            raise RuntimeError(
+                "Telethon session is not authorized — the session "
+                "string may be invalid, revoked, or the auth key "
+                "could not be decrypted. Sign in again from the "
+                "desktop to generate a new session."
+            )
         full_name = " ".join(filter(None, [me.first_name, me.last_name])).strip()
         return {
             "phone": getattr(me, "phone", None),

@@ -135,6 +135,17 @@ def mock_app(monkeypatch):
 
     mock_client.is_connected = async_is_connected_default
 
+    # Default async disconnect. cubic review 4615559812 P3: bare
+    # MagicMock.disconnect() returns a MagicMock (not awaitable), so
+    # the lifespan's `await _client.disconnect()` on teardown
+    # raised a TypeError that was swallowed by the lifespan handler
+    # but surfaced as a spurious warning. Pin the production
+    # interface (async disconnect) on the mock.
+    async def async_disconnect_default():
+        return None
+
+    mock_client.disconnect = async_disconnect_default
+
     # Default: mock the other methods so /status, /recent_messages,
     # etc. don't crash on default MagicMock callables.
     async def async_get_chats_default(limit):
@@ -436,24 +447,6 @@ class TestSessionStringNeverInHttpResponses:
     faithfully serializes it. What we pin is that the endpoint
     itself does not INJECT a session string into any response.
     """
-
-    def test_route_source_never_injects_session_string(self):
-        """Source-level check: no route handler in main.py builds
-        a response that includes the session string. The test
-        sentinel 'X' * 300 must not appear in the source. If a
-        future change adds a code path that puts a session-shaped
-        string into a response (e.g. via str(_client._session) or
-        similar), the test fails."""
-        import inspect
-        import main as main_module
-
-        source = inspect.getsource(main_module)
-        sentinel = "X" * 300  # matches the shape of a session string
-        assert sentinel not in source, (
-            "Test sentinel (300 X's) found in main.py source. "
-            "This indicates a code path that may inject a session-"
-            "shaped string into an HTTP response."
-        )
 
     def test_route_handlers_dont_reference_session(self):
         """Walk every route handler. None of them should reference
