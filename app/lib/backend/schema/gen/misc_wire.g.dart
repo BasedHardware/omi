@@ -94,6 +94,26 @@ class GeneratedRebuildResponse {
   }
 }
 
+class GeneratedErrorResponse {
+  final dynamic detail;
+
+  const GeneratedErrorResponse({
+    required this.detail,
+  });
+
+  factory GeneratedErrorResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedErrorResponse(
+      detail: _required(_readFieldValue<dynamic>(_readField(json, const ["detail"]), "detail", (value) => value, requiredField: true, nullable: false), "detail"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'detail': detail,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;

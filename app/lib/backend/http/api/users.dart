@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as people_wire;
 import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as subscription_wire;
 import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
@@ -549,8 +550,8 @@ Future<DailySummary?> getDailySummary(String summaryId) async {
   if (response == null || response.statusCode != 200) return null;
 
   try {
-    final data = jsonDecode(response.body);
-    return DailySummary.fromJson(data);
+    final data = wire.GeneratedDailySummaryResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return DailySummary.fromGenerated(data);
   } catch (e) {
     Logger.debug('Error parsing daily summary: $e');
     return null;
@@ -598,17 +599,14 @@ Future<RegenerateDailySummaryResult> regenerateDailySummary(String summaryId) as
   if (response.statusCode != 200) {
     String? detail;
     try {
-      final body = jsonDecode(response.body);
-      if (body is Map<String, dynamic>) {
-        final d = body['detail'];
-        if (d is String) detail = d;
-      }
+      final body = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      if (body.detail is String) detail = body.detail as String;
     } catch (_) {}
     return RegenerateDailySummaryResult(statusCode: response.statusCode, errorDetail: detail);
   }
   try {
-    final data = jsonDecode(response.body);
-    return RegenerateDailySummaryResult(summary: DailySummary.fromJson(data), statusCode: 200);
+    final data = wire.GeneratedDailySummaryResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return RegenerateDailySummaryResult(summary: DailySummary.fromGenerated(data), statusCode: 200);
   } catch (e) {
     Logger.debug('Error parsing regenerated daily summary: $e');
     return RegenerateDailySummaryResult(statusCode: 200);

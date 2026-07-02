@@ -127,6 +127,7 @@ SCHEMA_GROUPS = {
             'DeleteKnowledgeGraphResponse',
             'KnowledgeGraphResponse',
             'RebuildResponse',
+            'ErrorResponse',
         ),
     },
     'wrapped_task_integrations': {
@@ -310,6 +311,7 @@ class DartType:
     ref_schema: str | None = None
     is_date_time: bool = False
     is_map: bool = False
+    is_dynamic: bool = False
 
     @property
     def annotation(self) -> str:
@@ -386,6 +388,11 @@ def dart_type_for(
         ):
             nullable = any(item.get('type') == 'null' for item in any_of) or not required
             return DartType('Map<String, dynamic>', nullable=nullable, is_map=True)
+        elif any(item.get('type') in {'array', 'object'} for item in non_null) and all(
+            item.get('type') in {'array', 'boolean', 'integer', 'number', 'object', 'string'} for item in non_null
+        ):
+            nullable = any(item.get('type') == 'null' for item in any_of) or not required
+            return DartType('dynamic', nullable=nullable, is_dynamic=True)
         else:
             raise ValueError(f'unsupported anyOf schema: {schema_debug_name(schema)}')
     else:

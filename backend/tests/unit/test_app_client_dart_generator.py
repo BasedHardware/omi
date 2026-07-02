@@ -202,7 +202,9 @@ def test_misc_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedDeleteKnowledgeGraphResponse' in generated
     assert 'class GeneratedKnowledgeGraphResponse' in generated
     assert 'class GeneratedRebuildResponse' in generated
+    assert 'class GeneratedErrorResponse' in generated
     assert 'status: _required(_readFieldValue<String>' in generated
+    assert 'detail: _required(_readFieldValue<dynamic>' in generated
 
 
 def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openapi():
