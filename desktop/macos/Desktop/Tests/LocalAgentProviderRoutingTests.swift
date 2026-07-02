@@ -111,6 +111,9 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
 
     func testIsRetriableSpawnFailureMatchesInfrastructureErrors() {
         XCTAssertTrue(LocalAgentProviderRouting.isRetriableSpawnFailure("AI not available: adapter failed"))
+        XCTAssertTrue(LocalAgentProviderRouting.isRetriableSpawnFailure("ENOENT: no such file or directory"))
+        XCTAssertTrue(LocalAgentProviderRouting.isRetriableSpawnFailure("Failed to start child process"))
         XCTAssertFalse(LocalAgentProviderRouting.isRetriableSpawnFailure("Could not find the email thread"))
+        XCTAssertFalse(LocalAgentProviderRouting.isRetriableSpawnFailure("Could not parse adapter response: invalid JSON"))
     }
 }

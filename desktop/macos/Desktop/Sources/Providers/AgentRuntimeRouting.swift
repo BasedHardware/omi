@@ -86,6 +86,19 @@ struct LocalAgentProviderAvailability: Equatable {
         return false
     }
 
+    /// Concise speech-friendly install guidance (no URLs/backticks).
+    /// The full `setupPrompt` (with exact commands) goes to the UI/tool output.
+    var spokenInstallGuide: String {
+        switch provider {
+        case .hermes:
+            return "I don't see Hermes installed. You can install it from the Nous Research GitHub with pip install, then run hermes model to configure it. Check the chat for the full steps."
+        case .openclaw:
+            return "I don't see OpenClaw installed. Install it on your path, or set the OMI openclaw adapter command environment variable. Check the chat for details."
+        case .codex:
+            return "I don't see Codex installed. Run npm install -g at openai codex, then run codex to sign in. Or I can install it for you — just ask."
+        }
+    }
+
     var setupPrompt: String {
         switch provider {
         case .hermes:
@@ -293,10 +306,10 @@ enum LocalAgentProviderRouting {
         let lower = message.lowercased()
         return lower.contains("not available")
             || lower.contains("failed to start")
-            || lower.contains("adapter")
             || lower.contains("enoent")
             || lower.contains("command not found")
-            || lower.contains("activation")
+            || lower.contains("spawn")
+            || lower.contains("no such file")
     }
 
     static func resolveSpawn(
@@ -312,12 +325,14 @@ enum LocalAgentProviderRouting {
         // Only treat a provider as user-directed when it appears in the user's own
         // words. The model-authored `brief` often names a provider the model chose
         // (e.g. "use Hermes to refactor…") even when the user never said it.
-        // Match a bare mention ("codex", "use codex", "install codex"), not just a
-        // verb+name directive, so any task that names an agent routes to it.
+        // Prefer a verb-based match ("use codex") over a bare mention so negated
+        // phrases like "don't use Hermes, use Codex" route to the positively-
+        // requested provider, not the first one that appears as a substring.
         let userText = userRequestText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let explicit = userText.isEmpty ? nil : AgentPillsManager.DirectedProvider.allCases.first {
-            isExplicitProviderRequest($0, in: userText)
-        }
+        let explicit = userText.isEmpty ? nil : (explicitProvider(in: userText)
+            ?? AgentPillsManager.DirectedProvider.allCases.first {
+                isExplicitProviderRequest($0, in: userText)
+            })
 
         if let explicit {
             let availability = LocalAgentProviderDetector.availability(
@@ -330,7 +345,7 @@ enum LocalAgentProviderRouting {
                 return .setupRequired(
                     provider: explicit,
                     prompt: availability.setupPrompt,
-                    spokenStatus: explicit.setupNeededStatus
+                    spokenStatus: availability.spokenInstallGuide
                 )
             }
             let resolvedTitle = normalizedTitle(title, provider: explicit)
@@ -364,56 +379,38 @@ enum LocalAgentProviderRouting {
             )
         }
 
-        if let requestedProvider {
-            if LocalAgentProviderDetector.isAvailable(
-                requestedProvider,
-                environment: environment,
-                fileManager: fileManager,
-                homeDirectory: homeDirectory
-            ) {
-                let resolvedTitle = normalizedTitle(title, provider: requestedProvider)
-                return .spawn(
-                    AgentSpawnPlan(
-                        harnessOverride: requestedProvider.harnessMode,
-                        title: resolvedTitle,
-                        ack: "Starting \(requestedProvider.displayName).",
-                        selectedProvider: requestedProvider,
-                        usedFallback: false,
-                        fallbackNote: nil,
-                        context: spawnContext(
-                            taskKind: taskKind,
-                            explicitProvider: nil,
-                            selectedHarness: requestedProvider.harnessMode,
-                            environment: environment,
-                            fileManager: fileManager,
-                            homeDirectory: homeDirectory
-                        )
+        // When the user didn't explicitly name a provider, use the task-based
+        // preference ranking — the model's `requestedProvider` suggestion should
+        // NOT override the smart routing (e.g. model picking OpenClaw for a coding
+        // task when Codex is the preferred and installed choice).
+        // Exception: if the model's pick isn't installed and we DO have an
+        // installed fallback, speak the fallback note so the user knows.
+        if let requestedProvider, !LocalAgentProviderDetector.isAvailable(
+            requestedProvider,
+            environment: environment,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        ), let fallbackProvider = availableProviders.first {
+            let note = "\(requestedProvider.displayName) isn't installed; using \(fallbackProvider.displayName) instead."
+            let resolvedTitle = normalizedTitle(title, provider: fallbackProvider)
+            return .spawn(
+                AgentSpawnPlan(
+                    harnessOverride: fallbackProvider.harnessMode,
+                    title: resolvedTitle,
+                    ack: note,
+                    selectedProvider: fallbackProvider,
+                    usedFallback: true,
+                    fallbackNote: note,
+                    context: spawnContext(
+                        taskKind: taskKind,
+                        explicitProvider: nil,
+                        selectedHarness: fallbackProvider.harnessMode,
+                        environment: environment,
+                        fileManager: fileManager,
+                        homeDirectory: homeDirectory
                     )
                 )
-            }
-
-            if let fallbackProvider = availableProviders.first {
-                let note = "\(requestedProvider.displayName) isn't installed; using \(fallbackProvider.displayName) instead."
-                let resolvedTitle = normalizedTitle(title, provider: fallbackProvider)
-                return .spawn(
-                    AgentSpawnPlan(
-                        harnessOverride: fallbackProvider.harnessMode,
-                        title: resolvedTitle,
-                        ack: note,
-                        selectedProvider: fallbackProvider,
-                        usedFallback: true,
-                        fallbackNote: note,
-                        context: spawnContext(
-                            taskKind: taskKind,
-                            explicitProvider: nil,
-                            selectedHarness: fallbackProvider.harnessMode,
-                            environment: environment,
-                            fileManager: fileManager,
-                            homeDirectory: homeDirectory
-                        )
-                    )
-                )
-            }
+            )
         }
 
         if let primary = availableProviders.first {

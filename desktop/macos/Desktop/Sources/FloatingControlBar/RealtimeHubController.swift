@@ -1048,11 +1048,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         // so we don't speak or mutate state for a turn that's no longer active.
         guard self.isCurrentSession(source) else { return }
         switch resolution {
-        case .setupRequired(let provider, let setupPrompt, _):
+        case .setupRequired(let provider, let setupPrompt, let spokenStatus):
           self.assistantText = setupPrompt
           self.barState?.isVoiceResponseActive = true
           if !self.audioReceivedThisTurn {
-            self.speak(setupPrompt)
+            self.speak(spokenStatus)
           }
           self.suppressAssistantOutputForCurrentTurn = true
           log("RealtimeHub[\(self.providerTag)]: tool spawn_agent provider=\(provider.rawValue) unavailable")

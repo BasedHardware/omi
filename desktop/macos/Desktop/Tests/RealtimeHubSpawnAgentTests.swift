@@ -27,9 +27,9 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("LocalAgentProviderRouting.resolveSpawnWithAutoInstall("))
-    XCTAssertTrue(source.contains("case .setupRequired(let provider, let setupPrompt, _):"))
+    XCTAssertTrue(source.contains("case .setupRequired(let provider, let setupPrompt, let spokenStatus):"))
     XCTAssertTrue(source.contains("self.assistantText = setupPrompt"))
-    XCTAssertTrue(source.contains("self.speak(setupPrompt)"))
+    XCTAssertTrue(source.contains("self.speak(spokenStatus)"))
     XCTAssertTrue(source.contains("output: \"Error: \\(setupPrompt)\""))
   }
 

@@ -13,14 +13,15 @@ SRC_BUNDLE="$BUILD_DIR/${APP_NAME}.app"
 DEST_BUNDLE="/Applications/${APP_NAME}.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/' || true)}"
 
-# Use mktemp for secure, collision-free temporary paths
-ENTITLEMENTS="$(mktemp /tmp/omi-local-dev.XXXXXX.entitlements)"
+# Use mktemp for secure, collision-free temporary paths.
+# BSD mktemp requires XXXXXX as the final path component (no trailing suffix).
+ENTITLEMENTS="$(mktemp /tmp/omi-local-dev.XXXXXX)"
 CLEAN_DIR="$(mktemp -d)"
 CLEAN_BUNDLE="$CLEAN_DIR/${APP_NAME}.app"
 
 cleanup() {
   rm -f "$ENTITLEMENTS"
-  rm -rf "$CLEAN_DIR"
+  rm -rf "$CLEAN_DIR" "$STAGING_BUNDLE" "$OLD_BUNDLE"
 }
 trap cleanup EXIT
 
@@ -71,11 +72,18 @@ codesign --force --options runtime --entitlements "$ENTITLEMENTS" --sign "$SIGN_
 codesign --verify --deep --strict "$CLEAN_BUNDLE"
 echo "Signature OK"
 
-# Atomic install: copy to a temp location in /Applications, then swap in.
-# This way, a ditto failure doesn't leave the user with nothing installed.
+# Swap install: move old bundle aside, move new one in, then delete old.
+# If the move fails, restore the old bundle so the user is never left without an app.
+OLD_BUNDLE="/Applications/.${APP_NAME}-old-$$.app"
 STAGING_BUNDLE="/Applications/.${APP_NAME}-staging-$$.app"
 ditto "$CLEAN_BUNDLE" "$STAGING_BUNDLE"
-rm -rf "$DEST_BUNDLE"
-mv "$STAGING_BUNDLE" "$DEST_BUNDLE"
+mv "$DEST_BUNDLE" "$OLD_BUNDLE" 2>/dev/null || true
+if ! mv "$STAGING_BUNDLE" "$DEST_BUNDLE"; then
+  rm -rf "$STAGING_BUNDLE"
+  mv "$OLD_BUNDLE" "$DEST_BUNDLE" 2>/dev/null || true
+  echo "ERROR: install failed — restored previous bundle"
+  exit 1
+fi
+rm -rf "$OLD_BUNDLE"
 echo "Installed to $DEST_BUNDLE"
 open "$DEST_BUNDLE"
