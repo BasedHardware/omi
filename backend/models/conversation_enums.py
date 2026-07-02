@@ -57,6 +57,7 @@ class ConversationSource(str, Enum):
     external_integration = 'external_integration'
     imessage = 'imessage'
     telegram = 'telegram'
+    whatsapp = 'whatsapp'
     limitless = 'limitless'
     onboarding = 'onboarding'
     unknown = 'unknown'

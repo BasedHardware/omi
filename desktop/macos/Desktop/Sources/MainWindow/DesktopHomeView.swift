@@ -514,8 +514,10 @@ struct DesktopHomeView: View {
 
     var visibleRawValues: Set<Int> = [
       SidebarNavItem.dashboard.rawValue, SidebarNavItem.rewind.rawValue,
-      // Replies and Telegram are tier-0 main pages; keep them reachable for tiers 1–5.
-      SidebarNavItem.replies.rawValue, SidebarNavItem.telegram.rawValue,
+      // Replies, Telegram and WhatsApp are tier-0 main pages; keep them reachable for tiers 1–5.
+      SidebarNavItem.replies.rawValue,
+      SidebarNavItem.telegram.rawValue,
+      SidebarNavItem.whatsapp.rawValue,
     ]
     if currentTierLevel >= 2 { visibleRawValues.insert(SidebarNavItem.memories.rawValue) }
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
@@ -637,6 +639,8 @@ struct DesktopHomeView: View {
       return .replies
     case "telegram":
       return .telegram
+    case "whatsapp":
+      return .whatsapp
     case "help":
       return .help
     default:
@@ -1161,6 +1165,8 @@ private struct PageContentView: View {
         HelpPage()
       case 13:
         TelegramInboxPage()
+      case 14:
+        WhatsAppInboxPage()
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,

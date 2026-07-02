@@ -669,11 +669,12 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str, sou
     """Idempotently resolve a chat-app contact to a Person.
 
     Contacts are identified by a normalized handle (e.g. an iMessage phone/email or
-    a Telegram ``tg:<user_id>``). Resolution is by handle IDENTITY only: existing
-    handle → return it; otherwise create a new person. The person id is seeded from
-    ``{uid}:{source}:{handle}`` so concurrent ingests converge on the same document.
+    a Telegram ``tg:<user_id>``, or a WhatsApp phone number). Resolution is by
+    handle IDENTITY only: existing handle → return it; otherwise create a new person.
+    The person id is seeded from ``{uid}:{source}:{handle}`` so concurrent ingests
+    converge on the same document.
 
-    ``source`` (``'imessage'`` / ``'telegram'``) namespaces the id seed and is stored
+    ``source`` (``'imessage'`` / ``'telegram'`` / ``'whatsapp'``) namespaces the id seed and is stored
     on the person, so the same raw handle under different platforms can't collide.
 
     We deliberately do NOT merge by display name. Distinct people can share a saved

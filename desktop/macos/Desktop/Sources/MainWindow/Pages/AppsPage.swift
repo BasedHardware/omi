@@ -619,6 +619,17 @@ struct ImportConnector: Identifiable {
             isConnected: false
         ),
         ImportConnector(
+            id: "whatsapp",
+            title: "WhatsApp",
+            subtitle: "WhatsApp on this Mac",
+            description: "Read your conversations locally so Omi learns the people you talk to and can suggest replies.",
+            brand: .whatsapp,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
             id: "chatgpt",
             title: "ChatGPT",
             subtitle: "Memory import",
@@ -892,7 +903,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             return count == 1 ? "note" : "notes"
         case "x":
             return count == 1 ? "post" : "posts"
-        case "imessage":
+        case "imessage", "whatsapp":
             return count == 1 ? "message" : "messages"
         default:
             return count == 1 ? "item" : "items"
@@ -1293,6 +1304,67 @@ private final class ImportConnectorSheetModel: ObservableObject {
         }
     }
 
+    func connectWhatsApp() async -> SyncResult? {
+        beginRun(
+            title: "Connecting to WhatsApp",
+            detail: "Checking access to WhatsApp on this Mac."
+        )
+        defer { finishRun() }
+
+        guard WhatsAppPermissionPolicy.fullDiskAccessGranted() else {
+            WhatsAppPermissionPolicy.openFullDiskAccessSettings()
+            errorMessage =
+                "Omi needs Full Disk Access to read WhatsApp. Turn it on in System Settings → "
+                + "Privacy & Security → Full Disk Access, then quit and reopen Omi and try again."
+            return nil
+        }
+
+        updateProgress(
+            title: "Reading your messages",
+            detail: "Importing recent conversations and the people you talk to."
+        )
+
+        do {
+            let outcome = try await WhatsAppSyncCoordinator.shared.sync()
+            if outcome.messagesIngested > 0 {
+                statusMessage =
+                    "Imported \(outcome.messagesIngested.formatted()) messages across "
+                    + "\(outcome.conversationsCreated.formatted()) conversations. "
+                    + "Omi is learning the people you talk to."
+            } else {
+                statusMessage = "No new messages to import — Omi is up to date."
+            }
+            return SyncResult(
+                sourceCount: outcome.messagesIngested,
+                memoryCount: nil,
+                newItems: outcome.messagesIngested
+            )
+        } catch {
+            errorMessage = "Couldn't read WhatsApp: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    /// Uploads the macOS address book so the backend can resolve WhatsApp handles
+    /// to People. Reuses the shared contact resolver; only the endpoint differs.
+    func syncWhatsAppContacts() async {
+        isSyncingContacts = true
+        contactSyncStatus = nil
+        defer { isSyncingContacts = false }
+
+        let contacts = await IMessageContactResolver.shared.allContacts()
+        guard !contacts.isEmpty else {
+            contactSyncStatus = "No contacts to sync"
+            return
+        }
+        do {
+            let upserted = try await APIClient.shared.whatsappSyncContacts(contacts)
+            contactSyncStatus = "Synced \(upserted) contact\(upserted == 1 ? "" : "s")"
+        } catch {
+            contactSyncStatus = "Sync failed"
+        }
+    }
+
     static func appURLScheme() -> String {
         if let urlTypes = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]],
             let first = urlTypes.first,
@@ -1579,6 +1651,19 @@ struct ImportConnectorSheet: View {
                                 accumulateSourceCount: true
                             )
                         }
+                    case "whatsapp":
+                        if let result = await model.connectWhatsApp() {
+                            // WhatsApp sync reads incrementally via a Z_PK cursor,
+                            // so sourceCount is a per-sync delta — accumulate it.
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "WhatsApp on this Mac",
+                                accumulateSourceCount: true
+                            )
+                        }
                     case "local-files":
                         if let result = await model.rescanLocalFiles(appState: appState) {
                             statusStore.markSynced(
@@ -1603,10 +1688,16 @@ struct ImportConnectorSheet: View {
                     .foregroundColor(OmiColors.textTertiary)
             }
 
-            if connector.id == "imessage" {
+            if connector.id == "imessage" || connector.id == "whatsapp" {
                 VStack(alignment: .leading, spacing: 6) {
                     Button {
-                        Task { await model.syncContacts() }
+                        Task {
+                            if connector.id == "whatsapp" {
+                                await model.syncWhatsAppContacts()
+                            } else {
+                                await model.syncContacts()
+                            }
+                        }
                     } label: {
                         HStack(spacing: 6) {
                             if model.isSyncingContacts {
@@ -1703,6 +1794,8 @@ struct ImportConnectorSheet: View {
             return model.isRunning ? "Connecting…" : (snapshot.isConnected ? "Sync now" : "Connect X")
         case "imessage":
             return model.isRunning ? "Reading…" : (snapshot.isConnected ? "Sync now" : "Connect iMessage")
+        case "whatsapp":
+            return model.isRunning ? "Reading…" : (snapshot.isConnected ? "Sync now" : "Connect WhatsApp")
         case "local-files":
             return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:

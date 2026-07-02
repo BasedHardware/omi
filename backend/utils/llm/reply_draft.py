@@ -96,14 +96,20 @@ def _dedupe_recent(samples: List[str]) -> List[str]:
 # Conversation sources that represent the user *texting* (not voice-captured
 # speech, a different register). Cold-start voice-matching samples the user's own
 # outgoing messages from these sources only.
-_TEXTING_SOURCES = frozenset({ConversationSource.imessage.value, ConversationSource.telegram.value})
+_TEXTING_SOURCES = frozenset(
+    {
+        ConversationSource.imessage.value,
+        ConversationSource.telegram.value,
+        ConversationSource.whatsapp.value,
+    }
+)
 
 
 def _general_style_samples(uid: str) -> List[str]:
     """The user's GENERAL texting voice — their own outgoing messages across ALL
     contacts — used only as a cold-start fallback when there's no history with the
     specific person being replied to. Restricted to text-messaging sources
-    (iMessage/Telegram) so we mirror how the user *texts*, never how they speak in
+    (iMessage/Telegram/WhatsApp) so we mirror how the user *texts*, never how they speak in
     voice-captured conversations (a different register)."""
     samples: List[str] = []
     try:

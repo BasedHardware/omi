@@ -19,6 +19,7 @@ enum ConnectorBrand: String, Sendable {
   case x
   case imessage
   case telegram
+  case whatsapp
 
   fileprivate var appPath: String? {
     switch self {
@@ -28,6 +29,8 @@ enum ConnectorBrand: String, Sendable {
       return "/System/Applications/Messages.app"
     case .telegram:
       return "/Applications/Telegram.app"
+    case .whatsapp:
+      return "/Applications/WhatsApp.app"
     case .notion:
       return "/Applications/Notion.app"
     case .obsidian:
@@ -108,6 +111,8 @@ enum ConnectorBrand: String, Sendable {
       return "message.fill"
     case .telegram:
       return "paperplane.fill"
+    case .whatsapp:
+      return "message.fill"
     }
   }
 }
