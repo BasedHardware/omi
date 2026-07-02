@@ -260,8 +260,8 @@ class _FoundDevicesState extends State<FoundDevices> {
                       color: provider.batteryPercentage <= 25
                           ? Colors.red
                           : provider.batteryPercentage <= 50
-                          ? Colors.orange
-                          : Colors.green,
+                              ? Colors.orange
+                              : Colors.green,
                     ),
                   ),
                 ),

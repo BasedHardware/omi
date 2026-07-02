@@ -19,7 +19,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool _appleRemindersPermissionManuallySet = false;
 
   TaskIntegrationProvider()
-    : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+      : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;
