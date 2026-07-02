@@ -168,8 +168,7 @@ def _is_os_environ_subscript(node: ast.AST) -> bool:
     )
 
 
-def _is_network_call(node: ast.Call) -> bool:
-    chain = _attr_chain(node.func)
+def _is_network_call(chain: list[str]) -> bool:
     if len(chain) >= 2 and chain[0] in NETWORK_MODULES and chain[-1] in NETWORK_VERBS:
         return True
     # urllib.request.urlopen(...)
@@ -187,7 +186,7 @@ def _record_offenders_in_expr(node: ast.AST, aliases: dict[str, str], out: list[
             if _ctor_matches(resolved):
                 out.append((sub.lineno, f"import-time constructor: {'.'.join(chain)}"))
                 continue
-            if _is_network_call(sub):
+            if _is_network_call(resolved):
                 out.append((sub.lineno, f"top-level network call: {'.'.join(chain)}"))
                 continue
             if isinstance(sub.func, ast.Name) and sub.func.id == "open":
@@ -211,6 +210,44 @@ def _function_annotation_exprs(node: ast.FunctionDef | ast.AsyncFunctionDef) -> 
     return exprs
 
 
+def _record_import_scope_stmt(
+    node: ast.stmt,
+    aliases: dict[str, str],
+    eval_annotations: bool,
+    out: list[tuple[int, str]],
+) -> None:
+    """Scan one statement that executes during module import.
+
+    Function bodies do not execute at import time, but their decorators/defaults (and
+    annotations unless postponed) do. Class bodies *do* execute at import time, so
+    recurse into them while still treating methods like functions.
+    """
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        for expr in node.decorator_list:
+            _record_offenders_in_expr(expr, aliases, out)
+        a = node.args
+        default_exprs = list(a.defaults) + [d for d in (a.kw_defaults or []) if d is not None]
+        for expr in default_exprs:
+            _record_offenders_in_expr(expr, aliases, out)
+        if eval_annotations:
+            for expr in _function_annotation_exprs(node):
+                _record_offenders_in_expr(expr, aliases, out)
+        return
+
+    if isinstance(node, ast.ClassDef):
+        for expr in node.decorator_list:
+            _record_offenders_in_expr(expr, aliases, out)
+        for expr in node.bases:
+            _record_offenders_in_expr(expr, aliases, out)
+        for kw in node.keywords:
+            _record_offenders_in_expr(kw.value, aliases, out)
+        for stmt in node.body:
+            _record_import_scope_stmt(stmt, aliases, eval_annotations, out)
+        return
+
+    _record_offenders_in_expr(node, aliases, out)
+
+
 def _module_level_offenders(tree: ast.Module, source_lines: list[str]) -> list[tuple[int, str]]:
     """Return (lineno, reason) for module-scope import-time side effects.
 
@@ -223,27 +260,7 @@ def _module_level_offenders(tree: ast.Module, source_lines: list[str]) -> list[t
     eval_annotations = not _has_future_annotations(tree)
 
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for expr in node.decorator_list:
-                _record_offenders_in_expr(expr, aliases, out)
-            a = node.args
-            default_exprs = list(a.defaults) + [d for d in (a.kw_defaults or []) if d is not None]
-            for expr in default_exprs:
-                _record_offenders_in_expr(expr, aliases, out)
-            if eval_annotations:
-                for expr in _function_annotation_exprs(node):
-                    _record_offenders_in_expr(expr, aliases, out)
-            continue
-        if isinstance(node, ast.ClassDef):
-            for expr in node.decorator_list:
-                _record_offenders_in_expr(expr, aliases, out)
-            for expr in node.bases:
-                _record_offenders_in_expr(expr, aliases, out)
-            for kw in node.keywords:
-                _record_offenders_in_expr(kw.value, aliases, out)
-            continue
-        # Any other module-scope statement (incl. module-level if/for/try bodies).
-        _record_offenders_in_expr(node, aliases, out)
+        _record_import_scope_stmt(node, aliases, eval_annotations, out)
 
     # Deduplicate by (lineno, reason); collapse multiple hits on same line.
     seen: set[tuple[int, str]] = set()
