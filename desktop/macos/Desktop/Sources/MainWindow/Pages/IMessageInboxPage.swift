@@ -468,9 +468,27 @@ private actor IMessageAttachmentImageCache {
   func image(atPath path: String) -> NSImage? {
     let key = path as NSString
     if let cached = cache.object(forKey: key) { return cached }
+    // Skip the expensive decode if the requesting bubble already scrolled away.
+    if Task.isCancelled { return nil }
     guard let image = NSImage(contentsOfFile: path) else { return nil }
-    cache.setObject(image, forKey: key)
+    // Insert with a cost reflecting the decoded byte size so `totalCostLimit`
+    // actually bounds memory — without a cost only `countLimit` applies and 200
+    // high-res images can far exceed the 100MB budget.
+    cache.setObject(image, forKey: key, cost: Self.decodedByteCost(of: image))
     return image
+  }
+
+  /// Approximate decoded size in bytes (widest pixel rep × 4 bytes RGBA). Falls
+  /// back to the point size when no bitmap rep exposes pixel dimensions.
+  private static func decodedByteCost(of image: NSImage) -> Int {
+    var pixels = 0
+    for rep in image.representations {
+      pixels = max(pixels, rep.pixelsWide * rep.pixelsHigh)
+    }
+    if pixels == 0 {
+      pixels = Int(image.size.width * image.size.height)
+    }
+    return max(1, pixels * 4)
   }
 }
 

@@ -99,19 +99,25 @@ actor IMessageContactResolver {
 
   private func buildEmailIndexIfNeeded() {
     if emailIndexBuilt { return }
-    emailIndexBuilt = true
     let request = CNContactFetchRequest(keysToFetch: Self.keysToFetch)
     request.sortOrder = .none
-    try? store.enumerateContacts(with: request) { contact, _ in
-      guard !contact.emailAddresses.isEmpty else { return }
-      let name = Self.composeName(contact)
-      let image = Self.imageData(from: contact)
-      for email in contact.emailAddresses {
-        let addr = (email.value as String).lowercased()
-        guard !addr.isEmpty else { continue }
-        if let name, nameByEmail[addr] == nil { nameByEmail[addr] = name }
-        if let image, imageByEmail[addr] == nil { imageByEmail[addr] = image }
+    do {
+      try store.enumerateContacts(with: request) { contact, _ in
+        guard !contact.emailAddresses.isEmpty else { return }
+        let name = Self.composeName(contact)
+        let image = Self.imageData(from: contact)
+        for email in contact.emailAddresses {
+          let addr = (email.value as String).lowercased()
+          guard !addr.isEmpty else { continue }
+          if let name, nameByEmail[addr] == nil { nameByEmail[addr] = name }
+          if let image, imageByEmail[addr] == nil { imageByEmail[addr] = image }
+        }
       }
+      // Mark built only after a successful enumeration, so a transient store
+      // failure doesn't permanently disable email resolution for the session.
+      emailIndexBuilt = true
+    } catch {
+      NSLog("IMessageContactResolver: contact enumeration failed, will retry: \(error.localizedDescription)")
     }
   }
 

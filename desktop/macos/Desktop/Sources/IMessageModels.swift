@@ -16,16 +16,18 @@ struct IMessageRecord: Sendable {
 
 // MARK: - API payloads (snake_case matches backend models/imessage.py)
 
-/// Shared ISO8601 formatter for iMessage payloads. Timestamps are emitted as
+/// Shared ISO8601 formatting for iMessage payloads. Timestamps are emitted as
 /// ISO8601 strings because APIClient's shared JSONEncoder encodes `Date` as a
-/// reference-date double, which the backend would misread. Keeping the single
-/// formatter here means every payload serializes the same, stable format.
+/// reference-date double, which the backend would misread.
+///
+/// Uses `Date.ISO8601FormatStyle` — a `Sendable` value type — rather than a
+/// shared `ISO8601DateFormatter` (a non-Sendable reference type with no internal
+/// locking), so concurrent `encode(to:)` calls from sync/reply tasks can't race
+/// on it. Output is identical: internet date-time with fractional seconds in UTC.
 enum IMessagePayloadFormat {
-  static let iso: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-  }()
+  static let iso = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
+  static func string(from date: Date) -> String { iso.format(date) }
 }
 
 /// `timestamp` is stored as a `Date` so callers can't accidentally pass a
@@ -48,7 +50,7 @@ struct IMessageMessagePayload: Encodable {
     try c.encode(guid, forKey: .guid)
     try c.encode(text, forKey: .text)
     try c.encode(isFromMe, forKey: .isFromMe)
-    try c.encode(IMessagePayloadFormat.iso.string(from: timestamp), forKey: .timestamp)
+    try c.encode(IMessagePayloadFormat.string(from: timestamp), forKey: .timestamp)
     try c.encodeIfPresent(handle, forKey: .handle)
   }
 }
@@ -126,7 +128,7 @@ struct IMessageDraftMessagePayload: Encodable, Sendable {
     try c.encode(text, forKey: .text)
     try c.encode(isFromMe, forKey: .isFromMe)
     if let timestamp {
-      try c.encode(IMessagePayloadFormat.iso.string(from: timestamp), forKey: .timestamp)
+      try c.encode(IMessagePayloadFormat.string(from: timestamp), forKey: .timestamp)
     }
   }
 }
