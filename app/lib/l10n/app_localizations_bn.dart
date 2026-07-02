@@ -9475,4 +9475,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get latest => 'সর্বশেষ';
+
+  @override
+  String get flashFirmware => 'ফার্মওয়্যার ফ্ল্যাশ করুন';
 }

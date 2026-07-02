@@ -11210,5 +11210,9 @@
     "latest": "Latest",
     "@latest": {
         "description": "Visible label for the jump-to-latest button in chat"
+    },
+    "flashFirmware": "Flash Firmware",
+    "@flashFirmware": {
+        "description": "Button on the manual firmware flash page (developer settings)"
     }
 }

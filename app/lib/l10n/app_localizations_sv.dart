@@ -9474,4 +9474,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get latest => 'Senaste';
+
+  @override
+  String get flashFirmware => 'Installera firmware';
 }

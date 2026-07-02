@@ -10675,5 +10675,6 @@
     "deviceOnboardingIntroSubtitle": "Хуткі практычны агляд усяго, што ўмее ваш Omi.",
     "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
     "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
-    "latest": "Апошні"
+    "latest": "Апошні",
+    "flashFirmware": "Усталяваць прашыўку"
 }

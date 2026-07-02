@@ -9488,4 +9488,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get latest => 'Останнє';
+
+  @override
+  String get flashFirmware => 'Встановити прошивку';
 }

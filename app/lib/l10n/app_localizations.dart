@@ -17660,6 +17660,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Latest'**
   String get latest;
+
+  /// Button on the manual firmware flash page (developer settings)
+  ///
+  /// In en, this message translates to:
+  /// **'Flash Firmware'**
+  String get flashFirmware;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

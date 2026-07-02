@@ -9496,4 +9496,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get latest => 'Najnovejše';
+
+  @override
+  String get flashFirmware => 'Namesti vdelano programsko opremo';
 }

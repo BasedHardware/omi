@@ -3139,5 +3139,6 @@
     "deviceOnboardingIntroSubtitle": "Tur singkat dan praktis tentang semua yang bisa dilakukan Omi Anda.",
     "deviceOnboardingIntroDuration": "Sekitar 1 menit",
     "jumpToLatestMessage": "Lompat ke pesan terbaru",
-    "latest": "Terbaru"
+    "latest": "Terbaru",
+    "flashFirmware": "Flash Firmware"
 }

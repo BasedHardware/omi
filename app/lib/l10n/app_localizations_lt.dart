@@ -9485,4 +9485,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get latest => 'Naujausias';
+
+  @override
+  String get flashFirmware => 'Įrašyti programinę aparatinę įrangą';
 }

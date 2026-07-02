@@ -9482,4 +9482,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get latest => 'Најновије';
+
+  @override
+  String get flashFirmware => 'Инсталирај фирмвер';
 }

@@ -10675,5 +10675,6 @@
     "deviceOnboardingIntroSubtitle": "Брза, практична прошетка низ сè што може да направи вашиот Omi.",
     "deviceOnboardingIntroDuration": "Околу 1 минута",
     "jumpToLatestMessage": "Оди до последната порака",
-    "latest": "Најново"
+    "latest": "Најново",
+    "flashFirmware": "Инсталирај фирмвер"
 }

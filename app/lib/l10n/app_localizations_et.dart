@@ -9466,4 +9466,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get latest => 'Uusim';
+
+  @override
+  String get flashFirmware => 'Installi püsivara';
 }

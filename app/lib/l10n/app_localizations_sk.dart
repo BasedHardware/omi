@@ -9460,4 +9460,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get latest => 'Najnovšia';
+
+  @override
+  String get flashFirmware => 'Nahrať firmvér';
 }

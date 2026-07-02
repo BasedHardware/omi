@@ -10675,5 +10675,6 @@
     "deviceOnboardingIntroSubtitle": "আপনার Omi যা যা করতে পারে তার একটি দ্রুত, হাতে-কলমে ভ্রমণ।",
     "deviceOnboardingIntroDuration": "প্রায় ১ মিনিট",
     "jumpToLatestMessage": "সর্বশেষ বার্তায় যান",
-    "latest": "সর্বশেষ"
+    "latest": "সর্বশেষ",
+    "flashFirmware": "ফার্মওয়্যার ফ্ল্যাশ করুন"
 }

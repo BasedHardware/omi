@@ -9524,4 +9524,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get latest => 'Più recente';
+
+  @override
+  String get flashFirmware => 'Installa il firmware';
 }

@@ -3098,5 +3098,6 @@
     "deviceOnboardingIntroSubtitle": "आपका Omi जो कुछ भी कर सकता है, उसका एक त्वरित और व्यावहारिक दौरा।",
     "deviceOnboardingIntroDuration": "लगभग 1 मिनट",
     "jumpToLatestMessage": "नवीनतम संदेश पर जाएं",
-    "latest": "नवीनतम"
+    "latest": "नवीनतम",
+    "flashFirmware": "फ़र्मवेयर फ़्लैश करें"
 }

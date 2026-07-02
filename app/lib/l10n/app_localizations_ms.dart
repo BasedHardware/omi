@@ -9494,4 +9494,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get latest => 'Terkini';
+
+  @override
+  String get flashFirmware => 'Flash Perisian Tegar';
 }

@@ -9536,4 +9536,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get latest => 'Πρόσφατο';
+
+  @override
+  String get flashFirmware => 'Εγκατάσταση firmware';
 }

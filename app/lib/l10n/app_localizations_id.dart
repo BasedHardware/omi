@@ -9478,4 +9478,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get latest => 'Terbaru';
+
+  @override
+  String get flashFirmware => 'Flash Firmware';
 }

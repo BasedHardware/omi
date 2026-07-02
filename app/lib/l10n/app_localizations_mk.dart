@@ -9519,4 +9519,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get latest => 'Најново';
+
+  @override
+  String get flashFirmware => 'Инсталирај фирмвер';
 }

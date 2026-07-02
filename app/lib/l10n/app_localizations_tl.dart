@@ -9557,4 +9557,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get latest => 'Pinakabago';
+
+  @override
+  String get flashFirmware => 'I-flash ang Firmware';
 }

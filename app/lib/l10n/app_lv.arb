@@ -3097,5 +3097,6 @@
     "deviceOnboardingIntroSubtitle": "Ātrs, praktisks ieskats visā, ko spēj tavs Omi.",
     "deviceOnboardingIntroDuration": "Apmēram 1 minūte",
     "jumpToLatestMessage": "Pārlēkt uz jaunāko ziņojumu",
-    "latest": "Jaunākais"
+    "latest": "Jaunākais",
+    "flashFirmware": "Instalēt aparātprogrammatūru"
 }

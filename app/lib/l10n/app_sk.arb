@@ -3102,5 +3102,6 @@
     "deviceOnboardingIntroSubtitle": "Rýchla praktická prehliadka všetkého, čo váš Omi dokáže.",
     "deviceOnboardingIntroDuration": "Približne 1 minúta",
     "jumpToLatestMessage": "Prejsť na najnovšiu správu",
-    "latest": "Najnovšia"
+    "latest": "Najnovšia",
+    "flashFirmware": "Nahrať firmvér"
 }

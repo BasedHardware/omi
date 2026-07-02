@@ -9504,4 +9504,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get latest => 'Последно';
+
+  @override
+  String get flashFirmware => 'Инсталирай фърмуера';
 }

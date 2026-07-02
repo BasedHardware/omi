@@ -9547,4 +9547,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get latest => 'Neueste';
+
+  @override
+  String get flashFirmware => 'Firmware flashen';
 }

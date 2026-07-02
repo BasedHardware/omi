@@ -3097,5 +3097,6 @@
     "deviceOnboardingIntroSubtitle": "Un tur rapid și practic prin tot ce poate face Omi-ul tău.",
     "deviceOnboardingIntroDuration": "Aproximativ 1 minut",
     "jumpToLatestMessage": "Sari la cel mai recent mesaj",
-    "latest": "Recent"
+    "latest": "Recent",
+    "flashFirmware": "Instalați firmware-ul"
 }
