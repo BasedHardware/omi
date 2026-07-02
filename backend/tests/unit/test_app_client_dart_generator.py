@@ -60,7 +60,14 @@ def test_messages_wire_dart_is_generated_from_app_client_openapi():
     generated = generate_dart_models.build_output(spec, 'messages')
 
     assert MESSAGES_DART_PATH.read_text() == generated
+    assert 'class GeneratedMessage' in generated
+    assert 'class GeneratedResponseMessage' in generated
+    assert 'class GeneratedFileChat' in generated
+    assert 'class GeneratedChartData' in generated
     assert 'class GeneratedVoiceMessageTranscriptionResponse' in generated
+    assert (
+        'files: _readObjectList(_readAny(json, const ["files"]), GeneratedFileChat.fromJson) ?? const []' in generated
+    )
     assert 'transcript: _required(_readString(_readAny(json, const ["transcript"])), "transcript")' in generated
 
 

@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/transcript_segment.dart';
 
 abstract class MessageEvent {
@@ -62,6 +63,7 @@ class ConversationProcessingStartedEvent extends MessageEvent {
   ConversationProcessingStartedEvent({required this.memory}) : super(eventType: 'memory_processing_started');
 
   factory ConversationProcessingStartedEvent.fromJson(Map<String, dynamic> json) {
+    wire.GeneratedConversation.fromJson(json['memory'] as Map<String, dynamic>);
     return ConversationProcessingStartedEvent(memory: ServerConversation.fromJson(json['memory']));
   }
 }
@@ -73,6 +75,7 @@ class ConversationEvent extends MessageEvent {
   ConversationEvent({required this.memory, required this.messages}) : super(eventType: 'memory_created');
 
   factory ConversationEvent.fromJson(Map<String, dynamic> json) {
+    wire.GeneratedConversation.fromJson(json['memory'] as Map<String, dynamic>);
     return ConversationEvent(memory: ServerConversation.fromJson(json['memory']), messages: json['messages'] ?? []);
   }
 }
@@ -93,6 +96,9 @@ class TranslationEvent extends MessageEvent {
   TranslationEvent({required this.segments}) : super(eventType: 'translating');
 
   factory TranslationEvent.fromJson(Map<String, dynamic> json) {
+    for (final segment in json['segments'] as List<dynamic>) {
+      wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>);
+    }
     return TranslationEvent(
       segments: (json['segments'] as List<dynamic>).map((s) => TranscriptSegment.fromJson(s)).toList(),
     );
@@ -116,7 +122,7 @@ class PhotoDescribedEvent extends MessageEvent {
   final bool discarded;
 
   PhotoDescribedEvent({required this.photoId, required this.description, this.discarded = false})
-      : super(eventType: 'photo_described');
+    : super(eventType: 'photo_described');
 
   factory PhotoDescribedEvent.fromJson(Map<String, dynamic> json) {
     return PhotoDescribedEvent(
@@ -160,7 +166,7 @@ class OnboardingQuestionEvent extends MessageEvent {
   final int totalQuestions;
 
   OnboardingQuestionEvent({required this.question, required this.questionIndex, required this.totalQuestions})
-      : super(eventType: 'onboarding_question');
+    : super(eventType: 'onboarding_question');
 
   factory OnboardingQuestionEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingQuestionEvent(
@@ -176,7 +182,7 @@ class OnboardingQuestionAnsweredEvent extends MessageEvent {
   final bool answered;
 
   OnboardingQuestionAnsweredEvent({required this.questionIndex, required this.answered})
-      : super(eventType: 'question_answered');
+    : super(eventType: 'question_answered');
 
   factory OnboardingQuestionAnsweredEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingQuestionAnsweredEvent(
@@ -192,7 +198,7 @@ class OnboardingCompleteEvent extends MessageEvent {
   final String? error;
 
   OnboardingCompleteEvent({this.conversationId, this.memoriesCreated = 0, this.error})
-      : super(eventType: 'onboarding_complete');
+    : super(eventType: 'onboarding_complete');
 
   factory OnboardingCompleteEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingCompleteEvent(
@@ -228,7 +234,7 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
   final FreemiumAction action;
 
   FreemiumThresholdReachedEvent({required this.remainingSeconds, required this.action})
-      : super(eventType: 'freemium_threshold_reached');
+    : super(eventType: 'freemium_threshold_reached');
 
   /// Whether user action is required
   bool get requiresUserAction => action == FreemiumAction.setupOnDeviceStt;

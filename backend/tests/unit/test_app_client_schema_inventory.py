@@ -13,6 +13,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
 
     generated_backed_paths = {item['path'] for item in report['generated_backed_adapter_files']}
     remaining_manual_paths = {item['path'] for item in report['remaining_manual_dart_json_schema_files']}
+    local_non_rest_paths = {item['path'] for item in report['local_non_rest_schema_files']}
     unmodeled_operations = {
         (item['method'], item['path'], item['operation_id']) for item in report['app_used_unmodeled_success_responses']
     }
@@ -24,6 +25,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert 'app/lib/backend/http/api/users.dart' in generated_backed_paths
     assert 'app/lib/backend/schema/action_item.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/folder.dart' not in remaining_manual_paths
+    assert 'app/lib/backend/schema/bt_device/bt_device.dart' in local_non_rest_paths
     assert (
         'POST',
         '/v1/conversations/search',
@@ -126,6 +128,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
         'create_voice_message_stream_v2_voice_messages_post',
     ) not in unmodeled_operations
     assert report['app_used_unmodeled_success_response_count'] == 0
+    assert report['remaining_manual_dart_json_schema_file_count'] == 0
     assert report['app_used_unmodeled_success_response_count'] == len(report['app_used_unmodeled_success_responses'])
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']

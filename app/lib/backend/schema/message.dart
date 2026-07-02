@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:uuid/uuid.dart';
 
 enum MessageSender { ai, human }
@@ -23,7 +24,11 @@ class MessageConversationStructured {
   MessageConversationStructured(this.title, this.emoji);
 
   static MessageConversationStructured fromJson(Map<String, dynamic> json) {
-    return MessageConversationStructured(json['title'], json['emoji']);
+    return MessageConversationStructured.fromGenerated(wire.GeneratedMessageConversationStructured.fromJson(json));
+  }
+
+  factory MessageConversationStructured.fromGenerated(wire.GeneratedMessageConversationStructured generated) {
+    return MessageConversationStructured(generated.title, generated.emoji);
   }
 
   Map<String, dynamic> toJson() {
@@ -39,10 +44,14 @@ class MessageConversation {
   MessageConversation(this.id, this.createdAt, this.structured);
 
   static MessageConversation fromJson(Map<String, dynamic> json) {
+    return MessageConversation.fromGenerated(wire.GeneratedMessageConversation.fromJson(json));
+  }
+
+  factory MessageConversation.fromGenerated(wire.GeneratedMessageConversation generated) {
     return MessageConversation(
-      json['id'],
-      DateTime.parse(json['created_at']).toLocal(),
-      MessageConversationStructured.fromJson(json['structured']),
+      generated.id,
+      generated.createdAt,
+      MessageConversationStructured.fromGenerated(generated.structured),
     );
   }
 
@@ -63,14 +72,18 @@ class MessageFile {
   MessageFile(this.openaiFileId, this.thumbnail, this.name, this.mimeType, this.id, this.createdAt, this.thumbnailName);
 
   static MessageFile fromJson(Map<String, dynamic> json) {
+    return MessageFile.fromGenerated(wire.GeneratedFileChat.fromJson(json));
+  }
+
+  factory MessageFile.fromGenerated(wire.GeneratedFileChat generated) {
     return MessageFile(
-      json['openai_file_id'],
-      json['thumbnail'],
-      json['name'],
-      json['mime_type'],
-      json['id'],
-      DateTime.parse(json['created_at']).toLocal(),
-      json['thumb_name'],
+      generated.openaiFileId,
+      generated.thumbnail,
+      generated.name,
+      generated.mimeType,
+      generated.id,
+      generated.createdAt,
+      generated.thumbName,
     );
   }
 
@@ -106,7 +119,11 @@ class ChartDataPoint {
   ChartDataPoint(this.label, this.value);
 
   static ChartDataPoint fromJson(Map<String, dynamic> json) {
-    return ChartDataPoint(json['label'] ?? '', (json['value'] as num).toDouble());
+    return ChartDataPoint.fromGenerated(wire.GeneratedChartDataPoint.fromJson(json));
+  }
+
+  factory ChartDataPoint.fromGenerated(wire.GeneratedChartDataPoint generated) {
+    return ChartDataPoint(generated.label, generated.value);
   }
 
   Map<String, dynamic> toJson() {
@@ -122,10 +139,14 @@ class ChartDataset {
   ChartDataset(this.label, this.dataPoints, {this.color});
 
   static ChartDataset fromJson(Map<String, dynamic> json) {
+    return ChartDataset.fromGenerated(wire.GeneratedChartDataset.fromJson(json));
+  }
+
+  factory ChartDataset.fromGenerated(wire.GeneratedChartDataset generated) {
     return ChartDataset(
-      json['label'] ?? 'Data',
-      ((json['data_points'] ?? []) as List).map((p) => ChartDataPoint.fromJson(p)).toList(),
-      color: json['color'],
+      generated.label,
+      generated.dataPoints.map(ChartDataPoint.fromGenerated).toList(),
+      color: generated.color,
     );
   }
 
@@ -145,12 +166,16 @@ class ChartData {
 
   static ChartData? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
+    return ChartData.fromGenerated(wire.GeneratedChartData.fromJson(json));
+  }
+
+  factory ChartData.fromGenerated(wire.GeneratedChartData generated) {
     return ChartData(
-      json['chart_type'] ?? 'line',
-      json['title'] ?? '',
-      ((json['datasets'] ?? []) as List).map((d) => ChartDataset.fromJson(d)).toList(),
-      xLabel: json['x_label'],
-      yLabel: json['y_label'],
+      generated.chartType,
+      generated.title,
+      generated.datasets.map(ChartDataset.fromGenerated).toList(),
+      xLabel: generated.xLabel,
+      yLabel: generated.yLabel,
     );
   }
 
@@ -204,20 +229,39 @@ class ServerMessage {
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedMessage.fromJson(json);
+    final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
+    final chartData = json['chart_data'] is Map<String, dynamic>
+        ? ChartData.fromJson(json['chart_data'] as Map<String, dynamic>)
+        : null;
+    return ServerMessage.fromGenerated(
+      generated,
+      fromIntegration: fromIntegration,
+      askForNps: json['ask_for_nps'] as bool? ?? true,
+      chartData: chartData,
+    );
+  }
+
+  factory ServerMessage.fromGenerated(
+    wire.GeneratedMessage generated, {
+    bool? fromIntegration,
+    bool askForNps = true,
+    ChartData? chartData,
+  }) {
     return ServerMessage(
-      json['id'],
-      DateTime.parse(json['created_at']).toLocal(),
-      json['text'] ?? "",
-      MessageSender.values.firstWhere((e) => e.toString().split('.').last == json['sender']),
-      MessageType.valuesFromString(json['type']),
-      json['plugin_id'],
-      json['from_integration'] ?? false,
-      ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
-      (json['files_id'] ?? []).map((m) => m.toString()).toList(),
-      ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
-      askForNps: json['ask_for_nps'] ?? true,
-      rating: json['rating'],
-      chartData: json['chart_data'] != null ? ChartData.fromJson(json['chart_data']) : null,
+      generated.id,
+      generated.createdAt,
+      generated.text,
+      MessageSender.values.firstWhere((e) => e.toString().split('.').last == generated.sender),
+      MessageType.valuesFromString(generated.type),
+      generated.pluginId ?? generated.appId,
+      fromIntegration ?? generated.fromExternalIntegration,
+      generated.files.map(MessageFile.fromGenerated).toList(),
+      generated.filesId,
+      generated.memories.map(MessageConversation.fromGenerated).toList(),
+      askForNps: askForNps,
+      rating: generated.rating,
+      chartData: chartData,
     );
   }
 

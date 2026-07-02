@@ -38,7 +38,17 @@ SCHEMA_GROUPS = {
     },
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
-        'schemas': ('VoiceMessageTranscriptionResponse',),
+        'schemas': (
+            'MessageConversationStructured',
+            'MessageConversation',
+            'FileChat',
+            'ChartDataPoint',
+            'ChartDataset',
+            'ChartData',
+            'Message',
+            'ResponseMessage',
+            'VoiceMessageTranscriptionResponse',
+        ),
     },
     'action_items_folders': {
         'output': DEFAULT_OUTPUT_DIR / 'action_items_folders_wire.g.dart',

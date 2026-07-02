@@ -25,6 +25,11 @@ MODEL_REST_DTO_FILES = (
     APP_MODELS_DIR / 'subscription.dart',
     APP_MODELS_DIR / 'user_usage.dart',
 )
+LOCAL_NON_REST_SCHEMA_FILES = frozenset(
+    {
+        APP_SCHEMA_DIR / 'bt_device' / 'bt_device.dart',
+    }
+)
 
 CLASS_RE = re.compile(r'^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
 ENUM_RE = re.compile(r'^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
@@ -124,8 +129,14 @@ def scan_rest_dto_files() -> list[DartSchemaFile]:
     return [
         scan_dart_schema_file(path)
         for path in paths
-        if not path.name.endswith('.gen.dart') and not path.name.endswith('.g.dart')
+        if not path.name.endswith('.gen.dart')
+        and not path.name.endswith('.g.dart')
+        and path not in LOCAL_NON_REST_SCHEMA_FILES
     ]
+
+
+def scan_local_non_rest_schema_files() -> list[DartSchemaFile]:
+    return [scan_dart_schema_file(path) for path in sorted(LOCAL_NON_REST_SCHEMA_FILES) if path.exists()]
 
 
 def normalize_app_route(route: str) -> str:
@@ -234,6 +245,7 @@ def load_openapi_operations(path: Path) -> list[OpenApiOperation]:
 
 def build_report(spec_path: Path) -> dict[str, Any]:
     dart_files = scan_rest_dto_files()
+    local_non_rest_files = scan_local_non_rest_schema_files()
     manual_files = [
         item for item in dart_files if not item.generated and (item.from_json_count > 0 or item.to_json_count > 0)
     ]
@@ -277,6 +289,8 @@ def build_report(spec_path: Path) -> dict[str, Any]:
         'generated_backed_adapter_files': [item.to_report() for item in generated_backed_files],
         'remaining_manual_dart_json_schema_file_count': len(remaining_manual_files),
         'remaining_manual_dart_json_schema_files': [item.to_report() for item in remaining_manual_files],
+        'local_non_rest_schema_file_count': len(local_non_rest_files),
+        'local_non_rest_schema_files': [item.to_report() for item in local_non_rest_files],
     }
 
 
@@ -334,6 +348,7 @@ def main() -> int:
     print(f"Manual Dart JSON schema files: {report['manual_dart_json_schema_file_count']}")
     print(f"Generated-backed adapter files: {report['generated_backed_adapter_file_count']}")
     print(f"Remaining raw manual Dart JSON schema files: {report['remaining_manual_dart_json_schema_file_count']}")
+    print(f"Local non-REST schema files: {report['local_non_rest_schema_file_count']}")
     print(f"OpenAPI schemas in app-client spec: {report['openapi_schema_count']}")
     print(f"OpenAPI paths in app-client spec: {report['openapi_path_count']}")
     print(f"App-used unmodeled OpenAPI success responses: {report['app_used_unmodeled_success_response_count']}")
@@ -345,6 +360,9 @@ def main() -> int:
     for item in report['remaining_manual_dart_json_schema_files']:
         classes = ', '.join(item['classes']) or '(no classes found)'
         print(f"- {item['path']}: {classes} (fromJson={item['fromJson']}, toJson={item['toJson']})")
+    for item in report['local_non_rest_schema_files']:
+        classes = ', '.join(item['classes']) or '(no classes found)'
+        print(f"- local {item['path']}: {classes} (fromJson={item['fromJson']}, toJson={item['toJson']})")
     return 0
 
 

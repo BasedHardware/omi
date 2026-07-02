@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -52,7 +53,12 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     if (decoded is List) {
-      return GetMemoriesResult(decoded.map((e) => Memory.fromJson(e)).toList(), true);
+      final memories = decoded.map((e) {
+        final item = Map<String, dynamic>.from(e as Map);
+        wire.GeneratedMemoryDB.fromJson(item);
+        return Memory.fromJson(item);
+      }).toList();
+      return GetMemoriesResult(memories, true);
     }
   }
   // Legacy memory users cannot use server-side device_scope; fetch all and
