@@ -44,14 +44,34 @@ import re
 # lower bound. The 200+ threshold means a normal English sentence
 # won't trigger a false positive (typical English sentences are
 # shorter than 200 base64 chars).
-_TELETHON_SESSION_PATTERN = re.compile(r"\b[A-Za-z0-9+/]{200,}=*\b")
+#
+# Boundary detection: standard `\b` doesn't work for base64 because
+# `+`, `/`, and `=` are non-word characters. A session string that
+# ENDS with `==` padding would only have `=` matched up to an
+# internal word boundary, leaving the trailing `=` characters
+# unredacted. A session string that STARTS with `+` or `/` (unlikely
+# but possible) would also fail the leading boundary. We use
+# negative lookbehind/lookahead to match only when the run is NOT
+# surrounded by other base64 characters (which is what we want for
+# session detection — a session is a standalone blob in logs, not
+# embedded mid-word).
+_TELETHON_SESSION_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9+/=])"  # not preceded by base64 char
+    r"[A-Za-z0-9+/]{200,}"  # 200+ base64 chars (no word boundary)
+    r"=*"  # optional padding (greedy)
+    r"(?![A-Za-z0-9+/=])"  # not followed by base64 char
+)
 
 # A separate pattern for hex-encoded session strings, in case
 # Telethon switches encoding. Hex is 0-9a-f, so a session string
 # is 200+ contiguous hex chars. We don't apply this to base64
 # patterns because hex is a subset of [A-Za-z0-9] and would
 # double-trigger; instead we look for hex-only runs.
-_HEX_SESSION_PATTERN = re.compile(r"\b[0-9a-fA-F]{256,}\b")
+_HEX_SESSION_PATTERN = re.compile(
+    r"(?<![0-9a-fA-F])"  # not preceded by hex char
+    r"[0-9a-fA-F]{256,}"  # 256+ hex chars
+    r"(?![0-9a-fA-F])"  # not followed by hex char
+)
 
 # Replacement marker. Fixed-width so the surrounding log message
 # remains readable.
@@ -94,10 +114,41 @@ def safe_log_message(template, *args):
                 "Connect failed: %s",
                 exc,  # might contain session string
             ))
+
+    Failure mode: if the template and args are mismatched (e.g.,
+    template has `%s` but no args are passed, or template has no
+    placeholders but args are passed), standard Python logging
+    raises a `TypeError` deep inside the handler's `emit()` call
+    stack. Here we do the interpolation eagerly, so a TypeError
+    would be raised at the CALL SITE — that's still better than
+    silent corruption, but a `safe_log_message` that crashes the
+    caller contradicts the docstring's "drop-in" claim.
+
+    To preserve the standard logging behavior (a bad template
+    silently produces an unformatted string with the args
+    swallowed, NOT a TypeError), we catch the formatting error
+    and return a safe fallback: "[log format error: <error>]".
+    The fallback never contains the original args, so any
+    sensitive content in the args is stripped.
     """
     safe_template = redact_session_string(template)
     safe_args = tuple(redact_session_string(a) for a in args)
-    return safe_template % safe_args if safe_args else safe_template
+    try:
+        # Always run % formatting, even with zero args, so a
+        # mismatch like `safe_log_message("Failed: %s")` with no
+        # args raises TypeError — which we catch and turn into a
+        # safe fallback. The previous `if not safe_args else ...`
+        # early return bypassed the try/except and returned the
+        # template verbatim, contradicting the docstring's
+        # "drop-in for logger.error" promise.
+        return safe_template % safe_args
+    except (TypeError, ValueError) as exc:
+        # TypeError: wrong number of args / wrong type for placeholder
+        # ValueError: e.g., %d with a string arg
+        # Return a safe fallback that includes the error and the
+        # (already-redacted) template. NEVER include the args here
+        # — they may be the very thing the redactor couldn't handle.
+        return f"[log format error: {type(exc).__name__}: {exc}] template={safe_template!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +173,15 @@ class _RedactingFormatter(logging.Formatter):
     `original_format` is the formatter we delegate to AFTER
     redaction. If None, we fall back to `logging.Formatter.format`
     which uses the default format string.
+
+    Traceback / stack redaction: Python's `Formatter.format()` calls
+    `formatException()` (for `record.exc_info`) and `formatStack()`
+    (for `record.stack_info`) AFTER assembling the message. These
+    formatted strings can include Telethon exception tracebacks
+    whose `str(exc)` contains the session. We override both methods
+    so the redactor runs on the formatted exception / stack text
+    BEFORE the final output is written. This is the P1 fix from
+    cubic review 4614064929.
     """
 
     def __init__(self, original_format=None):
@@ -146,6 +206,42 @@ class _RedactingFormatter(logging.Formatter):
         if self._original_format is not None:
             return self._original_format.format(record)
         return super().format(record)
+
+    def formatException(self, ei):
+        """Override: format the exception, then redact the result.
+
+        `ei` is the exc_info tuple (type, value, traceback) — the same
+        shape `Formatter.formatException` accepts. We delegate to the
+        parent (which uses `traceback.format_exception` to build the
+        string) and then run the redactor on the output. Telethon
+        exceptions' `str(value)` can include the session string —
+        for example, `AuthKeyError: invalid auth key for session
+        <base64-session-string>`. The standard formatter would
+        include that verbatim; we strip it.
+        """
+        try:
+            formatted = super().formatException(ei)
+        except Exception:
+            # formatException itself failed. Return a safe placeholder
+            # rather than letting the failure propagate.
+            return "[exception format error]"
+        return redact_session_string(formatted)
+
+    def formatStack(self, stack_info):
+        """Override: format the stack info, then redact the result.
+
+        `stack_info` is the string from `record.stack_info` (None if
+        the record didn't capture a stack). Stack frames usually
+        contain local variable reprs, which can include the session
+        string if a Telethon client stored it in a local var that
+        survived into the exception scope. The redactor catches
+        any such leak.
+        """
+        try:
+            formatted = super().formatStack(stack_info)
+        except Exception:
+            return "[stack format error]"
+        return redact_session_string(formatted)
 
 
 # A no-op Filter (logging.Filter returns True) installed on the

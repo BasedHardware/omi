@@ -99,15 +99,13 @@ class TestDiscoveryFileNeverContainsSession:
         # string is per-user and never appears in the plugin's code
         # at all, so any leak is by definition a regression.
         assert TEST_SESSION_STRING not in raw, (
-            f"CRITICAL: session string leaked into discovery file at {target}.\n"
-            f"File contents:\n{raw!r}"
+            f"CRITICAL: session string leaked into discovery file at {target}.\n" f"File contents:\n{raw!r}"
         )
         # Also check the canonical Telethon session prefix "1A" which
         # every Telethon session string starts with — a substring
         # leak is just as bad as a full leak.
         assert "1AgAOMT" not in raw, (
-            f"CRITICAL: Telethon session prefix leaked into discovery file at {target}.\n"
-            f"File contents:\n{raw!r}"
+            f"CRITICAL: Telethon session prefix leaked into discovery file at {target}.\n" f"File contents:\n{raw!r}"
         )
 
     def test_discovery_payload_keys_allowlisted(self, tmp_path, monkeypatch):
@@ -149,8 +147,7 @@ class TestDiscoveryFileNeverContainsSession:
         }
         present = set(payload.keys()) & forbidden
         assert not present, (
-            f"CRITICAL: discovery file contains forbidden credential fields: {present}.\n"
-            f"Full payload: {payload!r}"
+            f"CRITICAL: discovery file contains forbidden credential fields: {present}.\n" f"Full payload: {payload!r}"
         )
 
     def test_account_metadata_only_metadata(self, tmp_path, monkeypatch):
@@ -274,13 +271,14 @@ class TestSessionStringNeverInLogs:
             except _FakeTelethonError as exc:
                 # The wrong way (which we want to be a regression):
                 # logger.error("Connect failed: %s", exc)
-                # The right way: use exc_info or explicitly redact.
-                # For this test we only check that we don't make
-                # the wrong-way mistake. We do that by demonstrating
-                # that when the helper does its job (strips the
-                # session from any logged string), the log records
-                # are clean.
-                safe_msg = _redact_session_string(str(exc))
+                # The right way: use the PRODUCTION redaction helper
+                # from redact.py. This test pins that the production
+                # helper, not a local stub, is what protects the
+                # log stream from session leaks. (Cubic review
+                # 4614064929 P2.)
+                from redact import redact_session_string
+
+                safe_msg = redact_session_string(str(exc))
                 logger.error("Connect failed: %s", safe_msg)
 
         for record in captured:
@@ -300,9 +298,7 @@ class TestSessionStringNeverInLogs:
         # (If the plugin ever needs to embed the session in
         # exceptions — e.g., for internal debugging — it must use a
         # redacted form like "session=<redacted 64 chars>".)
-        src_dir = (
-            Path(__file__).parent.parent  # plugins/telegram-user-account/
-        )
+        src_dir = Path(__file__).parent.parent  # plugins/telegram-user-account/
         for py in src_dir.glob("*.py"):
             content = py.read_text()
             assert TEST_SESSION_STRING not in content, (
@@ -317,8 +313,7 @@ class TestSessionStringNeverInLogs:
         # The message itself (after % substitution)
         msg = record.getMessage()
         assert TEST_SESSION_STRING not in msg, (
-            f"CRITICAL: session string leaked into log message at "
-            f"{record.levelname} on {record.name}: {msg!r}"
+            f"CRITICAL: session string leaked into log message at " f"{record.levelname} on {record.name}: {msg!r}"
         )
         # The unformatted message
         assert TEST_SESSION_STRING not in record.msg, (
@@ -387,59 +382,66 @@ class TestSessionStringNeverInStorage:
 
         This is a regression pin: if a future change accidentally
         persists the session into a user record, this test fails.
+
+        Implementation-pending: this test only runs the assertion
+        path when the simple_storage module is implemented. Until
+        then it skips — explicitly, with a visible pytest.skip()
+        marker so the gap is documented in the test report, NOT
+        hidden behind a no-op pass. (Cubic review 4614064929 P1.)
         """
-        # Stub the storage module since the plugin's storage layer
-        # isn't built yet.
-        # The test asserts the SHAPE of the storage contract: any
-        # field whose name is session-related, or whose value
-        # looks like a Telethon session (starts with "1A" + 200+
-        # base64 chars), should be stripped or rejected.
         try:
             import simple_storage  # noqa: F401 — bare-name per plugin convention
         except ImportError:
-            pytest.skip("simple_storage not yet implemented; pinning the invariant for the impl.")
-            return
+            pytest.skip(
+                "simple_storage not yet implemented. "
+                "When the storage module lands, this test will "
+                "drive save_user() with a session-string payload "
+                "and assert the on-disk file does NOT contain it. "
+                "See the test body below for the planned assertion."
+            )
+            return  # belt-and-suspenders: pytest.skip() raises, but
+            # a future maintainer who removes the skip must
+            # see the planned assertion below to know what
+            # to add.
 
-        # If the module doesn't exist yet (this is a regression-test
-        # scaffold commit), skip. The test exists to pin the
-        # invariant for the implementation to satisfy.
-        if simple_storage is None:
-            pytest.skip("simple_storage not yet implemented; pinning the invariant for the impl.")
-
-        # Force a save that includes a session in a user record.
-        # The storage layer should NOT have a `session` key. If it
-        # does, the implementation is wrong.
-        target = tmp_path / "users_data.json"
-        try:
-            monkeypatch.setattr(simple_storage, "USERS_FILE", str(target))
-        except AttributeError:
-            # simple_storage module doesn't exist yet (or has no
-            # USERS_FILE constant). This is fine — the test is
-            # forward-looking; it'll start asserting real storage
-            # behavior once the storage module is implemented.
-            pytest.skip("simple_storage.USERS_FILE not yet implemented")
-            return
-        # ... (full assertion when the module exists)
+        # -- planned assertion (executed when simple_storage lands) --
+        # The test forces a save that includes a session in a user
+        # record and asserts the on-disk file does not contain it.
+        #
+        # target = tmp_path / "users_data.json"
+        # monkeypatch.setattr(simple_storage, "USERS_FILE", str(target))
+        # simple_storage.save_user(
+        #     chat_id="42",
+        #     omi_uid="test-uid",
+        #     persona_id="persona-1",
+        #     omi_dev_api_key="dev-key",
+        #     bot_token="bot-token",
+        #     # hypothetical "user-set session" field — the storage
+        #     # layer should reject this.
+        #     session_string=TEST_SESSION_STRING,
+        # )
+        # raw = target.read_text()
+        # assert TEST_SESSION_STRING not in raw
+        # assert "session=" not in raw  # no <redacted> marker either
+        # The above will start running when simple_storage exposes
+        # the necessary hooks. The skip is a contract that the test
+        # is real, not absent.
+        pytest.fail(
+            "simple_storage landed but the assertion body of "
+            "test_storage_file_never_contains_session is still the "
+            "skip placeholder. Replace the planned-assertion block "
+            "above with the real assertions before merging the "
+            "simple_storage commit. The invariant is: on-disk "
+            "users_data.json MUST NOT contain the session string "
+            "(or any 200+ char base64 run)."
+        )
 
 
 # ---------------------------------------------------------------------------
-# Section 5: Reusable redactor helper
+# Section 5: no local helper — tests now use the production
+# `redact_session_string` from plugins/telegram_user_account/redact.py
+# (imported inline per-test). This keeps the invariant tests
+# pinned to the actual defense-in-depth pipeline rather than a
+# parallel implementation that could drift. (Cubic review
+# 4614064929 P2.)
 # ---------------------------------------------------------------------------
-
-
-def _redact_session_string(text: str) -> str:
-    """Strip any Telethon session string from a log string.
-
-    Telethon session strings are base64-encoded and start with a
-    version byte. We detect them by a regex: 1+ char followed by
-    200+ base64 characters (rough heuristic — Telethon session
-    strings are ~200-400 chars depending on permissions).
-
-    Replace with a fixed-width redacted marker so the surrounding
-    log message stays readable.
-    """
-    if not isinstance(text, str):
-        return text
-    # Telethon session regex: version char (alphanumeric) + 200+ base64
-    pattern = re.compile(r"[A-Za-z0-9+/]{200,}")
-    return pattern.sub("session=<redacted>", text)
