@@ -82,7 +82,17 @@ def _load_tts_router_module():
     endpoints_stub.get_current_user_uid = _fake_dep_factory()
     endpoints_stub.with_rate_limit = lambda _auth, _policy: _fake_dep_factory()
     endpoints_stub.with_rate_limit_context = lambda _auth, _policy: _fake_dep_factory()
+    endpoints_stub.rate_limit_dep = lambda _policy: lambda: None
     sys.modules["utils.other.endpoints"] = endpoints_stub
+
+    auth_mw_stub = types.ModuleType("utils.auth_middleware")
+    auth_mw_stub.require_firebase = lambda: None
+    auth_mw_stub.require_firebase_no_byok = lambda: None
+    sys.modules["utils.auth_middleware"] = auth_mw_stub
+
+    database_users_stub = types.ModuleType("database.users")
+    database_users_stub.get_user_display_name = MagicMock(return_value="")
+    sys.modules["database.users"] = database_users_stub
 
     # Stub redis_db helpers
     redis_db_stub = types.ModuleType("database.redis_db")

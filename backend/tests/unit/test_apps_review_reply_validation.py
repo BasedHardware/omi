@@ -114,6 +114,12 @@ finally:
 from fastapi import HTTPException  # noqa: E402
 
 
+def _mock_request(uid='uid1'):
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
 def _call(data):
     """Drive reply_to_review past the app/owner/reviewer gates so we reach the response check."""
     with patch.object(apps_mod, 'get_available_app_by_id', return_value={'id': 'app-1', 'uid': 'uid1'}), patch.object(
@@ -123,7 +129,7 @@ def _call(data):
     ), patch.object(
         apps_mod, 'send_app_review_reply_notification'
     ):
-        return apps_mod.reply_to_review('app-1', data, uid='uid1')
+        return apps_mod.reply_to_review(_mock_request(), 'app-1', data)
 
 
 def test_missing_response_returns_422():

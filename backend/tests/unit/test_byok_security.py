@@ -1169,14 +1169,11 @@ class TestAuthDependencyBYOKSeparation:
         assert uid == 'uid-456'
 
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_dep_is_sync_and_returns_uid_only(self, _mock_auth):
-        """get_current_user_uid_ws_listen is sync, returns uid, no BYOK logic."""
+    async def test_ws_listen_dep_returns_uid_only(self, _mock_auth):
+        """get_current_user_uid_ws_listen returns uid, no BYOK logic."""
         from utils.other.endpoints import get_current_user_uid_ws_listen
-        import inspect
 
-        # Must be sync (not async) — no ContextVar mutations in worker threads
-        assert not inspect.iscoroutinefunction(get_current_user_uid_ws_listen)
-        uid = get_current_user_uid_ws_listen(authorization='Bearer tok')
+        uid = await get_current_user_uid_ws_listen(authorization='Bearer tok')
         assert uid == 'ws-uid'
 
 
@@ -1209,14 +1206,13 @@ class TestBYOKSeparatedDeps:
         result = _extract_byok_headers(req)
         assert result == {}
 
-    @patch('utils.other.endpoints.validate_and_return_byok_keys_ws', return_value={'deepgram': 'dg-d'})
-    def test_ws_dep_extracts_and_validates(self, mock_validate):
-        from utils.other.endpoints import get_validated_byok_keys_ws
+    def test_ws_byok_extraction_matches_http(self):
+        """WebSocket BYOK header extraction follows the same pattern as HTTP."""
+        from utils.auth_middleware import _extract_byok_headers
 
         ws = self._make_ws({'x-byok-deepgram': 'dg-d'})
-        result = get_validated_byok_keys_ws(websocket=ws, uid='uid-3')
+        result = _extract_byok_headers(ws)
         assert result == {'deepgram': 'dg-d'}
-        mock_validate.assert_called_once()
 
 
 class TestActivationCacheInvalidation:

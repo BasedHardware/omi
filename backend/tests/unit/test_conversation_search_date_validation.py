@@ -149,8 +149,26 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
 
 _endpoints.get_current_user_uid = _fake_get_current_user_uid
 _endpoints.with_rate_limit = _fake_with_rate_limit
+_endpoints.rate_limit_dep = lambda _policy: lambda: None
 _endpoints.get_user = MagicMock()
 _register_module('utils.other.endpoints', _endpoints)
+
+_auth_mw = ModuleType('utils.auth_middleware')
+
+
+def _stub_require_firebase():
+    pass
+
+
+def _stub_require_firebase_no_byok():
+    pass
+
+
+_stub_require_firebase.__name__ = 'require_firebase'
+_stub_require_firebase_no_byok.__name__ = 'require_firebase_no_byok'
+_auth_mw.require_firebase = _stub_require_firebase
+_auth_mw.require_firebase_no_byok = _stub_require_firebase_no_byok
+_register_module('utils.auth_middleware', _auth_mw)
 
 _request_validation = ModuleType('utils.request_validation')
 _request_validation.NonNegativeOffset = int
@@ -183,7 +201,7 @@ _surface_routing_stub = ModuleType('utils.memory.surface_routing')
 setattr(_surface_routing_stub, 'pin_memory_system', MagicMock())
 _register_module('utils.memory.surface_routing', _surface_routing_stub)
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from models.conversation import Conversation  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
@@ -197,10 +215,22 @@ finally:
     _restore_stubbed_modules()
 
 
+def _mock_request(uid='test-uid'):
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
+async def _fake_firebase_auth(request: Request):
+    request.state.uid = 'test-uid'
+    request.state.byok_keys = {}
+    yield 'test-uid'
+
+
 def _client():
     app = FastAPI()
     app.include_router(conv.router)
-    app.dependency_overrides[conv.auth.get_current_user_uid] = lambda: 'test-uid'
+    app.dependency_overrides[_stub_require_firebase] = _fake_firebase_auth
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -292,7 +322,7 @@ def test_finalize_conversation_processes_target_id_and_clears_matching_redis_poi
         patch.object(conv, 'process_conversation', return_value=processed) as process,
         patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
     ):
-        response = conv.finalize_conversation('conv-1', uid='test-uid')
+        response = conv.finalize_conversation(_mock_request(), 'conv-1')
 
     claim_status.assert_called_once_with(
         'test-uid',
@@ -323,7 +353,7 @@ def test_finalize_conversation_does_not_clear_different_redis_pointer():
         patch.object(conv, 'process_conversation', return_value=processed),
         patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
     ):
-        conv.finalize_conversation('conv-1', uid='test-uid')
+        conv.finalize_conversation(_mock_request(), 'conv-1')
 
     remove_pointer.assert_not_called()
 
@@ -342,7 +372,7 @@ def test_finalize_conversation_claim_loser_returns_latest_without_side_effects()
         patch.object(conv, 'process_conversation') as process,
         patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
     ):
-        response = conv.finalize_conversation('conv-1', uid='test-uid')
+        response = conv.finalize_conversation(_mock_request(), 'conv-1')
 
     claim_status.assert_called_once()
     get_pointer.assert_not_called()
@@ -364,7 +394,7 @@ def test_finalize_conversation_is_noop_for_completed_conversation():
         patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
         patch.object(conv, 'process_conversation') as process,
     ):
-        response = conv.finalize_conversation('conv-1', uid='test-uid')
+        response = conv.finalize_conversation(_mock_request(), 'conv-1')
 
     get_pointer.assert_not_called()
     remove_pointer.assert_not_called()
