@@ -1,0 +1,25 @@
+backend/.python-version
+  s_ecd9aaa4f8f708::t_d62aef4395fc21 1
+backend/database/mcp_oauth.py
+  s_ecd9aaa4f8f708::t_49da563784a7ac 204-211
+  s_ecd9aaa4f8f708::t_33219f70a351ad 200-203,230,239-254
+backend/tests/unit/test_mcp_oauth.py
+  s_ecd9aaa4f8f708::t_0e777d4835f56a 269-288,292-295
+  s_ecd9aaa4f8f708::t_a787f5810dda53 289-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "a0113be43b2e66e67829c3ff87f4b41a12a457b5",
+  "prompts": {},
+  "sessions": {
+    "s_ecd9aaa4f8f708": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2323-cf7e-7cb2-98b8-8cf241cb6bbc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Drake Thomsen <drake@draket.xyz>"
+    }
+  }
+}
