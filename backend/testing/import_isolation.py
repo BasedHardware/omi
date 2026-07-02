@@ -132,7 +132,20 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         # 2. Evict any module keys that appeared during the block (e.g. a module
         #    exec'd via load_module_fresh against the fakes) and clear the parent
         #    attribute each one set, so a stub-fed version never leaks to later files.
+        #    Skip C extension / spec-less modules outside the backend namespace
+        #    (e.g. ``_openssl``) that cannot be safely re-imported once evicted —
+        #    evicting them corrupts the crypto stack for all subsequent test files.
+        #    Backend-owned modules (database.*, utils.*, etc.) are always evicted
+        #    because they may be stubs that must not leak.
+        _backend_prefixes = ("database.", "utils.", "models.", "routers.", "jobs.", "dependencies")
         for extra in list(sys.modules.keys() - saved_keys):
+            extra_mod = sys.modules.get(extra)
+            if extra_mod is not None:
+                spec = getattr(extra_mod, "__spec__", None)
+                origin = getattr(spec, "origin", None) if spec else None
+                is_backend = any(extra == p.rstrip(".") or extra.startswith(p) for p in _backend_prefixes)
+                if not is_backend and (spec is None or (origin and origin.endswith((".so", ".pyd")))):
+                    continue
             _clear_parent_attr_if_added(extra, saved_submodule_attrs)
             sys.modules.pop(extra, None)
         # 3. Restore existing keys whose object was swapped in place (load_module_fresh
