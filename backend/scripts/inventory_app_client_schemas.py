@@ -457,23 +457,99 @@ def _matching_brace_offset(text: str, open_brace: int) -> int | None:
     return None
 
 
-FUNCTION_RE = re.compile(
-    r'(?ms)^(?:[A-Za-z_][A-Za-z0-9_<>,?\s]*\s+)+([A-Za-z_][A-Za-z0-9_]*)\s*\(.*?\)\s*(?:async\*?|sync\*?)?\s*\{'
+FUNCTION_START_RE = re.compile(
+    r'(?m)^(?P<indent>[ \t]*)(?!class\b|enum\b|typedef\b|mixin\b|extension\b)(?:[A-Za-z_][^\n;=]*[ \t]+)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\('
 )
 HTTP_METHOD_RE = re.compile(r"""\bmethod\s*:\s*['"]([A-Z]+)['"]""")
+CONTROL_STATEMENT_NAMES = frozenset({'if', 'for', 'while', 'switch', 'catch'})
+
+
+def _previous_nonempty_line(text: str, offset: int) -> str:
+    prefix = text[:offset].splitlines()
+    for line in reversed(prefix):
+        if line.strip():
+            return line
+    return ''
+
+
+def _matching_delimiter_offset(text: str, open_offset: int, open_char: str, close_char: str) -> int | None:
+    depth = 0
+    cursor = open_offset
+    in_string: str | None = None
+    in_line_comment = False
+    in_block_comment = False
+
+    while cursor < len(text):
+        char = text[cursor]
+        next_char = text[cursor + 1] if cursor + 1 < len(text) else ''
+
+        if in_line_comment:
+            if char == '\n':
+                in_line_comment = False
+            cursor += 1
+            continue
+        if in_block_comment:
+            if char == '*' and next_char == '/':
+                cursor += 2
+                in_block_comment = False
+            else:
+                cursor += 1
+            continue
+        if in_string:
+            if char == '\\':
+                cursor += 2
+                continue
+            if char == in_string:
+                in_string = None
+            cursor += 1
+            continue
+        if char in ("'", '"'):
+            in_string = char
+            cursor += 1
+            continue
+        if char == '/' and next_char == '/':
+            cursor += 2
+            in_line_comment = True
+            continue
+        if char == '/' and next_char == '*':
+            cursor += 2
+            in_block_comment = True
+            continue
+
+        if char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+            if depth == 0:
+                return cursor
+        cursor += 1
+    return None
 
 
 def _function_ranges(text: str) -> list[FunctionRange]:
     line_offsets = _line_start_offsets(text)
     ranges: list[FunctionRange] = []
-    for match in FUNCTION_RE.finditer(text):
-        open_brace = match.end() - 1
+    for match in FUNCTION_START_RE.finditer(text):
+        name = match.group('name')
+        if name in CONTROL_STATEMENT_NAMES:
+            continue
+        if match.group('indent'):
+            previous = _previous_nonempty_line(text, match.start())
+            if previous[:1].isspace() or previous.rstrip().endswith(('{', '}', ';')):
+                continue
+        close_paren = _matching_delimiter_offset(text, match.end() - 1, '(', ')')
+        if close_paren is None:
+            continue
+        body_match = re.match(r'\s*(?:async\*?|sync\*?)?\s*\{', text[close_paren + 1 :])
+        if body_match is None:
+            continue
+        open_brace = close_paren + body_match.end()
         close_brace = _matching_brace_offset(text, open_brace)
         if close_brace is None:
             continue
         ranges.append(
             FunctionRange(
-                name=match.group(1),
+                name=name,
                 start_line=_line_for_offset(line_offsets, match.start()),
                 end_line=_line_for_offset(line_offsets, close_brace),
                 text=text[match.start() : close_brace + 1],

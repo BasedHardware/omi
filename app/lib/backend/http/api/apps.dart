@@ -89,10 +89,8 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
     }
     final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final apps = (data.data ?? const <wire.GeneratedAppBaseModel>[])
-        .map(App.fromGenerated)
-        .where((p) => !p.deleted)
-        .toList();
+    final apps =
+        (data.data ?? const <wire.GeneratedAppBaseModel>[]).map(App.fromGenerated).where((p) => !p.deleted).toList();
     final pagination = _paginationToJson(data.pagination, offset, limit);
     final cat = data.category?.toJson();
     return (apps: apps, pagination: pagination, category: cat);
@@ -104,7 +102,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
 }
 
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
@@ -162,10 +160,8 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, filters: null);
     }
     final data = wire.GeneratedAppSearchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final apps = (data.data ?? const <wire.GeneratedAppBaseModel>[])
-        .map(App.fromGenerated)
-        .where((p) => !p.deleted)
-        .toList();
+    final apps =
+        (data.data ?? const <wire.GeneratedAppBaseModel>[]).map(App.fromGenerated).where((p) => !p.deleted).toList();
     final pagination = data.pagination.toJson();
     final filters = data.filters.toJson();
     return (apps: apps, pagination: pagination, filters: filters);
@@ -181,7 +177,9 @@ Future<List<App>> retrievePopularApps() async {
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
       log('apps: ${response.body}');
-      var apps = App.fromJsonList(jsonDecode(response.body));
+      var apps = (jsonDecode(response.body) as List<dynamic>)
+          .map((item) => App.fromGenerated(wire.GeneratedAppBaseModel.fromJson(item as Map<String, dynamic>)))
+          .toList();
       apps = apps.where((p) => !p.deleted).toList();
       SharedPreferencesUtil().appsList = apps;
       return apps;
@@ -329,9 +327,8 @@ Future<bool> isAppSetupCompleted(String? url) async {
     headers: {},
     body: '',
   );
-  var data;
   try {
-    data = jsonDecode(response?.body ?? '{}');
+    final data = jsonDecode(response?.body ?? '{}') as Map<String, dynamic>;
     Logger.debug(data);
     return data['is_setup_completed'] ?? false;
   } on FormatException catch (e) {
@@ -385,8 +382,9 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
     );
 
     if (response.statusCode == 200) {
-      Logger.debug('updateAppServer Response body: ${jsonDecode(response.body)}');
-      return true;
+      final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      Logger.debug('updateAppServer status: ${data.status}');
+      return data.status == 'ok';
     } else {
       Logger.debug('Failed to update app. Status code: ${response.statusCode}');
       return false;
@@ -485,7 +483,7 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   try {
     if (response == null || response.statusCode != 200) return null;
     log('getAppDetailsServer: ${response.body}');
-    return jsonDecode(response.body);
+    return wire.GeneratedApp.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);

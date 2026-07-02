@@ -24,19 +24,24 @@ class AppReview {
   });
 
   factory AppReview.fromJson(Map<String, dynamic> json) {
-    return AppReview(
-      uid: json['uid'],
-      ratedAt: DateTime.parse(json['rated_at']).toLocal(),
-      score: json['score'],
-      review: json['review'],
-      username: json['username'] ?? json['user_name'] ?? '',
-      response: json['response'] ?? '',
+    return AppReview.fromGenerated(
+      wire.GeneratedAppReview.fromJson(json),
       updatedAt: (json['updated_at'] == "" || json['updated_at'] == null)
           ? null
           : DateTime.parse(json['updated_at']).toLocal(),
-      respondedAt: (json['responded_at'] == "" || json['responded_at'] == null)
-          ? null
-          : DateTime.parse(json['responded_at']).toLocal(),
+    );
+  }
+
+  factory AppReview.fromGenerated(wire.GeneratedAppReview generated, {DateTime? updatedAt}) {
+    return AppReview(
+      uid: generated.uid,
+      ratedAt: generated.ratedAt.toLocal(),
+      score: generated.score,
+      review: generated.review,
+      username: generated.username ?? '',
+      response: generated.response ?? '',
+      updatedAt: updatedAt,
+      respondedAt: generated.respondedAt?.toLocal(),
     );
   }
 
@@ -384,6 +389,55 @@ class App {
     );
   }
 
+  factory App.fromGeneratedDetail(wire.GeneratedApp generated) {
+    return App(
+      category: generated.category,
+      approved: generated.approved,
+      status: generated.status,
+      id: generated.id,
+      email: generated.email ?? '',
+      uid: generated.uid ?? '',
+      name: generated.name,
+      author: generated.author,
+      description: generated.description,
+      image: generated.image,
+      externalIntegration: generated.externalIntegration == null
+          ? null
+          : ExternalIntegration.fromGenerated(generated.externalIntegration!),
+      ratingAvg: generated.ratingAvg,
+      ratingCount: generated.ratingCount,
+      capabilities: generated.capabilities.toSet(),
+      chatPrompt: generated.chatPrompt,
+      conversationPrompt: generated.memoryPrompt,
+      reviews: generated.reviews.map(AppReview.fromGenerated).toList(),
+      userReview: generated.userReview == null ? null : AppReview.fromGenerated(generated.userReview!),
+      deleted: false,
+      enabled: generated.enabled,
+      installs: generated.installs,
+      private: generated.private,
+      proactiveNotification: generated.proactiveNotification == null
+          ? null
+          : ProactiveNotification.fromGenerated(generated.proactiveNotification!),
+      usageCount: generated.usageCount ?? 0,
+      moneyMade: generated.moneyMade ?? 0.0,
+      isPaid: generated.isPaid ?? false,
+      paymentPlan: generated.paymentPlan,
+      price: generated.price ?? 0.0,
+      isUserPaid: generated.isUserPaid ?? false,
+      paymentLink: generated.paymentLink,
+      thumbnailIds: generated.thumbnails ?? [],
+      thumbnailUrls: generated.thumbnailUrls ?? [],
+      username: generated.username,
+      isPopular: generated.isPopular ?? false,
+      chatTools: (generated.chatTools ?? const []).map(ChatTool.fromGenerated).toList(),
+      createdAt: generated.createdAt,
+      updatedAt: null,
+      score: generated.score,
+      official: generated.official ?? false,
+      sourceCodeUrl: generated.sourceCodeUrl,
+    );
+  }
+
   factory App.fromGenerated(
     wire.GeneratedAppBaseModel generated, {
     Map<String, dynamic> legacyJson = const {},
@@ -404,8 +458,8 @@ class App {
       externalIntegration: legacyJson['external_integration'] is Map<String, dynamic>
           ? ExternalIntegration.fromJson(legacyJson['external_integration'] as Map<String, dynamic>)
           : generated.externalIntegration == null
-          ? null
-          : ExternalIntegration.fromGenerated(generated.externalIntegration!),
+              ? null
+              : ExternalIntegration.fromGenerated(generated.externalIntegration!),
       ratingAvg: generated.ratingAvg,
       ratingCount: generated.ratingCount,
       capabilities: generated.capabilities.toSet(),
@@ -433,9 +487,8 @@ class App {
       isPopular: generated.isPopular ?? false,
       chatTools: (generated.chatTools ?? const []).map(ChatTool.fromGenerated).toList(),
       createdAt: generated.createdAt,
-      updatedAt: legacyJson['updated_at'] != null
-          ? DateTime.parse(legacyJson['updated_at'].toString()).toLocal()
-          : null,
+      updatedAt:
+          legacyJson['updated_at'] != null ? DateTime.parse(legacyJson['updated_at'].toString()).toLocal() : null,
       score: generated.score,
       official: generated.official ?? false,
       sourceCodeUrl: generated.sourceCodeUrl,

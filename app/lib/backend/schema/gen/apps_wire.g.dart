@@ -378,6 +378,50 @@ class GeneratedAppIconGenerationResponse {
   }
 }
 
+class GeneratedAppReview {
+  final DateTime ratedAt;
+  final DateTime? respondedAt;
+  final String? response;
+  final String review;
+  final double score;
+  final String uid;
+  final String? username;
+
+  const GeneratedAppReview({
+    required this.ratedAt,
+    this.respondedAt,
+    this.response,
+    required this.review,
+    required this.score,
+    required this.uid,
+    this.username,
+  });
+
+  factory GeneratedAppReview.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppReview(
+      ratedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["rated_at"]), "rated_at", _readDateTime, requiredField: true, nullable: false), "rated_at"),
+      respondedAt: _readFieldValue<DateTime>(_readField(json, const ["responded_at"]), "responded_at", _readDateTime, requiredField: false, nullable: true),
+      response: _readFieldValue<String>(_readField(json, const ["response"]), "response", _readString, requiredField: false, nullable: true),
+      review: _required(_readFieldValue<String>(_readField(json, const ["review"]), "review", _readString, requiredField: true, nullable: false), "review"),
+      score: _required(_readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: true, nullable: false), "score"),
+      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
+      username: _readFieldValue<String>(_readField(json, const ["username"]), "username", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'rated_at': ratedAt.toUtc().toIso8601String(),
+      'responded_at': respondedAt?.toUtc().toIso8601String(),
+      'response': response,
+      'review': review,
+      'score': score,
+      'uid': uid,
+      'username': username,
+    };
+  }
+}
+
 class GeneratedAuthStep {
   final String name;
   final String url;
@@ -721,6 +765,214 @@ class GeneratedAppBaseModel {
       'thumbnails': thumbnails,
       'trigger_workflow_memories': triggerWorkflowMemories,
       'uid': uid,
+      'username': username,
+    };
+  }
+}
+
+class GeneratedApp {
+  final bool approved;
+  final String author;
+  final List<String> capabilities;
+  final String category;
+  final String? chatPrompt;
+  final List<GeneratedChatTool>? chatTools;
+  final List<String> connectedAccounts;
+  final DateTime? createdAt;
+  final String description;
+  final bool? disabled;
+  final String? disabledReason;
+  final String? email;
+  final bool enabled;
+  final GeneratedExternalIntegration? externalIntegration;
+  final String id;
+  final String image;
+  final int installs;
+  final bool? isInfluencer;
+  final bool? isPaid;
+  final bool? isPopular;
+  final bool? isUserPaid;
+  final String? memoryPrompt;
+  final double? moneyMade;
+  final String name;
+  final bool? official;
+  final String? paymentLink;
+  final String? paymentLinkId;
+  final String? paymentPlan;
+  final String? paymentPriceId;
+  final String? paymentProductId;
+  final String? personaPrompt;
+  final double? price;
+  final bool private;
+  final GeneratedProactiveNotification? proactiveNotification;
+  final double? ratingAvg;
+  final int ratingCount;
+  final List<GeneratedAppReview> reviews;
+  final double? score;
+  final String? sourceCodeUrl;
+  final String status;
+  final List<String>? thumbnailUrls;
+  final List<String>? thumbnails;
+  final bool triggerWorkflowMemories;
+  final Map<String, dynamic>? twitter;
+  final String? uid;
+  final int? usageCount;
+  final GeneratedAppReview? userReview;
+  final String? username;
+
+  const GeneratedApp({
+    this.approved = false,
+    required this.author,
+    required this.capabilities,
+    required this.category,
+    this.chatPrompt,
+    this.chatTools = const [],
+    this.connectedAccounts = const [],
+    this.createdAt,
+    required this.description,
+    this.disabled = false,
+    this.disabledReason,
+    this.email,
+    this.enabled = false,
+    this.externalIntegration,
+    required this.id,
+    required this.image,
+    this.installs = 0,
+    this.isInfluencer = false,
+    this.isPaid = false,
+    this.isPopular = false,
+    this.isUserPaid = false,
+    this.memoryPrompt,
+    this.moneyMade,
+    required this.name,
+    this.official = false,
+    this.paymentLink,
+    this.paymentLinkId,
+    this.paymentPlan,
+    this.paymentPriceId,
+    this.paymentProductId,
+    this.personaPrompt,
+    this.price = 0.0,
+    this.private = false,
+    this.proactiveNotification,
+    this.ratingAvg = 0,
+    this.ratingCount = 0,
+    this.reviews = const [],
+    this.score,
+    this.sourceCodeUrl,
+    this.status = "approved",
+    this.thumbnailUrls = const [],
+    this.thumbnails = const [],
+    this.triggerWorkflowMemories = true,
+    this.twitter,
+    this.uid,
+    this.usageCount,
+    this.userReview,
+    this.username,
+  });
+
+  factory GeneratedApp.fromJson(Map<String, dynamic> json) {
+    return GeneratedApp(
+      approved: _required(_readFieldValue<bool>(_readField(json, const ["approved"]), "approved", _readBool, requiredField: false, nullable: false, defaultValue: false), "approved"),
+      author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: true, nullable: false), "author"),
+      capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
+      chatPrompt: _readFieldValue<String>(_readField(json, const ["chat_prompt"]), "chat_prompt", _readString, requiredField: false, nullable: true),
+      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      connectedAccounts: _required(_readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "connected_accounts"),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      disabledReason: _readFieldValue<String>(_readField(json, const ["disabled_reason"]), "disabled_reason", _readString, requiredField: false, nullable: true),
+      email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "enabled"),
+      externalIntegration: _readFieldValue<GeneratedExternalIntegration>(_readField(json, const ["external_integration"]), "external_integration", (value) => _readObject(value, GeneratedExternalIntegration.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      image: _required(_readFieldValue<String>(_readField(json, const ["image"]), "image", _readString, requiredField: true, nullable: false), "image"),
+      installs: _required(_readFieldValue<int>(_readField(json, const ["installs"]), "installs", _readInt, requiredField: false, nullable: false, defaultValue: 0), "installs"),
+      isInfluencer: _readFieldValue<bool>(_readField(json, const ["is_influencer"]), "is_influencer", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPaid: _readFieldValue<bool>(_readField(json, const ["is_paid"]), "is_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPopular: _readFieldValue<bool>(_readField(json, const ["is_popular"]), "is_popular", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isUserPaid: _readFieldValue<bool>(_readField(json, const ["is_user_paid"]), "is_user_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      memoryPrompt: _readFieldValue<String>(_readField(json, const ["memory_prompt"]), "memory_prompt", _readString, requiredField: false, nullable: true),
+      moneyMade: _readFieldValue<double>(_readField(json, const ["money_made"]), "money_made", _readDouble, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      official: _readFieldValue<bool>(_readField(json, const ["official"]), "official", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      paymentLink: _readFieldValue<String>(_readField(json, const ["payment_link"]), "payment_link", _readString, requiredField: false, nullable: true),
+      paymentLinkId: _readFieldValue<String>(_readField(json, const ["payment_link_id"]), "payment_link_id", _readString, requiredField: false, nullable: true),
+      paymentPlan: _readFieldValue<String>(_readField(json, const ["payment_plan"]), "payment_plan", _readString, requiredField: false, nullable: true),
+      paymentPriceId: _readFieldValue<String>(_readField(json, const ["payment_price_id"]), "payment_price_id", _readString, requiredField: false, nullable: true),
+      paymentProductId: _readFieldValue<String>(_readField(json, const ["payment_product_id"]), "payment_product_id", _readString, requiredField: false, nullable: true),
+      personaPrompt: _readFieldValue<String>(_readField(json, const ["persona_prompt"]), "persona_prompt", _readString, requiredField: false, nullable: true),
+      price: _readFieldValue<double>(_readField(json, const ["price"]), "price", _readDouble, requiredField: false, nullable: true, defaultValue: 0.0),
+      private: _required(_readFieldValue<bool>(_readField(json, const ["private"]), "private", _readBool, requiredField: false, nullable: false, defaultValue: false), "private"),
+      proactiveNotification: _readFieldValue<GeneratedProactiveNotification>(_readField(json, const ["proactive_notification"]), "proactive_notification", (value) => _readObject(value, GeneratedProactiveNotification.fromJson), requiredField: false, nullable: true),
+      ratingAvg: _readFieldValue<double>(_readField(json, const ["rating_avg"]), "rating_avg", _readDouble, requiredField: false, nullable: true, defaultValue: 0),
+      ratingCount: _required(_readFieldValue<int>(_readField(json, const ["rating_count"]), "rating_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "rating_count"),
+      reviews: _required(_readFieldValue<List<GeneratedAppReview>>(_readField(json, const ["reviews"]), "reviews", (value) => _readObjectList(value, GeneratedAppReview.fromJson), requiredField: false, nullable: false, defaultValue: const []), "reviews"),
+      score: _readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: false, nullable: true),
+      sourceCodeUrl: _readFieldValue<String>(_readField(json, const ["source_code_url"]), "source_code_url", _readString, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
+      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      triggerWorkflowMemories: _required(_readFieldValue<bool>(_readField(json, const ["trigger_workflow_memories"]), "trigger_workflow_memories", _readBool, requiredField: false, nullable: false, defaultValue: true), "trigger_workflow_memories"),
+      twitter: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["twitter"]), "twitter", _readMap, requiredField: false, nullable: true),
+      uid: _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: false, nullable: true),
+      usageCount: _readFieldValue<int>(_readField(json, const ["usage_count"]), "usage_count", _readInt, requiredField: false, nullable: true),
+      userReview: _readFieldValue<GeneratedAppReview>(_readField(json, const ["user_review"]), "user_review", (value) => _readObject(value, GeneratedAppReview.fromJson), requiredField: false, nullable: true),
+      username: _readFieldValue<String>(_readField(json, const ["username"]), "username", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'approved': approved,
+      'author': author,
+      'capabilities': capabilities,
+      'category': category,
+      'chat_prompt': chatPrompt,
+      'chat_tools': chatTools?.map((value) => value.toJson()).toList(),
+      'connected_accounts': connectedAccounts,
+      'created_at': createdAt?.toUtc().toIso8601String(),
+      'description': description,
+      'disabled': disabled,
+      'disabled_reason': disabledReason,
+      'email': email,
+      'enabled': enabled,
+      'external_integration': externalIntegration?.toJson(),
+      'id': id,
+      'image': image,
+      'installs': installs,
+      'is_influencer': isInfluencer,
+      'is_paid': isPaid,
+      'is_popular': isPopular,
+      'is_user_paid': isUserPaid,
+      'memory_prompt': memoryPrompt,
+      'money_made': moneyMade,
+      'name': name,
+      'official': official,
+      'payment_link': paymentLink,
+      'payment_link_id': paymentLinkId,
+      'payment_plan': paymentPlan,
+      'payment_price_id': paymentPriceId,
+      'payment_product_id': paymentProductId,
+      'persona_prompt': personaPrompt,
+      'price': price,
+      'private': private,
+      'proactive_notification': proactiveNotification?.toJson(),
+      'rating_avg': ratingAvg,
+      'rating_count': ratingCount,
+      'reviews': reviews.map((value) => value.toJson()).toList(),
+      'score': score,
+      'source_code_url': sourceCodeUrl,
+      'status': status,
+      'thumbnail_urls': thumbnailUrls,
+      'thumbnails': thumbnails,
+      'trigger_workflow_memories': triggerWorkflowMemories,
+      'twitter': twitter,
+      'uid': uid,
+      'usage_count': usageCount,
+      'user_review': userReview?.toJson(),
       'username': username,
     };
   }

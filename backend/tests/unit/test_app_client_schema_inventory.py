@@ -174,8 +174,12 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     )
     assert report['raw_dart_decode_site_count'] > 0
 
-    raw_sites = {(item['path'], item['line'], item['kind']) for item in report['raw_dart_decode_sites']}
-    assert ('app/lib/backend/schema/app.dart', 26, 'fromJson') in raw_sites
+    assert any(
+        item['path'] == 'app/lib/backend/schema/app.dart'
+        and item['kind'] == 'field_access'
+        and 'updated_at' in item['snippet']
+        for item in report['raw_dart_decode_sites']
+    )
     assert any(
         item['path'] == 'app/lib/backend/schema/conversation.dart'
         and item['kind'] == 'fromJson'
@@ -198,6 +202,21 @@ def test_inventory_normalizes_interpolated_dart_route_segments():
     assert '/v2/messages/{param}/report' in routes_by_file['messages.dart']
     assert '/v1/apps/{param}' in routes_by_file['apps.dart']
     assert '/v1/conversations/{param}/reprocess' in routes_by_file['conversations.dart']
+
+
+def test_inventory_scopes_record_return_type_route_functions():
+    routes = inventory_app_client_schemas.scan_app_routes()
+    route = next(
+        item
+        for item in routes
+        if item.path.name == 'apps.dart'
+        and item.normalized_route == '/v2/apps/capability/{param}/grouped'
+        and item.http_method == 'GET'
+    )
+
+    assert route.function_name == 'retrieveCapabilityAppsGroupedByCategory'
+    assert route.function_start_line is not None
+    assert route.function_end_line is not None
 
 
 def test_inventory_route_parser_handles_comments_queries_and_nested_interpolation():
@@ -244,7 +263,7 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
 
     assert result.returncode == 1
     assert 'Raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/schema/app.dart:26' in result.stdout
+    assert 'app/lib/backend/schema/app.dart:31' in result.stdout
 
 
 def test_inventory_route_raw_decode_gate_fails_with_operation_context():
@@ -288,7 +307,7 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
             'scripts/inventory_app_client_schemas.py',
             '--fail-on-raw-json-decode-for-openapi-routes',
             '--operation-id',
-            'get_apps_v2_v2_apps_get',
+            'get_user_enabled_apps_v1_apps_enabled_get',
         ],
         cwd=ROOT_DIR / 'backend',
         stdout=subprocess.PIPE,
@@ -300,4 +319,4 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
     assert clean_result.returncode == 0
     assert dirty_result.returncode == 1
     assert 'getApps' not in clean_result.stdout
-    assert 'app/lib/backend/http/api/apps.dart * /v2/apps' in dirty_result.stdout
+    assert 'app/lib/backend/http/api/apps.dart GET /v1/apps/enabled' in dirty_result.stdout
