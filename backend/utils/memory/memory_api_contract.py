@@ -32,6 +32,10 @@ def memory_api_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExp
     if exposure == MemoryApiExposure.LEGACY:
         for field in CANONICAL_LIFECYCLE_FIELDS:
             payload.pop(field, None)
+    elif exposure == MemoryApiExposure.CANONICAL:
+        tier = payload.get("memory_tier") or payload.get("tier")
+        if tier is not None and payload.get("layer") is None:
+            payload["layer"] = tier
     return payload
 
 

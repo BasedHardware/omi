@@ -600,7 +600,12 @@ def get_memories(
     )
     if memory_response.http_status != 200:
         _raise_memory_http_exception(memory_response)
-    return [MemoryDB.model_validate(item) for item in memory_response.body or []]
+    headers = _memory_allowlisted_headers(memory_response)
+    headers['Cache-Control'] = 'no-store'
+    return JSONResponse(
+        content=jsonable_encoder(memory_api_payloads(memory_response.body or [], MemoryApiExposure.CANONICAL)),
+        headers=headers,
+    )
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'])
