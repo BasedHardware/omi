@@ -23,6 +23,7 @@ WRAPPED_TASK_INTEGRATIONS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'wrapped_task_integrations_wire.g.dart'
 )
 APPS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'apps_wire.g.dart'
+USERS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'users_wire.g.dart'
 SUBSCRIPTION_USAGE_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'subscription_usage_wire.g.dart'
 )
@@ -180,6 +181,27 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert (
         'requiresOauth: _required(_readBool(_readAny(json, const ["requires_oauth"])), "requires_oauth")' in generated
     )
+
+
+def test_users_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'users')
+
+    assert USERS_DART_PATH.read_text() == generated
+    assert 'class GeneratedUserStatusResponse' in generated
+    assert 'class GeneratedStoreRecordingPermissionResponse' in generated
+    assert 'class GeneratedPrivateCloudSyncResponse' in generated
+    assert 'class GeneratedOnboardingStateResponse' in generated
+    assert 'class GeneratedUserLanguageResponse' in generated
+    assert 'class GeneratedUserLanguageUpdateResponse' in generated
+    assert 'class GeneratedMemorySummaryRatingResponse' in generated
+    assert 'class GeneratedTrainingDataOptInResponse' in generated
+    assert 'class GeneratedTranscriptionPreferencesResponse' in generated
+    assert 'class GeneratedDailySummarySettingsResponse' in generated
+    assert 'class GeneratedDailySummaryTestResponse' in generated
+    assert 'class GeneratedMentorNotificationSettingsResponse' in generated
+    assert 'storeRecordingPermission: _required(_readBool' in generated
+    assert 'summaryId: _required(_readString(_readAny(json, const ["summary_id"])), "summary_id")' in generated
 
 
 def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():

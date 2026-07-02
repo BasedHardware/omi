@@ -4031,6 +4031,40 @@
         "title": "DailySummarySettingsUpdate",
         "type": "object"
       },
+      "DailySummaryTestResponse": {
+        "properties": {
+          "conversations_count": {
+            "title": "Conversations Count",
+            "type": "integer"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary_id": {
+            "title": "Summary Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "summary_id",
+          "conversations_count"
+        ],
+        "title": "DailySummaryTestResponse",
+        "type": "object"
+      },
       "DefaultTaskIntegrationRequest": {
         "description": "Request to set default task integration",
         "properties": {
@@ -7161,6 +7195,30 @@
         "title": "MemoryMutationResponse",
         "type": "object"
       },
+      "MemorySummaryRatingResponse": {
+        "properties": {
+          "has_rating": {
+            "title": "Has Rating",
+            "type": "boolean"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          }
+        },
+        "required": [
+          "has_rating"
+        ],
+        "title": "MemorySummaryRatingResponse",
+        "type": "object"
+      },
       "MentorNotificationSettingsResponse": {
         "properties": {
           "frequency": {
@@ -7566,6 +7624,27 @@
           "auth_url"
         ],
         "title": "OAuthUrlResponse",
+        "type": "object"
+      },
+      "OnboardingStateResponse": {
+        "properties": {
+          "acquisition_source": {
+            "default": "",
+            "title": "Acquisition Source",
+            "type": "string"
+          },
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "device_onboarding_completed": {
+            "default": false,
+            "title": "Device Onboarding Completed",
+            "type": "boolean"
+          }
+        },
+        "title": "OnboardingStateResponse",
         "type": "object"
       },
       "OverageInfoResponse": {
@@ -8365,6 +8444,19 @@
           "price_string"
         ],
         "title": "PricingOption",
+        "type": "object"
+      },
+      "PrivateCloudSyncResponse": {
+        "properties": {
+          "private_cloud_sync_enabled": {
+            "title": "Private Cloud Sync Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "private_cloud_sync_enabled"
+        ],
+        "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
       "ProactiveNotification": {
@@ -9580,6 +9672,19 @@
         "title": "StoreMeetingResponse",
         "type": "object"
       },
+      "StoreRecordingPermissionResponse": {
+        "properties": {
+          "store_recording_permission": {
+            "title": "Store Recording Permission",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "store_recording_permission"
+        ],
+        "title": "StoreRecordingPermissionResponse",
+        "type": "object"
+      },
       "StripeConnectAccountResponse": {
         "properties": {
           "account_id": {
@@ -10411,6 +10516,30 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "TrainingDataOptInResponse": {
+        "properties": {
+          "opted_in": {
+            "title": "Opted In",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "opted_in"
+        ],
+        "title": "TrainingDataOptInResponse",
+        "type": "object"
+      },
       "TranscriptSegment": {
         "properties": {
           "end": {
@@ -10545,7 +10674,6 @@
             "type": "boolean"
           },
           "vocabulary": {
-            "default": [],
             "items": {
               "type": "string"
             },
@@ -11530,6 +11658,52 @@
         "title": "UsageStats",
         "type": "object"
       },
+      "UserLanguageResponse": {
+        "properties": {
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "title": "UserLanguageResponse",
+        "type": "object"
+      },
+      "UserLanguageUpdateResponse": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "single_language_mode": {
+            "title": "Single Language Mode",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "single_language_mode"
+        ],
+        "title": "UserLanguageUpdateResponse",
+        "type": "object"
+      },
       "UserProfile": {
         "properties": {
           "data_sources_used": {
@@ -11600,6 +11774,30 @@
           }
         },
         "title": "UserProfile",
+        "type": "object"
+      },
+      "UserStatusResponse": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "UserStatusResponse",
         "type": "object"
       },
       "UserSubscriptionResponse": {
@@ -31998,7 +32196,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -32082,7 +32282,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySummaryRatingResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -32173,7 +32375,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -32948,7 +33152,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -33033,7 +33239,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummaryTestResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -33781,7 +33989,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -33857,7 +34067,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserLanguageResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -33943,7 +34155,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserLanguageUpdateResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35026,7 +35240,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35609,7 +35825,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingStateResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35695,7 +35913,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36406,7 +36626,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateCloudSyncResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36488,7 +36710,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36715,7 +36939,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36788,7 +37014,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StoreRecordingPermissionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36870,7 +37098,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36946,7 +37176,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingDataOptInResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37020,7 +37252,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37182,7 +37416,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"

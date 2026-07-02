@@ -127,6 +127,48 @@ class BatchMigrationRequest(BaseModel):
     requests: List[MigrationRequest]
 
 
+class UserStatusResponse(BaseModel):
+    status: str
+    message: Optional[str] = None
+
+
+class StoreRecordingPermissionResponse(BaseModel):
+    store_recording_permission: bool
+
+
+class PrivateCloudSyncResponse(BaseModel):
+    private_cloud_sync_enabled: bool
+
+
+class OnboardingStateResponse(BaseModel):
+    completed: bool = False
+    acquisition_source: str = ''
+    device_onboarding_completed: bool = False
+
+
+class UserLanguageResponse(BaseModel):
+    language: Optional[str] = None
+
+
+class UserLanguageUpdateResponse(UserStatusResponse):
+    single_language_mode: bool
+
+
+class MemorySummaryRatingResponse(BaseModel):
+    has_rating: bool
+    rating: Optional[int] = None
+
+
+class TrainingDataOptInResponse(BaseModel):
+    opted_in: bool
+    status: Optional[str] = None
+
+
+class DailySummaryTestResponse(UserStatusResponse):
+    summary_id: str
+    conversations_count: int
+
+
 @router.get('/v1/users/profile', tags=['v1'])
 def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Gets the full user profile, including data protection and migration status."""
@@ -153,7 +195,7 @@ def delete_account(
         raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
-@router.patch('/v1/users/geolocation', tags=['v1'])
+@router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
 def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
     last_location_data = get_cached_user_geolocation(uid)
     if last_location_data:
@@ -242,18 +284,18 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
 # *************************************************
 
 
-@router.post('/v1/users/store-recording-permission', tags=['v1'])
+@router.post('/v1/users/store-recording-permission', tags=['v1'], response_model=UserStatusResponse)
 def store_recording_permission(value: bool, uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/store-recording-permission', tags=['v1'])
+@router.get('/v1/users/store-recording-permission', tags=['v1'], response_model=StoreRecordingPermissionResponse)
 def get_store_recording_permission(uid: str = Depends(auth.get_current_user_uid)):
     return {'store_recording_permission': get_user_store_recording_permission(uid)}
 
 
-@router.delete('/v1/users/store-recording-permission', tags=['v1'])
+@router.delete('/v1/users/store-recording-permission', tags=['v1'], response_model=UserStatusResponse)
 def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, False)
     delete_all_conversation_recordings(uid)
@@ -265,7 +307,7 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 # *************************************************
 
 
-@router.get('/v1/users/onboarding', tags=['v1'])
+@router.get('/v1/users/onboarding', tags=['v1'], response_model=OnboardingStateResponse)
 def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's onboarding state (completed status, acquisition source, etc.)."""
     state = get_user_onboarding_state(uid)
@@ -276,7 +318,7 @@ def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     }
 
 
-@router.patch('/v1/users/onboarding', tags=['v1'])
+@router.patch('/v1/users/onboarding', tags=['v1'], response_model=UserStatusResponse)
 def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """Update the user's onboarding state."""
     current_state = get_user_onboarding_state(uid)
@@ -295,13 +337,13 @@ def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user
 # *************************************************
 
 
-@router.post('/v1/users/private-cloud-sync', tags=['v1'])
+@router.post('/v1/users/private-cloud-sync', tags=['v1'], response_model=UserStatusResponse)
 def set_private_cloud_sync(value: bool, uid: str = Depends(auth.get_current_user_uid)):
     set_user_private_cloud_sync_enabled(uid, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/private-cloud-sync', tags=['v1'])
+@router.get('/v1/users/private-cloud-sync', tags=['v1'], response_model=PrivateCloudSyncResponse)
 def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
     return {'private_cloud_sync_enabled': get_user_private_cloud_sync_enabled(uid)}
 
@@ -435,7 +477,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
 # **************************************
 
 
-@router.post('/v1/users/analytics/memory_summary', tags=['v1'])
+@router.post('/v1/users/analytics/memory_summary', tags=['v1'], response_model=UserStatusResponse)
 def set_memory_summary_rating(
     memory_id: str,
     value: int,  # 0, 1, -1 (shown)
@@ -445,7 +487,7 @@ def set_memory_summary_rating(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'])
+@router.get('/v1/users/analytics/memory_summary', tags=['v1'], response_model=MemorySummaryRatingResponse)
 def get_memory_summary_rating(
     memory_id: str,
     _: str = Depends(auth.get_current_user_uid),
@@ -457,7 +499,7 @@ def get_memory_summary_rating(
     return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
 
 
-@router.post('/v1/users/analytics/chat_message', tags=['v1'])
+@router.post('/v1/users/analytics/chat_message', tags=['v1'], response_model=UserStatusResponse)
 def set_chat_message_analytics(
     message_id: str,
     value: int,
@@ -522,7 +564,7 @@ def set_chat_message_analytics(
 # ***************************************
 
 
-@router.get('/v1/users/language', tags=['v1'])
+@router.get('/v1/users/language', tags=['v1'], response_model=UserLanguageResponse)
 def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's preferred language."""
     language = get_user_language_preference(uid)
@@ -531,7 +573,7 @@ def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     return {'language': language}
 
 
-@router.patch('/v1/users/language', tags=['v1'])
+@router.patch('/v1/users/language', tags=['v1'], response_model=UserLanguageUpdateResponse)
 def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
     language = data.get('language')
@@ -550,7 +592,7 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
 
 class TranscriptionPreferencesResponse(BaseModel):
     single_language_mode: bool = False
-    vocabulary: List[str] = []
+    vocabulary: List[str] = Field(default_factory=list)
     language: str = ''
     uses_custom_stt: bool = False
     custom_stt_since: Optional[datetime] = None
@@ -568,7 +610,7 @@ def get_transcription_preferences_endpoint(uid: str = Depends(auth.get_current_u
     return prefs
 
 
-@router.patch('/v1/users/transcription-preferences', tags=['v1'])
+@router.patch('/v1/users/transcription-preferences', tags=['v1'], response_model=UserStatusResponse)
 def update_transcription_preferences_endpoint(
     data: TranscriptionPreferencesUpdate, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -716,7 +758,7 @@ def set_preferred_app_for_user(
 # **************************************
 
 
-@router.get('/v1/users/training-data-opt-in', tags=['v1'])
+@router.get('/v1/users/training-data-opt-in', tags=['v1'], response_model=TrainingDataOptInResponse)
 def get_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's training data opt-in status."""
     opt_in_data = get_user_training_data_opt_in(uid)
@@ -725,7 +767,7 @@ def get_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
     return {'opted_in': True, 'status': opt_in_data.get('status')}
 
 
-@router.post('/v1/users/training-data-opt-in', tags=['v1'])
+@router.post('/v1/users/training-data-opt-in', tags=['v1'], response_model=UserStatusResponse)
 def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
     """Opt-in for training data program. User's request will be reviewed."""
     set_user_training_data_opt_in(uid, 'pending_review')
@@ -1139,7 +1181,7 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
 
 
-@router.patch('/v1/users/daily-summary-settings', tags=['v1'])
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=UserStatusResponse)
 def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """
     Update user's daily summary notification settings.
@@ -1171,7 +1213,7 @@ class TestDailySummaryRequest(BaseModel):
     date: Optional[str] = None  # YYYY-MM-DD format, defaults to today
 
 
-@router.post('/v1/users/daily-summary-settings/test', tags=['v1'])
+@router.post('/v1/users/daily-summary-settings/test', tags=['v1'], response_model=DailySummaryTestResponse)
 def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
     """
     Test endpoint to manually trigger daily summary for the authenticated user.
@@ -1471,7 +1513,7 @@ def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_ui
     return MentorNotificationSettingsResponse(frequency=frequency)
 
 
-@router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
+@router.patch('/v1/users/mentor-notification-settings', tags=['v1'], response_model=UserStatusResponse)
 def update_mentor_notification_settings(
     data: MentorNotificationSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)
 ):

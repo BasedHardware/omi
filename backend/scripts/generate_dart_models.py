@@ -122,6 +122,23 @@ SCHEMA_GROUPS = {
             'AppIconGenerationResponse',
         ),
     },
+    'users': {
+        'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
+        'schemas': (
+            'UserStatusResponse',
+            'StoreRecordingPermissionResponse',
+            'PrivateCloudSyncResponse',
+            'OnboardingStateResponse',
+            'UserLanguageResponse',
+            'UserLanguageUpdateResponse',
+            'MemorySummaryRatingResponse',
+            'TrainingDataOptInResponse',
+            'TranscriptionPreferencesResponse',
+            'DailySummarySettingsResponse',
+            'DailySummaryTestResponse',
+            'MentorNotificationSettingsResponse',
+        ),
+    },
     'subscription_usage': {
         'output': DEFAULT_OUTPUT_DIR / 'subscription_usage_wire.g.dart',
         'schemas': (

@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
@@ -20,8 +21,9 @@ Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
     body: jsonEncode(geolocation.toJson()),
   );
   if (response == null) return false;
-  if (response.statusCode == 200) return true;
-  return false;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<bool> setUserWebhookUrl({required String type, required String url}) async {
@@ -111,7 +113,9 @@ Future<bool> setRecordingPermission(bool value) async {
   );
   if (response == null) return false;
   Logger.debug('storeRecordingPermission response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<bool?> getStoreRecordingPermission() async {
@@ -124,8 +128,9 @@ Future<bool?> getStoreRecordingPermission() async {
   if (response == null) return null;
   Logger.debug('getStoreRecordingPermission response: ${response.body}');
   if (response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
-    return jsonResponse['store_recording_permission'] as bool?;
+    return wire.GeneratedStoreRecordingPermissionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).storeRecordingPermission;
   }
   return null;
 }
@@ -139,7 +144,9 @@ Future<bool> deletePermissionAndRecordings() async {
   );
   if (response == null) return false;
   Logger.debug('deletePermissionAndRecordings response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 /**/
@@ -153,7 +160,9 @@ Future<bool> setPrivateCloudSyncEnabled(bool value) async {
   );
   if (response == null) return false;
   Logger.debug('setPrivateCloudSyncEnabled response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<bool> getPrivateCloudSyncEnabled() async {
@@ -166,8 +175,9 @@ Future<bool> getPrivateCloudSyncEnabled() async {
   if (response == null) return false;
   Logger.debug('getPrivateCloudSyncEnabled response: ${response.body}');
   if (response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
-    return jsonResponse['private_cloud_sync_enabled'] as bool? ?? false;
+    return wire.GeneratedPrivateCloudSyncResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).privateCloudSyncEnabled;
   }
   return false;
 }
@@ -255,7 +265,9 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
   );
   if (response == null) return false;
   Logger.debug('setConversationSummaryRating response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
@@ -270,7 +282,9 @@ Future<bool> setMessageResponseRating(String messageId, int value, {String? reas
   var response = await makeApiCall(url: url, headers: {}, method: 'POST', body: '');
   if (response == null) return false;
   Logger.debug('setMessageResponseRating response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<bool> getHasConversationSummaryRating(String conversationId) async {
@@ -284,8 +298,9 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
   Logger.debug('getHasConversationSummaryRating response: ${response.body}');
 
   try {
-    var jsonResponse = jsonDecode(response.body);
-    return jsonResponse['has_rating'] as bool? ?? false;
+    return wire.GeneratedMemorySummaryRatingResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).hasRating;
   } catch (e) {
     return false;
   }
@@ -298,12 +313,12 @@ Future<String?> getUserPrimaryLanguage() async {
   Logger.debug('getUserPrimaryLanguage response: ${response.body}');
 
   try {
-    var jsonResponse = jsonDecode(response.body);
+    final jsonResponse = wire.GeneratedUserLanguageResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     // Return null if language is null or empty
-    if (jsonResponse['language'] == null || jsonResponse['language'] == '') {
+    if (jsonResponse.language == null || jsonResponse.language == '') {
       return null;
     }
-    return jsonResponse['language'] as String?;
+    return jsonResponse.language;
   } catch (e) {
     Logger.debug('Error parsing getUserPrimaryLanguage response: $e');
     return null;
@@ -319,7 +334,9 @@ Future<bool> setUserPrimaryLanguage(String languageCode) async {
   );
   if (response == null) return false;
   Logger.debug('setUserPrimaryLanguage response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserLanguageUpdateResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<bool> setPreferredSummarizationAppServer(String appId) async {
@@ -359,7 +376,7 @@ Future<Map<String, dynamic>> getTrainingDataOptIn() async {
   if (response == null) return {'opted_in': false, 'status': null};
   Logger.debug('getTrainingDataOptIn response: ${response.body}');
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    return wire.GeneratedTrainingDataOptInResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   }
   return {'opted_in': false, 'status': null};
 }
@@ -373,7 +390,9 @@ Future<bool> setTrainingDataOptIn() async {
   );
   if (response == null) return false;
   Logger.debug('setTrainingDataOptIn response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 // Transcription Preferences
@@ -388,7 +407,9 @@ Future<Map<String, dynamic>?> getTranscriptionPreferences() async {
   if (response == null) return null;
   Logger.debug('getTranscriptionPreferences response: ${response.body}');
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    return wire.GeneratedTranscriptionPreferencesResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
   }
   return null;
 }
@@ -410,7 +431,9 @@ Future<bool> setTranscriptionPreferences({bool? singleLanguageMode, List<String>
   );
   if (response == null) return false;
   Logger.debug('setTranscriptionPreferences response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<UserSubscriptionResponse?> getUserSubscription() async {
@@ -454,7 +477,8 @@ Future<DailySummarySettings?> getDailySummarySettings() async {
   if (response == null) return null;
   Logger.debug('getDailySummarySettings response: ${response.body}');
   if (response.statusCode == 200) {
-    return DailySummarySettings.fromJson(jsonDecode(response.body));
+    final data = wire.GeneratedDailySummarySettingsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return DailySummarySettings(enabled: data.enabled, hour: data.hour);
   }
   return null;
 }
@@ -476,7 +500,9 @@ Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
   );
   if (response == null) return false;
   Logger.debug('setDailySummarySettings response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 // Daily Summaries API
@@ -600,8 +626,8 @@ Future<String?> generateDailySummary({String? date}) async {
   if (response == null || response.statusCode != 200) return null;
 
   try {
-    final data = jsonDecode(response.body);
-    return data['summary_id'] as String?;
+    final data = wire.GeneratedDailySummaryTestResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.summaryId;
   } catch (e) {
     Logger.debug('Error parsing generate summary response: $e');
     return null;
@@ -616,13 +642,16 @@ Future<Map<String, dynamic>?> getUserOnboardingState() async {
   print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    return wire.GeneratedOnboardingStateResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   }
   return null;
 }
 
-Future<bool> updateUserOnboardingState(
-    {bool? completed, String? acquisitionSource, bool? deviceOnboardingCompleted}) async {
+Future<bool> updateUserOnboardingState({
+  bool? completed,
+  String? acquisitionSource,
+  bool? deviceOnboardingCompleted,
+}) async {
   Map<String, dynamic> body = {};
   if (completed != null) {
     body['completed'] = completed;
@@ -642,7 +671,9 @@ Future<bool> updateUserOnboardingState(
   );
   if (response == null) return false;
   Logger.debug('updateUserOnboardingState response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 // Mentor Notification Settings
@@ -669,7 +700,10 @@ Future<MentorNotificationSettings?> getMentorNotificationSettings() async {
 
   Logger.debug('getMentorNotificationSettings response: ${response?.body}');
   if (response != null && response.statusCode == 200) {
-    return MentorNotificationSettings.fromJson(jsonDecode(response.body));
+    final data = wire.GeneratedMentorNotificationSettingsResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return MentorNotificationSettings(frequency: data.frequency);
   }
   return null;
 }
@@ -684,7 +718,9 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
   if (response == null) return false;
 
   Logger.debug('setMentorNotificationSettings response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 /// Streams the /v1/users/export endpoint directly to a file, avoiding loading
