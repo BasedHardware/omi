@@ -52,3 +52,9 @@ def test_import_evidence_client_targets_import_endpoint():
     source = (DESKTOP_SOURCES / "APIClient.swift").read_text(encoding="utf-8")
     assert 'post("v3/memory-imports/batch"' in source
     assert "func createMemoryImportBatch" in source
+
+
+def test_import_evidence_service_does_not_default_source_account_hash_to_device_hash():
+    source = (DESKTOP_SOURCES / "OnboardingImportEvidenceService.swift").read_text(encoding="utf-8")
+    assert "sourceAccountHash: String? = nil" in source
+    assert "deviceIdHash" not in source

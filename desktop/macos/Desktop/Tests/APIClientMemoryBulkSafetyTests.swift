@@ -313,6 +313,44 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         XCTAssertEqual(batches.map(\.sourceAccountHash), ["source-hash-1", "source-hash-1"])
     }
 
+    func testOnboardingImportEvidenceStampsClientDeviceIdWithoutDefaultSourceAccountHash() async {
+        let item = ImportEvidenceBatchItem(
+            title: "Device Provenance",
+            snippet: "Imports should stamp client_device_id, not source_account_hash.",
+            content: "Imports should stamp client_device_id, not source_account_hash.",
+            metadata: ["import_kind": "profile"]
+        )
+        let api = FakeImportEvidenceAPI(
+            outcomes: [
+                .success(
+                    ImportEvidenceBatchResponse(
+                        runId: "run1",
+                        artifactsReceived: 1,
+                        artifactsCreated: 1,
+                        artifactsDeduped: 0,
+                        candidatesCreated: 0,
+                        status: "received")),
+            ])
+
+        let result = await OnboardingImportEvidenceService.save(
+            [item],
+            sourceType: "test",
+            logPrefix: "test",
+            importRunId: "test-run-device",
+            apiClient: api,
+            sleep: { _ in }
+        )
+
+        XCTAssertEqual(result.saved, 1)
+        XCTAssertEqual(result.failed, 0)
+        let batches = await api.capturedBatches()
+        XCTAssertEqual(batches.map(\.sourceAccountHash), [nil])
+        XCTAssertEqual(
+            batches.flatMap(\.items).map(\.clientDeviceId),
+            [ClientDeviceService.shared.clientDeviceId]
+        )
+    }
+
     func testOnboardingImportEvidenceRetriesTransientNetworkError() async {
         let item = ImportEvidenceBatchItem(
             title: "Resilient Import",

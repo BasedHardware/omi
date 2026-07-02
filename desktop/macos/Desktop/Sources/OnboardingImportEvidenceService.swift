@@ -19,7 +19,7 @@ enum OnboardingImportEvidenceService {
     sourceType: String,
     logPrefix: String,
     importRunId: String? = nil,
-    sourceAccountHash: String? = ClientDeviceService.shared.deviceIdHash,
+    sourceAccountHash: String? = nil,
     legacyMemories: [MemoryBatchItem]? = nil,
     apiClient: ImportEvidenceBatchCreating = APIClient.shared,
     legacyApiClient: MemoryBatchCreating = APIClient.shared,
@@ -28,6 +28,7 @@ enum OnboardingImportEvidenceService {
     guard !artifacts.isEmpty else { return (0, 0) }
 
     let importRunId = importRunId ?? Self.newImportRunId(sourceType: sourceType)
+    let artifacts = withClientDeviceProvenance(artifacts)
     let chunks = artifacts.chunked(maxSize: APIClient.memoryImportBatchMaxSize)
     var saved = 0
     var failed = 0
@@ -61,6 +62,23 @@ enum OnboardingImportEvidenceService {
     }
 
     return (saved, failed)
+  }
+
+  private static func withClientDeviceProvenance(_ artifacts: [ImportEvidenceBatchItem]) -> [ImportEvidenceBatchItem] {
+    let deviceId = ClientDeviceService.shared.clientDeviceId
+    return artifacts.map { artifact in
+      guard artifact.clientDeviceId == nil else { return artifact }
+      return ImportEvidenceBatchItem(
+        externalId: artifact.externalId,
+        occurredAt: artifact.occurredAt,
+        title: artifact.title,
+        snippet: artifact.snippet,
+        content: artifact.content,
+        contentHash: artifact.contentHash,
+        metadata: artifact.metadata,
+        clientDeviceId: deviceId
+      )
+    }
   }
 
   private static func createChunkWithRetry(
