@@ -97,3 +97,11 @@ tests/unit/test_fair_use_upgrade.py
 tests/unit/test_sync_fair_use_gate.py
 tests/unit/test_vad_onnx.py
 tests/unit/test_patch_adapter.py
+tests/unit/test_modulate_stt.py
+tests/unit/test_short_audio_embedding.py
+tests/unit/test_streaming_deepgram_backoff.py
+tests/unit/test_flush_pending_batch1.py
+tests/unit/test_gpu_worker_submit_lock.py
+tests/unit/test_oom_reproduction.py
+tests/unit/test_vram_batch.py
+tests/unit/test_vad_gate.py
