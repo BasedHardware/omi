@@ -42,6 +42,7 @@ EXECUTABLE_DIR="$CONTENTS_DIR/MacOS"
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 errors=0
 checked=0
+candidate_rpaths=()
 
 report_error() {
   echo "ERROR: $*" >&2
@@ -54,15 +55,33 @@ is_macho() {
 
 dependency_exists_in_bundle() {
   local name="$1"
-  [[ -e "$FRAMEWORKS_DIR/$name" ]] && return 0
-  [[ -e "$EXECUTABLE_DIR/$name" ]] && return 0
-  [[ -e "$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/$name" ]] && return 0
+  local root
+  local roots=(
+    "$FRAMEWORKS_DIR"
+    "$EXECUTABLE_DIR"
+    "$CONTENTS_DIR/Resources"
+    "$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle"
+    "$CONTENTS_DIR/Resources/agent"
+    "$CONTENTS_DIR/Resources/pi-mono-extension"
+  )
 
-  if [[ "$name" == *.framework/* ]]; then
-    [[ -e "$FRAMEWORKS_DIR/$name" ]] && return 0
-  fi
+  for root in "${roots[@]}"; do
+    [[ -e "$root/$name" ]] && return 0
+  done
 
-  find "$CONTENTS_DIR" -name "$(basename "$name")" -print -quit 2>/dev/null | grep -q .
+  return 1
+}
+
+path_inside_bundle() {
+  local path="$1"
+  local dir
+  local abs
+
+  [[ -e "$path" ]] || return 1
+  dir="$(cd "$(dirname "$path")" && pwd)"
+  abs="$dir/$(basename "$path")"
+
+  [[ "$abs" == "$APP_BUNDLE"/* ]]
 }
 
 resolve_token_path() {
@@ -82,6 +101,37 @@ resolve_token_path() {
       return 1
       ;;
   esac
+}
+
+resolve_rpath_dependency() {
+  local binary="$1"
+  local dep="$2"
+  local dep_name="${dep#@rpath/}"
+  local rpath
+  local resolved_rpath
+  local resolved_dep
+
+  for rpath in "${candidate_rpaths[@]}"; do
+    case "$rpath" in
+      @executable_path/*|@loader_path/*)
+        resolved_rpath="$(resolve_token_path "$rpath" "$binary")" || continue
+        ;;
+      "$APP_BUNDLE"/*)
+        resolved_rpath="$rpath"
+        ;;
+      /*)
+        continue
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    resolved_dep="$resolved_rpath/$dep_name"
+    path_inside_bundle "$resolved_dep" && return 0
+  done
+
+  dependency_exists_in_bundle "$dep_name"
 }
 
 audit_dependency() {
@@ -106,7 +156,7 @@ audit_dependency() {
       return
       ;;
     @rpath/*)
-      dependency_exists_in_bundle "${dep#@rpath/}" || report_error "$binary has unresolved bundle @rpath dependency: $dep"
+      resolve_rpath_dependency "$binary" "$dep" || report_error "$binary has unresolved bundle @rpath dependency: $dep"
       return
       ;;
     @executable_path/*|@loader_path/*)
@@ -121,24 +171,59 @@ audit_dependency() {
   esac
 }
 
+macho_load_command_names() {
+  local binary="$1"
+  local command_field="$2"
+  local name_field="$3"
+  local values
+
+  values="$(
+    otool -l "$binary" 2>/dev/null | awk -v command_field="$command_field" -v name_field="$name_field" '
+    $1 == "cmd" {
+      in_target = ($2 == command_field)
+      next
+    }
+    in_target && $1 == name_field {
+      sub("^[[:space:]]*" name_field "[[:space:]]+", "")
+      sub(/[[:space:]]+\(offset [0-9]+\)$/, "")
+      print
+      in_target = 0
+    }
+  '
+  )" || return 1
+
+  printf '%s\n' "$values" | sort -u
+}
+
+macho_load_dependencies() {
+  {
+    macho_load_command_names "$1" LC_LOAD_DYLIB name
+    macho_load_command_names "$1" LC_LOAD_WEAK_DYLIB name
+    macho_load_command_names "$1" LC_REEXPORT_DYLIB name
+    macho_load_command_names "$1" LC_LOAD_UPWARD_DYLIB name
+  } | sort -u
+}
+
+macho_rpaths() {
+  macho_load_command_names "$1" LC_RPATH path
+}
+
 while IFS= read -r -d '' candidate; do
   if ! is_macho "$candidate"; then
     continue
   fi
 
   checked=$((checked + 1))
+  candidate_rpaths=()
+  while IFS= read -r rpath; do
+    [[ -n "$rpath" ]] || continue
+    candidate_rpaths+=("$rpath")
+  done < <(macho_rpaths "$candidate")
+
   while IFS= read -r dep; do
     [[ -n "$dep" ]] || continue
     audit_dependency "$candidate" "$dep"
-  done < <(
-    otool -L "$candidate" 2>/dev/null | awk '
-      /^\t/ {
-        sub(/^[ \t]+/, "")
-        sub(/ \(.*$/, "")
-        print
-      }
-    ' | sort -u
-  )
+  done < <(macho_load_dependencies "$candidate")
 done < <(
   find "$CONTENTS_DIR" -type f \
     \( -path "$CONTENTS_DIR/MacOS/*" -o -name '*.node' -o -name '*.dylib' -o -name '*.jnilib' -o -name '*.so' -o -name 'rg' -o -name 'node' -o -name 'ffmpeg' \) \
