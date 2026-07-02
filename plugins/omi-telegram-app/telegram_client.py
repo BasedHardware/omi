@@ -150,3 +150,18 @@ async def send_message(bot_token: str, chat_id: int | str, text: str) -> Optiona
         # in their repr but log a generic message anyway.
         logger.error("send_message failed for chat_id=%s: %s", chat_id, type(e).__name__)
         return None
+    except httpx.InvalidURL as e:
+        # Cubic review 4614064929 P2: httpx.InvalidURL is NOT a subclass
+        # of httpx.HTTPError — it lives at the top of the httpx
+        # exception hierarchy. A non-empty but malformed bot_token
+        # (e.g., containing whitespace or control characters) would
+        # trigger this when interpolated into the request URL. The
+        # docstring says this function "Does not raise" — without
+        # this catch, an InvalidURL would escape and crash the
+        # webhook handler that relies on the contract.
+        logger.error(
+            "send_message failed for chat_id=%s: invalid URL: %s",
+            chat_id,
+            type(e).__name__,
+        )
+        return None

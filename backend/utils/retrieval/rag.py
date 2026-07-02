@@ -131,7 +131,18 @@ def retrieve_relevant_memories_for_persona(
     memories: list[dict] = []
     if memory_ids:
         try:
-            memories = list(memories_db.get_memories_by_ids(uid, memory_ids) or [])
+            hydrated = list(memories_db.get_memories_by_ids(uid, memory_ids) or [])
+            # Cubic review 4614064929 P2: Firestore's `get_all` does
+            # NOT preserve the order of the input document
+            # references. The semantic ranking from
+            # `search_memories_by_vector` would be lost during
+            # hydration, so `memories[:top_k]` may retain less-
+            # relevant memories instead of the actual top-k most
+            # relevant ones. Reorder `hydrated` to match the input
+            # `memory_ids` order, dropping any IDs that didn't
+            # resolve (e.g. deleted between search and hydration).
+            by_id = {m.get("id"): m for m in hydrated if m.get("id")}
+            memories = [by_id[mid] for mid in memory_ids if mid in by_id]
         except Exception as e:
             logger.warning(
                 "retrieve_relevant_memories_for_persona: hydration failed for uid=%s, " "falling back to recent: %s",
