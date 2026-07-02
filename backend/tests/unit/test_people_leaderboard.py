@@ -71,5 +71,20 @@ def test_limit_caps_results():
     assert len(board) == 2
 
 
+def test_tie_broken_by_name_when_metrics_equal():
+    # Equal conversation count and speaking time, different names: ordered by name.
+    convos = [_conv([_seg('bob', 0, 5), _seg('amy', 0, 5)], _at(1))]
+    board = build_people_leaderboard(convos, {'amy': 'Amy', 'bob': 'Bob'}, limit=10)
+    assert [e.person_id for e in board] == ['amy', 'bob']
+
+
+def test_order_is_deterministic_for_duplicate_names_and_equal_metrics():
+    # Two different people share a display name with identical metrics: person_id
+    # is the final tie-breaker, so the order is stable regardless of traversal order.
+    convos = [_conv([_seg('p_b', 0, 1), _seg('p_a', 0, 1)], _at(1))]
+    board = build_people_leaderboard(convos, {'p_a': 'Sam', 'p_b': 'Sam'}, limit=10)
+    assert [e.person_id for e in board] == ['p_a', 'p_b']
+
+
 def test_empty_input_returns_empty():
     assert build_people_leaderboard([], {}, limit=10) == []
