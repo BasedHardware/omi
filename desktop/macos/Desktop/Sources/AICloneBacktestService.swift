@@ -289,7 +289,7 @@ actor AICloneBacktestService {
 
     tick(1, "Generating persona", nil)
     var current = try await AIClonePersonaService.shared.generatePersona(
-      for: contact, messages: messages)
+      for: contact, messages: messages, excludeExchangeKeys: excludePairKeys)
 
     var best: (persona: ContactPersona, result: BacktestResult)?
     var reachedTarget = false
@@ -321,7 +321,8 @@ actor AICloneBacktestService {
       let worst = Self.worstPairs(from: result, limit: 4)
       do {
         current = try await AIClonePersonaService.shared.refinePersona(
-          for: contact, messages: messages, previous: current, worstPairs: worst)
+          for: contact, messages: messages, previous: current, worstPairs: worst,
+          excludeExchangeKeys: excludePairKeys)
       } catch {
         log("AICloneBacktest: refine failed at iteration \(iteration), stopping: \(error)")
         break

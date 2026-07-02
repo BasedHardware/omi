@@ -118,6 +118,9 @@ enum AICloneHarness {
       progress("contact rank=\(rank) messages=\(messages.count)")
 
       let started = Date()
+      // Pinned eval pairs must never appear in a persona's few-shot examples.
+      let evalKeys = Set(
+        (pinned ?? []).map { AICloneBacktestService.pairKey(them: $0.them, me: $0.me) })
       var persona: ContactPersona
       if reusePersona, let existing = await AIClonePersonaService.shared.existingPersona(
         for: contact.id)
@@ -127,7 +130,7 @@ enum AICloneHarness {
       } else {
         progress("generating persona…")
         persona = try await AIClonePersonaService.shared.generatePersona(
-          for: contact, messages: messages)
+          for: contact, messages: messages, excludeExchangeKeys: evalKeys)
         progress("persona generated (\(persona.systemPrompt.count) chars)")
       }
 
@@ -139,8 +142,6 @@ enum AICloneHarness {
           holdoutCount: holdout, seed: seed, pinnedPairs: pinned)
       } else {
         // Training iterations must never sample (or memorize) the eval pairs.
-        let evalKeys = Set(
-          (pinned ?? []).map { AICloneBacktestService.pairKey(them: $0.them, me: $0.me) })
         progress("training loop iterations=\(iterations) holdout=\(holdout) evalExcluded=\(evalKeys.count)…")
         let trained = try await AICloneBacktestService.shared.trainToTarget(
           for: contact, messages: messages,

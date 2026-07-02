@@ -95,8 +95,12 @@ actor AIClonePersonaService {
   /// Generates (or regenerates) a persona for `contact` from the provided `messages`
   /// (any platform, newest-first). Persists on success so re-opening the page keeps it.
   /// Also (re)builds the retrieval index used for dynamic few-shot examples.
+  /// `excludeExchangeKeys` (pair-keys via `AICloneBacktestService.pairKey`) prevents
+  /// specific exchanges from being baked into the persona's few-shot examples — the
+  /// backtest harness passes its eval set so measurement stays leak-free.
   func generatePersona(
-    for contact: ImportedContact, messages: [ImportedMessage]
+    for contact: ImportedContact, messages: [ImportedMessage],
+    excludeExchangeKeys: Set<String> = []
   ) async throws -> ContactPersona {
     guard messages.count >= 4 else {
       throw AIClonePersonaError.notEnoughMessages
@@ -117,7 +121,7 @@ actor AIClonePersonaService {
 
     let persona = try await makePersona(
       fromSynthesisPrompt: synthesisPrompt, contact: contact, messageCount: messages.count,
-      styleCard: styleCard, styleFeatures: features)
+      styleCard: styleCard, styleFeatures: features, excludeExchangeKeys: excludeExchangeKeys)
 
     store(persona)
     return persona
@@ -131,7 +135,8 @@ actor AIClonePersonaService {
     for contact: ImportedContact,
     messages: [ImportedMessage],
     previous: ContactPersona,
-    worstPairs: [(contactMessage: String, predicted: String, actual: String, reasoning: String)]
+    worstPairs: [(contactMessage: String, predicted: String, actual: String, reasoning: String)],
+    excludeExchangeKeys: Set<String> = []
   ) async throws -> ContactPersona {
     guard messages.count >= 4 else { throw AIClonePersonaError.notEnoughMessages }
 
@@ -139,7 +144,8 @@ actor AIClonePersonaService {
       contact: contact, previous: previous, worstPairs: worstPairs)
     return try await makePersona(
       fromSynthesisPrompt: refinePrompt, contact: contact, messageCount: messages.count,
-      styleCard: previous.styleCard, styleFeatures: previous.styleFeatures)
+      styleCard: previous.styleCard, styleFeatures: previous.styleFeatures,
+      excludeExchangeKeys: excludeExchangeKeys)
   }
 
   /// Persist a persona as the active one for its contact.
@@ -336,7 +342,7 @@ actor AIClonePersonaService {
   /// measured style card + few-shot examples + hard in-character rules).
   private func makePersona(
     fromSynthesisPrompt prompt: String, contact: ImportedContact, messageCount: Int,
-    styleCard: String, styleFeatures: StyleFeatures?
+    styleCard: String, styleFeatures: StyleFeatures?, excludeExchangeKeys: Set<String> = []
   ) async throws -> ContactPersona {
     let system =
       "You analyze a person's real text-message history with one contact and write notes "
@@ -371,8 +377,18 @@ actor AIClonePersonaService {
         return ContactExampleExchange(them: them, me: me)
       }
     // Cap at 5 (dedup, keep first occurrences) so refine passes can't grow the few-shot
-    // block unbounded across iterations.
-    let exchanges = Self.dedupeAndCap(parsedExchanges, max: 5)
+    // block unbounded across iterations. Excluded keys (the backtest eval set) can never
+    // become few-shot examples, or the eval would leak into the prompt.
+    // Match on the full pair key, and also on the contact-side alone (an exchange that
+    // quotes an eval pair's trigger leaks even if the copied reply is partial).
+    let excludedThemPrefixes = excludeExchangeKeys.compactMap { $0.components(separatedBy: "|||").first }
+    let allowedExchanges = parsedExchanges.filter { exchange in
+      let key = AICloneBacktestService.pairKey(them: exchange.them, me: exchange.me)
+      guard !excludeExchangeKeys.contains(key) else { return false }
+      let themSide = key.components(separatedBy: "|||").first ?? ""
+      return !excludedThemPrefixes.contains(themSide)
+    }
+    let exchanges = Self.dedupeAndCap(allowedExchanges, max: 5)
 
     let effectivePrompt = Self.composeSystemPrompt(
       voiceNotes: voiceNotes, styleCard: styleCard, exchanges: exchanges, contact: contact)
