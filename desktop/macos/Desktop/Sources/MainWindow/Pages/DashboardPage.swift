@@ -3144,6 +3144,7 @@ private struct HomeAIButton: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     DashboardPage(
         viewModel: DashboardViewModel(),
@@ -3156,3 +3157,4 @@ private struct HomeAIButton: View {
     .frame(width: 800, height: 600)
     .background(OmiColors.backgroundPrimary)
 }
+#endif

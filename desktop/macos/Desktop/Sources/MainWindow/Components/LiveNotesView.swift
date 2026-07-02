@@ -312,8 +312,10 @@ private struct NoteRowView: View {
 
 // MARK: - Preview
 
+#if canImport(PreviewsMacros)
 #Preview {
     LiveNotesView()
         .frame(width: 300, height: 500)
         .background(OmiColors.backgroundPrimary)
 }
+#endif

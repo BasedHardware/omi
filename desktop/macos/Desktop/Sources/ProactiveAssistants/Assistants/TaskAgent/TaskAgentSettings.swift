@@ -286,7 +286,9 @@ struct ValidationRow: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     TaskAgentSettingsView()
         .frame(width: 400)
 }
+#endif
