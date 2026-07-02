@@ -11,10 +11,12 @@ final class MemoryBankConnectorTests: XCTestCase {
       .appendingPathComponent("memory-bank-connector-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
     MemoryBankConnector.homeOverrideForTesting = tempHome
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = ""
   }
 
   override func tearDownWithError() throws {
     MemoryBankConnector.homeOverrideForTesting = nil
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = nil
     if let tempHome {
       try? FileManager.default.removeItem(at: tempHome)
     }
@@ -40,6 +42,29 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertTrue(configContent.contains(#""omi-memory""#))
     XCTAssertTrue(configContent.contains(#""transport" : "sse""#))
     XCTAssertTrue(configContent.contains(#""Authorization" : "Bearer test-key""#))
+  }
+
+  func testOpenClawConnectUsesCLIForJSON5Config() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let configDir = tempHome.appendingPathComponent(".openclaw", isDirectory: true)
+    try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+    let config = configDir.appendingPathComponent("openclaw.json")
+    try """
+      {
+        agents: { defaults: { workspace: "\(workspace.path)" } },
+      }
+      """.write(to: config, atomically: true, encoding: .utf8)
+    let cli = try writeFakeOpenClawCLI()
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    let configContent = try String(contentsOf: config, encoding: .utf8)
+    XCTAssertTrue(configContent.contains(#""omi-memory""#))
+    XCTAssertTrue(configContent.contains(#""transport":"sse""#))
+    XCTAssertTrue(configContent.contains(#""Authorization":"Bearer test-key""#))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("SOUL.md").path))
   }
 
   func testOpenClawConnectUsesConfiguredWorkspaceForSoulNote() throws {
@@ -114,6 +139,25 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertFalse(config.contains("https://old.example"))
   }
 
+  func testHermesConnectRecognizesFormattedMCPServersKey() throws {
+    let hermes = try writeHermesInstall(
+      config: """
+        model:
+          default: test
+        mcp_servers:  # local tools
+          other-tool:
+            command: other
+        """
+    )
+
+    _ = try MemoryBankConnector.connect(.hermes, key: "test-key")
+
+    let config = try String(contentsOf: hermes.appendingPathComponent("config.yaml"), encoding: .utf8)
+    XCTAssertEqual(config.components(separatedBy: "mcp_servers:").count - 1, 1)
+    XCTAssertTrue(config.contains("Authorization: Bearer test-key"))
+    XCTAssertTrue(config.contains("other-tool:"))
+  }
+
   func testHermesConnectAlwaysWritesSoulNotAgentsFallback() throws {
     let hermes = try writeHermesInstall()
     try "legacy agents prompt".write(
@@ -144,6 +188,24 @@ final class MemoryBankConnectorTests: XCTestCase {
     let url = configDir.appendingPathComponent("openclaw.json")
     try config.write(to: url, atomically: true, encoding: .utf8)
     return url
+  }
+
+  private func writeFakeOpenClawCLI() throws -> URL {
+    let cli = tempHome.appendingPathComponent("openclaw")
+    try """
+      #!/bin/sh
+      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+        exit 1
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+        exit 0
+      fi
+      echo "unexpected arguments: $*" >&2
+      exit 2
+      """.write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    return cli
   }
 
   private func writeHermesInstall(config: String = "model:\n  default: test\n") throws -> URL {

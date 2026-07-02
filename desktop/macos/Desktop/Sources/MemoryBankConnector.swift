@@ -1,11 +1,9 @@
 import Foundation
 
 /// Deterministic, local "Do it for me" for agent frameworks that store their
-/// memory/config as plain files (OpenClaw, Hermes). Unlike the cloud
-/// connectors, these don't have a CLI like `claude mcp add`, and delegating to
-/// the in-app agent proved unreliable (it doesn't reliably fire a file-write
-/// tool). So we write the Omi memory bank ourselves — idempotently — exactly
-/// the way Codex's config.toml block is written.
+/// memory/config locally (OpenClaw, Hermes). Delegating to the in-app agent
+/// proved unreliable (it doesn't reliably fire a file-write tool), so we wire
+/// the Omi memory bank ourselves using each agent's native durable surface.
 enum MemoryBankConnector {
   static let marker = "omi-memory-bank"
   private static var mcpURL: String { MemoryExportDestination.mcpServerURL }
@@ -38,6 +36,7 @@ enum MemoryBankConnector {
   }
 
   static var homeOverrideForTesting: URL?
+  static var openClawCLIPathOverrideForTesting: String?
   private static var home: URL { homeOverrideForTesting ?? FileManager.default.homeDirectoryForCurrentUser }
 
   // MARK: - OpenClaw (mcp.servers + workspace SOUL.md)
@@ -83,9 +82,52 @@ enum MemoryBankConnector {
 
   @discardableResult
   private static func ensureOpenClawMCPConfig(configURL: URL, key: String) throws -> Bool {
+    if let cli = openClawCLIPath() {
+      return try ensureOpenClawMCPConfigWithCLI(configURL: configURL, key: key, cliPath: cli)
+    }
+    return try ensureOpenClawMCPConfigByStrictJSON(configURL: configURL, key: key)
+  }
+
+  @discardableResult
+  private static func ensureOpenClawMCPConfigWithCLI(configURL: URL, key: String, cliPath: String) throws -> Bool {
+    let server = openClawMCPServer(key: key)
+    let existing = try? runOpenClawCLI(
+      cliPath: cliPath,
+      configURL: configURL,
+      arguments: ["mcp", "show", "omi-memory", "--json"]
+    )
+    if
+      let existing,
+      let data = existing.stdout.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      NSDictionary(dictionary: json).isEqual(to: server)
+    {
+      return true
+    }
+
+    let serverData = try JSONSerialization.data(withJSONObject: server, options: [.withoutEscapingSlashes])
+    guard let serverJSON = String(data: serverData, encoding: .utf8) else {
+      throw ConnectError.invalidConfig("Could not serialize OpenClaw MCP server config.")
+    }
+    do {
+      _ = try runOpenClawCLI(
+        cliPath: cliPath,
+        configURL: configURL,
+        arguments: ["mcp", "set", "omi-memory", serverJSON]
+      )
+      return false
+    } catch {
+      throw ConnectError.invalidConfig(
+        "OpenClaw rejected MCP config update for \(displayPath(for: configURL)): \(error.localizedDescription)")
+    }
+  }
+
+  @discardableResult
+  private static func ensureOpenClawMCPConfigByStrictJSON(configURL: URL, key: String) throws -> Bool {
     let data = try Data(contentsOf: configURL)
     guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-      throw ConnectError.notInstalled("OpenClaw config is not a JSON object: \(displayPath(for: configURL)).")
+      throw ConnectError.invalidConfig(
+        "OpenClaw config is not strict JSON and the openclaw CLI was not found. Install the OpenClaw CLI, then try again.")
     }
 
     let server = openClawMCPServer(key: key)
@@ -118,6 +160,71 @@ enum MemoryBankConnector {
     let output = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .withoutEscapingSlashes])
     try output.write(to: configURL, options: .atomic)
     return false
+  }
+
+  private struct CommandOutput {
+    let stdout: String
+    let stderr: String
+  }
+
+  private static func openClawCLIPath() -> String? {
+    if let override = openClawCLIPathOverrideForTesting {
+      return override.isEmpty ? nil : override
+    }
+    let candidates = [
+      home.appendingPathComponent(".hermes/node/bin/openclaw").path,
+      "/opt/homebrew/bin/openclaw",
+      "/usr/local/bin/openclaw",
+    ]
+    if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+      return path
+    }
+    return try? runShell(["-lc", "command -v openclaw"]).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+      .nilIfEmpty
+  }
+
+  private static func runOpenClawCLI(cliPath: String, configURL: URL, arguments: [String]) throws -> CommandOutput {
+    try runProcess(
+      executable: cliPath,
+      arguments: arguments,
+      environment: ["OPENCLAW_CONFIG_PATH": configURL.path]
+    )
+  }
+
+  private static func runShell(_ arguments: [String]) throws -> CommandOutput {
+    try runProcess(executable: "/bin/zsh", arguments: arguments, environment: [:])
+  }
+
+  private static func runProcess(
+    executable: String,
+    arguments: [String],
+    environment: [String: String]
+  ) throws -> CommandOutput {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    var processEnvironment = ProcessInfo.processInfo.environment
+    for (key, value) in environment {
+      processEnvironment[key] = value
+    }
+    process.environment = processEnvironment
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+    try process.run()
+    process.waitUntilExit()
+
+    let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let error = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    guard process.terminationStatus == 0 else {
+      let message = error.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        ?? output.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        ?? "exit code \(process.terminationStatus)"
+      throw ConnectError.invalidConfig(message)
+    }
+    return CommandOutput(stdout: output, stderr: error)
   }
 
   private static func openClawMCPServer(key: String) -> [String: Any] {
@@ -265,7 +372,7 @@ enum MemoryBankConnector {
     var lines = content.components(separatedBy: "\n")
     let hadTrailingNewline = content.hasSuffix("\n")
 
-    if let sectionIndex = lines.firstIndex(where: { $0 == "mcp_servers:" }) {
+    if let sectionIndex = lines.firstIndex(where: { isTopLevelYAMLKey($0, named: "mcp_servers") }) {
       let nextTopLevelIndex =
         lines[(sectionIndex + 1)...]
         .firstIndex(where: { !$0.isEmpty && !$0.hasPrefix(" ") && !$0.hasPrefix("\t") }) ?? lines.endIndex
@@ -288,7 +395,7 @@ enum MemoryBankConnector {
       return updated
     }
 
-    if lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == "mcp_servers:" }) {
+    if lines.contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("mcp_servers:") }) {
       throw ConnectError.invalidConfig(
         "Hermes config has an indented mcp_servers section; expected top-level mcp_servers in \(displayPath(for: configURL)).")
     }
@@ -298,5 +405,17 @@ enum MemoryBankConnector {
     updated += "\nmcp_servers:\n" + entry
     if hadTrailingNewline || content.isEmpty { updated += "\n" }
     return updated
+  }
+
+  private static func isTopLevelYAMLKey(_ line: String, named key: String) -> Bool {
+    guard !line.hasPrefix(" "), !line.hasPrefix("\t") else { return false }
+    let withoutComment = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+    return withoutComment.trimmingCharacters(in: .whitespaces) == "\(key):"
+  }
+}
+
+private extension String {
+  var nilIfEmpty: String? {
+    isEmpty ? nil : self
   }
 }
