@@ -4,29 +4,52 @@ import Foundation
 struct IMessageRecord: Sendable {
   let rowid: Int64
   let guid: String
-  let text: String
+  let text: String  // decoded body text; may be empty for attachment-only messages
   let isFromMe: Bool
   let date: Date
   let handle: String?  // sender phone/email; nil when isFromMe
   let chatGUID: String
   let chatIdentifier: String?
   let chatDisplayName: String?
+  let hasAttachment: Bool  // true when the message carries an attachment (photo, video, etc.)
 }
 
 // MARK: - API payloads (snake_case matches backend models/imessage.py)
 
-/// Timestamps are sent as ISO8601 strings because APIClient's shared JSONEncoder
-/// encodes `Date` as a reference-date double, which the backend would misread.
+/// Shared ISO8601 formatter for iMessage payloads. Timestamps are emitted as
+/// ISO8601 strings because APIClient's shared JSONEncoder encodes `Date` as a
+/// reference-date double, which the backend would misread. Keeping the single
+/// formatter here means every payload serializes the same, stable format.
+enum IMessagePayloadFormat {
+  static let iso: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+}
+
+/// `timestamp` is stored as a `Date` so callers can't accidentally pass a
+/// localized or non-ISO string; a custom `encode(to:)` emits the stable ISO8601
+/// string regardless of the shared encoder's date strategy.
 struct IMessageMessagePayload: Encodable {
   let guid: String
   let text: String
   let isFromMe: Bool
-  let timestamp: String
+  let timestamp: Date
   let handle: String?
 
   enum CodingKeys: String, CodingKey {
     case guid, text, timestamp, handle
     case isFromMe = "is_from_me"
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(guid, forKey: .guid)
+    try c.encode(text, forKey: .text)
+    try c.encode(isFromMe, forKey: .isFromMe)
+    try c.encode(IMessagePayloadFormat.iso.string(from: timestamp), forKey: .timestamp)
+    try c.encodeIfPresent(handle, forKey: .handle)
   }
 }
 
@@ -88,13 +111,23 @@ struct IMessageStatusPayload: Decodable {
 
 // MARK: - Reply drafting
 
-struct IMessageDraftMessagePayload: Codable, Sendable {
+struct IMessageDraftMessagePayload: Encodable, Sendable {
   let text: String
   let isFromMe: Bool
+  var timestamp: Date? = nil  // send time; lets the backend order the thread deterministically
 
   enum CodingKeys: String, CodingKey {
-    case text
+    case text, timestamp
     case isFromMe = "is_from_me"
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(text, forKey: .text)
+    try c.encode(isFromMe, forKey: .isFromMe)
+    if let timestamp {
+      try c.encode(IMessagePayloadFormat.iso.string(from: timestamp), forKey: .timestamp)
+    }
   }
 }
 
@@ -150,7 +183,7 @@ struct IMessageChat: Identifiable, Sendable {
   /// Recent thread as draft-reply context (last N messages).
   func draftContext(limit: Int = 20) -> [IMessageDraftMessagePayload] {
     bubbles.suffix(limit).map {
-      IMessageDraftMessagePayload(text: $0.text, isFromMe: $0.isFromMe)
+      IMessageDraftMessagePayload(text: $0.text, isFromMe: $0.isFromMe, timestamp: $0.date)
     }
   }
 }

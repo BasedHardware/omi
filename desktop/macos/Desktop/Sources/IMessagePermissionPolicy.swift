@@ -29,17 +29,38 @@ enum IMessagePermissionPolicy {
 
   // MARK: - Full Disk Access
 
-  /// True if we can actually read chat.db. Attempting the read is the only
-  /// reliable probe — `FileManager` cannot distinguish "denied" from "missing".
+  /// True when reading chat.db is not blocked by Full Disk Access. Attempting the
+  /// read is the only reliable probe. A *missing* chat.db (the user never used
+  /// iMessage) is not a permission denial, so we treat it as "not blocked" —
+  /// otherwise we'd wrongly tell the user to grant FDA. Only an actual access
+  /// error (EPERM/EACCES from TCC) returns false.
   static func fullDiskAccessGranted() -> Bool {
     do {
       let handle = try FileHandle(forReadingFrom: chatDatabaseURL)
       defer { try? handle.close() }
       _ = try handle.read(upToCount: 1)
       return true
-    } catch {
+    } catch let error as NSError {
+      if isMissingFileError(error) {
+        return true
+      }
       return false
     }
+  }
+
+  /// Whether `error` represents a genuinely absent file (ENOENT) rather than a
+  /// permission denial. TCC denials surface as EPERM/EACCES, not "no such file".
+  private static func isMissingFileError(_ error: NSError) -> Bool {
+    if error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+      return true
+    }
+    if error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT) {
+      return true
+    }
+    if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+      return isMissingFileError(underlying)
+    }
+    return false
   }
 
   static func openFullDiskAccessSettings() {

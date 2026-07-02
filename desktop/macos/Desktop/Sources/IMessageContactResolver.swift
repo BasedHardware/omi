@@ -12,7 +12,7 @@ actor IMessageContactResolver {
   static let shared = IMessageContactResolver()
 
   private var loaded = false
-  private var nameByPhone: [String: String] = [:]  // last-10-digits -> name
+  private var nameByPhone: [String: String] = [:]  // normalized phone digits -> name
   private var imageByPhone: [String: Data] = [:]
   private var nameByEmail: [String: String] = [:]  // lowercased email -> name
   private var imageByEmail: [String: Data] = [:]
@@ -45,10 +45,20 @@ actor IMessageContactResolver {
       let key = h.lowercased()
       return (nameByEmail[key], imageByEmail[key])
     }
-    let digits = h.filter { $0.isNumber }
-    guard digits.count >= 7 else { return (nil, nil) }
-    let key = String(digits.suffix(10))
+    guard let key = Self.normalizedPhoneKey(h) else { return (nil, nil) }
     return (nameByPhone[key], imageByPhone[key])
+  }
+
+  /// Normalizes a phone number to a lookup key by keeping the full digit string,
+  /// only stripping a leading `1` from 11-digit US numbers. Matches
+  /// `IMessageReaderService.prettyHandle` so distinct international numbers that
+  /// share a 10-digit suffix (e.g. UK `+44 20 7946 0958` vs `020 7946 0958`) don't
+  /// collapse to the same contact. Returns nil for numbers with fewer than 7 digits.
+  static func normalizedPhoneKey(_ raw: String) -> String? {
+    let digits = raw.filter { $0.isNumber }
+    guard digits.count >= 7 else { return nil }
+    if digits.count == 11 && digits.hasPrefix("1") { return String(digits.dropFirst()) }
+    return digits
   }
 
   private func ensureLoaded() async {
@@ -95,10 +105,7 @@ actor IMessageContactResolver {
           """)
       {
         for row in rows {
-          guard let num = row["num"] as? String else { continue }
-          let digits = num.filter { $0.isNumber }
-          guard digits.count >= 7 else { continue }
-          let key = String(digits.suffix(10))
+          guard let num = row["num"] as? String, let key = Self.normalizedPhoneKey(num) else { continue }
           if nameByPhone[key] == nil, let name = Self.composeName(row) { nameByPhone[key] = name }
         }
       }
@@ -128,10 +135,9 @@ actor IMessageContactResolver {
           """)
       {
         for row in rows {
-          guard let num = row["num"] as? String, let img = row["img"] as? Data, !img.isEmpty else { continue }
-          let digits = num.filter { $0.isNumber }
-          guard digits.count >= 7 else { continue }
-          let key = String(digits.suffix(10))
+          guard let num = row["num"] as? String, let img = row["img"] as? Data, !img.isEmpty,
+            let key = Self.normalizedPhoneKey(num)
+          else { continue }
           if imageByPhone[key] == nil { imageByPhone[key] = img }
         }
       }

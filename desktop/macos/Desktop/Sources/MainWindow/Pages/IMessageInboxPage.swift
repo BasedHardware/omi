@@ -309,6 +309,12 @@ private struct ChatDetailView: View {
       let text = try await APIClient.shared.imessageDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil)
       draft = text
+    } catch is CancellationError {
+      // Switching chats / the detail view disappearing cancels `.task(id:)`.
+      // Normal cancellation is not a failure — don't surface it to the user.
+      return
+    } catch let urlError as URLError where urlError.code == .cancelled {
+      return
     } catch {
       errorText = "Couldn't draft a reply: \(error.localizedDescription)"
     }
@@ -338,11 +344,26 @@ private struct ChatBubbleView: View {
   let showSender: Bool
   let accent: Color
 
-  private var attachmentImage: NSImage? {
+  @State private var loadedImage: NSImage?
+
+  /// File path if this bubble is an image attachment (resolved synchronously
+  /// from mime + path — the pixels are decoded off the render path in `.task`).
+  private var imageAttachmentPath: String? {
     guard bubble.attachmentMime?.lowercased().hasPrefix("image/") ?? false,
       let path = bubble.attachmentPath
     else { return nil }
-    return NSImage(contentsOfFile: path)
+    return path
+  }
+
+  /// A real user caption to show alongside an image, if any. When a message has
+  /// no text, the reader synthesizes a placeholder ("📷 Photo") — don't render
+  /// that as a caption below the image it already represents.
+  private var caption: String? {
+    guard imageAttachmentPath != nil else { return nil }
+    let placeholders: Set<String> = ["📷 Photo", "🎥 Video", "🎤 Audio", "📎 Attachment"]
+    let trimmed = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !placeholders.contains(trimmed) else { return nil }
+    return bubble.text
   }
 
   var body: some View {
@@ -353,24 +374,75 @@ private struct ChatBubbleView: View {
           Text(sender).scaledFont(size: 10).foregroundColor(OmiColors.textTertiary)
             .padding(.leading, 12)
         }
-        if let img = attachmentImage {
-          Image(nsImage: img)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(maxWidth: 220, maxHeight: 260)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        if let path = imageAttachmentPath {
+          imageAttachment(path: path)
+          if let caption { messageBubble(caption) }
         } else {
-          Text(bubble.text)
-            .scaledFont(size: 13)
-            .foregroundColor(bubble.isFromMe ? .white : OmiColors.textPrimary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(bubble.isFromMe ? accent : Color(red: 0.17, green: 0.17, blue: 0.19))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+          messageBubble(bubble.text)
         }
       }
       if !bubble.isFromMe { Spacer(minLength: 60) }
     }
+  }
+
+  @ViewBuilder
+  private func imageAttachment(path: String) -> some View {
+    Group {
+      if let img = loadedImage {
+        Image(nsImage: img)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(maxWidth: 220, maxHeight: 260)
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      } else {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(Color(red: 0.17, green: 0.17, blue: 0.19))
+          .frame(width: 160, height: 160)
+          .overlay(
+            Image(systemName: "photo")
+              .font(.system(size: 28))
+              .foregroundColor(OmiColors.textTertiary)
+          )
+      }
+    }
+    .task(id: path) {
+      loadedImage = await IMessageAttachmentImageCache.shared.image(atPath: path)
+    }
+  }
+
+  @ViewBuilder
+  private func messageBubble(_ text: String) -> some View {
+    Text(text)
+      .scaledFont(size: 13)
+      .foregroundColor(bubble.isFromMe ? .white : OmiColors.textPrimary)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .background(bubble.isFromMe ? accent : Color(red: 0.17, green: 0.17, blue: 0.19))
+      .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+  }
+}
+
+// MARK: - Attachment image cache
+
+/// Loads and caches iMessage attachment images off the SwiftUI render path.
+/// Mirrors the `AppIconCache` pattern (actor + NSCache) so scrolling never
+/// decodes images synchronously in a view body.
+private actor IMessageAttachmentImageCache {
+  static let shared = IMessageAttachmentImageCache()
+
+  private let cache: NSCache<NSString, NSImage> = {
+    let cache = NSCache<NSString, NSImage>()
+    cache.countLimit = 200
+    cache.totalCostLimit = 100 * 1024 * 1024  // 100MB
+    return cache
+  }()
+
+  func image(atPath path: String) -> NSImage? {
+    let key = path as NSString
+    if let cached = cache.object(forKey: key) { return cached }
+    guard let image = NSImage(contentsOfFile: path) else { return nil }
+    cache.setObject(image, forKey: key)
+    return image
   }
 }
 

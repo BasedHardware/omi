@@ -755,8 +755,11 @@ if [ -n "$SIGN_IDENTITY" ]; then
         # Disable library validation for LOCAL DEV ONLY — production keeps the
         # untouched Desktop/Omi.entitlements (validation stays on; frameworks are
         # properly Developer-ID signed + notarized there).
+        # Do NOT mask the final Set: if neither Add nor Set writes the key, the
+        # bundle would ship signed WITHOUT the entitlement and crash at launch.
+        # Let a real failure abort the build (set -e) instead of silently continuing.
         /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" /tmp/omi-local-dev.entitlements 2>/dev/null \
-            || /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation true" /tmp/omi-local-dev.entitlements 2>/dev/null || true
+            || /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation true" /tmp/omi-local-dev.entitlements
         rm -f "$PROFILE_PATH"
         EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
     fi

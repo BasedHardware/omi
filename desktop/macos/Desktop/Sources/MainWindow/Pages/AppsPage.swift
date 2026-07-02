@@ -706,11 +706,16 @@ final class ImportConnectorStatusStore: ObservableObject {
         memoryCount: Int? = nil,
         lastDeltaCount: Int? = nil,
         availabilityText: String? = nil,
+        // Incremental connectors (e.g. iMessage) report a per-sync delta rather
+        // than a full total. Accumulate it so the primary count reflects the
+        // cumulative amount ingested instead of dropping to the latest delta.
+        accumulateSourceCount: Bool = false,
         syncedAt: Date = Date()
     ) {
         var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
         if let sourceCount {
-            metrics.sourceCount = max(sourceCount, 0)
+            let delta = max(sourceCount, 0)
+            metrics.sourceCount = accumulateSourceCount ? (metrics.sourceCount ?? 0) + delta : delta
             defaults.set(metrics.sourceCount, forKey: sourceCountKeyPrefix + connectorID)
         }
         if let memoryCount {
@@ -1559,12 +1564,15 @@ struct ImportConnectorSheet: View {
                         }
                     case "imessage":
                         if let result = await model.connectIMessage() {
+                            // iMessage sync reads incrementally via a ROWID cursor,
+                            // so sourceCount is a per-sync delta — accumulate it.
                             statusStore.markSynced(
                                 connectorID: connector.id,
                                 sourceCount: result.sourceCount,
                                 memoryCount: result.memoryCount,
                                 lastDeltaCount: result.newItems,
-                                availabilityText: "Messages on this Mac"
+                                availabilityText: "Messages on this Mac",
+                                accumulateSourceCount: true
                             )
                         }
                     case "local-files":

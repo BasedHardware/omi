@@ -30,7 +30,9 @@ final class IMessageInboxStore: ObservableObject {
     watchTask = Task { [weak self] in
       while !Task.isCancelled {
         try? await Task.sleep(nanoseconds: 8_000_000_000)  // 8s
-        await self?.poll()
+        // Stop the loop once the store is gone, otherwise it keeps waking forever.
+        guard let self else { break }
+        await self.poll()
       }
     }
   }
@@ -40,15 +42,29 @@ final class IMessageInboxStore: ObservableObject {
     watchTask = nil
   }
 
+  deinit {
+    watchTask?.cancel()
+  }
+
   private func poll() async {
-    guard IMessagePermissionPolicy.fullDiskAccessGranted() else { return }
+    guard IMessagePermissionPolicy.fullDiskAccessGranted() else {
+      // Mirror load(): reflect revoked Full Disk Access in the UI instead of
+      // silently leaving stale chats on screen.
+      permissionNeeded = true
+      chats = []
+      return
+    }
+    permissionNeeded = false
     guard let loaded = try? await IMessageReaderService.shared.readChats() else { return }
     chats = loaded
 
-    for chat in loaded where chat.awaitingReply {
+    for chat in loaded {
       let latestID = chat.bubbles.last?.id ?? ""
       let known = lastLatestMessageID[chat.id]
+      // Baseline the latest ID for ALL chats so a chat transitioning to
+      // awaitingReply on its first inbound message still gets a pre-draft.
       lastLatestMessageID[chat.id] = latestID
+      guard chat.awaitingReply else { continue }
       // Only draft NEW arrivals (after the first baseline pass), so we don't flood
       // the backend for every existing unread thread on launch.
       if baselined, let known, known != latestID {

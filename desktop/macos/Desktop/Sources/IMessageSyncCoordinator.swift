@@ -24,9 +24,6 @@ actor IMessageSyncCoordinator {
       byChat[record.chatGUID, default: []].append(record)
     }
 
-    let iso = ISO8601DateFormatter()
-    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
     var threads: [IMessageThreadPayload] = []
     for (chatGUID, recs) in byChat {
       // Group chats use a ";+;" GUID or a "chat…" identifier; 1:1 use ";-;".
@@ -48,7 +45,7 @@ actor IMessageSyncCoordinator {
           guid: r.guid,
           text: r.text,
           isFromMe: r.isFromMe,
-          timestamp: iso.string(from: r.date),
+          timestamp: r.date,
           handle: r.isFromMe ? nil : r.handle
         )
       }

@@ -90,7 +90,11 @@ actor IMessageReaderService {
 
   /// Recent inbound threads awaiting a reply, for the Replies inbox. Does NOT
   /// advance the ingest cursor — this is a read-only view over recent history.
-  func readInboxThreads(days: Int = 7, limit: Int = 800, perThreadContext: Int = 15) async throws
+  ///
+  /// Selects the most recently active chats first (bounded by `maxThreads`), then
+  /// fetches per-chat context. A flat message budget would let one high-volume
+  /// chat consume it and starve other recent threads in the window.
+  func readInboxThreads(days: Int = 7, maxThreads: Int = 50, perThreadContext: Int = 15) async throws
     -> [IMessageInboxThread]
   {
     var config = Configuration()
@@ -107,30 +111,50 @@ actor IMessageReaderService {
       Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date(timeIntervalSince1970: 0)
     let cutoffNanos = Int64(cutoffDate.timeIntervalSinceReferenceDate * 1_000_000_000)
 
-    let records: [IMessageRecord] = try await dbQueue.read { db in
-      let rows = try Row.fetchAll(
+    let byChat: [String: [IMessageRecord]] = try await dbQueue.read { db in
+      // Phase 1: the most recently active chats within the window (one row per
+      // chat), so a single noisy thread can't starve other recent threads.
+      let chatRows = try Row.fetchAll(
         db,
         sql: """
-            SELECT m.ROWID AS rowid, m.guid AS guid, m.text AS text, m.attributedBody AS body,
-                   m.date AS date, m.is_from_me AS is_from_me, h.id AS handle,
-                   c.guid AS chat_guid, c.chat_identifier AS chat_identifier,
-                   c.display_name AS chat_display_name
+            SELECT c.guid AS chat_guid, MAX(m.date) AS max_date
             FROM message m
-            LEFT JOIN handle h ON m.handle_id = h.ROWID
-            LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-            LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+            JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+            JOIN chat c ON c.ROWID = cmj.chat_id
             WHERE m.date >= ?
               AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
-            ORDER BY m.ROWID DESC LIMIT ?
+            GROUP BY c.guid
+            ORDER BY max_date DESC LIMIT ?
           """,
-        arguments: [cutoffNanos, limit]
+        arguments: [cutoffNanos, maxThreads]
       )
-      return rows.compactMap { Self.record(from: $0) }
-    }
 
-    var byChat: [String: [IMessageRecord]] = [:]
-    for record in records {
-      byChat[record.chatGUID, default: []].append(record)
+      // Phase 2: fetch recent per-chat context (bounded per chat).
+      var map: [String: [IMessageRecord]] = [:]
+      for chatRow in chatRows {
+        guard let chatGUID = chatRow["chat_guid"] as? String, !chatGUID.isEmpty else { continue }
+        let rows = try Row.fetchAll(
+          db,
+          sql: """
+              SELECT m.ROWID AS rowid, m.guid AS guid, m.text AS text, m.attributedBody AS body,
+                     m.date AS date, m.is_from_me AS is_from_me, h.id AS handle,
+                     c.guid AS chat_guid, c.chat_identifier AS chat_identifier,
+                     c.display_name AS chat_display_name, m.cache_has_attachments AS has_att
+              FROM message m
+              LEFT JOIN handle h ON m.handle_id = h.ROWID
+              JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+              JOIN chat c ON c.ROWID = cmj.chat_id
+              WHERE c.guid = ?
+                AND m.date >= ?
+                AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
+              ORDER BY m.ROWID DESC LIMIT ?
+            """,
+          arguments: [chatGUID, cutoffNanos, perThreadContext]
+        )
+        let recs = rows.compactMap { Self.record(from: $0) }
+        if !recs.isEmpty { map[chatGUID] = recs }
+      }
+      return map
     }
 
     var items: [IMessageInboxThread] = []
@@ -149,13 +173,13 @@ actor IMessageReaderService {
       }
 
       let context = sorted.suffix(perThreadContext).map {
-        IMessageDraftMessagePayload(text: $0.text, isFromMe: $0.isFromMe)
+        IMessageDraftMessagePayload(text: Self.previewText(for: $0), isFromMe: $0.isFromMe, timestamp: $0.date)
       }
       items.append(
         IMessageInboxThread(
           chatGUID: chatGUID,
           displayName: name,
-          lastMessage: last.text,
+          lastMessage: Self.previewText(for: last),
           lastDate: last.date,
           personRef: personRef,
           context: context
@@ -223,6 +247,13 @@ actor IMessageReaderService {
     if mime.hasPrefix("video/") { return "🎥 Video" }
     if mime.hasPrefix("audio/") { return "🎤 Audio" }
     return "📎 Attachment"
+  }
+
+  /// Preview text for a record: the decoded body, or an attachment placeholder
+  /// when the message is attachment-only (empty text).
+  private static func previewText(for rec: IMessageRecord) -> String {
+    if rec.text.isEmpty && rec.hasAttachment { return attachmentPlaceholder(mime: nil) }
+    return rec.text
   }
 
   /// Loads recent chats with their full-ish message history (text + attachments +
@@ -395,10 +426,13 @@ actor IMessageReaderService {
   private static func record(from row: Row) -> IMessageRecord? {
     let rowid = (row["rowid"] as? Int64) ?? Int64(row["rowid"] as? Int ?? 0)
     guard let chatGUID = row["chat_guid"] as? String, !chatGUID.isEmpty else { return nil }
-    guard
-      let text = AttributedBodyDecoder.bestText(
-        text: row["text"] as? String, attributedBody: row["body"] as? Data), !text.isEmpty
-    else { return nil }
+    let text =
+      AttributedBodyDecoder.bestText(text: row["text"] as? String, attributedBody: row["body"] as? Data) ?? ""
+    // `has_att` is only selected by queries that need it (e.g. the Replies inbox);
+    // it's absent (→ false) for the ingest query, whose behavior is unchanged.
+    let hasAttachment = ((row["has_att"] as? Int64) ?? Int64(row["has_att"] as? Int ?? 0)) == 1
+    // Keep messages with decoded text OR an attachment; drop only truly empty rows.
+    guard !text.isEmpty || hasAttachment else { return nil }
 
     let isFromMe = ((row["is_from_me"] as? Int64) ?? Int64(row["is_from_me"] as? Int ?? 0)) == 1
     let rawDate = (row["date"] as? Int64) ?? Int64(row["date"] as? Int ?? 0)
@@ -414,7 +448,8 @@ actor IMessageReaderService {
       handle: row["handle"] as? String,
       chatGUID: chatGUID,
       chatIdentifier: row["chat_identifier"] as? String,
-      chatDisplayName: row["chat_display_name"] as? String
+      chatDisplayName: row["chat_display_name"] as? String,
+      hasAttachment: hasAttachment
     )
   }
 }

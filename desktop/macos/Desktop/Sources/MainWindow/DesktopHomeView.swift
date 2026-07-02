@@ -514,6 +514,8 @@ struct DesktopHomeView: View {
 
     var visibleRawValues: Set<Int> = [
       SidebarNavItem.dashboard.rawValue, SidebarNavItem.rewind.rawValue,
+      // Replies is a tier-0 main page; keep it reachable for tiers 1–5.
+      SidebarNavItem.replies.rawValue,
     ]
     if currentTierLevel >= 2 { visibleRawValues.insert(SidebarNavItem.memories.rawValue) }
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
