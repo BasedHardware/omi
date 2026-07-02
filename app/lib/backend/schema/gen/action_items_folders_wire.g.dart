@@ -146,6 +146,198 @@ class GeneratedPendingSyncResponse {
   }
 }
 
+class GeneratedBatchMutationResponse {
+  final List<String>? lockedIds;
+  final List<String>? missingIds;
+  final List<String>? noopIds;
+  final String status;
+  final int updatedCount;
+  final List<String>? updatedIds;
+
+  const GeneratedBatchMutationResponse({
+    this.lockedIds,
+    this.missingIds,
+    this.noopIds,
+    required this.status,
+    required this.updatedCount,
+    this.updatedIds,
+  });
+
+  factory GeneratedBatchMutationResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedBatchMutationResponse(
+      lockedIds: _readAny(json, const ["locked_ids"]) == null ? null : _readStringList(_readAny(json, const ["locked_ids"])),
+      missingIds: _readAny(json, const ["missing_ids"]) == null ? null : _readStringList(_readAny(json, const ["missing_ids"])),
+      noopIds: _readAny(json, const ["noop_ids"]) == null ? null : _readStringList(_readAny(json, const ["noop_ids"])),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      updatedCount: _required(_readInt(_readAny(json, const ["updated_count"])), "updated_count"),
+      updatedIds: _readAny(json, const ["updated_ids"]) == null ? null : _readStringList(_readAny(json, const ["updated_ids"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'locked_ids': lockedIds,
+      'missing_ids': missingIds,
+      'noop_ids': noopIds,
+      'status': status,
+      'updated_count': updatedCount,
+      'updated_ids': updatedIds,
+    };
+  }
+}
+
+class GeneratedBatchDeleteActionItemsResponse {
+  final int deletedCount;
+  final List<String> deletedIds;
+  final String status;
+
+  const GeneratedBatchDeleteActionItemsResponse({
+    required this.deletedCount,
+    required this.deletedIds,
+    required this.status,
+  });
+
+  factory GeneratedBatchDeleteActionItemsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedBatchDeleteActionItemsResponse(
+      deletedCount: _required(_readInt(_readAny(json, const ["deleted_count"])), "deleted_count"),
+      deletedIds: _required(_readStringList(_readAny(json, const ["deleted_ids"])), "deleted_ids"),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'deleted_count': deletedCount,
+      'deleted_ids': deletedIds,
+      'status': status,
+    };
+  }
+}
+
+class GeneratedBatchCreateActionItemsResponse {
+  final List<GeneratedActionItemResponse> actionItems;
+  final int createdCount;
+
+  const GeneratedBatchCreateActionItemsResponse({
+    required this.actionItems,
+    required this.createdCount,
+  });
+
+  factory GeneratedBatchCreateActionItemsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedBatchCreateActionItemsResponse(
+      actionItems: _required(_readObjectList(_readAny(json, const ["action_items"]), GeneratedActionItemResponse.fromJson), "action_items"),
+      createdCount: _required(_readInt(_readAny(json, const ["created_count"])), "created_count"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action_items': actionItems.map((value) => value.toJson()).toList(),
+      'created_count': createdCount,
+    };
+  }
+}
+
+class GeneratedShareActionItemsResponse {
+  final String token;
+  final String url;
+
+  const GeneratedShareActionItemsResponse({
+    required this.token,
+    required this.url,
+  });
+
+  factory GeneratedShareActionItemsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedShareActionItemsResponse(
+      token: _required(_readString(_readAny(json, const ["token"])), "token"),
+      url: _required(_readString(_readAny(json, const ["url"])), "url"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'token': token,
+      'url': url,
+    };
+  }
+}
+
+class GeneratedSharedActionItemPreview {
+  final String description;
+  final DateTime? dueAt;
+
+  const GeneratedSharedActionItemPreview({
+    required this.description,
+    this.dueAt,
+  });
+
+  factory GeneratedSharedActionItemPreview.fromJson(Map<String, dynamic> json) {
+    return GeneratedSharedActionItemPreview(
+      description: _required(_readString(_readAny(json, const ["description"])), "description"),
+      dueAt: _readDateTime(_readAny(json, const ["due_at"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'description': description,
+      'due_at': dueAt?.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedSharedActionItemsResponse {
+  final int count;
+  final String senderName;
+  final List<GeneratedSharedActionItemPreview> tasks;
+
+  const GeneratedSharedActionItemsResponse({
+    required this.count,
+    required this.senderName,
+    required this.tasks,
+  });
+
+  factory GeneratedSharedActionItemsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSharedActionItemsResponse(
+      count: _required(_readInt(_readAny(json, const ["count"])), "count"),
+      senderName: _required(_readString(_readAny(json, const ["sender_name"])), "sender_name"),
+      tasks: _required(_readObjectList(_readAny(json, const ["tasks"]), GeneratedSharedActionItemPreview.fromJson), "tasks"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'count': count,
+      'sender_name': senderName,
+      'tasks': tasks.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedAcceptSharedActionItemsResponse {
+  final int count;
+  final List<String> created;
+
+  const GeneratedAcceptSharedActionItemsResponse({
+    required this.count,
+    required this.created,
+  });
+
+  factory GeneratedAcceptSharedActionItemsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAcceptSharedActionItemsResponse(
+      count: _required(_readInt(_readAny(json, const ["count"])), "count"),
+      created: _required(_readStringList(_readAny(json, const ["created"])), "created"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'count': count,
+      'created': created,
+    };
+  }
+}
+
 class GeneratedFolder {
   final String? categoryMapping;
   final String color;

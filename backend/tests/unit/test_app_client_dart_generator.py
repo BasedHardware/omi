@@ -49,11 +49,18 @@ def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedActionItemsResponse' in generated
     assert 'class GeneratedActionItemsSearchResponse' in generated
     assert 'class GeneratedPendingSyncResponse' in generated
+    assert 'class GeneratedBatchMutationResponse' in generated
+    assert 'class GeneratedBatchDeleteActionItemsResponse' in generated
+    assert 'class GeneratedBatchCreateActionItemsResponse' in generated
+    assert 'class GeneratedShareActionItemsResponse' in generated
+    assert 'class GeneratedSharedActionItemsResponse' in generated
+    assert 'class GeneratedAcceptSharedActionItemsResponse' in generated
     assert 'class GeneratedFolder' in generated
     assert 'class GeneratedFolderMutationResponse' in generated
     assert 'class GeneratedBulkMoveConversationsResponse' in generated
     assert 'exported: _readBool(_readAny(json, const ["exported"])) ?? false' in generated
     assert 'color: _readString(_readAny(json, const ["color"])) ?? "#6B7280"' in generated
+    assert 'deletedIds: _required(_readStringList(_readAny(json, const ["deleted_ids"])), "deleted_ids")' in generated
 
 
 def test_action_items_adapter_coalesces_optional_envelope_defaults():

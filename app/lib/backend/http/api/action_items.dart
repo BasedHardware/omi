@@ -170,9 +170,10 @@ Future<List<String>?> bulkDeleteActionItems(List<String> ids) async {
     return null;
   }
 
-  final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-  final deleted = (body['deleted_ids'] as List?)?.cast<String>() ?? const [];
-  return deleted;
+  final generated = wire.GeneratedBatchDeleteActionItemsResponse.fromJson(
+    jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
+  );
+  return generated.deletedIds;
 }
 
 // Task sharing
@@ -188,7 +189,7 @@ Future<Map<String, dynamic>?> shareActionItems(List<String> taskIds) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedShareActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('shareActionItems error ${response.statusCode}');
     return null;
@@ -207,7 +208,7 @@ Future<Map<String, dynamic>?> getSharedActionItems(String token) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedSharedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('getSharedActionItems error ${response.statusCode}');
     return null;
@@ -226,7 +227,7 @@ Future<Map<String, dynamic>?> acceptSharedActionItems(String token) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedAcceptSharedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('acceptSharedActionItems error ${response.statusCode}');
     return null;
@@ -245,6 +246,7 @@ Future<bool> batchUpdateActionItems(List<Map<String, dynamic>> items) async {
   if (response == null) return false;
 
   if (response.statusCode == 200) {
+    wire.GeneratedBatchMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return true;
   } else {
     Logger.debug('batchUpdateActionItems error ${response.statusCode}');
@@ -284,6 +286,7 @@ Future<bool> syncBatchUpdate(List<Map<String, dynamic>> items) async {
   if (response == null) return false;
 
   if (response.statusCode == 200) {
+    wire.GeneratedBatchMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return true;
   } else {
     Logger.debug('syncBatchUpdate error ${response.statusCode}');

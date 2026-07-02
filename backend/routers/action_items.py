@@ -107,6 +107,47 @@ class PendingSyncResponse(BaseModel):
     synced_items: List[ActionItemResponse]
 
 
+class BatchMutationResponse(BaseModel):
+    status: str
+    updated_count: int
+    updated_ids: Optional[List[str]] = None
+    missing_ids: Optional[List[str]] = None
+    noop_ids: Optional[List[str]] = None
+    locked_ids: Optional[List[str]] = None
+
+
+class BatchDeleteActionItemsResponse(BaseModel):
+    status: str
+    deleted_count: int
+    deleted_ids: List[str]
+
+
+class BatchCreateActionItemsResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+    created_count: int
+
+
+class ShareActionItemsResponse(BaseModel):
+    url: str
+    token: str
+
+
+class SharedActionItemPreview(BaseModel):
+    description: str
+    due_at: Optional[datetime] = None
+
+
+class SharedActionItemsResponse(BaseModel):
+    sender_name: str
+    tasks: List[SharedActionItemPreview]
+    count: int
+
+
+class AcceptSharedActionItemsResponse(BaseModel):
+    created: List[str]
+    count: int
+
+
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
@@ -133,7 +174,12 @@ class BatchUpdateActionItemsRequest(BaseModel):
     items: List[BatchUpdateActionItemEntry] = Field(..., max_length=500)
 
 
-@router.patch("/v1/action-items/batch", tags=['action-items'])
+@router.patch(
+    "/v1/action-items/batch",
+    response_model=BatchMutationResponse,
+    response_model_exclude_none=True,
+    tags=['action-items'],
+)
 def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update sort_order and indent_level for multiple action items."""
     result = action_items_db.batch_update_action_items(uid, request.items)
@@ -174,7 +220,12 @@ def get_pending_sync_items(
     }
 
 
-@router.patch("/v1/action-items/sync-batch", tags=['action-items'])
+@router.patch(
+    "/v1/action-items/sync-batch",
+    response_model=BatchMutationResponse,
+    response_model_exclude_none=True,
+    tags=['action-items'],
+)
 def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update action items during reminders sync. Single Firestore batch commit."""
     if not request.items:
@@ -515,7 +566,7 @@ class BatchDeleteActionItemsRequest(BaseModel):
     ids: List[str] = Field(description="IDs of action items to delete", min_length=1, max_length=10000)
 
 
-@router.post("/v1/action-items/batch-delete", tags=['action-items'])
+@router.post("/v1/action-items/batch-delete", response_model=BatchDeleteActionItemsResponse, tags=['action-items'])
 def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Delete multiple action items in one request.
 
@@ -573,7 +624,7 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
     return {"status": "Ok", "deleted_count": deleted_count}
 
 
-@router.post("/v1/action-items/batch", tags=['action-items'])
+@router.post("/v1/action-items/batch", response_model=BatchCreateActionItemsResponse, tags=['action-items'])
 def create_action_items_batch(
     action_items: List[CreateActionItemRequest], uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -635,7 +686,7 @@ class AcceptSharedTasksRequest(BaseModel):
     token: str = Field(description="Share token from the shared URL")
 
 
-@router.post("/v1/action-items/share", tags=['action-items'])
+@router.post("/v1/action-items/share", response_model=ShareActionItemsResponse, tags=['action-items'])
 def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a shareable link for selected action items."""
     # Validate all task_ids belong to user and are not locked
@@ -658,7 +709,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
     return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
 
 
-@router.get("/v1/action-items/shared/{token}", tags=['action-items'])
+@router.get("/v1/action-items/shared/{token}", response_model=SharedActionItemsResponse, tags=['action-items'])
 def get_shared_action_items(token: str):
     """Public endpoint — get shared task preview (no auth required)."""
     share_data = redis_db.get_task_share(token)
@@ -687,7 +738,7 @@ def get_shared_action_items(token: str):
     }
 
 
-@router.post("/v1/action-items/accept", tags=['action-items'])
+@router.post("/v1/action-items/accept", response_model=AcceptSharedActionItemsResponse, tags=['action-items'])
 def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Save shared tasks to the recipient's task list."""
     share_data = redis_db.get_task_share(request.token)

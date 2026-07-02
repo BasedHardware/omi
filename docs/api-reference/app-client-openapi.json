@@ -33,6 +33,27 @@
       }
     },
     "schemas": {
+      "AcceptSharedActionItemsResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "created": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Created",
+            "type": "array"
+          }
+        },
+        "required": [
+          "created",
+          "count"
+        ],
+        "title": "AcceptSharedActionItemsResponse",
+        "type": "object"
+      },
       "AcceptSharedTasksRequest": {
         "properties": {
           "token": {
@@ -1383,6 +1404,27 @@
         "title": "BatchActionItemsResponse",
         "type": "object"
       },
+      "BatchCreateActionItemsResponse": {
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "created_count": {
+            "title": "Created Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action_items",
+          "created_count"
+        ],
+        "title": "BatchCreateActionItemsResponse",
+        "type": "object"
+      },
       "BatchDeleteActionItemsRequest": {
         "properties": {
           "ids": {
@@ -1400,6 +1442,32 @@
           "ids"
         ],
         "title": "BatchDeleteActionItemsRequest",
+        "type": "object"
+      },
+      "BatchDeleteActionItemsResponse": {
+        "properties": {
+          "deleted_count": {
+            "title": "Deleted Count",
+            "type": "integer"
+          },
+          "deleted_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deleted Ids",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "deleted_count",
+          "deleted_ids"
+        ],
+        "title": "BatchDeleteActionItemsResponse",
         "type": "object"
       },
       "BatchMemoriesRequest": {
@@ -1455,6 +1523,80 @@
           "requests"
         ],
         "title": "BatchMigrationRequest",
+        "type": "object"
+      },
+      "BatchMutationResponse": {
+        "properties": {
+          "locked_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked Ids"
+          },
+          "missing_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Ids"
+          },
+          "noop_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Noop Ids"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_count": {
+            "title": "Updated Count",
+            "type": "integer"
+          },
+          "updated_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated Ids"
+          }
+        },
+        "required": [
+          "status",
+          "updated_count"
+        ],
+        "title": "BatchMutationResponse",
         "type": "object"
       },
       "BatchUpdateActionItemEntry": {
@@ -8007,6 +8149,24 @@
         "title": "SetConversationEventsStateRequest",
         "type": "object"
       },
+      "ShareActionItemsResponse": {
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "token"
+        ],
+        "title": "ShareActionItemsResponse",
+        "type": "object"
+      },
       "ShareTasksRequest": {
         "properties": {
           "task_ids": {
@@ -8024,6 +8184,57 @@
           "task_ids"
         ],
         "title": "ShareTasksRequest",
+        "type": "object"
+      },
+      "SharedActionItemPreview": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "SharedActionItemPreview",
+        "type": "object"
+      },
+      "SharedActionItemsResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/SharedActionItemPreview"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sender_name",
+          "tasks",
+          "count"
+        ],
+        "title": "SharedActionItemsResponse",
         "type": "object"
       },
       "SharedAssistantSettings": {
@@ -11346,7 +11557,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptSharedActionItemsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11432,7 +11645,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BatchMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11520,7 +11735,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BatchCreateActionItemsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11606,7 +11823,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDeleteActionItemsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11886,7 +12105,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ShareActionItemsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11935,7 +12156,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SharedActionItemsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -12024,7 +12247,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BatchMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
