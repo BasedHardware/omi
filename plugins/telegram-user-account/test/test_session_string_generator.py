@@ -87,13 +87,36 @@ class TestSessionStringGeneratorInvariants:
     """Source-level invariants: the session string only flows to
     stdout, never to stderr, never to disk, never to logs."""
 
-    def test_no_open_in_source(self):
-        # The script must NOT write to any file. The Telethon
-        # sign-in flow is in-memory only; StringSession holds
-        # the auth key in the process's memory.
+    def test_no_file_writes_in_source(self):
+        # cubic review 4616126827 P2: the previous check only looked
+        # for the `open(` built-in, which is one of several Python
+        # APIs that could write a session string to disk. The
+        # invariant we want: the session_string_generator script
+        # never writes ANY file. StringSession holds the auth key
+        # in process memory only.
         source = SCRIPT_PATH.read_text()
-        assert "open(" not in source or "open(__file__" in source, (
-            "session_string_generator.py must not open any file — the " "session lives in process memory only."
+        forbidden_patterns = [
+            ("open()", "open("),
+            ("io.open()", "io.open("),
+            ("Path.write_text", ".write_text("),
+            ("Path.write_bytes", ".write_bytes("),
+            ("os.write", "os.write("),
+            ("json.dump with file handle", "json.dump(session"),
+            ("json.dump with file handle", "json.dump(captured"),
+            ("pickle.dump", "pickle.dump("),
+            ("shutil.copy", "shutil.copy("),
+        ]
+        # Strip line comments before searching to reduce false
+        # positives from comments that mention the forbidden APIs.
+        source_no_comments = "\n".join(line.split("#", 1)[0] for line in source.splitlines())
+        violations = []
+        for label, needle in forbidden_patterns:
+            if needle in source_no_comments:
+                violations.append(f"{label} ({needle!r})")
+        assert not violations, (
+            "session_string_generator.py must not write any file — "
+            "the session lives in process memory only. Forbidden "
+            "patterns found: " + ", ".join(violations)
         )
 
     def test_session_appears_only_in_stdout_write(self):

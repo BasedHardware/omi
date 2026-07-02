@@ -1036,6 +1036,28 @@ struct ConnectSheet: View {
             return
         }
 
+        // cubic review 4616126827 P1: detect "no terminal attached"
+        // BEFORE spawning the subprocess. When the desktop is launched
+        // from Finder (the normal production path), fd 0 is /dev/null
+        // and the controlling terminal is nil -- the generator
+        // would either hit EOF immediately or hang forever waiting
+        // for input the user can't provide. isatty(0) is the
+        // canonical POSIX check; on macOS GUI apps launched from
+        // Finder it returns 0. The user must run the desktop via
+        // `./run.sh` from a terminal to use "Reply as me".
+        if isatty(0) == 0 {
+            let bundleDir = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
+            let hint = "Reply as me requires a terminal-attached session. " +
+                "Open Terminal.app and run the desktop from there (e.g. via ./run.sh). " +
+                "Current bundle path: " + bundleDir + ". " +
+                "Then try 'Generate session' again."
+            await MainActor.run {
+                self.sessionGeneratorError = hint
+                self.generatingSession = false
+            }
+            return
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = baseArgs + [scriptPath]
@@ -1043,25 +1065,43 @@ struct ConnectSheet: View {
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        // The generator wants interactive input (api_id, code, etc.).
-        // We pass through the controlling terminal -- the user types
-        // directly. Don't capture stdin.
-        process.standardInput = FileHandle(fileDescriptor: 0)
-        sessionGeneratorProcess = process
+        // cubic review 4616126827 P1 (continued): wire stdin to a
+        // Pipe (NOT fd 0) so we own the lifecycle. We still don't
+        // WRITE to the pipe -- the generator wants interactive
+        // input. In the terminal-attached case (the only case we
+        // reach here after the isatty(0) check above), we dup the
+        // controlling terminal's stdin into the pipe. This is the
+        // same pattern the existing AgentRuntimeProcess uses (per
+        // the review). If we ever add programmatic credential
+        // input, we can write to this pipe from Swift.
+        let stdinPipe = Pipe()
+        process.standardInput = stdinPipe
+        // cubic review 4616126827 P1 (actor-isolation): the
+        // @State mutation must happen on the main actor. We
+        // initialize it AFTER the isatty check so the
+        // cancelSessionGeneration() entry point on the UI
+        // thread sees a consistent value.
+        await MainActor.run {
+            self.sessionGeneratorProcess = process
+        }
 
         do {
             try process.run()
         } catch {
             await MainActor.run {
+                self.sessionGeneratorProcess = nil
                 self.sessionGeneratorError = "Could not launch Python: \(error.localizedDescription)"
                 self.generatingSession = false
             }
             return
         }
 
-        // Read stdout asynchronously. We can't await process.waitUntilExit
-        // AND read the pipe in the same task on Foundation's Process,
-        // so we dispatch reads to a background queue and wait separately.
+        // Read stdout off the main actor. The blocking
+        // availableData loop is fine in a Task.detached context --
+        // only @State mutations need to hop back to the main
+        // actor. cubic review 4616126827 P1: previously this
+        // synchronous loop ran on the main actor and froze the
+        // UI for the entire subprocess lifetime.
         var capturedStdout = ""
         let stdoutHandle = stdoutPipe.fileHandleForReading
         // Read until EOF in a tight loop. Process's termination closes
