@@ -289,51 +289,6 @@ def _module_level_offenders(tree: ast.Module, source_lines: list[str]) -> list[t
     return deduped
 
 
-def _scan_function_def_import_time(
-    node: ast.FunctionDef | ast.AsyncFunctionDef, aliases, out, eval_annotations: bool
-) -> None:
-    """Scan the import-time expressions attached to a function/method definition.
-
-    Decorator lists and default values run when the def executes (at import time
-    for module-level and class-level defs). Annotations run too, unless PEP 563
-    deferred them. The function *body* is NOT scanned (it runs at call time).
-    """
-    for expr in node.decorator_list:
-        _record_offenders_in_expr(expr, aliases, out)
-    a = node.args
-    default_exprs = list(a.defaults) + [d for d in (a.kw_defaults or []) if d is not None]
-    for expr in default_exprs:
-        _record_offenders_in_expr(expr, aliases, out)
-    if eval_annotations:
-        for expr in _function_annotation_exprs(node):
-            _record_offenders_in_expr(expr, aliases, out)
-
-
-def _scan_statements(body: list[ast.stmt], aliases, out, eval_annotations: bool) -> None:
-    """Scan a list of statements that execute at import time.
-
-    Used for the module body and for class bodies (class-level statements run when
-    the class is defined). Recurses into nested class bodies; skips function/method
-    bodies while still scanning their decorators/defaults/annotations.
-    """
-    for node in body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _scan_function_def_import_time(node, aliases, out, eval_annotations)
-            continue
-        if isinstance(node, ast.ClassDef):
-            for expr in node.decorator_list:
-                _record_offenders_in_expr(expr, aliases, out)
-            for expr in node.bases:
-                _record_offenders_in_expr(expr, aliases, out)
-            for kw in node.keywords:
-                _record_offenders_in_expr(kw.value, aliases, out)
-            # Class-body statements execute at import time; recurse, skipping method bodies.
-            _scan_statements(node.body, aliases, out, eval_annotations)
-            continue
-        # Any other statement (incl. module-level if/for/try bodies).
-        _record_offenders_in_expr(node, aliases, out)
-
-
 def _has_pragma_with_reason(source_lines: list[str], lineno: int) -> bool:
     """A qualifying pragma must be on the offending line or the line above."""
     for cand in (lineno, lineno - 1):
