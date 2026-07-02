@@ -1,3 +1,0 @@
-{
-  "change": "Fixed ChatGPT and Claude cloud connector setup to use public OAuth clients without requiring an MCP key as a client secret"
-}
