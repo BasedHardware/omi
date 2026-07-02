@@ -94,8 +94,8 @@ describe("omi tool manifest", () => {
     expect(guidelines).toContain("Hermes: long-running or recurring automations");
     expect(guidelines).toContain("Codex: coding, repositories, and terminal/software-engineering work");
     expect(guidelines).toContain("omit provider to use Omi's default agent");
-    expect(guidelines).toContain("Never pass a provider that is not connected");
-    expect(guidelines).toContain("when the user names an agent, always use that one");
+    expect(guidelines).toContain("When the user names an agent, always use exactly that one");
+    expect(guidelines).toContain("offer to install it via setup_agent_provider");
   });
 
   it("projects stdio onboarding-only tools only in onboarding context", () => {

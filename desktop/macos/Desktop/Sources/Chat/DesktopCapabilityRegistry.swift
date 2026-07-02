@@ -301,7 +301,7 @@ enum DesktopCapabilityRegistry {
             .map { "\($0.displayName): \($0.strengths)" }
             .joined(separator: "; ")
           + " — otherwise omit provider to use Omi's default agent.",
-        "Never pass a provider that is not connected; when the user names an agent, always use that one.",
+        "When the user names an agent, always use exactly that one; if it is not installed yet, do not pass it to spawn_agent — offer to install it via setup_agent_provider instead.",
         "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."
       ]),
     Capability(
