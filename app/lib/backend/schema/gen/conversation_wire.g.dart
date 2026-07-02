@@ -395,8 +395,8 @@ class GeneratedCalendarEventLink {
 
   factory GeneratedCalendarEventLink.fromJson(Map<String, dynamic> json) {
     return GeneratedCalendarEventLink(
-      attendeeEmails: _readStringList(_readAny(json, const ["attendee_emails"])),
-      attendees: _readStringList(_readAny(json, const ["attendees"])),
+      attendeeEmails: _readStringList(_readAny(json, const ["attendee_emails"])) ?? const [],
+      attendees: _readStringList(_readAny(json, const ["attendees"])) ?? const [],
       endTime: _required(_readDateTime(_readAny(json, const ["end_time"])), "end_time"),
       eventId: _required(_readString(_readAny(json, const ["event_id"])), "event_id"),
       htmlLink: _readString(_readAny(json, const ["html_link"])),
@@ -490,8 +490,8 @@ class GeneratedConversation {
   factory GeneratedConversation.fromJson(Map<String, dynamic> json) {
     return GeneratedConversation(
       appId: _readString(_readAny(json, const ["app_id"])),
-      appsResults: _readObjectList(_readAny(json, const ["apps_results"]), GeneratedAppResult.fromJson),
-      audioFiles: _readObjectList(_readAny(json, const ["audio_files"]), GeneratedAudioFile.fromJson),
+      appsResults: _readObjectList(_readAny(json, const ["apps_results"]), GeneratedAppResult.fromJson) ?? const [],
+      audioFiles: _readObjectList(_readAny(json, const ["audio_files"]), GeneratedAudioFile.fromJson) ?? const [],
       calendarEvent: _readObject(_readAny(json, const ["calendar_event"]), GeneratedCalendarEventLink.fromJson),
       callId: _readString(_readAny(json, const ["call_id"])),
       clientDeviceId: _readString(_readAny(json, const ["client_device_id"])),
@@ -507,8 +507,8 @@ class GeneratedConversation {
       id: _required(_readString(_readAny(json, const ["id"])), "id"),
       isLocked: _readBool(_readAny(json, const ["is_locked"])) ?? false,
       language: _readString(_readAny(json, const ["language"])),
-      photos: _readObjectList(_readAny(json, const ["photos"]), GeneratedConversationPhoto.fromJson),
-      pluginsResults: _readObjectList(_readAny(json, const ["plugins_results"]), GeneratedPluginResult.fromJson),
+      photos: _readObjectList(_readAny(json, const ["photos"]), GeneratedConversationPhoto.fromJson) ?? const [],
+      pluginsResults: _readObjectList(_readAny(json, const ["plugins_results"]), GeneratedPluginResult.fromJson) ?? const [],
       privateCloudSyncEnabled: _readBool(_readAny(json, const ["private_cloud_sync_enabled"])) ?? false,
       processingConversationId: _readString(_readAny(json, const ["processing_conversation_id"])),
       processingMemoryId: _readString(_readAny(json, const ["processing_memory_id"])),
@@ -517,8 +517,8 @@ class GeneratedConversation {
       startedAt: _readDateTime(_readAny(json, const ["started_at"])),
       status: _readString(_readAny(json, const ["status"])) ?? "completed",
       structured: _required(_readObject(_readAny(json, const ["structured"]), GeneratedStructured.fromJson), "structured"),
-      suggestedSummarizationApps: _readStringList(_readAny(json, const ["suggested_summarization_apps"])),
-      transcriptSegments: _readObjectList(_readAny(json, const ["transcript_segments"]), GeneratedTranscriptSegment.fromJson),
+      suggestedSummarizationApps: _readStringList(_readAny(json, const ["suggested_summarization_apps"])) ?? const [],
+      transcriptSegments: _readObjectList(_readAny(json, const ["transcript_segments"]), GeneratedTranscriptSegment.fromJson) ?? const [],
       transcriptSegmentsCompressed: _readBool(_readAny(json, const ["transcript_segments_compressed"])) ?? false,
       visibility: _readString(_readAny(json, const ["visibility"])) ?? "private",
     );
@@ -613,24 +613,24 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   return map == null ? null : fromJson(map);
 }
 
-List<T> _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
-  if (value is! List) return const [];
+List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
+  if (value is! List) return null;
   return value.map(_readMap).whereType<Map<String, dynamic>>().map(fromJson).toList();
 }
 
-List<String> _readStringList(dynamic value) {
-  if (value is! List) return const [];
+List<String>? _readStringList(dynamic value) {
+  if (value is! List) return null;
   return value.map((item) => item.toString()).toList();
 }
 
-List<double> _readDoubleList(dynamic value) {
-  if (value is! List) return const [];
+List<double>? _readDoubleList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readDouble).whereType<double>().toList();
 }
 
-List<int> _readIntList(dynamic value) {
-  if (value is! List) return const [];
+List<int>? _readIntList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readInt).whereType<int>().toList();
 }
 
-List<dynamic> _readDynamicList(dynamic value) => value is List ? value : const [];
+List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

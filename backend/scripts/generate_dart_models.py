@@ -268,38 +268,22 @@ def read_expr(field: Field) -> str:
     if typ.list_item:
         item = typ.list_item
         nullable_prefix = f'{value} == null ? null : ' if typ.nullable else ''
+        required = field.required and not has_schema_default
         if item.ref_schema:
             expr = f'{nullable_prefix}_readObjectList({value}, {item.name}.fromJson)'
-            return (
-                f'_required({expr}, {json.dumps(field.wire_name)})'
-                if field.required and not has_schema_default
-                else expr
-            )
-        if item.name == 'String':
+        elif item.name == 'String':
             expr = f'{nullable_prefix}_readStringList({value})'
-            return (
-                f'_required({expr}, {json.dumps(field.wire_name)})'
-                if field.required and not has_schema_default
-                else expr
-            )
-        if item.name == 'double':
+        elif item.name == 'double':
             expr = f'{nullable_prefix}_readDoubleList({value})'
-            return (
-                f'_required({expr}, {json.dumps(field.wire_name)})'
-                if field.required and not has_schema_default
-                else expr
-            )
-        if item.name == 'int':
+        elif item.name == 'int':
             expr = f'{nullable_prefix}_readIntList({value})'
-            return (
-                f'_required({expr}, {json.dumps(field.wire_name)})'
-                if field.required and not has_schema_default
-                else expr
-            )
-        expr = f'{nullable_prefix}_readDynamicList({value})'
-        return (
-            f'_required({expr}, {json.dumps(field.wire_name)})' if field.required and not has_schema_default else expr
-        )
+        else:
+            expr = f'{nullable_prefix}_readDynamicList({value})'
+        if required:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        if typ.nullable:
+            return expr
+        return f'{expr} ?? {default}'
     if typ.ref_schema:
         if typ.nullable:
             return f'_readObject({value}, {typ.name}.fromJson)'
@@ -477,27 +461,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   return map == null ? null : fromJson(map);
 }
 
-List<T> _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
-  if (value is! List) return const [];
+List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
+  if (value is! List) return null;
   return value.map(_readMap).whereType<Map<String, dynamic>>().map(fromJson).toList();
 }
 
-List<String> _readStringList(dynamic value) {
-  if (value is! List) return const [];
+List<String>? _readStringList(dynamic value) {
+  if (value is! List) return null;
   return value.map((item) => item.toString()).toList();
 }
 
-List<double> _readDoubleList(dynamic value) {
-  if (value is! List) return const [];
+List<double>? _readDoubleList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readDouble).whereType<double>().toList();
 }
 
-List<int> _readIntList(dynamic value) {
-  if (value is! List) return const [];
+List<int>? _readIntList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readInt).whereType<int>().toList();
 }
 
-List<dynamic> _readDynamicList(dynamic value) => value is List ? value : const [];
+List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;
 '''.strip()
 
 

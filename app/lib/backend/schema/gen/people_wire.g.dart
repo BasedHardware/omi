@@ -27,7 +27,7 @@ class GeneratedPerson {
       id: _required(_readString(_readAny(json, const ["id"])), "id"),
       name: _required(_readString(_readAny(json, const ["name"])), "name"),
       speechSampleTranscripts: _readAny(json, const ["speech_sample_transcripts"]) == null ? null : _readStringList(_readAny(json, const ["speech_sample_transcripts"])),
-      speechSamples: _readStringList(_readAny(json, const ["speech_samples"])),
+      speechSamples: _readStringList(_readAny(json, const ["speech_samples"])) ?? const [],
       speechSamplesVersion: _readInt(_readAny(json, const ["speech_samples_version"])) ?? 3,
       updatedAt: _readDateTime(_readAny(json, const ["updated_at"])),
     );
@@ -97,24 +97,24 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   return map == null ? null : fromJson(map);
 }
 
-List<T> _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
-  if (value is! List) return const [];
+List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
+  if (value is! List) return null;
   return value.map(_readMap).whereType<Map<String, dynamic>>().map(fromJson).toList();
 }
 
-List<String> _readStringList(dynamic value) {
-  if (value is! List) return const [];
+List<String>? _readStringList(dynamic value) {
+  if (value is! List) return null;
   return value.map((item) => item.toString()).toList();
 }
 
-List<double> _readDoubleList(dynamic value) {
-  if (value is! List) return const [];
+List<double>? _readDoubleList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readDouble).whereType<double>().toList();
 }
 
-List<int> _readIntList(dynamic value) {
-  if (value is! List) return const [];
+List<int>? _readIntList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readInt).whereType<int>().toList();
 }
 
-List<dynamic> _readDynamicList(dynamic value) => value is List ? value : const [];
+List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

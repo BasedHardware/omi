@@ -73,7 +73,7 @@ class GeneratedSubscription {
       currentPriceId: _readString(_readAny(json, const ["current_price_id"])),
       deprecated: _readBool(_readAny(json, const ["deprecated"])) ?? false,
       deprecationMessage: _readString(_readAny(json, const ["deprecation_message"])),
-      features: _readStringList(_readAny(json, const ["features"])),
+      features: _readStringList(_readAny(json, const ["features"])) ?? const [],
       limits: _readObject(_readAny(json, const ["limits"]), GeneratedPlanLimits.fromJson) ?? GeneratedPlanLimits.fromJson(const {}),
       plan: _readString(_readAny(json, const ["plan"])) ?? "basic",
       status: _readString(_readAny(json, const ["status"])) ?? "active",
@@ -155,10 +155,10 @@ class GeneratedSubscriptionPlan {
     return GeneratedSubscriptionPlan(
       description: _readString(_readAny(json, const ["description"])),
       eyebrow: _readString(_readAny(json, const ["eyebrow"])),
-      features: _readStringList(_readAny(json, const ["features"])),
+      features: _readStringList(_readAny(json, const ["features"])) ?? const [],
       id: _required(_readString(_readAny(json, const ["id"])), "id"),
       legacy: _readBool(_readAny(json, const ["legacy"])) ?? false,
-      prices: _readObjectList(_readAny(json, const ["prices"]), GeneratedPricingOption.fromJson),
+      prices: _readObjectList(_readAny(json, const ["prices"]), GeneratedPricingOption.fromJson) ?? const [],
       subtitle: _readString(_readAny(json, const ["subtitle"])),
       title: _required(_readString(_readAny(json, const ["title"])), "title"),
     );
@@ -201,7 +201,7 @@ class GeneratedPhoneCallQuota {
 
   factory GeneratedPhoneCallQuota.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneCallQuota(
-      allowedCountries: _readStringList(_readAny(json, const ["allowed_countries"])),
+      allowedCountries: _readStringList(_readAny(json, const ["allowed_countries"])) ?? const [],
       hasAccess: _required(_readBool(_readAny(json, const ["has_access"])), "has_access"),
       isPaid: _required(_readBool(_readAny(json, const ["is_paid"])), "is_paid"),
       maxDurationSeconds: _readInt(_readAny(json, const ["max_duration_seconds"])),
@@ -265,7 +265,7 @@ class GeneratedUserSubscriptionResponse {
 
   factory GeneratedUserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserSubscriptionResponse(
-      availablePlans: _readObjectList(_readAny(json, const ["available_plans"]), GeneratedSubscriptionPlan.fromJson),
+      availablePlans: _readObjectList(_readAny(json, const ["available_plans"]), GeneratedSubscriptionPlan.fromJson) ?? const [],
       chatQuotaAllowed: _readBool(_readAny(json, const ["chat_quota_allowed"])) ?? true,
       chatQuotaPercent: _readDouble(_readAny(json, const ["chat_quota_percent"])) ?? 0.0,
       chatQuotaResetAt: _readInt(_readAny(json, const ["chat_quota_reset_at"])),
@@ -469,24 +469,24 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   return map == null ? null : fromJson(map);
 }
 
-List<T> _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
-  if (value is! List) return const [];
+List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
+  if (value is! List) return null;
   return value.map(_readMap).whereType<Map<String, dynamic>>().map(fromJson).toList();
 }
 
-List<String> _readStringList(dynamic value) {
-  if (value is! List) return const [];
+List<String>? _readStringList(dynamic value) {
+  if (value is! List) return null;
   return value.map((item) => item.toString()).toList();
 }
 
-List<double> _readDoubleList(dynamic value) {
-  if (value is! List) return const [];
+List<double>? _readDoubleList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readDouble).whereType<double>().toList();
 }
 
-List<int> _readIntList(dynamic value) {
-  if (value is! List) return const [];
+List<int>? _readIntList(dynamic value) {
+  if (value is! List) return null;
   return value.map(_readInt).whereType<int>().toList();
 }
 
-List<dynamic> _readDynamicList(dynamic value) => value is List ? value : const [];
+List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

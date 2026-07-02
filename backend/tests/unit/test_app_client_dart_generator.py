@@ -184,6 +184,8 @@ def test_audio_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAudioUrlsResponse' in generated
     assert 'duration: _readDouble(_readAny(json, const ["duration"])) ?? 0' in generated
     assert 'audioFiles: _required(_readObjectList(_readAny(json, const ["audio_files"])' in generated
+    assert 'List<T>? _readObjectList<T>' in generated
+    assert 'if (value is! List) return null;' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():
@@ -195,12 +197,18 @@ def test_conversation_wire_dart_preserves_known_client_aliases():
     assert 'const ["google_place_id", "googlePlaceId"]' in generated
     assert "'apps_results': appsResults" in generated
     assert "'plugins_results': pluginsResults" in generated
+    assert (
+        'appsResults: _readObjectList(_readAny(json, const ["apps_results"]), GeneratedAppResult.fromJson) ?? const []'
+        in generated
+    )
     assert 'category: _readString(_readAny(json, const ["category"])) ?? "other"' in generated
     assert 'source: _readString(_readAny(json, const ["source"])) ?? "omi"' in generated
     assert 'visibility: _readString(_readAny(json, const ["visibility"])) ?? "private"' in generated
     assert 'DateTime.fromMillisecondsSinceEpoch(value * 1000).toLocal()' in generated
     assert 'final List<GeneratedTranslation>? translations;' in generated
     assert 'translations: _readAny(json, const ["translations"]) == null ? null : _readObjectList' in generated
+    assert 'List<T>? _readObjectList<T>' in generated
+    assert 'if (value is! List) return null;' in generated
 
 
 def test_conversation_fixtures_validate_against_python_schema_authority():
