@@ -81,8 +81,6 @@ logger = logging.getLogger(__name__)
 _firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 _public_router = APIRouter()
 router = APIRouter()
-router.include_router(_firebase_router)
-router.include_router(_public_router)
 
 # WS idle timeout: close if no audio bytes received for this long
 _WS_IDLE_TIMEOUT_S = 60
@@ -1263,3 +1261,7 @@ def get_shared_chat_messages(token: str):
         "messages": messages,
         "count": len(messages),
     }
+
+
+router.include_router(_firebase_router)
+router.include_router(_public_router)
