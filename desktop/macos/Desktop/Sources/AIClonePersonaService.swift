@@ -239,7 +239,11 @@ actor AIClonePersonaService {
     for attempt in 1...2 {
       let responseText = try await runLLM(
         prompt: prompt, system: system, model: ModelQoS.Claude.cloneVoice, label: "generate")
-      log("AIClone respond RAW: «\(responseText.replacingOccurrences(of: "\n", with: "⏎").prefix(500))»")
+      // Raw model output is personal-message content — log it for harness debugging on
+      // dev/test bundles only, never in production.
+      if AppBuild.isNonProduction {
+        log("AIClone respond RAW: «\(responseText.replacingOccurrences(of: "\n", with: "⏎").prefix(500))»")
+      }
       lastResponse = responseText
 
       if let parsed = Self.parseCandidates(from: responseText), !parsed.isEmpty {
