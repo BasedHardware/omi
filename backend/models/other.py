@@ -26,3 +26,19 @@ class Person(BaseModel):
     speech_samples: List[str] = []
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
+
+
+class PersonLeaderboardEntry(BaseModel):
+    person_id: str
+    name: str
+    conversation_count: int
+    speaking_seconds: float
+    last_talked_at: Optional[datetime] = None
+
+
+class PeopleLeaderboardResponse(BaseModel):
+    # Size of the window scanned and how many conversations it actually considered,
+    # so a client can tell an empty board (no people) from a short history.
+    days: int
+    conversations_considered: int
+    people: List[PersonLeaderboardEntry] = []
