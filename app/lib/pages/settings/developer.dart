@@ -1987,7 +1987,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                 width: double.infinity,
                 height: 52,
                 child: OmiButton(
-                  label: 'Flash Firmware',
+                  label: context.l10n.flashFirmware,
                   onPressed: _startFlash,
                   color: Colors.deepPurple,
                   textColor: Colors.white,

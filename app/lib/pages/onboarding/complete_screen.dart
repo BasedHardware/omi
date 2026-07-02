@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class OnboardingCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -117,7 +118,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                         width: double.infinity,
                         height: 56,
                         child: OmiButton(
-                          label: 'Start Using Omi',
+                          label: context.l10n.startUsingOmi,
                           onPressed: widget.onComplete,
                           icon: Icons.arrow_forward_rounded,
                           trailingIcon: true,

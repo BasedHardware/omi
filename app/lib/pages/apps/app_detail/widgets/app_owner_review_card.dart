@@ -231,15 +231,13 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      OmiButton(
+                      OmiButton.legacy(
                         label:
                             widget.review.response.isNotEmpty ? context.l10n.editYourReply : context.l10n.replyToReview,
                         onPressed: () {
                           updateShowReplyField(!showReplyField);
                         },
                         borderRadius: 16,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
                       ),
                     ],
                   )

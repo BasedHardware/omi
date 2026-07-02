@@ -55,7 +55,7 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                     ),
                   ),
                   if (!isSyncing)
-                    OmiButton(
+                    OmiButton.legacy(
                       label: context.l10n.syncNow,
                       onPressed: () async {
                         if (await confirmSyncForCustomStt(context) && context.mounted) syncProvider.syncWals();
@@ -64,8 +64,6 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                       textColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       borderRadius: 8,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
                     )
                   else
                     Text(

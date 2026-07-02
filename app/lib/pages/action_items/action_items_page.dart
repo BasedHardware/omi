@@ -1794,7 +1794,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                child: OmiButton(
+                child: OmiButton.legacy(
                   label: context.l10n.addGoal,
                   onPressed: () async {
                     final title = titleController.text.trim();
@@ -1815,8 +1815,6 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                   textColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   borderRadius: 12,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -2009,7 +2007,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                   // Save button
                   Expanded(
                     flex: 2,
-                    child: OmiButton(
+                    child: OmiButton.legacy(
                       label: context.l10n.save,
                       onPressed: () async {
                         final title = titleController.text.trim();
@@ -2030,8 +2028,6 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                       textColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       borderRadius: 12,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

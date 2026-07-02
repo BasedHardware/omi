@@ -411,7 +411,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            OmiButton(
+            OmiButton.legacy(
               label: context.l10n.openSettings,
               onPressed: () async {
                 // Open app settings
@@ -422,9 +422,6 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                 }
               },
               color: Colors.deepPurple,
-              borderRadius: 4,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
             ),
           ],
         ),

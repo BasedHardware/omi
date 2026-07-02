@@ -437,11 +437,9 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   Widget _buildSaveButton() {
     return SizedBox(
       width: double.infinity,
-      child: OmiButton(
+      child: OmiButton.legacy(
         label: context.l10n.save,
         borderRadius: 8,
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
         disabledColor: Colors.white.withValues(alpha: 0.12),
         disabledTextColor: Colors.white.withValues(alpha: 0.38),
         onPressed: !allowSave || loading

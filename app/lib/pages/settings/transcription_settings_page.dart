@@ -922,14 +922,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   onPressed: () => Navigator.pop(context, true),
                   child: Text(context.l10n.proceedAnyway, style: const TextStyle(color: Colors.white12, fontSize: 10)),
                 ),
-                OmiButton(
+                OmiButton.legacy(
                   label: context.l10n.close,
                   onPressed: () => Navigator.pop(context, false),
                   color: Colors.red,
                   textColor: Colors.white,
-                  borderRadius: 4,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
                 ),
               ],
               actionsAlignment: MainAxisAlignment.spaceBetween,
@@ -1696,7 +1693,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Row(
             children: [
               Expanded(
-                child: OmiButton(
+                child: OmiButton.legacy(
                   label:
                       context.l10n.downloadModelWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin'),
                   onPressed: _downloadModel,
@@ -1704,8 +1701,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   iconSize: 16,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -2566,6 +2561,8 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
             label: context.l10n.save,
             onPressed: _parseError != null ? null : () => Navigator.of(context).pop(_controller.text),
             disabledColor: Colors.grey.shade800,
+            // The legacy button baked a black label that stayed black when disabled.
+            disabledTextColor: Colors.black,
             borderRadius: 10,
             fontSize: 16,
           ),

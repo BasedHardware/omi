@@ -220,7 +220,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
             if (widget.onRetry != null) ...[
               const SizedBox(width: 12),
               Expanded(
-                child: OmiButton(
+                child: OmiButton.legacy(
                   label: context.l10n.retry,
                   onPressed: () {
                     Navigator.of(context).pop();
@@ -229,8 +229,6 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
                   textColor: const Color(0xFF1C1C1E),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   borderRadius: 12,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],

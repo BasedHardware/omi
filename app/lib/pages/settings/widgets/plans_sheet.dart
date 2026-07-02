@@ -463,14 +463,12 @@ class _PlansSheetState extends State<PlansSheet> {
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
             ),
-            OmiButton(
+            OmiButton.legacy(
               label: context.l10n.confirmUpgrade,
               onPressed: () => Navigator.of(ctx).pop(true),
               color: Colors.deepPurple,
               textColor: Colors.white,
               borderRadius: 8,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
             ),
           ],
         ),

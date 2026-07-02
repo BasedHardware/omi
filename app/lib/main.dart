@@ -473,11 +473,8 @@ class CustomErrorWidget extends StatelessWidget {
             const SizedBox(height: 10.0),
             SizedBox(
               width: 210,
-              child: OmiButton(
+              child: OmiButton.legacy(
                 color: Colors.red,
-                borderRadius: 4,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
                 label: context.l10n.copyErrorMessage,
                 icon: Icons.copy_rounded,
                 trailingIcon: true,

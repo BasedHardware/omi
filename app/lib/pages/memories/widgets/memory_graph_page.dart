@@ -633,12 +633,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               // NOTE: the legacy bare ElevatedButton here resolved to the theme
               // primary/onPrimary (black-on-black, an effectively invisible label)
               // on this dark theme. Render the visible canonical button instead.
-              OmiButton(
+              OmiButton.legacy(
                 label: context.l10n.retry,
                 onPressed: _loadGraph,
-                borderRadius: 4,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
               ),
             ],
           ),
@@ -689,16 +686,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                     ),
                   )
                 else if (!widget.hideRebuildButtonWhenEmpty)
-                  OmiButton(
+                  OmiButton.legacy(
                     label: context.l10n.buildGraphButton,
                     onPressed: _rebuildGraph,
                     icon: Icons.auto_fix_high,
                     iconSize: 24,
                     color: Colors.purpleAccent.withValues(alpha: 0.2),
                     textColor: Colors.purpleAccent,
-                    borderRadius: 4,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
                     padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 16, 0),
                   ),
               ],

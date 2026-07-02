@@ -202,7 +202,7 @@ class LanguageSelectionDialog {
                     style: TextButton.styleFrom(foregroundColor: Colors.grey),
                     child: Text(context.l10n.skip),
                   ),
-                OmiButton(
+                OmiButton.legacy(
                   label: context.l10n.confirm,
                   onPressed: selectedLanguage == null
                       ? null
@@ -227,9 +227,6 @@ class LanguageSelectionDialog {
                   textColor: Colors.white,
                   disabledColor: Colors.deepPurple.withValues(alpha: 0.3),
                   disabledTextColor: Colors.white.withValues(alpha: 0.38),
-                  borderRadius: 4,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
                 ),
               ],
             );

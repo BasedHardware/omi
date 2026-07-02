@@ -38,13 +38,10 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
             Navigator.of(context).pop();
           },
         ),
-        OmiButton(
+        OmiButton.legacy(
           label: context.l10n.copy,
           color: Theme.of(context).colorScheme.secondary,
           textColor: Colors.white,
-          borderRadius: 4,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
           onPressed: () {
             Clipboard.setData(ClipboardData(text: apiKey.key));
             AppSnackbar.showSnackbar(context.l10n.copiedToClipboard(context.l10n.keyWord));

@@ -118,13 +118,11 @@ class PaymentMethodCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (isConnected && isActive) ...[
-                  OmiButton(
+                  OmiButton.legacy(
                     label: context.l10n.update,
                     onPressed: onManageTap,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     borderRadius: 8,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
                   ),
                   const SizedBox(width: 16),
                 ],
@@ -146,13 +144,11 @@ class PaymentMethodCard extends StatelessWidget {
                   ),
                 ],
                 if (!isConnected) ...[
-                  OmiButton(
+                  OmiButton.legacy(
                     label: context.l10n.connect,
                     onPressed: onManageTap,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     borderRadius: 8,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
                   ),
                 ],
               ],
