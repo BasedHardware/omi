@@ -66,6 +66,120 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("SOUL.md").path))
   }
 
+  func testOpenClawConnectUsesSiblingNodeForEnvLauncher() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let config = try writeOpenClawConfig(workspace: workspace)
+    let install = tempHome.appendingPathComponent(".hermes/node/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: install, withIntermediateDirectories: true)
+    let cli = install.appendingPathComponent("openclaw")
+    let node = install.appendingPathComponent("node")
+    try "#!/usr/bin/env definitely-missing-node\n".write(to: cli, atomically: true, encoding: .utf8)
+    try """
+      #!/bin/sh
+      shift
+      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+        exit 1
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+        exit 0
+      fi
+      echo "unexpected arguments: $*" >&2
+      exit 2
+      """.write(to: node, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: node.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    let configContent = try String(contentsOf: config, encoding: .utf8)
+    XCTAssertTrue(configContent.contains(#""omi-memory""#))
+    XCTAssertTrue(configContent.contains(#""Authorization":"Bearer test-key""#))
+  }
+
+  func testOpenClawConnectDiscoversCommonUserBinInstall() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let config = try writeOpenClawConfig(workspace: workspace)
+    let bin = tempHome.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let cli = bin.appendingPathComponent("openclaw")
+    try fakeOpenClawScript().write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = nil
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    let configContent = try String(contentsOf: config, encoding: .utf8)
+    XCTAssertTrue(configContent.contains(#""omi-memory""#))
+  }
+
+  func testOpenClawConnectFindsNodeFromVersionManagerPath() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let config = try writeOpenClawConfig(workspace: workspace)
+    let cliBin = tempHome.appendingPathComponent(".local/bin", isDirectory: true)
+    let nodeBin = tempHome.appendingPathComponent(".nvm/versions/node/v22.0.0/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: cliBin, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: nodeBin, withIntermediateDirectories: true)
+    let cli = cliBin.appendingPathComponent("openclaw")
+    let node = nodeBin.appendingPathComponent("node")
+    try "#!/usr/bin/env node\n".write(to: cli, atomically: true, encoding: .utf8)
+    try nodeBackedFakeOpenClawScript().write(to: node, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: node.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    let configContent = try String(contentsOf: config, encoding: .utf8)
+    XCTAssertTrue(configContent.contains(#""omi-memory""#))
+  }
+
+  func testOpenClawConnectFindsNodeFromXDGFnmPath() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let config = try writeOpenClawConfig(workspace: workspace)
+    let cliBin = tempHome.appendingPathComponent(".local/bin", isDirectory: true)
+    let nodeBin = tempHome.appendingPathComponent(".local/share/fnm/node-versions/v22.0.0/installation/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: cliBin, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: nodeBin, withIntermediateDirectories: true)
+    let cli = cliBin.appendingPathComponent("openclaw")
+    let node = nodeBin.appendingPathComponent("node")
+    try "#!/usr/bin/env node\n".write(to: cli, atomically: true, encoding: .utf8)
+    try nodeBackedFakeOpenClawScript().write(to: node, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: node.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    let configContent = try String(contentsOf: config, encoding: .utf8)
+    XCTAssertTrue(configContent.contains(#""omi-memory""#))
+  }
+
+  func testOpenClawConnectDoesNotRunShellShimThroughSiblingNode() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let config = try writeOpenClawConfig(workspace: workspace)
+    let bin = tempHome.appendingPathComponent(".volta/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let cli = bin.appendingPathComponent("openclaw")
+    let node = bin.appendingPathComponent("node")
+    try fakeOpenClawScript().write(to: cli, atomically: true, encoding: .utf8)
+    try "#!/bin/sh\necho should-not-wrap-openclaw-shim >&2\nexit 9\n".write(to: node, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: node.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = nil
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    let configContent = try String(contentsOf: config, encoding: .utf8)
+    XCTAssertTrue(configContent.contains(#""omi-memory""#))
+  }
+
   func testOpenClawConnectUsesConfiguredWorkspaceForSoulNote() throws {
     let workspace = tempHome.appendingPathComponent("custom-openclaw-workspace", isDirectory: true)
     try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
@@ -77,6 +191,27 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertFalse(
       FileManager.default.fileExists(
         atPath: tempHome.appendingPathComponent(".openclaw/workspace/SOUL.md").path))
+  }
+
+  func testOpenClawConnectExpandsHomeInConfiguredWorkspace() throws {
+    let workspace = tempHome.appendingPathComponent("custom-openclaw-workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let configDir = tempHome.appendingPathComponent(".openclaw", isDirectory: true)
+    try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+    let config = configDir.appendingPathComponent("openclaw.json")
+    try """
+      {
+        "agents": {
+          "defaults": {
+            "workspace": "${HOME}/custom-openclaw-workspace"
+          }
+        }
+      }
+      """.write(to: config, atomically: true, encoding: .utf8)
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("SOUL.md").path))
   }
 
   func testOpenClawConnectRejectsMalformedMCPConfig() throws {
@@ -91,6 +226,31 @@ final class MemoryBankConnectorTests: XCTestCase {
     let configContent = try String(contentsOf: config, encoding: .utf8)
     XCTAssertTrue(configContent.contains(#""mcp":[]"#))
     XCTAssertFalse(configContent.contains("omi-memory"))
+  }
+
+  func testOpenClawConnectRedactsTokenFromCLIError() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    let cli = tempHome.appendingPathComponent("echoing-openclaw")
+    try """
+      #!/bin/sh
+      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+        exit 1
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "set" ]; then
+        echo "rejected payload $4" >&2
+        exit 1
+      fi
+      exit 0
+      """.write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+
+    XCTAssertThrowsError(try MemoryBankConnector.connect(.openclaw, key: "secret-token")) { error in
+      XCTAssertFalse(error.localizedDescription.contains("secret-token"), error.localizedDescription)
+      XCTAssertTrue(error.localizedDescription.contains("Bearer [redacted]"), error.localizedDescription)
+    }
   }
 
   func testOpenClawConnectTimesOutHungCLI() throws {
@@ -207,7 +367,13 @@ final class MemoryBankConnectorTests: XCTestCase {
 
   private func writeFakeOpenClawCLI() throws -> URL {
     let cli = tempHome.appendingPathComponent("openclaw")
-    try """
+    try fakeOpenClawScript().write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    return cli
+  }
+
+  private func fakeOpenClawScript() -> String {
+    """
       #!/bin/sh
       if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
         exit 1
@@ -222,9 +388,23 @@ final class MemoryBankConnectorTests: XCTestCase {
       fi
       echo "unexpected arguments: $*" >&2
       exit 2
-      """.write(to: cli, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
-    return cli
+      """
+  }
+
+  private func nodeBackedFakeOpenClawScript() -> String {
+    """
+      #!/bin/sh
+      shift
+      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+        exit 1
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+        exit 0
+      fi
+      echo "unexpected arguments: $*" >&2
+      exit 2
+      """
   }
 
   private func writeHermesInstall(config: String = "model:\n  default: test\n") throws -> URL {
