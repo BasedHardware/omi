@@ -575,7 +575,7 @@ struct DashboardPage: View {
                     .font(.system(size: 22, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
-                Text("Bring your memories and tasks into the apps you already use")
+                Text("Bring your memories to the apps you use")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
