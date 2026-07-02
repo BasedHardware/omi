@@ -1068,7 +1068,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(requestedHarness?.rawValue ?? selectedHarness?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
       if !audioReceivedThisTurn {
         let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck
+        // Name the chosen agent out loud so the routing decision is transparent
+        // ("Starting Codex.") when the hub model did not speak its own ack.
+        let agentName: String? = {
+          guard let harness = selectedHarness else { return nil }
+          if let provider = AgentPillsManager.DirectedProvider(harness: harness) { return provider.displayName }
+          return harness == .acp ? "Claude Code" : nil
+        }()
+        let ack =
+          !existingAck.isEmpty
+          ? existingAck : (agentName.map { "Starting \($0)." } ?? "Starting a background agent.")
         assistantText = ack
         barState?.isVoiceResponseActive = true
         speak(ack)

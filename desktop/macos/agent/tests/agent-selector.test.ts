@@ -4,11 +4,40 @@ import {
   classifyTask,
   detectExplicitAgent,
   installCommandFor,
+  isRetryableAgentFailure,
   nextInChain,
+  planFailover,
   resolveSpokenAgent,
   selectAgent,
   type AgentId,
 } from "../src/runtime/agent-selector.js";
+
+describe("failover", () => {
+  const chain: AgentId[] = ["codex", "acp", "pi-mono"];
+
+  it("retries on startup/execution errors, not on user-actionable ones", () => {
+    expect(isRetryableAgentFailure("codex exec exited with code 1")).toBe(true);
+    expect(isRetryableAgentFailure("adapter failed to start")).toBe(true);
+    expect(isRetryableAgentFailure("user cancelled")).toBe(false);
+    expect(isRetryableAgentFailure("authentication required")).toBe(false);
+    expect(isRetryableAgentFailure("quota exceeded")).toBe(false);
+  });
+
+  it("plans the next agent with a transparent message", () => {
+    const plan = planFailover(chain, "codex", "codex exec failed");
+    expect(plan?.next).toBe("acp");
+    expect(plan?.message).toContain("Codex");
+    expect(plan?.message).toContain("Claude Code");
+  });
+
+  it("stops on a user-actionable error", () => {
+    expect(planFailover(chain, "codex", "authentication required")).toBeNull();
+  });
+
+  it("stops when the chain is exhausted", () => {
+    expect(planFailover(chain, "pi-mono", "some error")).toBeNull();
+  });
+});
 
 describe("resolveSpokenAgent — STT-robust name matching", () => {
   const cases: Array<[string, AgentId]> = [

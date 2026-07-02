@@ -356,6 +356,46 @@ export function nextInChain(chain: AgentId[], failed: AgentId): AgentId | undefi
   return chain[idx + 1];
 }
 
+/**
+ * Whether an agent failure should trigger trying the next agent in the chain.
+ * User-actionable failures (cancel, auth needed, quota) are NOT retried on another
+ * agent; startup / execution / tooling failures are.
+ */
+export function isRetryableAgentFailure(message: string): boolean {
+  const m = (message || "").toLowerCase();
+  if (
+    m.includes("cancel") ||
+    m.includes("aborted") ||
+    m.includes("auth") ||
+    m.includes("unauthorized") ||
+    m.includes("quota") ||
+    m.includes("rate limit")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export interface FailoverPlan {
+  next: AgentId;
+  message: string;
+}
+
+/**
+ * Decide the next agent to try after `failed` errored, with a transparent, user-facing
+ * message ("Codex hit an error, trying Claude Code instead."). Returns null when the
+ * error is user-actionable or the chain is exhausted.
+ */
+export function planFailover(chain: AgentId[], failed: AgentId, errorMessage: string): FailoverPlan | null {
+  if (!isRetryableAgentFailure(errorMessage)) return null;
+  const next = nextInChain(chain, failed);
+  if (!next) return null;
+  return {
+    next,
+    message: `${AGENT_DESCRIPTORS[failed].displayName} hit an error, trying ${AGENT_DESCRIPTORS[next].displayName} instead.`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // STT-robust agent-name resolution
 //
