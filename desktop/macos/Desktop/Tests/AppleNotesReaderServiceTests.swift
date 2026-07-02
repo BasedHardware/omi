@@ -36,6 +36,34 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     )
   }
 
+  func testReadRecentNotesResolvesLegacyGroupContainersSelection() async throws {
+    let root = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let groupContainers = root.appendingPathComponent("Library/Group Containers", isDirectory: true)
+    let notesContainer = try makeNotesContainerFixture(in: groupContainers, withSchema: true)
+    let store = notesContainer.appendingPathComponent("NoteStore.sqlite")
+    let dbQueue = try DatabaseQueue(path: store.path)
+    try await dbQueue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO ZICCLOUDSYNCINGOBJECT
+            (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
+          VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        arguments: [1, "Legacy folder import", "Parent folder still works", 42.0, 1, 0]
+      )
+    }
+
+    let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+      maxResults: 10,
+      selectedFolderPath: groupContainers.path
+    )
+
+    XCTAssertEqual(notes.count, 1)
+    XCTAssertEqual(notes.first?.title, "Legacy folder import")
+  }
+
   func testResolveSelectedFolderRejectsUnrelatedFolder() throws {
     let root = try makeTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -93,6 +121,23 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     XCTAssertTrue(notes.isEmpty)
   }
 
+  func testConnectionStatusTreatsZeroNotesAsReadable() async throws {
+    let root = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let notesContainer = try makeNotesContainerFixture(in: root, withSchema: true)
+    let status = await AppleNotesReaderService.shared.connectionStatus(
+      maxResults: 10,
+      selectedFolderPath: notesContainer.path
+    )
+
+    guard case .connected(let noteCount, _) = status else {
+      return XCTFail("Expected connected status, got \(status)")
+    }
+    XCTAssertEqual(noteCount, 0)
+    XCTAssertTrue(status.isConnected)
+  }
+
   func testValidateSelectedFolderClassifiesSchemaFailure() async throws {
     let root = try makeTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -106,6 +151,63 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     } catch let error as AppleNotesReaderError {
       XCTAssertEqual(error.reasonCode, "schema_unavailable")
     }
+  }
+
+  func testReadOutcomeClassifiesPathFailuresAsNeedsAccess() {
+    let outcome = AppleNotesReaderService.classifyReadOutcome(
+      noteCount: nil,
+      error: .invalidSelectedFolder(path: "/tmp/wrong")
+    )
+
+    XCTAssertEqual(
+      outcome,
+      .needsAccess(
+        message: "Choose the Apple Notes folder named group.com.apple.notes.",
+        reasonCode: "invalid_selected_folder"
+      )
+    )
+  }
+
+  func testReadOutcomeClassifiesSchemaAndReadFailuresAsErrors() {
+    XCTAssertEqual(
+      AppleNotesReaderService.classifyReadOutcome(
+        noteCount: nil,
+        error: .schemaUnavailable(path: "/notes/NoteStore.sqlite")
+      ),
+      .error(
+        message: "Apple Notes data store could not be read because its database format was not recognized.",
+        reasonCode: "schema_unavailable"
+      )
+    )
+
+    XCTAssertEqual(
+      AppleNotesReaderService.classifyReadOutcome(
+        noteCount: nil,
+        error: .storeReadFailed(path: "/notes/NoteStore.sqlite", reason: "disk I/O error")
+      ),
+      .error(
+        message: "Apple Notes data store could not be read: disk I/O error",
+        reasonCode: "store_read_failed"
+      )
+    )
+  }
+
+  func testConnectionStatusSurfacesSchemaFailureAsError() async throws {
+    let root = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let notesContainer = try makeNotesContainerFixture(in: root, withSchema: false)
+    _ = try DatabaseQueue(path: notesContainer.appendingPathComponent("NoteStore.sqlite").path)
+    let status = await AppleNotesReaderService.shared.connectionStatus(
+      maxResults: 10,
+      selectedFolderPath: notesContainer.path
+    )
+
+    guard case .error(let message, let reasonCode) = status else {
+      return XCTFail("Expected error status, got \(status)")
+    }
+    XCTAssertEqual(reasonCode, "schema_unavailable")
+    XCTAssertTrue(message.contains("database format was not recognized"))
   }
 
   private func makeNotesContainerFixture(in root: URL, withSchema: Bool) throws -> URL {
