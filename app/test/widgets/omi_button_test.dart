@@ -4,9 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/ui/atoms/omi_button.dart';
 
-/// The canonical primary CTA the app hand-rolls across onboarding. OmiButton's
-/// primary variant must render an identical [ButtonStyle] so migrated call
-/// sites are a 1:1 visual match.
+/// The canonical primary CTA the app hand-rolls across onboarding. OmiButton
+/// must render an identical [ButtonStyle] so migrated call sites are a 1:1
+/// visual match.
 ElevatedButton _legacyPrimary(VoidCallback onPressed, String label, {double radius = 28, double fontSize = 18}) =>
     ElevatedButton(
       onPressed: onPressed,
@@ -18,15 +18,16 @@ ElevatedButton _legacyPrimary(VoidCallback onPressed, String label, {double radi
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600),
       ),
     );
 
 void main() {
   void noop() {}
   const enabled = <WidgetState>{};
+  const disabled = <WidgetState>{WidgetState.disabled};
 
-  group('OmiButton primary — 1:1 with legacy white CTA', () {
+  group('OmiButton — 1:1 with legacy white CTA', () {
     testWidgets('resolves the same enabled-state ButtonStyle', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -86,7 +87,7 @@ void main() {
       });
     }
 
-    testWidgets('label uses 18 / w600 / Manrope', (tester) async {
+    testWidgets('label uses 18 / w600 by default', (tester) async {
       await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: OmiButton(label: 'Continue', onPressed: noop))),
       );
@@ -94,7 +95,6 @@ void main() {
       final text = tester.widget<Text>(find.text('Continue'));
       expect(text.style!.fontSize, 18);
       expect(text.style!.fontWeight, FontWeight.w600);
-      expect(text.style!.fontFamily, 'Manrope');
     });
 
     testWidgets('trailing icon renders after the label', (tester) async {
@@ -113,16 +113,55 @@ void main() {
 
       final row = tester.widget<Row>(find.byType(Row));
       expect(row.children.length, 3);
-      expect(row.children.first, isA<Text>());
+      // The label is Flexible (like ElevatedButton.icon's) so it can wrap.
+      expect(row.children.first, isA<Flexible>());
+      expect((row.children.first as Flexible).child, isA<Text>());
       // Lock complete_screen's exact geometry: 8px gap, size-20 trailing icon.
       expect((row.children[1] as SizedBox).width, 8);
       final icon = row.children.last as Icon;
       expect(icon.icon, Icons.arrow_forward_rounded);
       expect(icon.size, 20);
     });
+
+    testWidgets('long label with icon wraps instead of overflowing a tight width', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 200,
+              child: OmiButton.legacy(
+                label: 'Download Model (ggml-large-v2.bin)',
+                onPressed: noop,
+                icon: Icons.download,
+              ),
+            ),
+          ),
+        ),
+      );
+      // Legacy ElevatedButton.icon wrapped the label in Flexible; the atom must
+      // do the same so tight widths / large text scales don't RenderFlex-overflow.
+      expect(tester.takeException(), isNull);
+    });
   });
 
-  group('OmiButton primary — behavior', () {
+  group('OmiButton.legacy — pinned Material-2 look', () {
+    testWidgets('defaults to radius 4 / 14 / w500', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: OmiButton.legacy(label: 'Retry', onPressed: noop))),
+      );
+
+      final style = tester.widget<ElevatedButton>(find.byType(ElevatedButton)).style!;
+      expect(
+        style.shape!.resolve(enabled),
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      );
+      final text = tester.widget<Text>(find.text('Retry'));
+      expect(text.style!.fontSize, 14);
+      expect(text.style!.fontWeight, FontWeight.w500);
+    });
+  });
+
+  group('OmiButton — behavior', () {
     testWidgets('fires onPressed when enabled', (tester) async {
       var taps = 0;
       await tester.pumpWidget(
@@ -132,20 +171,31 @@ void main() {
       expect(taps, 1);
     });
 
-    testWidgets('isLoading shows a spinner and blocks taps', (tester) async {
+    testWidgets('isLoading shows a visible spinner, keeps the background, blocks taps', (tester) async {
       var taps = 0;
       await tester.pumpWidget(
-        MaterialApp(home: Scaffold(body: OmiButton(label: 'Go', isLoading: true, onPressed: () => taps++))),
+        MaterialApp(
+          home: Scaffold(
+            body: OmiButton(label: 'Go', isLoading: true, color: Colors.deepPurple, onPressed: () => taps++),
+          ),
+        ),
       );
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       await tester.tap(find.byType(OmiButton), warnIfMissed: false);
       expect(taps, 0);
+
+      final style = tester.widget<ElevatedButton>(find.byType(ElevatedButton)).style!;
       expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed, isNull);
+      // The loading button must NOT flash to the grey disabled background.
+      expect(style.backgroundColor!.resolve(disabled), Colors.deepPurple);
+      // And the spinner must use the enabled foreground, not an invisible color.
+      final spinner = tester.widget<CircularProgressIndicator>(find.byType(CircularProgressIndicator));
+      expect((spinner.valueColor as AlwaysStoppedAnimation<Color>).value, Colors.black);
     });
 
-    testWidgets('enabled: false disables the button', (tester) async {
+    testWidgets('onPressed: null disables the button', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(home: Scaffold(body: OmiButton(label: 'Go', enabled: false, onPressed: noop))),
+        const MaterialApp(home: Scaffold(body: OmiButton(label: 'Go', onPressed: null))),
       );
       expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed, isNull);
     });
@@ -164,7 +214,6 @@ void main() {
         ),
       );
       final style = tester.widget<ElevatedButton>(find.byType(ElevatedButton)).style!;
-      const disabled = <WidgetState>{WidgetState.disabled};
       expect(style.backgroundColor!.resolve(disabled), const Color(0xFF111111));
       expect(style.foregroundColor!.resolve(disabled), const Color(0xFF222222));
     });
@@ -191,7 +240,7 @@ void main() {
       final row = tester.widget<Row>(find.byType(Row));
       expect((row.children[1] as SizedBox).width, 10);
       final style = tester.widget<ElevatedButton>(find.byType(ElevatedButton)).style!;
-      expect(style.padding!.resolve(<WidgetState>{}), const EdgeInsets.symmetric(horizontal: 16));
+      expect(style.padding!.resolve(enabled), const EdgeInsets.symmetric(horizontal: 16));
     });
 
     // Guards against baking the enabled foreground onto the Text/Icon, which

@@ -12,7 +12,9 @@ abstract class AdaptiveWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
+    // sizeOf (not MediaQuery.of) so widgets don't rebuild on every viewInsets
+    // change — e.g. each frame of the keyboard animation.
+    final width = MediaQuery.sizeOf(context).width;
     if (width >= 1100) {
       return buildDesktop(context);
     }
