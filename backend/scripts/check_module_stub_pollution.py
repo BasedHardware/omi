@@ -72,11 +72,12 @@ def _iter_module_level_stmts(body: list[ast.stmt]) -> Iterator[ast.stmt]:
 
     Descends into module-level compound statements (``if``/``for``/``while``/
     ``try``/``with``/``match``) including their ``orelse``/``handlers``/``finalbody``
-    bodies, because those branches run during import. Stops at function/class
-    definitions — their bodies are not module scope.
+    bodies, because those branches run during import. Class bodies also execute at
+    import time, so they are descended into. Stops at function definitions — their
+    bodies are not module scope.
     """
     for node in body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         yield node
         for field in ("body", "orelse", "finalbody"):
