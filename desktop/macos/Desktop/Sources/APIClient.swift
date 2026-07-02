@@ -5608,6 +5608,33 @@ extension APIClient {
     let resp: IMessageContactsSyncResponsePayload = try await post("v1/imessage/contacts/sync", body: body)
     return resp.peopleUpserted
   }
+
+  // MARK: - Telegram connector
+
+  @discardableResult
+  func telegramIngest(threads: [TelegramThreadPayload]) async throws
+    -> TelegramIngestResponsePayload
+  {
+    let body = TelegramIngestRequestPayload(threads: threads, language: "en")
+    return try await post("v1/telegram/threads", body: body)
+  }
+
+  func telegramConnectionStatus() async throws -> TelegramStatusPayload {
+    try await get("v1/telegram/connection-status")
+  }
+
+  /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
+  /// a disambiguation ask as if it were a reply.
+  func telegramDraftReply(person: String, thread: [TelegramDraftMessagePayload], intent: String?) async throws
+    -> TelegramDraftResponsePayload
+  {
+    let body = TelegramDraftRequestPayload(person: person, thread: thread, intent: intent)
+    return try await post("v1/telegram/draft-reply", body: body)
+  }
+
+  func telegramDisconnect() async throws {
+    let _: XSimpleOK = try await post("v1/telegram/disconnect")
+  }
 }
 
 struct XOAuthURLResponse: Decodable {
