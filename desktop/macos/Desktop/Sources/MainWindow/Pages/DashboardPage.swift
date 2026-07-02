@@ -589,6 +589,9 @@ struct DashboardPage: View {
             }
             .frame(height: 62, alignment: .bottomLeading)
 
+            HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
+                navigate(to: .chat)
+            }
             HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: isMCPDestinationConnected(.claude)) {
                 openExportDestination(.claudeCode)
             }
@@ -600,9 +603,6 @@ struct DashboardPage: View {
             }
             HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: isMCPDestinationConnected(.hermes)) {
                 openExportDestination(.hermes)
-            }
-            HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
-                navigate(to: .chat)
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
                 openAppsPage()
