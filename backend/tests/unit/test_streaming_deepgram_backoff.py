@@ -536,7 +536,7 @@ def test_concurrent_send_and_keepalive():
 
         import time
 
-        time.sleep(0.1)  # Let keepalive thread fire
+        time.sleep(0.3)  # Let keepalive thread fire (generous under CI load)
 
         # Verify keepalive actually fired during this idle window
         assert mock_conn.keep_alive.call_count >= 1, "keepalive must fire before concurrent sends start"
@@ -549,7 +549,7 @@ def test_concurrent_send_and_keepalive():
         # Advance clock again so keepalive fires during contention
         with lock:
             fake_time[0] = 6.0
-        time.sleep(0.1)  # Let keepalive thread fire during send contention
+        time.sleep(0.3)  # Let keepalive thread fire during send contention
         for t in threads:
             t.join(timeout=5.0)
 
