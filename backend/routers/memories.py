@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+class MemoryMutationResponse(BaseModel):
+    status: str
+
+
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
 MEMORIES_BATCH_MAX = 100
@@ -581,7 +586,7 @@ def resolve_memory_review_item(
     return result
 
 
-@router.delete('/v3/memories/{memory_id}', tags=['memories'])
+@router.delete('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memory(
     memory_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
@@ -603,7 +608,7 @@ def delete_memory(
     return {'status': 'ok'}
 
 
-@router.delete('/v3/memories', tags=['memories'])
+@router.delete('/v3/memories', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):

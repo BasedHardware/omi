@@ -6720,6 +6720,19 @@
         "title": "MemoryLayer",
         "type": "string"
       },
+      "MemoryMutationResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "MemoryMutationResponse",
+        "type": "object"
+      },
       "MentorNotificationSettingsResponse": {
         "properties": {
           "frequency": {
@@ -38706,7 +38719,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -39294,7 +39309,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
