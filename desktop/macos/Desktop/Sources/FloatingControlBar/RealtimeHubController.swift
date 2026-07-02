@@ -290,12 +290,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   /// Shared idle-only "drop and rebuild the warm session" used by discrete
   /// refresh events. Only acts when idle: a live session exists and we're
-  /// neither mid-reply, mid-mint, nor mid barge-in replacement, so this never
-  /// interrupts an active turn or races a connect already in flight. teardown
+  /// neither mid-reply, mid-mint, mid barge-in replacement, nor mid PTT
+  /// capture (voice UI listening), so this never interrupts an active turn,
+  /// drops in-flight audio, or races a connect already in flight. teardown
   /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat
   /// the stale socket as already-warm and no-op).
   private func forceRewarm(reason: String) {
-    guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }
+    guard session != nil, !responding, !minting, !bargeInReplacementInFlight, barState?.isVoiceListening != true else { return }
     log("RealtimeHub: \(reason) — re-warming session")
     teardownSession()
     ensureWarm()

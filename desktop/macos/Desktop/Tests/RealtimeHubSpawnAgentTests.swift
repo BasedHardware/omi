@@ -57,10 +57,13 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     // Shared idle-only re-warm used by system wake and provider-change
-    // refresh; the guard also skips an in-flight barge-in replacement.
+    // refresh; the guard also skips an in-flight barge-in replacement and
+    // active PTT capture (listening), so async callers can't drop live audio.
     XCTAssertTrue(source.contains("private func forceRewarm(reason: String) {"))
     XCTAssertTrue(
-      source.contains("guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }"))
+      source.contains(
+        "guard session != nil, !responding, !minting, !bargeInReplacementInFlight, barState?.isVoiceListening != true else { return }"
+      ))
     XCTAssertTrue(source.contains("forceRewarm(reason: \"system woke (dropping possibly-stale socket)\")"))
     XCTAssertTrue(source.contains("forceRewarm(reason: \"local agent provider availability changed\")"))
   }
