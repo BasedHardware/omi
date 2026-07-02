@@ -156,7 +156,10 @@ def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[
     style_block = (
         "\n".join(f"- {_fence(s)}" for s in style_samples)
         if style_samples
-        else "(no samples available — write short, casual, and human; do not sound like an AI)"
+        else (
+            "(no samples available — this is a new/unknown contact with no established style. "
+            "Write short, natural, and human. Use plain text only: NO emojis. Do not sound like an AI.)"
+        )
     )
 
     thread_lines = []
@@ -204,8 +207,10 @@ def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[
         f"user's own earlier messages), like a real person continuing the chat.\n\n"
         f"SOUND EXACTLY LIKE THE USER — this matters most. Copy their exact voice from their real messages "
         f"below: capitalization (if they text in all lowercase, you do too), punctuation or lack of it, "
-        f"spelling and typos, slang and abbreviations (u, ur, lol, ngl, bet, etc.), emoji use (or none), and "
-        f"message length. Do NOT be more polished, formal, or grammatically correct than these examples.\n\n"
+        f"spelling and typos, slang and abbreviations (u, ur, lol, ngl, bet, etc.), and message length. "
+        f"Do NOT be more polished, formal, or grammatically correct than these examples. "
+        f"EMOJIS: only use emojis if the user's own style samples above clearly show them using emojis; if "
+        f"there are no style samples (a new/unknown contact), do NOT use any emojis — write plain text.\n\n"
         f"THE USER'S OWN MESSAGES — mimic this voice precisely:\n<user_style>\n{style_block}\n</user_style>\n\n"
         f"WHO {name} IS TO THE USER:\n<person_context>\n{context_text}\n</person_context>\n\n"
         f"{life_block}"
