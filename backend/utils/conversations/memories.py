@@ -8,6 +8,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 import logging
@@ -128,7 +129,10 @@ def process_external_integration_memory(
             for memory_db in saved_memories:
                 memory_service.write(uid, memory_db.dict())
         else:
-            memories_db.save_memories(uid, [fact_db.dict() for fact_db in saved_memories])
+            memories_db.save_memories(
+                uid,
+                [memory_write_payload(fact_db, MemoryApiExposure.LEGACY) for fact_db in saved_memories],
+            )
 
     return saved_memories
 
@@ -172,6 +176,9 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
             for memory_db in saved_memories:
                 memory_service.write(uid, memory_db.dict())
         else:
-            memories_db.save_memories(uid, [memory_db.dict() for memory_db in saved_memories])
+            memories_db.save_memories(
+                uid,
+                [memory_write_payload(memory_db, MemoryApiExposure.LEGACY) for memory_db in saved_memories],
+            )
 
     return saved_memories

@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Fail fast on release/process contracts that otherwise break late."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def main() -> int:
+    errors: list[str] = []
+    errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_docs_workflow_scripts())
+    errors.extend(check_python_cli_release_version_source())
+    errors.extend(check_react_native_release_tags())
+    errors.extend(check_firmware_release_metadata())
+
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print("release process guard checks passed")
+    return 0
+
+
+def check_desktop_codemagic_release() -> list[str]:
+    path = ROOT / "codemagic.yaml"
+    text = path.read_text(encoding="utf-8")
+    errors: list[str] = []
+
+    if "omi-desktop-swift-release:" not in text:
+        errors.append("codemagic.yaml is missing the omi-desktop-swift-release workflow")
+
+    if "os.environ['BUILD_NAME']" in text or 'os.environ["BUILD_NAME"]' in text:
+        errors.append("desktop Firestore bridge reads BUILD_NAME, but desktop release sets VERSION")
+
+    if "edSignature: ${ED_SIGNATURE}" in text:
+        empty_signature_block = re.search(
+            r'if \[ -z "\$ED_SIGNATURE" \]; then(?:(?!\bfi\b).)*\bexit 1\b',
+            text,
+            flags=re.DOTALL,
+        )
+        if empty_signature_block is None:
+            errors.append("desktop release can publish an empty Sparkle EdDSA signature")
+
+    required_files = [
+        "desktop/macos/scripts/prepare-agent-runtime.sh",
+        "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+        "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
+        "desktop/macos/scripts/test-tool-surfaces.sh",
+        "desktop/macos/Desktop/Omi-Release.entitlements",
+        "desktop/macos/Desktop/Node.entitlements",
+        "desktop/macos/dmg-assets/dmgbuild_settings.py",
+        "scripts/scan-public-artifact-secrets.py",
+        ".github/scripts/desktop-changelog.py",
+    ]
+    for required_file in required_files:
+        if not (ROOT / required_file).exists():
+            errors.append(f"desktop release references missing file: {required_file}")
+
+    return errors
+
+
+def check_docs_workflow_scripts() -> list[str]:
+    workflow = ROOT / ".github/workflows/deploy_docs.yml"
+    package_json = ROOT / "docs/package.json"
+    if not workflow.exists() or not package_json.exists():
+        return []
+
+    text = workflow.read_text(encoding="utf-8")
+    scripts = json.loads(package_json.read_text(encoding="utf-8")).get("scripts", {})
+    errors = []
+    for script in sorted(set(re.findall(r"npm run ([A-Za-z0-9:_-]+)", text))):
+        if script not in scripts:
+            errors.append(f"deploy_docs.yml runs npm script {script!r}, but docs/package.json does not define it")
+    return errors
+
+
+def check_python_cli_release_version_source() -> list[str]:
+    release_script = ROOT / "sdks/python-cli/release.sh"
+    if not release_script.exists():
+        return []
+
+    text = release_script.read_text(encoding="utf-8")
+    if "['project']['version']" in text or '["project"]["version"]' in text:
+        return ["sdks/python-cli/release.sh reads project.version, but pyproject.toml uses dynamic versioning"]
+    if "import omi_cli" not in text or "__version__" not in text:
+        return ["sdks/python-cli/release.sh must resolve the version from omi_cli.__version__"]
+    return []
+
+
+def check_react_native_release_tags() -> list[str]:
+    package_json = ROOT / "sdks/react-native/package.json"
+    podspec = ROOT / "sdks/react-native/omi-react-native.podspec"
+    if not package_json.exists() or not podspec.exists():
+        return []
+
+    package = json.loads(package_json.read_text(encoding="utf-8"))
+    release_tag = package.get("release-it", {}).get("git", {}).get("tagName")
+    podspec_text = podspec.read_text(encoding="utf-8")
+    if release_tag == "v${version}" and ':tag => "v#{s.version}"' not in podspec_text:
+        return ["React Native podspec tag must match release-it tagName v${version}"]
+    return []
+
+
+def check_firmware_release_metadata() -> list[str]:
+    script = ROOT / "omi/firmware/scripts/ci/make-release-body.sh"
+    workflow = ROOT / ".github/workflows/firmware_release.yml"
+    if not script.exists():
+        return []
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output = Path(temp_dir) / "body.md"
+        env = {
+            "TITLE": "Omi CV1 Firmware v9.8.7",
+            "VER": "9.8.7",
+            "CHANGELOG": "Guard smoke test",
+            "MIN_FW": "3.0.6",
+            "MIN_APP": "1.0.74",
+            "MIN_APP_CODE": "438",
+            "OTA_STEPS": "battery,internet",
+            "IS_LEGACY_SECURE_DFU": "False",
+            "OUT": str(output),
+        }
+        completed = subprocess.run(
+            ["bash", str(script)],
+            cwd=ROOT,
+            env={**os.environ, **env},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return [f"firmware release body smoke failed: {completed.stderr.strip() or completed.stdout.strip()}"]
+        body = output.read_text(encoding="utf-8")
+
+    kv = extract_key_value_pairs(body)
+    errors = []
+    if kv.get("release_firmware_version") != "9.8.7":
+        errors.append("firmware release body must include release_firmware_version")
+    if kv.get("minimum_firmware_required") != "3.0.6":
+        errors.append("firmware release body must include minimum_firmware_required")
+    if kv.get("minimum_app_version") != "1.0.74":
+        errors.append("firmware release body must include minimum_app_version")
+    if kv.get("minimum_app_version_code") != "438":
+        errors.append("firmware release body must include minimum_app_version_code")
+    if kv.get("is_legacy_secure_dfu") != "False":
+        errors.append("CV1 firmware release body must emit is_legacy_secure_dfu:False")
+    if "ota_update_steps" not in kv:
+        errors.append("firmware release body must include ota_update_steps when provided")
+    if workflow.exists():
+        workflow_text = workflow.read_text(encoding="utf-8")
+        ota_asset = r'Omi_CV1_OTA_v$VER.zip'
+        if ota_asset not in workflow_text:
+            errors.append("firmware release workflow must stage and publish an OTA .zip asset")
+    return errors
+
+
+def extract_key_value_pairs(markdown_content: str) -> dict[str, str]:
+    match = re.search(r"<!-- KEY_VALUE_START\s*(.*?)\s*KEY_VALUE_END -->", markdown_content, re.DOTALL)
+    if not match:
+        return {}
+
+    result: dict[str, str] = {}
+    for line in match.group(1).strip().split("\n"):
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        result[key.strip()] = value.strip()
+    return result
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -29,12 +29,17 @@ class MemoryItem extends StatelessWidget {
   final Function(BuildContext, Memory, MemoriesProvider) onTap;
   final bool showDismissible;
 
+  /// Invoked after a swipe-to-delete so the host page can show an undo
+  /// notification. Optional — hosts without one (e.g. category page) omit it.
+  final void Function(String content, Memory memory)? onDeleteNotification;
+
   const MemoryItem({
     super.key,
     required this.memory,
     required this.provider,
     required this.onTap,
     this.showDismissible = true,
+    this.onDeleteNotification,
   });
 
   @override
@@ -138,9 +143,7 @@ class MemoryItem extends StatelessWidget {
         provider.deleteMemory(memory);
         PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
 
-        if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
-          context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
-        }
+        onDeleteNotification?.call(memoryContent, memory);
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),

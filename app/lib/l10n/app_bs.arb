@@ -10681,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "Brz, praktičan obilazak svega što vaš Omi može.",
     "deviceOnboardingIntroDuration": "Oko 1 minute",
     "jumpToLatestMessage": "Idi na najnoviju poruku",
-    "latest": "Najnovije"
+    "latest": "Najnovije",
+    "flashFirmware": "Instaliraj firmver"
 }

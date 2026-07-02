@@ -144,6 +144,20 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertFalse(branch.contains("persistMessage(messages[index])"))
   }
 
+  func testTerminalFailureMarksRemainingToolCallsFailed() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(
+      source.contains("private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed)")
+    )
+    XCTAssertTrue(
+      source.contains("ToolCallBlockUpdater.completeRemainingToolCalls(\n            in: &messages[index].contentBlocks,\n            terminalStatus: terminalStatus\n        )")
+    )
+    XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)"))
+    XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))
+    XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)"))
+  }
+
   func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {
     let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
 

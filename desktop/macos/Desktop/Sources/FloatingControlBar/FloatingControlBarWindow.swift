@@ -2627,6 +2627,7 @@ class FloatingControlBarManager {
             case .visible:
                 completeVisibleAgentHandoff(
                     .init(originalRequest: message, agentTask: directive.rewrittenQuery),
+                    pill: pill,
                     assistantMessage: recordedTurn.assistant,
                     assistantText: assistantText,
                     barWindow: barWindow
@@ -2659,6 +2660,7 @@ class FloatingControlBarManager {
             case .visible:
                 completeVisibleAgentHandoff(
                     handoff,
+                    pill: pill,
                     assistantMessage: recordedTurn.assistant,
                     assistantText: assistantText,
                     barWindow: barWindow
@@ -2688,7 +2690,7 @@ class FloatingControlBarManager {
         let decision = await AgentPillsManager.classify(message)
         routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
-            _ = AgentPillsManager.shared.spawnFromUserQuery(
+            let pill = AgentPillsManager.shared.spawnFromUserQuery(
                 message,
                 model: selectedFloatingModel,
                 fromVoice: presentation.fromVoice,
@@ -2701,16 +2703,20 @@ class FloatingControlBarManager {
             let assistantText = ack?.isEmpty == false
                 ? "\(ack!) I started a background agent\(titleSuffix) for that."
                 : "I started a background agent\(titleSuffix) for that."
-            provider.recordCompletedTurn(
+            let recordedTurn = provider.recordCompletedTurn(
                 userText: message,
                 assistantText: assistantText,
                 logLabel: "floating-agent"
             )
             switch presentation {
             case .visible:
-                // Tear down the inline state we set up for the thinking spinner.
-                barWindow.state.aiInputText = ""
-                barWindow.closeAIConversation()
+                completeVisibleAgentHandoff(
+                    .init(originalRequest: message, agentTask: message),
+                    pill: pill,
+                    assistantMessage: recordedTurn.assistant,
+                    assistantText: assistantText,
+                    barWindow: barWindow
+                )
             case .voiceOnly:
                 barWindow.state.currentQueryFromVoice = false
                 barWindow.state.isVoiceResponseActive = false
@@ -2748,15 +2754,61 @@ class FloatingControlBarManager {
 
     private func completeVisibleAgentHandoff(
         _ handoff: AgentPillsManager.FloatingAgentHandoff,
+        pill: AgentPill,
         assistantMessage: ChatMessage?,
         assistantText: String,
         barWindow: FloatingControlBarWindow
     ) {
+        var message = assistantMessage ?? ChatMessage(text: assistantText, sender: .ai)
+        message.isStreaming = false
+        let toolUseId = "floating-agent-\(pill.id.uuidString)"
+        if !message.contentBlocks.contains(where: { block in
+            if case .toolCall(_, let name, _, let existingToolUseId, _, _) = block {
+                return name == "spawn_agent" && existingToolUseId == toolUseId
+            }
+            return false
+        }) {
+            let details = Self.agentHandoffToolDetails(task: handoff.agentTask, title: pill.title)
+            let input = ToolCallInput(
+                summary: pill.title,
+                details: details
+            )
+            let output = """
+            Agent started as a floating agent pill.
+            id: \(pill.id.uuidString)
+            title: \(pill.title)
+            status: \(pill.status.displayLabel)
+            """
+            message.contentBlocks.append(
+                .toolCall(
+                    id: UUID().uuidString,
+                    name: "spawn_agent",
+                    status: .completed,
+                    toolUseId: toolUseId,
+                    input: input,
+                    output: output
+                )
+            )
+        }
         completeVisibleAgentResponse(
             userText: handoff.originalRequest,
-            assistantMessage: assistantMessage ?? ChatMessage(text: assistantText, sender: .ai),
+            assistantMessage: message,
             barWindow: barWindow
         )
+    }
+
+    private static func agentHandoffToolDetails(task: String, title: String) -> String {
+        let payload: [String: String] = [
+            "brief": task,
+            "title": title,
+        ]
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+            let json = String(data: data, encoding: .utf8)
+        else {
+            return "brief: \(task)\ntitle: \(title)"
+        }
+        return json
     }
 
     private func completeVisibleAgentResponse(

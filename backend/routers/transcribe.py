@@ -142,6 +142,8 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     should_initialize_vad_gate,
     should_load_speech_profile,
     should_queue_speaker_embedding,
+    should_process_on_disconnect,
+    should_remove_in_progress_pointer,
     should_skip_speaker_detection,
     should_spawn_speaker_match,
     stt_buffer_flush_size as calculate_stt_buffer_flush_size,
@@ -866,7 +868,6 @@ async def _stream_handler(
 
     # Create new stub conversation for next batch
     async def _create_new_in_progress_conversation():
-
         conversation_source = ConversationSource.omi
         if source:
             try:
@@ -963,18 +964,20 @@ async def _stream_handler(
                     logger.warning(
                         f"Pusher not enabled, skipping conversation {conversation_id} (stays in_progress) {uid} {session_id}"
                     )
-                    return
+                    return False
                 # Mark processing + buffer for pusher — never process locally (#6061)
                 conversations_db.update_conversation_status(uid, conversation_id, ConversationStatus.processing)
                 on_conversation_processing_started(conversation_id)
                 await request_conversation_processing(conversation_id)
+                return True
             else:
                 logger.info(f'Clean up the conversation {conversation_id}, reason: no content {uid} {session_id}')
                 conversations_db.delete_conversation(uid, conversation_id)
+                return True
+        return False
 
     # Process existing conversations
     async def _prepare_in_progess_conversations():
-
         if existing_conversation := retrieve_in_progress_conversation(uid):
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
@@ -2027,6 +2030,7 @@ async def _stream_handler(
                 # Handle client disconnect
                 if message.get("type") == "websocket.disconnect":
                     close_code = message.get("code", 1000)
+                    session.close_code = close_code
                     close_reason = {
                         1000: "normal_closure",
                         1001: "going_away_os_or_background",
@@ -2452,6 +2456,33 @@ async def _stream_handler(
                 await websocket.close(code=session.close_code)
             except Exception as e:
                 logger.error(f"Error closing Client WebSocket: {e} {uid} {session_id}")
+
+        # Single-channel sessions normally stay open for reconnects/timeouts. If the client closes
+        # cleanly after writing content, submit that exact conversation so desktop can reconcile it.
+        if not is_multi_channel and session.current_conversation_id:
+            try:
+                conversation = conversations_db.get_conversation(uid, session.current_conversation_id)
+                if should_process_on_disconnect(
+                    is_multi_channel=is_multi_channel,
+                    close_code=session.close_code,
+                    conversation_id=session.current_conversation_id,
+                    conversation=conversation,
+                    in_progress_status=ConversationStatus.in_progress,
+                ):
+                    _flush_speaker_assignments(session.current_conversation_id)
+                    processed = await _process_conversation(session.current_conversation_id)
+                    if processed:
+                        current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+                        if should_remove_in_progress_pointer(
+                            current_in_progress_id=current_in_progress_id,
+                            conversation_id=session.current_conversation_id,
+                        ):
+                            redis_db.remove_in_progress_conversation_id(uid)
+                        logger.info(
+                            f"Single-channel conversation {session.current_conversation_id} submitted for processing on disconnect {uid} {session_id}"
+                        )
+            except Exception as e:
+                logger.error(f"Error processing single-channel conversation on disconnect: {e} {uid} {session_id}")
 
         # Multi-channel: process the single conversation at session end
         if is_multi_channel and session.current_conversation_id:

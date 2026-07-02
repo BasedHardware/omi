@@ -10681,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "סיור מהיר ומעשי בכל מה שה-Omi שלכם יכול לעשות.",
     "deviceOnboardingIntroDuration": "כדקה אחת",
     "jumpToLatestMessage": "קפוץ להודעה האחרונה",
-    "latest": "האחרון"
+    "latest": "האחרון",
+    "flashFirmware": "צריבת קושחה"
 }

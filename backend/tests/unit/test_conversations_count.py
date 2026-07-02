@@ -79,11 +79,14 @@ def get_conversations_count(
     categories=None,
     folder_id=None,
     starred=None,
+    sources=None,
 ):
     """Mirrors database.conversations.get_conversations_count."""
     conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if sources:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
@@ -116,6 +119,7 @@ class TestConversationsCount:
             source = f.read()
         assert 'def get_conversations_count(' in source
         assert "FieldFilter('discarded', '==', False)" in source
+        assert "FieldFilter('source', 'in', sources)" in source
         assert "FieldFilter('status', 'in', statuses)" in source
         assert "FieldFilter('folder_id', '==', folder_id)" in source
         assert "FieldFilter('starred', '==', starred)" in source
@@ -305,6 +309,26 @@ class TestConversationsCountRouteSource:
         with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert "{'count': count}" in source or "{'count':count}" in source
+
+    def test_route_forwards_sources_as_list(self):
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'sources=source_list' in source
+
+    def test_route_rejects_statuses_combined_with_sources(self):
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'statuses and sources filters cannot be combined' in source
+
+    def test_route_echoes_sources_when_filtered(self):
+        # Clients rely on the echo to distinguish a filtered count from an
+        # older backend that ignored the unknown sources param.
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert "{'count': count, 'sources': source_list}" in source
 
 
 class TestAppsV2LimitBoundary:

@@ -80,19 +80,20 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -334,19 +335,20 @@ workflows:
           echo "flutter.sdk=$HOME/programs/flutter" > "$(pwd)/android/local.properties"
           echo "sdk.dir=$ANDROID_HOME" >> "$(pwd)/android/local.properties"
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -427,8 +429,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-          shopt -s globstar nullglob
-          ../scripts/scan-public-artifact-secrets.py build/**/outputs/**/*.aab
+          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
+          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -529,19 +531,20 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -708,19 +711,20 @@ workflows:
           # Copy GoogleService-Info.plist
           cp macos/Config/Prod/GoogleService-Info.plist macos/GoogleService-Info.plist
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -774,11 +778,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-
-      - name: Scan macOS app artifact
-        script: |
-          APP_NAME=$(find $(pwd) -name "Omi.app" -type d | head -1)
-          ../scripts/scan-public-artifact-secrets.py "$APP_NAME"
 
       - name: Package application for App Store
         script: |
@@ -951,19 +950,20 @@ workflows:
           echo "flutter.sdk=$HOME/programs/flutter" > "$(pwd)/android/local.properties"
           echo "sdk.dir=$ANDROID_HOME" >> "$(pwd)/android/local.properties"
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -985,8 +985,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-          shopt -s globstar nullglob
-          ../scripts/scan-public-artifact-secrets.py build/**/outputs/**/*.aab
+          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
+          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
 
     artifacts:
@@ -1093,19 +1093,20 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -1150,8 +1151,6 @@ workflows:
         notify:
           success: true
           failure: false
-  macos-prod-legacy-disabled:
-    name: Legacy macOS Flutter Release (disabled)
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1208,19 +1207,21 @@ workflows:
           # Copy GoogleService-Info.plist
           cp macos/Config/Prod/GoogleService-Info.plist macos/GoogleService-Info.plist
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
+          echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
         script: |
@@ -1416,12 +1417,10 @@ workflows:
 
       - name: Bundle .env into app
         script: |
-          # Copy policy-validated public client env into the app bundle for native Swift code to access
+          # Copy .env file into app bundle for native Swift code to access
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
-          ../scripts/check-public-client-secrets.py --env-file .client.env
-          cp .client.env "$APP_PATH/Contents/Resources/.env"
-          echo "Bundled public client env into $APP_PATH/Contents/Resources/.env"
-          ../scripts/scan-public-artifact-secrets.py "$APP_PATH"
+          cp .env "$APP_PATH/Contents/Resources/.env"
+          echo "Bundled .env into $APP_PATH/Contents/Resources/.env"
 
       - name: Sign app for notarization
         script: |
@@ -1669,7 +1668,6 @@ workflows:
           fi
 
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
-          ../scripts/scan-public-artifact-secrets.py "$DIST_DIR/$ZIP_NAME" build/macos/dmg/Omi.dmg
 
       - name: Create GitHub Release
         script: |
@@ -1876,19 +1874,20 @@ workflows:
           echo "flutter.sdk=$HOME/programs/flutter" > "$(pwd)/android/local.properties"
           echo "sdk.dir=$ANDROID_HOME" >> "$(pwd)/android/local.properties"
 
-      - name: Generate public client config
+      - name: Set up App .env
         script: |
-          PUBLIC_API_BASE_URL="$PUBLIC_API_BASE_URL" \
-          PUBLIC_STAGING_API_URL="${PUBLIC_STAGING_API_URL-$STAGING_API_URL}" \
-          PUBLIC_GOOGLE_MAPS_API_KEY="$PUBLIC_GOOGLE_MAPS_API_KEY" \
-          PUBLIC_GOOGLE_CLIENT_ID="$PUBLIC_GOOGLE_CLIENT_ID" \
-          PUBLIC_USE_WEB_AUTH="$PUBLIC_USE_WEB_AUTH" \
-          PUBLIC_USE_AUTH_CUSTOM_TOKEN="$PUBLIC_USE_AUTH_CUSTOM_TOKEN" \
-          PUBLIC_POSTHOG_API_KEY="$PUBLIC_POSTHOG_API_KEY" \
-          PUBLIC_INTERCOM_APP_ID="$PUBLIC_INTERCOM_APP_ID" \
-          PUBLIC_INTERCOM_IOS_API_KEY="$PUBLIC_INTERCOM_IOS_API_KEY" \
-          PUBLIC_INTERCOM_ANDROID_API_KEY="$PUBLIC_INTERCOM_ANDROID_API_KEY" \
-          ../scripts/create-public-client-env.sh .client.env
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -1905,8 +1904,8 @@ workflows:
           # Should use bump version automatically by CI
           shorebird patch android \
             --flavor prod
-          shopt -s globstar nullglob
-          ../scripts/scan-public-artifact-secrets.py build/**/outputs/**/*.aab
+          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
+          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
@@ -1936,8 +1935,8 @@ workflows:
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
   #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
-  #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded public bundle env for .app runtime
-  #                                     Contains only public client config (not server secrets):
+  #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
+  #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
   #                                       MIXPANEL_PROJECT_TOKEN=<token>
   #                                     URLs are set via workflow vars (not in this secret):
@@ -2411,8 +2410,8 @@ workflows:
           [ -f "Desktop/embedded.provisionprofile" ] && \
             cp Desktop/embedded.provisionprofile "$APP_BUNDLE/Contents/embedded.provisionprofile"
 
-          # Write runtime .env from OMI_DESKTOP_APP_ENV_V3 (base64-encoded public client config)
-          # V3 contains only public values: FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
+          # Write runtime .env from OMI_DESKTOP_APP_ENV_V3 secret (base64-encoded, secrets only)
+          # V3 contains only: FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
           # URLs are appended from workflow vars below
           # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are fetched at
           # runtime from backend /v1/config/api-keys via APIKeyService
@@ -2420,11 +2419,12 @@ workflows:
           # Append backend URLs from workflow vars
           echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
-          ../../scripts/check-public-client-secrets.py --env-file "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
       - name: Sign app
         script: |
+          scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
+
           xattr -cr "$APP_BUNDLE"
 
           # Sign ffmpeg (inside SPM resource bundle)
@@ -2526,6 +2526,10 @@ workflows:
 
           codesign --verify --verbose=2 "$APP_BUNDLE" 2>&1 | head -3
           echo "App signed successfully"
+
+      - name: Audit app bundle dependencies
+        script: |
+          scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
       - name: Notarize app
         script: |
@@ -2639,13 +2643,12 @@ workflows:
             fi
           fi
 
-          if [ -n "$ED_SIGNATURE" ]; then
-            echo "EdDSA signature: $ED_SIGNATURE"
-          else
-            echo "WARNING: Could not generate EdDSA signature — Sparkle auto-update will not work"
+          if [ -z "$ED_SIGNATURE" ]; then
+            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work"
+            exit 1
           fi
+          echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
-          ../../scripts/scan-public-artifact-secrets.py "$SPARKLE_ZIP_PATH" "$DMG_PATH"
 
       - name: Create GitHub release
         script: |
@@ -2757,7 +2760,7 @@ workflows:
           RELEASE_JSON=$(python3 -c "
           import json, os
           data = {
-            'version':      os.environ['BUILD_NAME'],
+            'version':      os.environ['VERSION'],
             'build_number': int(os.environ['BUILD_NUMBER']),
             'download_url': os.environ.get('DOWNLOAD_URL', ''),
             'ed_signature': os.environ.get('ED_SIGNATURE', ''),

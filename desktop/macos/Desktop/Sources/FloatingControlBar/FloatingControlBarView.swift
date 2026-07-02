@@ -27,6 +27,7 @@ struct FloatingControlBarView: View {
 
     @State private var isHovering = false
     @State private var notchLogoHovering = false
+    @State private var notchSettingsHovering = false
     @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
     /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
     /// continuously-animated value so the same dots morph both ways (and reverse exactly).
@@ -304,25 +305,16 @@ struct FloatingControlBarView: View {
                 ZStack(alignment: .trailing) {
                     NotchAgentPillsRowView(manager: agentPills, barWindow: window)
                         // Compact mode lets the morph field own the ring while agents unfurl.
-                        // Chat mode hides that field, so the lobe owns the logo/settings slot.
-                        .opacity((agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu) && !notchLogoHovering ? 1 : 0)
-                        .scaleEffect(notchLogoHovering ? 0.72 : 1.0)
-                        .rotationEffect(.degrees(notchLogoHovering ? -28 : 0))
-
-                    Image(systemName: "gearshape.fill")
-                        .scaledFont(size: 15, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.88))
-                        .frame(width: NotchAgentStackMetrics.logoFrameSize, height: NotchAgentStackMetrics.logoFrameSize)
-                        .opacity(notchLogoHovering ? 1 : 0)
-                        .scaleEffect(notchLogoHovering ? 1 : 0.5)
-                        .rotationEffect(.degrees(notchLogoHovering ? 0 : 42))
+                        // Chat mode hides that field, so the lobe owns the logo slot.
+                        .opacity(agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu ? 1 : 0)
+                        .scaleEffect(notchLogoHovering ? 1.06 : 1.0)
                 }
                 .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
                 .padding(.trailing, 2)
                 .contentShape(Rectangle())
                 .onHover { setNotchLogoHovering($0) }
                 .onTapGesture {
-                    openFloatingBarSettings()
+                    openAgentChatsFromNotchLogo()
                 }
             }
         }
@@ -343,10 +335,10 @@ struct FloatingControlBarView: View {
                 .position(x: logoCenterX, y: notchChromeHeight / 2)
                 .onHover { setNotchLogoHovering($0) }
                 .onTapGesture {
-                    openFloatingBarSettings()
+                    openAgentChatsFromNotchLogo()
                 }
-                .accessibilityLabel("Floating Bar Settings")
-                .accessibilityHint("Open settings")
+                .accessibilityLabel("Agent chats")
+                .accessibilityHint("Open agent chats")
         }
     }
 
@@ -358,20 +350,42 @@ struct FloatingControlBarView: View {
         // the conversation/PTT entry point by clicking the notch. (Codex P1.)
         // It is intentionally subtle (transparent) to preserve the minimal
         // notch aesthetic.
-        Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture {
+        ZStack(alignment: .leading) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onAskAI()
+                }
+
+            if notchSettingsHovering {
+                Button {
+                    openFloatingBarSettings()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.86))
+                        .frame(width: 26, height: 24)
+                        .background(Color.white.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Floating Bar Settings")
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(.leading, 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(notchSettingsHovering ? "Floating Bar Settings" : "Ask Omi")
+        .accessibilityHint(notchSettingsHovering ? "Open settings" : "Open the conversation")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            if notchSettingsHovering {
+                openFloatingBarSettings()
+            } else {
                 onAskAI()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding(.leading, 5)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Ask Omi")
-            .accessibilityHint("Open the conversation")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction {
-                onAskAI()
-            }
+        }
     }
 
     private var notchOmiChatRow: some View {
@@ -673,8 +687,25 @@ struct FloatingControlBarView: View {
         setAgentSwitcherHovering(hovering)
     }
 
+    private func openAgentChatsFromNotchLogo() {
+        guard !agentPills.pills.isEmpty else {
+            onAskAI()
+            return
+        }
+        if state.showingAIConversation {
+            showAgentListFromConversation()
+            return
+        }
+        toggleAgentSwitcherPinned()
+        (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+    }
+
     private func openAgentInChat(_ pill: AgentPill) {
-        guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
+        openAgentInChat(agentID: pill.id)
+    }
+
+    private func openAgentInChat(agentID: UUID) {
+        guard let pill = agentPills.pills.first(where: { $0.id == agentID }) else { return }
         if state.conversationSurface == .agent(pill.id) {
             showAgentListFromConversation()
             return
@@ -708,8 +739,9 @@ struct FloatingControlBarView: View {
             (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovering = state.isNotchHoverMenuVisible
+                notchSettingsHovering = hovering
             }
-            if !state.isNotchHoverMenuVisible {
+            if !hovering || !state.isNotchHoverMenuVisible {
                 notchLogoHovering = false
             }
             return
@@ -1139,7 +1171,10 @@ struct FloatingControlBarView: View {
                 onSendQuery(message)
             },
             onRate: onRate,
-            onShareLink: onShareLink
+            onShareLink: onShareLink,
+            onOpenAgent: { agentID in
+                openAgentInChat(agentID: agentID)
+            }
         )
         .transition(
             .asymmetric(
@@ -1324,7 +1359,7 @@ private struct AgentMainChatView: View {
         switch pill.status {
         case .queued, .starting, .running:
             return true
-        case .done, .failed:
+        case .done, .stopped, .failed:
             return false
         }
     }
@@ -1351,45 +1386,42 @@ private struct AgentMainChatView: View {
         pill.latestActivity.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var scrollContentToken: AnyHashable {
+        AnyHashable(
+            [
+                String(pill.contentRevision),
+                pill.latestActivity,
+                displayedMessages.map { message in
+                    [
+                        message.id,
+                        message.text,
+                        String(message.contentBlocks.count),
+                        String(message.isStreaming),
+                    ].joined(separator: "\u{1F}")
+                }.joined(separator: "\u{1E}"),
+                String(isRecording),
+            ].joined(separator: "\u{1D}")
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        conversationContent
-                            .id(pill.contentRevision)
+            ChatScrollContainer(
+                bottomAnchorId: "agentBottom",
+                contentChangeToken: scrollContentToken,
+                scrollPaddingTrailing: 30,
+                onContentHeightChange: { height in
+                    state.reportContentHeight(height, for: .agent(pill.id))
+                }
+            ) {
+                conversationContent
+                    .id(pill.contentRevision)
 
-                        if isRecording {
-                            voiceFollowUpView
-                                .id("agentVoiceFollowUp")
-                        }
-
-                        Color.clear.frame(height: 1).id("agentBottom")
-                    }
-                    .padding(.trailing, 30)
-                    .background(
-                        GeometryReader { geometry -> Color in
-                            let height = geometry.size.height
-                            DispatchQueue.main.async {
-                                state.reportContentHeight(height, for: .agent(pill.id))
-                            }
-                            return Color.clear
-                        }
-                    )
-                }
-                .onChange(of: pill.latestActivity) {
-                    scrollToBottom(proxy)
-                }
-                .onChange(of: pill.conversationMessages.map(\.text).joined(separator: "\n")) {
-                    scrollToBottom(proxy)
-                }
-                .onChange(of: pill.contentRevision) {
-                    scrollToBottom(proxy)
-                }
-                .onChange(of: isRecording) {
-                    scrollToBottom(proxy)
+                if isRecording {
+                    voiceFollowUpView
+                        .id("agentVoiceFollowUp")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1433,20 +1465,42 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBadge: some View {
-        Group {
-            if pill.status == .done {
-                Button {
-                    manager.dismiss(pillID: pill.id)
-                    onBackToAgentRows()
-                } label: {
+        HStack(spacing: 6) {
+            Group {
+                if pill.status == .done {
+                    Button {
+                        manager.dismiss(pillID: pill.id)
+                        onBackToAgentRows()
+                    } label: {
+                        statusBadgeLabel
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss completed agent")
+                } else {
                     statusBadgeLabel
                 }
-                .buttonStyle(.plain)
-                .help("Dismiss completed agent")
-            } else {
-                statusBadgeLabel
+            }
+
+            if isRunning {
+                stopButton
             }
         }
+    }
+
+    private var stopButton: some View {
+        Button {
+            manager.stop(pillID: pill.id)
+        } label: {
+            Image(systemName: "stop.fill")
+                .scaledFont(size: 8, weight: .bold)
+                .foregroundColor(.black.opacity(0.82))
+                .frame(width: 22, height: 22)
+                .background(pill.status.tintColor)
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Stop subagent")
+        .help("Stop subagent")
     }
 
     private var statusBadgeLabel: some View {
@@ -1463,6 +1517,8 @@ private struct AgentMainChatView: View {
         switch pill.status {
         case .queued, .starting, .running, .done:
             return .black.opacity(0.86)
+        case .stopped:
+            return .black.opacity(0.78)
         case .failed:
             return .white
         }
@@ -1470,7 +1526,7 @@ private struct AgentMainChatView: View {
 
     private var statusBackgroundOpacity: Double {
         switch pill.status {
-        case .queued, .starting, .running, .done:
+        case .queued, .starting, .running, .done, .stopped:
             return 1
         case .failed:
             return 0.75
@@ -1550,7 +1606,7 @@ private struct AgentMainChatView: View {
     private func agentAssistantContent(_ message: ChatMessage) -> some View {
         if !message.contentBlocks.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(ContentBlockGroup.group(message.contentBlocks)) { group in
+                ForEach(groupedContentBlocks(for: message)) { group in
                     switch group {
                     case .text(_, let text):
                         if !text.isEmpty {
@@ -1578,6 +1634,32 @@ private struct AgentMainChatView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
+        let grouped = ContentBlockGroup.group(message.contentBlocks)
+
+        return grouped.filter { group in
+            switch group {
+            case .text, .discoveryCard:
+                return true
+            case .toolCalls(_, let calls):
+                if calls.contains(where: { $0.spawnedAgentID != nil }) {
+                    return true
+                }
+                if message.isStreaming {
+                    return calls.contains { block in
+                        if case .toolCall(_, _, let status, _, _, _) = block {
+                            return status.isInFlight
+                        }
+                        return false
+                    }
+                }
+                return false
+            case .thinking:
+                return message.isStreaming
             }
         }
     }
@@ -1659,11 +1741,6 @@ private struct AgentMainChatView: View {
         manager.continueAgent(from: pill, text: trimmed)
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.15)) {
-            proxy.scrollTo("agentBottom", anchor: .bottom)
-        }
-    }
 }
 
 private struct NotchAgentPillsRowView: View {
@@ -2031,6 +2108,8 @@ private struct NotchAgentListRow: View {
             return "sparkles"
         case .done:
             return "checkmark"
+        case .stopped:
+            return "stop.fill"
         case .failed:
             return "exclamationmark"
         }
@@ -2041,6 +2120,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
     case running
     case queued
     case failed
+    case stopped
     case done
 
     var id: String { rawValue }
@@ -2053,6 +2133,8 @@ private enum NotchAgentStatusGroup: String, Identifiable {
             self = .queued
         case .failed:
             self = .failed
+        case .stopped:
+            self = .stopped
         case .done:
             self = .done
         }
@@ -2063,6 +2145,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return "Running"
         case .queued: return "Queued"
         case .failed: return "Failed"
+        case .stopped: return "Stopped"
         case .done: return "Done"
         }
     }
@@ -2072,6 +2155,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return Color(red: 1.0, green: 0.80, blue: 0.40)
         case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
+        case .stopped: return Color(red: 0.64, green: 0.66, blue: 0.70)
         case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
         }
     }
@@ -2081,6 +2165,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return Color(red: 1.0, green: 0.62, blue: 0.20)
         case .queued: return Color(red: 0.08, green: 0.52, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.46, blue: 0.12)
+        case .stopped: return Color(red: 0.42, green: 0.44, blue: 0.48)
         case .done: return Color(red: 0.08, green: 0.78, blue: 0.62)
         }
     }
@@ -2090,6 +2175,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return Color(red: 0.72, green: 0.36, blue: 0.04)
         case .queued: return Color(red: 0.00, green: 0.44, blue: 0.95)
         case .failed: return Color(red: 0.78, green: 0.08, blue: 0.18)
+        case .stopped: return Color(red: 0.24, green: 0.25, blue: 0.28)
         case .done: return Color(red: 0.02, green: 0.50, blue: 0.24)
         }
     }
@@ -2099,7 +2185,8 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return 0
         case .queued: return 1
         case .failed: return 2
-        case .done: return 3
+        case .stopped: return 3
+        case .done: return 4
         }
     }
 

@@ -12,6 +12,12 @@ emit() {
   local name="$1"
   local value="${!name:-}"
   if [ -n "$value" ]; then
+    case "$value" in
+      *$'\n'*|*$'\r'*)
+        echo "ERROR: $name contains a newline and cannot be written to $OUT" >&2
+        exit 1
+        ;;
+    esac
     printf '%s=%s\n' "$name" "$value" >> "$TMP"
   fi
 }

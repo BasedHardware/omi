@@ -264,6 +264,7 @@ async def twiml_voice_webhook(request: Request):
     caller_number = None
 
     if uid:
+        # Offloaded: the Firestore read is sync and blocks the event loop in this async handler.
         primary = await run_blocking(db_executor, phone_calls_db.get_primary_phone_number, uid)
         if primary:
             caller_number = primary.get('phone_number')

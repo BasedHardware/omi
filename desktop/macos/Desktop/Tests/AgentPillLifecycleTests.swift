@@ -76,7 +76,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("ForEach(displayedMessages) { message in"))
     XCTAssertTrue(source.contains("agentMessageBubble(message)"))
     XCTAssertTrue(source.contains("agentAssistantContent(message)"))
-    XCTAssertTrue(source.contains("ForEach(ContentBlockGroup.group(message.contentBlocks))"))
+    XCTAssertTrue(source.contains("ForEach(groupedContentBlocks(for: message))"))
+    XCTAssertTrue(source.contains("private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup]"))
     XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
     XCTAssertTrue(source.contains("Markdown(trimmed)"))
@@ -152,6 +153,13 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"))
     XCTAssertFalse(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"))
+    XCTAssertTrue(source.contains("@State private var notchSettingsHovering = false"))
+    XCTAssertTrue(source.contains("if notchSettingsHovering"))
+    XCTAssertTrue(source.contains("notchSettingsHovering = hovering"))
+    XCTAssertTrue(source.contains("openFloatingBarSettings()"))
+    XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
+    XCTAssertFalse(source.contains(".onHover { hovering in\n            withAnimation(.easeInOut(duration: 0.12)) {\n                notchSettingsHovering = hovering"))
+    XCTAssertFalse(source.contains(".onTapGesture {\n                    openFloatingBarSettings()\n                }"))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -166,6 +174,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let windowSource = try floatingControlBarWindowSource()
     let viewSource = try floatingControlBarViewSource()
     let responseSource = try aiResponseViewSource()
+    let scrollSource = try chatScrollBehaviorSource()
 
     XCTAssertTrue(windowSource.contains("responseStreamingResizeStep"))
     XCTAssertTrue(windowSource.contains("let steppedHeight = (targetHeight / Self.responseStreamingResizeStep).rounded(.up) * Self.responseStreamingResizeStep"))
@@ -173,8 +182,16 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("animated: false,\n                    anchorTop: true"))
     XCTAssertTrue(viewSource.contains(".transition(.opacity)"))
     XCTAssertFalse(viewSource.contains("conversationView\n                    .padding(.horizontal, 12)\n                    .padding(.top, 4)\n                    .padding(.bottom, 9)\n                    .transition(.move(edge: .top).combined(with: .opacity))"))
-    XCTAssertTrue(responseSource.contains(".onChange(of: currentMessage?.text) {\n                    proxy.scrollTo(\"bottom\", anchor: .bottom)\n                }"))
-    XCTAssertTrue(responseSource.contains(".onChange(of: currentMessage?.contentBlocks.count) {\n                    proxy.scrollTo(\"bottom\", anchor: .bottom)\n                }"))
+    XCTAssertTrue(responseSource.contains("ChatScrollContainer("))
+    XCTAssertTrue(viewSource.contains("ChatScrollContainer("))
+    XCTAssertTrue(responseSource.contains("contentChangeToken: scrollContentToken"))
+    XCTAssertTrue(viewSource.contains("contentChangeToken: scrollContentToken"))
+    XCTAssertFalse(responseSource.contains("proxy.scrollTo(\"bottom\", anchor: .bottom)"))
+    XCTAssertFalse(viewSource.contains("proxy.scrollTo(\"agentBottom\", anchor: .bottom)"))
+    XCTAssertTrue(scrollSource.contains("struct ChatScrollContainer<Content: View>: View"))
+    XCTAssertTrue(scrollSource.contains("UserScrollDetector {"))
+    XCTAssertTrue(scrollSource.contains("scrollMode = .freeScrolling"))
+    XCTAssertTrue(scrollSource.contains("if scrollMode == .followingBottom"))
   }
 
   func testNotchAgentIndicatorUsesOmiDotsAndStackedList() throws {
@@ -234,12 +251,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("@State private var notchLogoHovering = false"))
     XCTAssertTrue(source.contains("private func setNotchLogoHovering(_ hovering: Bool)"))
     XCTAssertTrue(source.contains("private var notchAgentLogoHitTarget: some View"))
-    XCTAssertTrue(source.contains("(agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu) && !notchLogoHovering ? 1 : 0"))
+    XCTAssertTrue(source.contains("agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu ? 1 : 0"))
     XCTAssertTrue(source.contains("ZStack(alignment: .trailing)"))
-    XCTAssertTrue(source.contains(".frame(width: NotchAgentStackMetrics.logoFrameSize, height: NotchAgentStackMetrics.logoFrameSize)"))
+    XCTAssertTrue(source.contains("static let logoFrameSize: CGFloat = 21"))
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
-    XCTAssertTrue(source.contains(".onTapGesture {\n                    openFloatingBarSettings()\n                }"))
+    XCTAssertTrue(source.contains(".onTapGesture {\n                    openAgentChatsFromNotchLogo()\n                }"))
     XCTAssertTrue(source.contains("Image(systemName: \"gearshape.fill\")"))
+    XCTAssertTrue(source.contains("private func openAgentChatsFromNotchLogo()"))
+    XCTAssertTrue(source.contains("showAgentListFromConversation()"))
     XCTAssertTrue(source.contains("setAgentSwitcherHovering(hovering)"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherPinned"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherHovering"))
@@ -290,7 +309,31 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("let handoff = AgentPillsManager.floatingAgentHandoff(for: message)"))
     XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnFromHandoff("))
-    XCTAssertTrue(source.contains("completeVisibleAgentHandoff("))
+    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    handoff,\n                    pill: pill"))
+    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    .init(originalRequest: message, agentTask: message),\n                    pill: pill"))
+    XCTAssertTrue(source.contains("let toolUseId = \"floating-agent-\\(pill.id.uuidString)\""))
+    XCTAssertTrue(source.contains("name: \"spawn_agent\""))
+    XCTAssertTrue(source.contains("status: .completed"))
+    XCTAssertTrue(source.contains("id: \\(pill.id.uuidString)"))
+    XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
+    XCTAssertFalse(source.contains("barWindow.closeAIConversation()"))
+  }
+
+  func testSpawnAgentToolCallOpensSubagentChat() throws {
+    let responseSource = try aiResponseViewSource()
+    let viewSource = try floatingControlBarViewSource()
+    let chatPageSource = try chatPageSource()
+
+    XCTAssertTrue(responseSource.contains("var onOpenAgent: ((UUID) -> Void)?"))
+    XCTAssertTrue(responseSource.contains("ToolCallsGroup(calls: calls, onOpenAgent: onOpenAgent)"))
+    XCTAssertTrue(responseSource.contains("return calls.contains { $0.spawnedAgentID != nil }"))
+    XCTAssertFalse(responseSource.contains("openNewlySpawnedAgentIfNeeded()"))
+    XCTAssertFalse(responseSource.contains("autoOpenedSpawnedAgentIDs"))
+    XCTAssertTrue(viewSource.contains("onOpenAgent: { agentID in\n                openAgentInChat(agentID: agentID)"))
+    XCTAssertTrue(chatPageSource.contains("var onOpenAgent: ((UUID) -> Void)? = nil"))
+    XCTAssertTrue(chatPageSource.contains("calls.compactMap(\\.spawnedAgentID).last"))
+    XCTAssertTrue(chatPageSource.contains("Self.cleanToolName(name) == \"spawn_agent\""))
+    XCTAssertTrue(chatPageSource.contains("guard trimmed.lowercased().hasPrefix(\"id:\") else { continue }"))
   }
 
   func testResizeGripKeepsNotchCentered() throws {
@@ -363,8 +406,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentSource.contains("func markContentChanged()"))
     XCTAssertTrue(agentSource.contains("pill.markContentChanged()"))
     XCTAssertTrue(viewSource.contains(".id(pill.contentRevision)"))
-    XCTAssertTrue(viewSource.contains(".onChange(of: pill.contentRevision)"))
-    XCTAssertTrue(viewSource.contains(".onChange(of: pill.conversationMessages.map(\\.text).joined(separator: \"\\n\"))"))
+    XCTAssertTrue(viewSource.contains("private var scrollContentToken: AnyHashable"))
+    XCTAssertTrue(viewSource.contains("String(pill.contentRevision)"))
+    XCTAssertTrue(viewSource.contains("message.text"))
+    XCTAssertTrue(viewSource.contains("contentChangeToken: scrollContentToken"))
     XCTAssertTrue(viewSource.contains("state.reportContentHeight(height, for: .agent(pill.id))"))
   }
 
@@ -731,6 +776,20 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(statusStoreSource.contains("if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {\n      return\n    }"))
   }
 
+  func testStoppedPillIgnoresLateNonCancellationProjection() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(
+      source.contains(
+        """
+        if pill.status == .stopped && projection.status != .cancelled {
+                    return
+                }
+
+                switch projection.status {
+        """))
+  }
+
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
     let source = try agentPillSource()
     let pillViewSource = try agentPillsViewSource()
@@ -802,7 +861,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatPageSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
     XCTAssertTrue(chatPageSource.contains(".frame(height: compact ? 34 : nil)"))
     XCTAssertTrue(chatPageSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
-    XCTAssertTrue(chatPageSource.contains("ToolCallCard(name: name, status: status, input: input, output: output)"))
+    XCTAssertTrue(chatPageSource.contains("ToolCallCard(\n              name: name"))
+    XCTAssertTrue(chatPageSource.contains("spawnedAgentID: block.spawnedAgentID"))
+    XCTAssertTrue(chatPageSource.contains("onOpenAgent: onOpenAgent"))
     XCTAssertTrue(chatPageSource.contains("summaryEmbeddedInToolName"))
     XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
     XCTAssertTrue(providerSource.contains("return \"Reading file\""))
@@ -879,6 +940,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/AIResponseView.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func chatScrollBehaviorSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Components/ChatScrollBehavior.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

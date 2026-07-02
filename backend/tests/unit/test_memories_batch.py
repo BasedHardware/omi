@@ -85,6 +85,27 @@ class TestUpsertMemoryVectorsBatch:
         vector = fake_index.upsert.call_args.kwargs['vectors'][0]
         assert vector['metadata']['subject_entity_id'] == 'user'
 
+    def test_single_upsert_strips_null_projection_metadata(self, monkeypatch):
+        fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
+        fake_embeddings.embed_query = MagicMock(return_value=[0.1, 0.2])
+
+        vector_db.upsert_memory_vector(
+            'uid-abc',
+            'm1',
+            'hello',
+            'system',
+            projection_metadata={
+                'source_commit_id': None,
+                'projection_version': 1,
+                'source_tombstone_state': 'active',
+            },
+        )
+
+        metadata = fake_index.upsert.call_args.kwargs['vectors'][0]['metadata']
+        assert 'source_commit_id' not in metadata
+        assert metadata['projection_version'] == 1
+        assert metadata['source_tombstone_state'] == 'active'
+
     def test_batch_upsert_uses_single_embed_and_single_upsert(self, monkeypatch):
         """The whole point of the helper: one embed call + one upsert call."""
         fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
@@ -111,6 +132,32 @@ class TestUpsertMemoryVectorsBatch:
         assert all(v['metadata']['uid'] == 'uid-abc' for v in vectors)
         assert vectors[0]['metadata']['subject_entity_id'] == 'user'
         assert 'subject_entity_id' not in vectors[1]['metadata']
+
+    def test_batch_upsert_strips_null_projection_metadata(self, monkeypatch):
+        fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
+
+        written = vector_db.upsert_memory_vectors_batch(
+            'uid-abc',
+            [
+                {
+                    'memory_id': 'm1',
+                    'content': 'apple',
+                    'category': 'manual',
+                    'projection_metadata': {
+                        'source_commit_id': None,
+                        'projection_version': 1,
+                        'valid_time': None,
+                    },
+                }
+            ],
+        )
+
+        assert written == 1
+        fake_embeddings.embed_documents.assert_called_once_with(['apple'])
+        metadata = fake_index.upsert.call_args.kwargs['vectors'][0]['metadata']
+        assert 'source_commit_id' not in metadata
+        assert 'valid_time' not in metadata
+        assert metadata['projection_version'] == 1
 
     def test_batch_upsert_empty_list_is_noop(self, monkeypatch):
         fake_index, fake_embeddings = self._setup_mocks(monkeypatch)

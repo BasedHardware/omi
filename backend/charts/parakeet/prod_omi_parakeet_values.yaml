@@ -123,6 +123,8 @@ env:
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
 
+terminationGracePeriodSeconds: 150
+
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
@@ -177,25 +179,20 @@ prometheus-adapter:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 10
+  maxReplicas: 2
   behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 300
     scaleDown:
       stabilizationWindowSeconds: 600
       policies:
-      - type: Percent
-        value: 20
-        periodSeconds: 300
       - type: Pods
         value: 1
-        periodSeconds: 120
-      selectPolicy: Min
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-      - type: Pods
-        value: 2
-        periodSeconds: 60
-      selectPolicy: Max
+        periodSeconds: 600
   requestsPerPod: 25
   targetGPUUtilization: 70
 

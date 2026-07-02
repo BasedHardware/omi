@@ -101,6 +101,7 @@ byok_stub.has_byok_keys = MagicMock(return_value=False)
 gateway_stub = _stub_module("utils.llm.gateway_client")
 gateway_stub.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_stub.record_chat_extraction_gateway_result = MagicMock()
+gateway_stub.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 
 gateway_observability_stub = _stub_module("utils.llm.gateway_observability")
 gateway_observability_stub.record_gateway_shadow_comparison = MagicMock()
