@@ -34,7 +34,7 @@ struct AgentsSettingsView: View {
                     .font(.title2).bold()
                 Text("Omi routes a spoken task to the best connected agent, with fallback to the others.")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(OmiColors.textTertiary)
             }
             Spacer()
             Button {
@@ -65,22 +65,22 @@ struct AgentsSettingsView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Circle()
-                    .fill(connected ? Color.green : Color.secondary.opacity(0.4))
+                    .fill(connected ? OmiColors.success : OmiColors.textQuaternary)
                     .frame(width: 9, height: 9)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(provider.displayName).font(.headline)
-                    Text(provider.tagline).font(.caption).foregroundStyle(.secondary)
+                    Text(provider.tagline).font(.caption).foregroundStyle(OmiColors.textTertiary)
                 }
                 Spacer()
                 if bridgeMode == provider.bridgeModeRawValue {
                     Text("Default")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(OmiColors.textTertiary)
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.15), in: Capsule())
+                        .background(OmiColors.border, in: Capsule())
                 }
                 Text(connected ? "Connected" : (installable != nil ? "Not installed" : "Connect in AI Chat"))
                     .font(.caption)
-                    .foregroundStyle(connected ? .green : .secondary)
+                    .foregroundStyle(connected ? OmiColors.success : OmiColors.textTertiary)
             }
             if !connected, let installable {
                 HStack(spacing: 8) {
@@ -89,7 +89,7 @@ struct AgentsSettingsView: View {
                         .textSelection(.enabled)
                         .padding(6)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+                        .background(OmiColors.backgroundTertiary, in: RoundedRectangle(cornerRadius: 6))
                     Button {
                         copyCommand(installable.installCommand, key: provider.id)
                     } label: {
@@ -108,8 +108,8 @@ struct AgentsSettingsView: View {
             }
         }
         .padding()
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15)))
+        .background(OmiColors.backgroundRaised, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.border))
     }
 
     private var defaultPicker: some View {
@@ -117,7 +117,7 @@ struct AgentsSettingsView: View {
             Text("Default agent")
                 .font(.headline)
             Text("Used when the best-fit agents tie, or when you don't name one.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(OmiColors.textTertiary)
             Picker("", selection: $bridgeMode) {
                 ForEach(AIProvider.all, id: \.id) { provider in
                     Text(provider.displayName).tag(provider.bridgeModeRawValue)
@@ -127,8 +127,8 @@ struct AgentsSettingsView: View {
             .frame(maxWidth: 280, alignment: .leading)
         }
         .padding()
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15)))
+        .background(OmiColors.backgroundRaised, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.border))
     }
 
     private var routingExplainer: some View {
@@ -139,11 +139,11 @@ struct AgentsSettingsView: View {
                 "Say a task and name an agent (\"use Codex\") to run it there. Say a task without naming one and Omi picks the best connected agent for it, then falls back through the others. Name an agent that isn't installed and Omi shows you how."
             )
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(OmiColors.textTertiary)
         }
         .padding()
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15)))
+        .background(OmiColors.backgroundRaised, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.border))
     }
 
     private func copyCommand(_ command: String, key: String) {
