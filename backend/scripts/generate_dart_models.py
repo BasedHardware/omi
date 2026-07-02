@@ -36,7 +36,12 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'action_items_folders_wire.g.dart',
         'schemas': (
             'ActionItemResponse',
+            'ActionItemsResponse',
+            'ActionItemsSearchResponse',
+            'PendingSyncResponse',
             'Folder',
+            'FolderMutationResponse',
+            'BulkMoveConversationsResponse',
         ),
     },
 }
@@ -92,7 +97,12 @@ def unwrap_nullable(schema: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     return schema, False
 
 
-def dart_type_for(schema: dict[str, Any], required: bool, target_schemas: tuple[str, ...]) -> DartType:
+def dart_type_for(
+    schema: dict[str, Any],
+    required: bool,
+    target_schemas: tuple[str, ...],
+    all_schemas: dict[str, Any],
+) -> DartType:
     unwrapped, nullable = unwrap_nullable(schema)
     nullable = nullable or not required
     ref = unwrapped.get('$ref')
@@ -100,14 +110,17 @@ def dart_type_for(schema: dict[str, Any], required: bool, target_schemas: tuple[
         schema_name = ref.rsplit('/', 1)[-1]
         if schema_name in target_schemas:
             return DartType(generated_class_name(schema_name), nullable=nullable, ref_schema=schema_name)
-        return DartType('String', nullable=nullable)
+        ref_schema = all_schemas.get(schema_name, {})
+        if ref_schema.get('type') == 'string':
+            return DartType('String', nullable=nullable)
+        raise ValueError(f'$ref target {schema_name} is not in selected Dart schema group')
 
     schema_type = unwrapped.get('type')
     if unwrapped.get('format') == 'date-time':
         return DartType('DateTime', nullable=nullable, is_date_time=True)
     if schema_type == 'array':
-        item_type = dart_type_for(unwrapped.get('items', {'type': 'object'}), True, target_schemas)
-        return DartType(f'List<{item_type.name}>', nullable=False, list_item=item_type)
+        item_type = dart_type_for(unwrapped.get('items', {'type': 'object'}), True, target_schemas, all_schemas)
+        return DartType(f'List<{item_type.name}>', nullable=nullable, list_item=item_type)
     if schema_type == 'integer':
         return DartType('int', nullable=nullable)
     if schema_type == 'number':
@@ -123,7 +136,7 @@ def default_for(field: Field) -> str:
     if field.default is not None:
         return dart_literal(field.default)
     if field.dart_type.list_item:
-        return 'const []'
+        return 'null' if field.dart_type.nullable else 'const []'
     if field.dart_type.name == 'String' and not field.dart_type.nullable:
         return "''"
     if field.dart_type.name == 'int' and not field.dart_type.nullable:
@@ -166,15 +179,16 @@ def read_expr(field: Field) -> str:
     default = default_for(field)
     if typ.list_item:
         item = typ.list_item
+        nullable_prefix = f'{value} == null ? null : ' if typ.nullable else ''
         if item.ref_schema:
-            return f'_readObjectList({value}, {item.name}.fromJson)'
+            return f'{nullable_prefix}_readObjectList({value}, {item.name}.fromJson)'
         if item.name == 'String':
-            return f'_readStringList({value})'
+            return f'{nullable_prefix}_readStringList({value})'
         if item.name == 'double':
-            return f'_readDoubleList({value})'
+            return f'{nullable_prefix}_readDoubleList({value})'
         if item.name == 'int':
-            return f'_readIntList({value})'
-        return f'_readDynamicList({value})'
+            return f'{nullable_prefix}_readIntList({value})'
+        return f'{nullable_prefix}_readDynamicList({value})'
     if typ.ref_schema:
         if typ.nullable:
             return f'_readObject({value}, {typ.name}.fromJson)'
@@ -212,6 +226,8 @@ def to_json_expr(field: Field) -> str:
     if typ.list_item:
         item = typ.list_item
         if item.ref_schema:
+            if typ.nullable:
+                return f'{name}?.map((value) => value.toJson()).toList()'
             return f'{name}.map((value) => value.toJson()).toList()'
         return name
     if typ.ref_schema:
@@ -221,7 +237,12 @@ def to_json_expr(field: Field) -> str:
     return name
 
 
-def fields_for_schema(schema_name: str, schema: dict[str, Any], target_schemas: tuple[str, ...]) -> list[Field]:
+def fields_for_schema(
+    schema_name: str,
+    schema: dict[str, Any],
+    target_schemas: tuple[str, ...],
+    all_schemas: dict[str, Any],
+) -> list[Field]:
     required = set(schema.get('required', []))
     fields: list[Field] = []
     for wire_name, prop_schema in schema.get('properties', {}).items():
@@ -229,7 +250,7 @@ def fields_for_schema(schema_name: str, schema: dict[str, Any], target_schemas: 
             Field(
                 wire_name=wire_name,
                 dart_name=snake_to_camel(wire_name),
-                dart_type=dart_type_for(prop_schema, wire_name in required, target_schemas),
+                dart_type=dart_type_for(prop_schema, wire_name in required, target_schemas, all_schemas),
                 required=wire_name in required,
                 default=prop_schema.get('default'),
                 aliases=ALIASES.get(schema_name, {}).get(wire_name, ()),
@@ -248,7 +269,7 @@ def emit_class(schema_name: str, fields: list[Field]) -> str:
     for field in fields:
         required = 'required ' if field.required or not field.dart_type.nullable else ''
         default = ''
-        if not required and field.dart_type.list_item:
+        if not required and field.dart_type.list_item and not field.dart_type.nullable:
             default = ' = const []'
         lines.append(f'    {required}this.{field.dart_name}{default},')
     lines.append('  });')
@@ -356,7 +377,9 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
         '',
     ]
     for schema_name in target_schemas:
-        chunks.append(emit_class(schema_name, fields_for_schema(schema_name, schemas[schema_name], target_schemas)))
+        chunks.append(
+            emit_class(schema_name, fields_for_schema(schema_name, schemas[schema_name], target_schemas, schemas))
+        )
         chunks.append('')
     chunks.append(emit_helpers())
     chunks.append('')
@@ -372,6 +395,7 @@ def parse_args() -> argparse.Namespace:
         default='conversation',
         help='schema group to generate',
     )
+    parser.add_argument('--all', action='store_true', help='generate or check every schema group')
     parser.add_argument('--output', default=None, help='Dart output path; defaults to the selected group output')
     parser.add_argument('--check', action='store_true', help='fail if generated output is stale')
     return parser.parse_args()
@@ -379,16 +403,22 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    output_path = Path(args.output) if args.output else SCHEMA_GROUPS[args.group]['output']
-    generated = build_output(json.loads(Path(args.spec).read_text()), args.group)
-    if args.check:
-        if not output_path.exists() or output_path.read_text() != generated:
-            raise SystemExit(f'{output_path} is stale; run backend/scripts/generate_dart_models.py')
-        print(f'{output_path} is up to date')
-        return 0
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(generated)
-    print(f'wrote {output_path}')
+    if args.all and args.output:
+        raise SystemExit('--output cannot be used with --all')
+
+    spec = json.loads(Path(args.spec).read_text())
+    groups = tuple(SCHEMA_GROUPS) if args.all else (args.group,)
+    for group in groups:
+        output_path = Path(args.output) if args.output else SCHEMA_GROUPS[group]['output']
+        generated = build_output(spec, group)
+        if args.check:
+            if not output_path.exists() or output_path.read_text() != generated:
+                raise SystemExit(f'{output_path} is stale; run backend/scripts/generate_dart_models.py --group {group}')
+            print(f'{output_path} is up to date')
+            continue
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(generated)
+        print(f'wrote {output_path}')
     return 0
 
 

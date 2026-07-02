@@ -189,8 +189,8 @@ class CalendarEventLink {
     return CalendarEventLink(
       eventId: generated.eventId,
       title: generated.title,
-      attendees: generated.attendees,
-      attendeeEmails: generated.attendeeEmails,
+      attendees: generated.attendees ?? const [],
+      attendeeEmails: generated.attendeeEmails ?? const [],
       startTime: generated.startTime,
       endTime: generated.endTime,
       htmlLink: generated.htmlLink,
@@ -335,14 +335,14 @@ class ServerConversation {
           : Structured.fromJson(generated.structured.toJson()),
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
-      transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
-      appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
-      suggestedSummarizationApps: generated.suggestedSummarizationApps,
+      transcriptSegments: (generated.transcriptSegments ?? const []).map(_transcriptSegmentFromGenerated).toList(),
+      appResults: (generated.appsResults ?? const []).map(AppResponse.fromGenerated).toList(),
+      suggestedSummarizationApps: generated.suggestedSummarizationApps ?? const [],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'])
           : (generated.geolocation == null ? null : Geolocation.fromJson(generated.geolocation!.toJson())),
-      photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
-      audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
+      photos: (generated.photos ?? const []).map(ConversationPhoto.fromGenerated).toList(),
+      audioFiles: (generated.audioFiles ?? const []).map(AudioFile.fromGenerated).toList(),
       discarded: generated.discarded ?? false,
       source: generated.source != null
           ? ConversationSource.values.asNameMap()[generated.source]

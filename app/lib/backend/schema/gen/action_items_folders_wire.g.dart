@@ -78,6 +78,74 @@ class GeneratedActionItemResponse {
   }
 }
 
+class GeneratedActionItemsResponse {
+  final List<GeneratedActionItemResponse> actionItems;
+  final bool? hasMore;
+
+  const GeneratedActionItemsResponse({
+    required this.actionItems,
+    this.hasMore,
+  });
+
+  factory GeneratedActionItemsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedActionItemsResponse(
+      actionItems: _readObjectList(_readAny(json, const ["action_items"]), GeneratedActionItemResponse.fromJson),
+      hasMore: _readBool(_readAny(json, const ["has_more"])) ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action_items': actionItems.map((value) => value.toJson()).toList(),
+      'has_more': hasMore,
+    };
+  }
+}
+
+class GeneratedActionItemsSearchResponse {
+  final List<GeneratedActionItemResponse> actionItems;
+
+  const GeneratedActionItemsSearchResponse({
+    required this.actionItems,
+  });
+
+  factory GeneratedActionItemsSearchResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedActionItemsSearchResponse(
+      actionItems: _readObjectList(_readAny(json, const ["action_items"]), GeneratedActionItemResponse.fromJson),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action_items': actionItems.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedPendingSyncResponse {
+  final List<GeneratedActionItemResponse> pendingExport;
+  final List<GeneratedActionItemResponse> syncedItems;
+
+  const GeneratedPendingSyncResponse({
+    required this.pendingExport,
+    required this.syncedItems,
+  });
+
+  factory GeneratedPendingSyncResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedPendingSyncResponse(
+      pendingExport: _readObjectList(_readAny(json, const ["pending_export"]), GeneratedActionItemResponse.fromJson),
+      syncedItems: _readObjectList(_readAny(json, const ["synced_items"]), GeneratedActionItemResponse.fromJson),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'pending_export': pendingExport.map((value) => value.toJson()).toList(),
+      'synced_items': syncedItems.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
 class GeneratedFolder {
   final String? categoryMapping;
   final String? color;
@@ -138,6 +206,50 @@ class GeneratedFolder {
       'name': name,
       'order': order,
       'updated_at': updatedAt.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedFolderMutationResponse {
+  final String status;
+
+  const GeneratedFolderMutationResponse({
+    required this.status,
+  });
+
+  factory GeneratedFolderMutationResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedFolderMutationResponse(
+      status: _readString(_readAny(json, const ["status"])) ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+    };
+  }
+}
+
+class GeneratedBulkMoveConversationsResponse {
+  final int? movedCount;
+  final String status;
+
+  const GeneratedBulkMoveConversationsResponse({
+    this.movedCount,
+    required this.status,
+  });
+
+  factory GeneratedBulkMoveConversationsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedBulkMoveConversationsResponse(
+      movedCount: _readInt(_readAny(json, const ["moved_count"])) ?? 0,
+      status: _readString(_readAny(json, const ["status"])) ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'moved_count': movedCount,
+      'status': status,
     };
   }
 }

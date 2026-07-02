@@ -48,7 +48,7 @@ class Structured {
         }
       }
     } else {
-      structured.actionItems.addAll(generated.actionItems.map(ActionItem.fromGenerated));
+      structured.actionItems.addAll((generated.actionItems ?? const []).map(ActionItem.fromGenerated));
     }
 
     final events = json['events'];
@@ -62,7 +62,7 @@ class Structured {
         }
       }
     } else {
-      structured.events.addAll(generated.events.map(Event.fromGenerated));
+      structured.events.addAll((generated.events ?? const []).map(Event.fromGenerated));
     }
     return structured;
   }

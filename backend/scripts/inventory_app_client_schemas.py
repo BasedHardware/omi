@@ -213,6 +213,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='fail when Flutter REST route prefixes are missing from app-client OpenAPI',
     )
+    parser.add_argument(
+        '--fail-on-manual-rest-dtos',
+        action='store_true',
+        help='fail when raw hand-written REST DTO JSON parsing remains',
+    )
     return parser.parse_args()
 
 
@@ -224,6 +229,10 @@ def main() -> int:
             'Uncovered Flutter REST route prefixes: ' + ', '.join(report['uncovered_app_route_prefixes']),
             flush=True,
         )
+        return 1
+    if args.fail_on_manual_rest_dtos and report['remaining_manual_dart_json_schema_files']:
+        paths = [item['path'] for item in report['remaining_manual_dart_json_schema_files']]
+        print('Remaining raw manual Dart JSON schema files: ' + ', '.join(paths), flush=True)
         return 1
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

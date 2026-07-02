@@ -93,6 +93,20 @@ class ActionItemResponse(BaseModel):
     indent_level: int = 0
 
 
+class ActionItemsResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+    has_more: bool = False
+
+
+class ActionItemsSearchResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+
+
+class PendingSyncResponse(BaseModel):
+    pending_export: List[ActionItemResponse]
+    synced_items: List[ActionItemResponse]
+
+
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
@@ -145,7 +159,7 @@ class SyncBatchRequest(BaseModel):
     items: List[SyncBatchItem] = Field(..., max_length=100)
 
 
-@router.get("/v1/action-items/pending-sync", tags=['action-items'])
+@router.get("/v1/action-items/pending-sync", response_model=PendingSyncResponse, tags=['action-items'])
 def get_pending_sync_items(
     platform: str = Query('apple_reminders', description="Sync platform"),
     uid: str = Depends(auth.get_current_user_uid),
@@ -281,7 +295,7 @@ def _ensure_aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
-@router.get("/v1/action-items", tags=['action-items'])
+@router.get("/v1/action-items", response_model=ActionItemsResponse, tags=['action-items'])
 def get_action_items(
     limit: int = Query(50, ge=1, le=500, description="Maximum number of action items to return"),
     offset: int = Query(0, ge=0, description="Number of action items to skip"),
@@ -340,7 +354,7 @@ def get_action_items(
     return {"action_items": response_items, "has_more": has_more}
 
 
-@router.get("/v1/action-items/search", tags=['action-items'])
+@router.get("/v1/action-items/search", response_model=ActionItemsSearchResponse, tags=['action-items'])
 def search_action_items(
     query: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results"),

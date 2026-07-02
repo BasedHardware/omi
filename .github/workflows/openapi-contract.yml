@@ -8,6 +8,7 @@ on:
       - 'backend/**'
       - 'docs/api-reference/openapi.json'
       - 'docs/api-reference/app-client-openapi.json'
+      - 'app/lib/backend/schema/gen/**'
       - 'docs/docs.json'
       - '.github/workflows/openapi-contract.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'backend/**'
       - 'docs/api-reference/openapi.json'
       - 'docs/api-reference/app-client-openapi.json'
+      - 'app/lib/backend/schema/gen/**'
       - 'docs/docs.json'
       - '.github/workflows/openapi-contract.yml'
   workflow_dispatch:
@@ -50,3 +52,6 @@ jobs:
       - name: Check committed app-client OpenAPI contract
         working-directory: backend
         run: scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json
+
+      - name: Check generated app-client Dart schemas
+        run: python backend/scripts/generate_dart_models.py --all --check

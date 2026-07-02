@@ -127,11 +127,13 @@ class ActionItemsResponse {
   ActionItemsResponse({required this.actionItems, required this.hasMore});
 
   factory ActionItemsResponse.fromJson(Map<String, dynamic> json) {
+    return ActionItemsResponse.fromGenerated(wire.GeneratedActionItemsResponse.fromJson(json));
+  }
+
+  factory ActionItemsResponse.fromGenerated(wire.GeneratedActionItemsResponse generated) {
     return ActionItemsResponse(
-      actionItems: (json['action_items'] as List<dynamic>)
-          .map((item) => ActionItemWithMetadata.fromJson(item))
-          .toList(),
-      hasMore: json['has_more'],
+      actionItems: generated.actionItems.map(ActionItemWithMetadata.fromGenerated).toList(),
+      hasMore: generated.hasMore,
     );
   }
 }
@@ -143,13 +145,13 @@ class PendingSyncResponse {
   PendingSyncResponse({required this.pendingExport, required this.syncedItems});
 
   factory PendingSyncResponse.fromJson(Map<String, dynamic> json) {
+    return PendingSyncResponse.fromGenerated(wire.GeneratedPendingSyncResponse.fromJson(json));
+  }
+
+  factory PendingSyncResponse.fromGenerated(wire.GeneratedPendingSyncResponse generated) {
     return PendingSyncResponse(
-      pendingExport: (json['pending_export'] as List<dynamic>)
-          .map((item) => ActionItemWithMetadata.fromJson(item))
-          .toList(),
-      syncedItems: (json['synced_items'] as List<dynamic>)
-          .map((item) => ActionItemWithMetadata.fromJson(item))
-          .toList(),
+      pendingExport: generated.pendingExport.map(ActionItemWithMetadata.fromGenerated).toList(),
+      syncedItems: generated.syncedItems.map(ActionItemWithMetadata.fromGenerated).toList(),
     );
   }
 }

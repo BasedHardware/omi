@@ -278,6 +278,43 @@
         "title": "ActionItemResponse",
         "type": "object"
       },
+      "ActionItemsResponse": {
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action_items"
+        ],
+        "title": "ActionItemsResponse",
+        "type": "object"
+      },
+      "ActionItemsSearchResponse": {
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Action Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action_items"
+        ],
+        "title": "ActionItemsSearchResponse",
+        "type": "object"
+      },
       "ActionType": {
         "enum": [
           "create_conversation",
@@ -1507,6 +1544,25 @@
           "conversation_ids"
         ],
         "title": "BulkMoveConversationsRequest",
+        "type": "object"
+      },
+      "BulkMoveConversationsResponse": {
+        "description": "Response for bulk folder conversation moves.",
+        "properties": {
+          "moved_count": {
+            "default": 0,
+            "title": "Moved Count",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "BulkMoveConversationsResponse",
         "type": "object"
       },
       "CalendarEventLink": {
@@ -4800,6 +4856,20 @@
         "title": "Folder",
         "type": "object"
       },
+      "FolderMutationResponse": {
+        "description": "Status response for folder mutation endpoints.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "FolderMutationResponse",
+        "type": "object"
+      },
       "FullConversation": {
         "properties": {
           "finished_at": {
@@ -6734,6 +6804,30 @@
           "paywalled"
         ],
         "title": "PaywallStatusResponse",
+        "type": "object"
+      },
+      "PendingSyncResponse": {
+        "properties": {
+          "pending_export": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Pending Export",
+            "type": "array"
+          },
+          "synced_items": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Synced Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pending_export",
+          "synced_items"
+        ],
+        "title": "PendingSyncResponse",
         "type": "object"
       },
       "Person": {
@@ -10855,7 +10949,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ActionItemsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11375,7 +11471,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PendingSyncResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11477,7 +11575,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ActionItemsSearchResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19119,7 +19219,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -22566,7 +22668,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -23075,7 +23179,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMoveConversationsResponse"
+                }
               }
             },
             "description": "Successful Response"

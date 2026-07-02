@@ -78,7 +78,7 @@ class TranscriptSegment {
       personId: generated.personId,
       start: generated.start,
       end: generated.end,
-      translations: generated.translations.map((translation) {
+      translations: (generated.translations ?? const []).map((translation) {
         return Translation(lang: translation.lang, text: translation.text);
       }).toList(),
       speechProfileProcessed: generated.speechProfileProcessed ?? true,
