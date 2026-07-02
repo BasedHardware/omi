@@ -5,6 +5,7 @@ enum AgentHarnessMode: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 extension Optional where Wrapped == AgentHarnessMode {
@@ -19,6 +20,7 @@ enum AgentAdapterId: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 enum AgentRuntimeRouting {
@@ -32,6 +34,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case .openClaw:
             return .openclaw
+        case .codex:
+            return .codex
         }
     }
 
@@ -45,6 +49,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case AgentHarnessMode.openclaw.rawValue, "openClaw":
             return .openclaw
+        case AgentHarnessMode.codex.rawValue:
+            return .codex
         default:
             return nil
         }
@@ -60,7 +66,27 @@ enum AgentRuntimeRouting {
             return .hermes
         case .openclaw:
             return .openclaw
+        case .codex:
+            return .codex
         }
+    }
+
+    /// Harnesses currently connected/available on this machine. Omi AI (pi-mono) is always
+    /// available; Hermes/OpenClaw/Codex are detected locally; Claude Code (acp) counts when the
+    /// user has selected it as their provider.
+    static func connectedHarnesses(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bridgeMode: String? = UserDefaults.standard.string(forKey: "chatBridgeMode")
+    ) -> [AgentHarnessMode] {
+        var harnesses: [AgentHarnessMode] = [.piMono]
+        for provider in AgentPillsManager.DirectedProvider.allCases
+        where LocalAgentProviderDetector.isAvailable(provider, environment: environment) {
+            harnesses.append(provider.harnessMode)
+        }
+        if bridgeMode == ChatProvider.BridgeMode.userClaude.rawValue {
+            harnesses.append(.acp)
+        }
+        return harnesses
     }
 }
 
@@ -79,13 +105,11 @@ struct LocalAgentProviderAvailability: Equatable {
     }
 
     var setupPrompt: String {
-        switch provider {
-        case .hermes:
-            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
-        case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
-        }
+        "\(provider.displayName) isn't connected yet. Install it by running: \(provider.installCommand). Then ask me again."
     }
+
+    /// The one-line install command surfaced by the install-helper UI.
+    var installCommand: String { provider.installCommand }
 
     var toolError: String {
         "Error: \(setupPrompt)"

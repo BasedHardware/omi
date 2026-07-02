@@ -55,6 +55,25 @@ export interface CompatibilityFacadeOptions {
   maxRecoverableRetries?: number;
 }
 
+export interface HandleQueryOptions {
+  /**
+   * When true, a terminal run failure is returned to the caller instead of being
+   * emitted as an `error` message. This lets the caller try another adapter
+   * (failover) before the user ever sees an error.
+   */
+  suppressTerminalError?: boolean;
+}
+
+export interface HandleQueryOutcome {
+  /** Whether the run ended in a terminal failure. */
+  failed: boolean;
+  /**
+   * The correlated error the facade emitted (or would have emitted, when
+   * suppressed). Present only when `failed` is true.
+   */
+  errorMessage?: ErrorMessage;
+}
+
 interface ActiveRequestContext {
   protocolVersion?: ProtocolVersion;
   requestId: string;
@@ -200,7 +219,7 @@ export class JsonlCompatibilityFacade {
     }
   }
 
-  async handleQuery(message: QueryMessage): Promise<void> {
+  async handleQuery(message: QueryMessage, options?: HandleQueryOptions): Promise<HandleQueryOutcome> {
     const input = this.buildRunInput(message);
     const key = this.activeRequestKey(input.requestId, input.clientId);
     if (this.activeByRequest.has(key)) {
@@ -227,13 +246,12 @@ export class JsonlCompatibilityFacade {
       if (result.terminalStatus === "failed") {
         const failure = failureFromResultJson(result.run.resultJson);
         const message = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
-        const errorMessage: ErrorMessage = {
-          type: "error",
-          message,
-          failure,
-        };
-        this.send(this.withCorrelation(errorMessage, context));
-        return;
+        const errorMessage = this.withCorrelation({ type: "error", message, failure } as ErrorMessage, context);
+        if (options?.suppressTerminalError) {
+          return { failed: true, errorMessage };
+        }
+        this.send(errorMessage);
+        return { failed: true, errorMessage };
       }
 
       const resultMessage: ResultMessage = {
@@ -250,11 +268,16 @@ export class JsonlCompatibilityFacade {
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
       };
       this.send(this.withCorrelation(resultMessage, context));
+      return { failed: false };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
       this.log(`Compatibility query error: ${messageText}`);
-      const errorMessage: ErrorMessage = { type: "error", message: messageText };
-      this.send(this.withCorrelation(errorMessage, context));
+      const errorMessage = this.withCorrelation({ type: "error", message: messageText } as ErrorMessage, context);
+      if (options?.suppressTerminalError) {
+        return { failed: true, errorMessage };
+      }
+      this.send(errorMessage);
+      return { failed: true, errorMessage };
     } finally {
       this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {

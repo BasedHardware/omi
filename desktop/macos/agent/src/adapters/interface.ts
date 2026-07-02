@@ -254,6 +254,22 @@ export const ADAPTER_CAPABILITY_MATRIX = {
       restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable OpenClaw bindings."),
     },
   },
+  codex: {
+    adapterId: "codex",
+    productionAdapter: true,
+    // Codex runs one-shot `codex exec` invocations: stateless per attempt, no
+    // resumable native session, model chosen per invocation.
+    expectations: {
+      nativeResume: unsupported("Codex runs one-shot `codex exec` invocations with no resumable native session id."),
+      cancellationDispatch: required("Codex attempts are cancellable by terminating the active `codex exec` subprocess."),
+      cancellationAck: knownLimitation("Codex cancellation terminates the subprocess without an independent terminal ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: unsupported("Codex exec is stateless per attempt and keeps no process-local session state between attempts."),
+      modelSwitching: unsupported("Codex model is selected per invocation via --model; there is no in-session set_model."),
+      artifactEmission: unsupported("Codex adapter does not emit artifact references yet."),
+      toolSupport: unsupported("Codex exec does not consume the per-session Omi MCP tool relay; tools are configured in the Codex environment."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active Codex attempts; one-shot bindings carry no resumable state."),
+    },
+  },
   a2a: {
     adapterId: "a2a",
     productionAdapter: false,
@@ -262,10 +278,10 @@ export const ADAPTER_CAPABILITY_MATRIX = {
 } as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
 
 export type KnownAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX;
-export type ProductionAdapterId = "acp" | "pi-mono" | "hermes" | "openclaw";
+export type ProductionAdapterId = "acp" | "pi-mono" | "hermes" | "openclaw" | "codex";
 export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
 
-export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono", "hermes", "openclaw"] as const satisfies readonly ProductionAdapterId[];
+export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono", "hermes", "openclaw", "codex"] as const satisfies readonly ProductionAdapterId[];
 export const PLACEHOLDER_ADAPTER_IDS = ["a2a"] as const satisfies readonly PlaceholderAdapterId[];
 
 export function isKnownAdapterId(adapterId: string): adapterId is KnownAdapterId {
