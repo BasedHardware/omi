@@ -355,3 +355,22 @@ class MergeConversationsResponse(BaseModel):
     message: str = Field(default="Merge started", description="Status message")
     warning: Optional[str] = Field(default=None, description="Warning message (e.g., large time gaps)")
     conversation_ids: List[str] = Field(description="All conversation IDs being merged")
+
+
+class SpeakerAnalytics(BaseModel):
+    speaker: str  # "You", a person's name, or a "Speaker N" diarization label
+    person_id: Optional[str] = None
+    is_user: bool = False
+    talk_seconds: float
+    word_count: int
+    words_per_minute: float
+    talk_share: float  # fraction of total talk time, 0..1
+
+
+class ConversationAnalytics(BaseModel):
+    conversation_id: str
+    total_seconds: float
+    total_words: int
+    words_per_minute: float
+    speaker_count: int
+    speakers: List[SpeakerAnalytics] = []
