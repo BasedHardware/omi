@@ -334,6 +334,294 @@ class GeneratedMentorNotificationSettingsResponse {
   }
 }
 
+class GeneratedDailySummaryActionItem {
+  final bool? completed;
+  final String? description;
+  final String? priority;
+  final String? sourceConversationId;
+
+  const GeneratedDailySummaryActionItem({
+    this.completed,
+    this.description,
+    this.priority,
+    this.sourceConversationId,
+  });
+
+  factory GeneratedDailySummaryActionItem.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryActionItem(
+      completed: _readBool(_readAny(json, const ["completed"])),
+      description: _readString(_readAny(json, const ["description"])),
+      priority: _readString(_readAny(json, const ["priority"])),
+      sourceConversationId: _readString(_readAny(json, const ["source_conversation_id"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'completed': completed,
+      'description': description,
+      'priority': priority,
+      'source_conversation_id': sourceConversationId,
+    };
+  }
+}
+
+class GeneratedDailySummaryTopicHighlight {
+  final List<String>? conversationIds;
+  final String? emoji;
+  final String? summary;
+  final String? topic;
+
+  const GeneratedDailySummaryTopicHighlight({
+    this.conversationIds,
+    this.emoji,
+    this.summary,
+    this.topic,
+  });
+
+  factory GeneratedDailySummaryTopicHighlight.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryTopicHighlight(
+      conversationIds: _readAny(json, const ["conversation_ids"]) == null ? null : _readStringList(_readAny(json, const ["conversation_ids"])),
+      emoji: _readString(_readAny(json, const ["emoji"])),
+      summary: _readString(_readAny(json, const ["summary"])),
+      topic: _readString(_readAny(json, const ["topic"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_ids': conversationIds,
+      'emoji': emoji,
+      'summary': summary,
+      'topic': topic,
+    };
+  }
+}
+
+class GeneratedDailySummaryUnresolvedQuestion {
+  final String? conversationId;
+  final String? question;
+
+  const GeneratedDailySummaryUnresolvedQuestion({
+    this.conversationId,
+    this.question,
+  });
+
+  factory GeneratedDailySummaryUnresolvedQuestion.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryUnresolvedQuestion(
+      conversationId: _readString(_readAny(json, const ["conversation_id"])),
+      question: _readString(_readAny(json, const ["question"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'question': question,
+    };
+  }
+}
+
+class GeneratedDailySummaryDecisionMade {
+  final String? conversationId;
+  final String? decision;
+
+  const GeneratedDailySummaryDecisionMade({
+    this.conversationId,
+    this.decision,
+  });
+
+  factory GeneratedDailySummaryDecisionMade.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryDecisionMade(
+      conversationId: _readString(_readAny(json, const ["conversation_id"])),
+      decision: _readString(_readAny(json, const ["decision"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'decision': decision,
+    };
+  }
+}
+
+class GeneratedDailySummaryKnowledgeNugget {
+  final String? conversationId;
+  final String? insight;
+
+  const GeneratedDailySummaryKnowledgeNugget({
+    this.conversationId,
+    this.insight,
+  });
+
+  factory GeneratedDailySummaryKnowledgeNugget.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryKnowledgeNugget(
+      conversationId: _readString(_readAny(json, const ["conversation_id"])),
+      insight: _readString(_readAny(json, const ["insight"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'insight': insight,
+    };
+  }
+}
+
+class GeneratedDailySummaryDayStats {
+  final int? actionItemsCount;
+  final int? totalConversations;
+  final int? totalDurationMinutes;
+
+  const GeneratedDailySummaryDayStats({
+    this.actionItemsCount,
+    this.totalConversations,
+    this.totalDurationMinutes,
+  });
+
+  factory GeneratedDailySummaryDayStats.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryDayStats(
+      actionItemsCount: _readInt(_readAny(json, const ["action_items_count"])),
+      totalConversations: _readInt(_readAny(json, const ["total_conversations"])),
+      totalDurationMinutes: _readInt(_readAny(json, const ["total_duration_minutes"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action_items_count': actionItemsCount,
+      'total_conversations': totalConversations,
+      'total_duration_minutes': totalDurationMinutes,
+    };
+  }
+}
+
+class GeneratedDailySummaryLocationPin {
+  final String? address;
+  final String? conversationId;
+  final double? latitude;
+  final double? longitude;
+  final String? time;
+
+  const GeneratedDailySummaryLocationPin({
+    this.address,
+    this.conversationId,
+    this.latitude,
+    this.longitude,
+    this.time,
+  });
+
+  factory GeneratedDailySummaryLocationPin.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryLocationPin(
+      address: _readString(_readAny(json, const ["address"])),
+      conversationId: _readString(_readAny(json, const ["conversation_id"])),
+      latitude: _readDouble(_readAny(json, const ["latitude"])),
+      longitude: _readDouble(_readAny(json, const ["longitude"])),
+      time: _readString(_readAny(json, const ["time"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'address': address,
+      'conversation_id': conversationId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'time': time,
+    };
+  }
+}
+
+class GeneratedDailySummaryResponse {
+  final List<GeneratedDailySummaryActionItem>? actionItems;
+  final DateTime? createdAt;
+  final String? date;
+  final String? dayEmoji;
+  final List<GeneratedDailySummaryDecisionMade>? decisionsMade;
+  final String? headline;
+  final List<GeneratedDailySummaryTopicHighlight>? highlights;
+  final String? id;
+  final List<GeneratedDailySummaryKnowledgeNugget>? knowledgeNuggets;
+  final List<GeneratedDailySummaryLocationPin>? locations;
+  final String? overview;
+  final GeneratedDailySummaryDayStats? stats;
+  final List<GeneratedDailySummaryUnresolvedQuestion>? unresolvedQuestions;
+
+  const GeneratedDailySummaryResponse({
+    this.actionItems,
+    this.createdAt,
+    this.date,
+    this.dayEmoji,
+    this.decisionsMade,
+    this.headline,
+    this.highlights,
+    this.id,
+    this.knowledgeNuggets,
+    this.locations,
+    this.overview,
+    this.stats,
+    this.unresolvedQuestions,
+  });
+
+  factory GeneratedDailySummaryResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummaryResponse(
+      actionItems: _readAny(json, const ["action_items"]) == null ? null : _readObjectList(_readAny(json, const ["action_items"]), GeneratedDailySummaryActionItem.fromJson),
+      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
+      date: _readString(_readAny(json, const ["date"])),
+      dayEmoji: _readString(_readAny(json, const ["day_emoji"])),
+      decisionsMade: _readAny(json, const ["decisions_made"]) == null ? null : _readObjectList(_readAny(json, const ["decisions_made"]), GeneratedDailySummaryDecisionMade.fromJson),
+      headline: _readString(_readAny(json, const ["headline"])),
+      highlights: _readAny(json, const ["highlights"]) == null ? null : _readObjectList(_readAny(json, const ["highlights"]), GeneratedDailySummaryTopicHighlight.fromJson),
+      id: _readString(_readAny(json, const ["id"])),
+      knowledgeNuggets: _readAny(json, const ["knowledge_nuggets"]) == null ? null : _readObjectList(_readAny(json, const ["knowledge_nuggets"]), GeneratedDailySummaryKnowledgeNugget.fromJson),
+      locations: _readAny(json, const ["locations"]) == null ? null : _readObjectList(_readAny(json, const ["locations"]), GeneratedDailySummaryLocationPin.fromJson),
+      overview: _readString(_readAny(json, const ["overview"])),
+      stats: _readObject(_readAny(json, const ["stats"]), GeneratedDailySummaryDayStats.fromJson),
+      unresolvedQuestions: _readAny(json, const ["unresolved_questions"]) == null ? null : _readObjectList(_readAny(json, const ["unresolved_questions"]), GeneratedDailySummaryUnresolvedQuestion.fromJson),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action_items': actionItems?.map((value) => value.toJson()).toList(),
+      'created_at': createdAt?.toUtc().toIso8601String(),
+      'date': date,
+      'day_emoji': dayEmoji,
+      'decisions_made': decisionsMade?.map((value) => value.toJson()).toList(),
+      'headline': headline,
+      'highlights': highlights?.map((value) => value.toJson()).toList(),
+      'id': id,
+      'knowledge_nuggets': knowledgeNuggets?.map((value) => value.toJson()).toList(),
+      'locations': locations?.map((value) => value.toJson()).toList(),
+      'overview': overview,
+      'stats': stats?.toJson(),
+      'unresolved_questions': unresolvedQuestions?.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedDailySummariesResponse {
+  final List<GeneratedDailySummaryResponse>? summaries;
+
+  const GeneratedDailySummariesResponse({
+    this.summaries,
+  });
+
+  factory GeneratedDailySummariesResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedDailySummariesResponse(
+      summaries: _readAny(json, const ["summaries"]) == null ? null : _readObjectList(_readAny(json, const ["summaries"]), GeneratedDailySummaryResponse.fromJson),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'summaries': summaries?.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
 class GeneratedFairUseLimitsResponse {
   final double dailyHours;
   final double threeDayHours;

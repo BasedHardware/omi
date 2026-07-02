@@ -522,9 +522,8 @@ Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) a
   if (response == null || response.statusCode != 200) return [];
 
   try {
-    final data = jsonDecode(response.body);
-    final summaries = (data['summaries'] as List<dynamic>?)?.map((e) => DailySummary.fromJson(e)).toList() ?? [];
-    return summaries;
+    final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.summaries?.map(DailySummary.fromGenerated).toList() ?? [];
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
     return [];
@@ -556,7 +555,9 @@ Future<bool> setDailySummaryVisibility(String summaryId, {String visibility = 's
     method: 'PATCH',
     body: '',
   );
-  return response?.statusCode == 200;
+  if (response == null || response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status.toLowerCase() == 'ok';
 }
 
 /// Regenerate a daily summary in place. Backend re-runs generation for the
@@ -616,7 +617,10 @@ Future<bool> deleteDailySummary(String summaryId) async {
   );
   if (response == null) return false;
   // 200 = deleted, 404 = already gone (treat as success — user expectation matches).
-  return response.statusCode == 200 || response.statusCode == 404;
+  if (response.statusCode == 404) return true;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 /// Generate a daily summary for a specific date (or today if not specified)

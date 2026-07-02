@@ -192,6 +192,71 @@ class DailySummaryTestResponse(UserStatusResponse):
     conversations_count: int
 
 
+class DailySummaryActionItem(BaseModel):
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    source_conversation_id: Optional[str] = None
+    completed: Optional[bool] = None
+
+
+class DailySummaryTopicHighlight(BaseModel):
+    topic: Optional[str] = None
+    emoji: Optional[str] = None
+    summary: Optional[str] = None
+    conversation_ids: Optional[List[str]] = None
+
+
+class DailySummaryUnresolvedQuestion(BaseModel):
+    question: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class DailySummaryDecisionMade(BaseModel):
+    decision: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class DailySummaryKnowledgeNugget(BaseModel):
+    insight: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class DailySummaryDayStats(BaseModel):
+    total_conversations: Optional[int] = None
+    total_duration_minutes: Optional[int] = None
+    action_items_count: Optional[int] = None
+
+
+class DailySummaryLocationPin(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
+    conversation_id: Optional[str] = None
+    time: Optional[str] = None
+
+
+class DailySummaryResponse(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    id: Optional[str] = None
+    date: Optional[str] = None
+    created_at: Optional[datetime] = None
+    headline: Optional[str] = None
+    overview: Optional[str] = None
+    day_emoji: Optional[str] = None
+    stats: Optional[DailySummaryDayStats] = None
+    highlights: Optional[List[DailySummaryTopicHighlight]] = None
+    action_items: Optional[List[DailySummaryActionItem]] = None
+    unresolved_questions: Optional[List[DailySummaryUnresolvedQuestion]] = None
+    decisions_made: Optional[List[DailySummaryDecisionMade]] = None
+    knowledge_nuggets: Optional[List[DailySummaryKnowledgeNugget]] = None
+    locations: Optional[List[DailySummaryLocationPin]] = None
+
+
+class DailySummariesResponse(BaseModel):
+    summaries: List[DailySummaryResponse] = Field(default_factory=list)
+
+
 @router.get('/v1/users/profile', tags=['v1'], response_model=UserProfileResponse)
 def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Gets the full user profile, including data protection and migration status."""
@@ -1350,7 +1415,7 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
 # Daily Summaries API
 
 
-@router.get('/v1/users/daily-summaries', tags=['v1'])
+@router.get('/v1/users/daily-summaries', tags=['v1'], responses={200: {'model': DailySummariesResponse}})
 def get_daily_summaries(
     limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -1362,7 +1427,7 @@ def get_daily_summaries(
     return {'summaries': summaries}
 
 
-@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], responses={200: {'model': DailySummaryResponse}})
 def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Get a single daily summary by ID.
@@ -1373,7 +1438,7 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     return summary
 
 
-@router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'])
+@router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'], response_model=UserStatusResponse)
 def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Set the visibility of a daily summary. Use value='shared' to make it shareable.
@@ -1391,7 +1456,7 @@ def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends
     return {'status': 'Ok'}
 
 
-@router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+@router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=UserStatusResponse)
 def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Delete a daily summary by ID.
@@ -1409,7 +1474,11 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 _REGENERATE_COOLDOWN_SECONDS = 30
 
 
-@router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'])
+@router.post(
+    '/v1/users/daily-summaries/{summary_id}/regenerate',
+    tags=['v1'],
+    responses={200: {'model': DailySummaryResponse}},
+)
 def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Re-run summary generation for the date of an existing daily summary and

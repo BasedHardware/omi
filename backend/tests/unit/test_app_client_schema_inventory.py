@@ -46,6 +46,11 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert ('POST', '/v1/users/fcm-token', 'save_token_v1_users_fcm_token_post') not in unmodeled_operations
     assert ('GET', '/v1/fair-use/status', 'get_my_fair_use_status_v1_fair_use_status_get') not in unmodeled_operations
     assert (
+        'GET',
+        '/v1/users/daily-summaries',
+        'get_daily_summaries_v1_users_daily_summaries_get',
+    ) not in unmodeled_operations
+    assert (
         'DELETE',
         '/v1/users/delete-account',
         'delete_account_v1_users_delete_account_delete',
