@@ -248,6 +248,33 @@ actor WhatsAppReaderService {
       return rows.compactMap { Self.record(from: $0) }
     }
 
+    // Per-group member directory (chat JID → member-id-digits → display name), used
+    // to turn `@<id>` mentions in group text into readable `@Name`.
+    let membersByChat: [String: [String: String]] = try await dbQueue.read { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: """
+            SELECT s.ZCONTACTJID AS chat_jid, gm.ZMEMBERJID AS member_jid,
+                   gm.ZCONTACTNAME AS cname, gm.ZFIRSTNAME AS fname
+            FROM ZWAGROUPMEMBER gm
+            JOIN ZWACHATSESSION s ON s.Z_PK = gm.ZCHATSESSION
+            WHERE s.ZCONTACTJID LIKE '%@g.us'
+          """)
+      var map: [String: [String: String]] = [:]
+      for row in rows {
+        guard let chatJID = row["chat_jid"] as? String,
+          let memberJID = (row["member_jid"] as? String)?.trimmingCharacters(in: .whitespaces),
+          let digits = memberJID.split(separator: "@").first.map(String.init), !digits.isEmpty
+        else { continue }
+        let name =
+          Self.sanitizedName(row["cname"] as? String)
+          ?? Self.sanitizedName(row["fname"] as? String)
+          ?? Self.prettyHandle(digits)
+        map[chatJID, default: [:]][digits] = name
+      }
+      return map
+    }
+
     var byChat: [String: [WhatsAppRecord]] = [:]
     for r in raws {
       byChat[r.chatID, default: []].append(r)
@@ -282,6 +309,7 @@ actor WhatsAppReaderService {
         personRef = chatID
       }
 
+      let members = isGroup ? (membersByChat[chatID] ?? [:]) : [:]
       var bubbles: [WhatsAppChatBubble] = []
       for r in recent {
         guard !r.text.isEmpty else { continue }
@@ -292,7 +320,7 @@ actor WhatsAppReaderService {
         bubbles.append(
           WhatsAppChatBubble(
             id: r.messageId.isEmpty ? "\(chatID)-\(r.rowid)" : r.messageId,
-            text: r.text, isFromMe: r.isFromMe, date: r.date,
+            text: Self.resolveMentions(in: r.text, members: members), isFromMe: r.isFromMe, date: r.date,
             senderName: (isGroup && !r.isFromMe) ? r.senderName : nil, senderImage: senderImg))
       }
 
@@ -345,10 +373,14 @@ actor WhatsAppReaderService {
     if !isFromMe {
       if isGroup {
         handle = (row["member_jid"] as? String).flatMap(Self.handle(fromJID:))
+        // Prefer a real saved/first name; ZPUSHNAME (and sometimes ZFIRSTNAME) can
+        // hold a base64 protocol blob for @lid senders, so sanitize each candidate
+        // and fall back to a readable phone rather than showing the blob.
         senderName =
-          nonEmpty(row["member_contact_name"] as? String)
-          ?? nonEmpty(row["member_first_name"] as? String)
-          ?? nonEmpty(row["push_name"] as? String)
+          sanitizedName(row["member_contact_name"] as? String)
+          ?? sanitizedName(row["member_first_name"] as? String)
+          ?? sanitizedName(row["push_name"] as? String)
+          ?? handle.map(Self.prettyHandle)
       } else {
         handle = Self.handle(fromJID: chatJID)
       }
@@ -387,6 +419,58 @@ actor WhatsAppReaderService {
   private static func nonEmpty(_ s: String?) -> String? {
     guard let t = s?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
     return t
+  }
+
+  /// WhatsApp stores a base64 protocol/identity blob in `ZPUSHNAME` (and sometimes
+  /// `ZFIRSTNAME`) for many `@lid`-era senders instead of a readable name — e.g.
+  /// `CKLi2ssGGhMxNTg1MzIwNDEy` or values ending in `=`. Those must never be shown
+  /// as a person's name. A real display name either has whitespace, or lacks the
+  /// base64 punctuation and isn't a long random case+digit token.
+  static func isLikelyEncodedName(_ s: String) -> Bool {
+    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+    if t.isEmpty || t.contains(" ") { return false }  // names with spaces are always fine
+    if t.count >= 6, t.contains("=") || t.contains("+") || t.contains("/") { return true }
+    if t.count >= 12 {
+      let wordChars = t.allSatisfy { $0.isLetter || $0.isNumber }
+      let hasDigit = t.contains { $0.isNumber }
+      let hasUpper = t.contains { $0.isUppercase }
+      let hasLower = t.contains { $0.isLowercase }
+      if wordChars && hasDigit && hasUpper && hasLower { return true }  // random id-looking token
+    }
+    return false
+  }
+
+  /// A trimmed, human-readable name, or nil when the candidate is empty or an
+  /// encoded protocol blob (see `isLikelyEncodedName`).
+  static func sanitizedName(_ s: String?) -> String? {
+    guard let t = nonEmpty(s), !isLikelyEncodedName(t) else { return nil }
+    return t
+  }
+
+  /// Replace WhatsApp `@<id>` mentions in group text with the mentioned member's
+  /// display name (from `members`, keyed by the digits of their JID). Unknown ids
+  /// are left as-is. No-op when there are no members or no `@` in the text.
+  static func resolveMentions(in text: String, members: [String: String]) -> String {
+    guard !members.isEmpty, text.contains("@") else { return text }
+    let chars = Array(text)
+    var result = ""
+    result.reserveCapacity(chars.count)
+    var i = 0
+    while i < chars.count {
+      if chars[i] == "@" {
+        var j = i + 1
+        while j < chars.count, chars[j].isNumber { j += 1 }
+        let digits = String(chars[(i + 1)..<j])
+        if digits.count >= 5, let name = members[digits] {
+          result += "@" + name
+          i = j
+          continue
+        }
+      }
+      result.append(chars[i])
+      i += 1
+    }
+    return result
   }
 
   /// A human-friendly fallback when a handle isn't in Contacts: format a US phone
