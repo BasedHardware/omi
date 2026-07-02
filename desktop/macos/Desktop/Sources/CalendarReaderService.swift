@@ -46,6 +46,7 @@ enum CalendarReaderError: LocalizedError, Equatable {
   case sessionExpired
   case cookieDecryptionFailed(String)
   case networkError(String)
+  case configurationError(String)
   case pythonNotFound
 
   var errorDescription: String? {
@@ -60,6 +61,8 @@ enum CalendarReaderError: LocalizedError, Equatable {
       return "Couldn't read your browser session: \(msg)"
     case .networkError(let msg):
       return "Couldn't reach Google Calendar: \(msg)"
+    case .configurationError(let msg):
+      return "Couldn't use Google Calendar: \(msg)"
     case .pythonNotFound:
       return "Python 3 not found. Install it via Homebrew: brew install python3"
     }
@@ -105,6 +108,7 @@ enum CalendarFailureClass: String, Equatable {
   case notSignedIn = "not_signed_in"
   case sessionExpired = "session_expired"
   case decryptFailed = "decrypt_failed"
+  case configuration = "configuration"
   case network = "network"
   case unknown = "unknown"
 
@@ -118,6 +122,8 @@ enum CalendarFailureClass: String, Equatable {
       return "Your Google session expired. Reload calendar.google.com to refresh it."
     case .decryptFailed:
       return "browser session could not be decrypted"
+    case .configuration:
+      return "Calendar API key is invalid or unavailable"
     case .network:
       return "please check your connection and try again"
     case .unknown:
@@ -149,12 +155,12 @@ enum CalendarFailureClass: String, Equatable {
       return raw
     case .noBrowser, .notSignedIn, .sessionExpired:
       return nil
-    case .unknown:
+    case .configuration, .unknown:
       return raw
     }
   }
 
-  func asError(summary: String?) -> CalendarReaderError {
+  func asError(summary: String? = nil) -> CalendarReaderError {
     func detailOr(_ fallback: String) -> String {
       detailFragment(from: summary) ?? fallback
     }
@@ -165,6 +171,8 @@ enum CalendarFailureClass: String, Equatable {
     case .sessionExpired: return .sessionExpired
     case .decryptFailed:
       return .cookieDecryptionFailed(detailOr("browser session could not be decrypted"))
+    case .configuration:
+      return .configurationError(detailOr("Calendar API key is invalid or unavailable"))
     case .network:
       return .networkError(detailOr("please check your connection and try again"))
     case .unknown:
@@ -219,6 +227,7 @@ actor CalendarReaderService {
   func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
     -> [CalendarEvent]
   {
+    await APIKeyService.shared.waitForKeys()
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
     return events.sorted { $0.startTime > $1.startTime }
@@ -233,6 +242,7 @@ actor CalendarReaderService {
   /// green result guarantees the whole chain (cookies → auth → API) works.
   func verifyConnection() async -> CalendarConnectionStatus {
     do {
+      await APIKeyService.shared.waitForKeys()
       _ = try fetchCalendarViaCookies(daysBack: 1, daysForward: 1, maxResults: 1)
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
@@ -460,6 +470,11 @@ actor CalendarReaderService {
       daysForward: daysForward,
       maxResults: maxResults
     )
+    guard let calendarKey = getenv("GOOGLE_CALENDAR_API_KEY").flatMap({ String(validatingUTF8: $0) }),
+      !calendarKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      throw CalendarReaderError.configurationError("Calendar API key is unavailable; try again after startup finishes.")
+    }
 
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
@@ -494,6 +509,22 @@ actor CalendarReaderService {
           raw = timestamp + " " + sapisid + " " + origin
           hash_val = hashlib.sha1(raw.encode('utf-8')).hexdigest()
           return "SAPISIDHASH " + timestamp + "_" + hash_val
+
+      def google_error_detail(raw_body):
+          try:
+              payload = json.loads(raw_body.decode('utf-8', errors='replace'))
+              error = payload.get('error', {})
+              message = error.get('message') or ''
+              status = error.get('status') or ''
+              reasons = [
+                  e.get('reason', '')
+                  for e in error.get('errors', [])
+                  if isinstance(e, dict)
+              ]
+              parts = [p for p in [status, message, ','.join([r for r in reasons if r])] if p]
+              return ': '.join(parts) if parts else None
+          except Exception:
+              return None
 
       def fetch_calendar_events(jar, cookies_list, days_back, days_forward, max_results):
           # Returns (events, error, http_status). http_status lets the caller
@@ -551,7 +582,8 @@ actor CalendarReaderService {
                       return None, f"HTTP {status}", status
                   data = json.loads(body)
               except urllib.error.HTTPError as e:
-                  return None, f"HTTP {e.code}", e.code
+                  detail = google_error_detail(e.read())
+                  return None, f"HTTP {e.code}" + (f": {detail}" if detail else ""), e.code
               except Exception as e:
                   return None, str(e), None
 
@@ -572,6 +604,19 @@ actor CalendarReaderService {
           # No browser produced any readable cookies at all.
           if not attempts:
               return 'no_browser', 'No supported browser with a readable session was found.'
+          # API-key/config failures are not user sign-in problems. Google uses
+          # 400 for invalid keys and 403 for missing/unregistered callers.
+          config_markers = (
+              'API key not valid',
+              'API key expired',
+              'API key is invalid',
+              'unregistered callers',
+              'API key',
+          )
+          for a in attempts:
+              reason = a.get('reason') or ''
+              if a['stage'] == 'fetch' and any(marker in reason for marker in config_markers):
+                  return 'configuration', 'Calendar API key is invalid or unavailable.'
           # Session expired beats "not signed in": if any profile HAD auth
           # cookies but Google rejected them, telling the user to re-login is the
           # actionable next step.
