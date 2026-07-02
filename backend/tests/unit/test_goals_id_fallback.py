@@ -2,77 +2,55 @@
 
 Verifies that _goal_dict() correctly injects doc.id when the 'id' field
 is missing from Firestore document data (issue #5671).
+
+database.goals binds ``db`` at import (``from database._client import db``), so the
+fake ``database._client`` must be active before the module is exec'd. Sanctioned
+Tier-2 "fake must precede import" pattern (see backend/docs/test_isolation.md and
+testing/import_isolation.load_module_fresh).
 """
 
 import os
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+from testing.import_isolation import load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
-def _stub_module(name: str) -> types.ModuleType:
-    if name not in sys.modules:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    return sys.modules[name]
+@pytest.fixture(scope="module")
+def goals():
+    """Fresh database.goals against a stubbed database._client + firestore chain."""
+    client_stub = ModuleType("database._client")
+    client_stub.db = MagicMock(name="db")
+    client_stub.document_id_from_seed = MagicMock(return_value="doc-id")
 
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.Client = MagicMock()
+    firestore_stub.Query = MagicMock()
+    fv1_stub = ModuleType("google.cloud.firestore_v1")
+    fv1_stub.FieldFilter = MagicMock()
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
 
-# --- Stub the Firestore client chain to avoid GCP credential lookup ---
-# Must happen before importing database.goals
-_stub_module("google")
-google_mod = sys.modules["google"]
-if not hasattr(google_mod, "__path__"):
-    google_mod.__path__ = []
-
-_stub_module("google.cloud")
-gc_mod = sys.modules["google.cloud"]
-if not hasattr(gc_mod, "__path__"):
-    gc_mod.__path__ = []
-
-firestore_mod = _stub_module("google.cloud.firestore")
-firestore_mod.Client = MagicMock()
-firestore_mod.Query = MagicMock()
-
-fv1_mod = _stub_module("google.cloud.firestore_v1")
-fv1_mod.FieldFilter = MagicMock()
-
-# Stub database package
-database_mod = _stub_module("database")
-database_mod.__path__ = [os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "database"))]
-
-# Stub database._client with a mock db
-client_mod = _stub_module("database._client")
-mock_db = MagicMock()
-client_mod.db = mock_db
-client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
-
-# Now import the real goals module
-import importlib
-
-if "database.goals" in sys.modules:
-    del sys.modules["database.goals"]
-
-# Manually load the real goals.py
-import importlib.util
-
-_goals_path = os.path.join(os.path.dirname(__file__), "..", "..", "database", "goals.py")
-_goals_path = os.path.normpath(_goals_path)
-spec = importlib.util.spec_from_file_location("database.goals", _goals_path, submodule_search_locations=[])
-goals_mod = importlib.util.module_from_spec(spec)
-sys.modules["database.goals"] = goals_mod
-spec.loader.exec_module(goals_mod)
-
-_goal_dict = goals_mod._goal_dict
-get_user_goal = goals_mod.get_user_goal
-get_user_goals = goals_mod.get_user_goals
-get_all_goals = goals_mod.get_all_goals
+    fakes = {
+        "database._client": client_stub,
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore": firestore_stub,
+        "google.cloud.firestore_v1": fv1_stub,
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "database.goals",
+            os.path.join(str(_BACKEND), "database", "goals.py"),
+        )
+        yield module
 
 
 class FakeDoc:
@@ -94,31 +72,31 @@ class FakeDoc:
 
 
 class TestGoalDict:
-    def test_injects_doc_id_when_id_missing(self):
+    def test_injects_doc_id_when_id_missing(self, goals):
         doc = FakeDoc("goal_abc123", {"title": "Run 5k", "is_active": True})
-        result = _goal_dict(doc)
+        result = goals._goal_dict(doc)
         assert result["id"] == "goal_abc123"
 
-    def test_injects_doc_id_when_id_empty_string(self):
+    def test_injects_doc_id_when_id_empty_string(self, goals):
         doc = FakeDoc("goal_abc123", {"id": "", "title": "Run 5k"})
-        result = _goal_dict(doc)
+        result = goals._goal_dict(doc)
         assert result["id"] == "goal_abc123"
 
-    def test_injects_doc_id_when_id_none(self):
+    def test_injects_doc_id_when_id_none(self, goals):
         doc = FakeDoc("goal_abc123", {"id": None, "title": "Run 5k"})
-        result = _goal_dict(doc)
+        result = goals._goal_dict(doc)
         assert result["id"] == "goal_abc123"
 
-    def test_preserves_existing_id(self):
+    def test_preserves_existing_id(self, goals):
         doc = FakeDoc("goal_abc123", {"id": "goal_existing", "title": "Run 5k"})
-        result = _goal_dict(doc)
+        result = goals._goal_dict(doc)
         assert result["id"] == "goal_existing"
 
-    def test_handles_none_to_dict(self):
+    def test_handles_none_to_dict(self, goals):
         """to_dict() returning None (empty snapshot) should not crash."""
         doc = FakeDoc("goal_abc123", {})
         doc.to_dict = lambda: None
-        result = _goal_dict(doc)
+        result = goals._goal_dict(doc)
         assert result["id"] == "goal_abc123"
 
 
@@ -143,41 +121,39 @@ def _mock_collection(query):
     return col
 
 
-def _setup_db_for_query(docs):
+def _setup_db_for_query(goals, docs):
     """Wire mock_db chain: db.collection().document().collection() returns a mock collection."""
+    mock_db = goals.db
     mock_db.reset_mock()
     query = _mock_query(docs)
     col = _mock_collection(query)
-    # Wire: db.collection('users').document(uid).collection('goals')
     user_doc = MagicMock()
     user_doc.collection.return_value = col
     users_col = MagicMock()
     users_col.document.return_value = user_doc
     mock_db.collection.return_value = users_col
-    # Also set goals_mod.db to our mock (in case import cached a different ref)
-    goals_mod.db = mock_db
     return col
 
 
 class TestGetUserGoal:
-    def test_returns_id_from_doc_id_when_missing(self):
+    def test_returns_id_from_doc_id_when_missing(self, goals):
         doc = FakeDoc("goal_rust_created", {"title": "Meditate", "is_active": True})
-        _setup_db_for_query([doc])
+        _setup_db_for_query(goals, [doc])
 
-        result = get_user_goal("uid123")
+        result = goals.get_user_goal("uid123")
         assert result is not None
         assert result["id"] == "goal_rust_created"
 
 
 class TestGetUserGoals:
-    def test_returns_ids_for_all_docs_when_missing(self):
+    def test_returns_ids_for_all_docs_when_missing(self, goals):
         docs = [
             FakeDoc("goal_1", {"title": "A", "is_active": True, "created_at": "2026-01-01"}),
             FakeDoc("goal_2", {"title": "B", "is_active": True, "created_at": "2026-01-02"}),
         ]
-        _setup_db_for_query(docs)
+        _setup_db_for_query(goals, docs)
 
-        results = get_user_goals("uid123", limit=3)
+        results = goals.get_user_goals("uid123", limit=3)
         assert len(results) == 2
         assert results[0]["id"] == "goal_1"
         assert results[1]["id"] == "goal_2"
@@ -185,10 +161,10 @@ class TestGetUserGoals:
 
 class TestGetAllGoals:
     @pytest.mark.parametrize("include_inactive", [True, False])
-    def test_returns_id_from_doc_id_when_missing(self, include_inactive):
+    def test_returns_id_from_doc_id_when_missing(self, goals, include_inactive):
         doc = FakeDoc("goal_no_id", {"title": "Read", "is_active": True, "created_at": "2026-01-01"})
-        _setup_db_for_query([doc])
+        _setup_db_for_query(goals, [doc])
 
-        results = get_all_goals("uid123", include_inactive=include_inactive)
+        results = goals.get_all_goals("uid123", include_inactive=include_inactive)
         assert len(results) == 1
         assert results[0]["id"] == "goal_no_id"

@@ -2,86 +2,11 @@
 Unit tests for LLM usage tracking.
 """
 
-import os
-import sys
-import types
 from unittest.mock import MagicMock
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+from langchain_core.outputs import Generation, LLMResult
 
-# Mock the database client to avoid needing GCP credentials
-mock_db = MagicMock()
-mock_client_module = MagicMock()
-mock_client_module.db = mock_db
-sys.modules["database._client"] = mock_client_module
-sys.modules["stripe"] = MagicMock()
-
-_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
-_google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-_google_firestore_module = types.ModuleType("google.cloud.firestore")
-_google_firestore_module.Increment = lambda x: {"__increment": x}
-sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
-setattr(_google_module, "cloud", _google_cloud_module)
-setattr(_google_cloud_module, "firestore", _google_firestore_module)
-
-_MISSING = object()
-_LANGCHAIN_MODULES = ("langchain_core", "langchain_core.callbacks", "langchain_core.outputs")
-_original_langchain_modules = {name: sys.modules.get(name, _MISSING) for name in _LANGCHAIN_MODULES}
-_langchain_stubs_installed = False
-
-
-class BaseCallbackHandler:
-    pass
-
-
-class Generation:
-    def __init__(self, text="", generation_info=None, **kwargs):
-        self.text = text
-        self.generation_info = generation_info
-
-
-class LLMResult:
-    def __init__(self, generations=None, llm_output=None, **kwargs):
-        self.generations = generations or []
-        self.llm_output = llm_output
-
-
-try:
-    import langchain_core.callbacks  # noqa: F401
-    from langchain_core.outputs import Generation, LLMResult
-except (ImportError, ModuleNotFoundError) as exc:
-    if isinstance(exc, ModuleNotFoundError) and (exc.name is None or not exc.name.startswith("langchain_core")):
-        raise
-
-    _langchain_core_module = sys.modules.setdefault("langchain_core", types.ModuleType("langchain_core"))
-    _langchain_callbacks_module = types.ModuleType("langchain_core.callbacks")
-    _langchain_outputs_module = types.ModuleType("langchain_core.outputs")
-    _langchain_callbacks_module.BaseCallbackHandler = BaseCallbackHandler
-    _langchain_outputs_module.Generation = Generation
-    _langchain_outputs_module.LLMResult = LLMResult
-    sys.modules["langchain_core.callbacks"] = _langchain_callbacks_module
-    sys.modules["langchain_core.outputs"] = _langchain_outputs_module
-    setattr(_langchain_core_module, "callbacks", _langchain_callbacks_module)
-    setattr(_langchain_core_module, "outputs", _langchain_outputs_module)
-    _langchain_stubs_installed = True
-
-
-def _restore_langchain_modules():
-    for _name, _module in _original_langchain_modules.items():
-        if _module is _MISSING:
-            sys.modules.pop(_name, None)
-        else:
-            sys.modules[_name] = _module
-
-
-try:
-    from utils.llm import usage_tracker
-finally:
-    if _langchain_stubs_installed:
-        _restore_langchain_modules()
+from utils.llm import usage_tracker
 
 
 def test_track_usage_context_sets_and_resets():

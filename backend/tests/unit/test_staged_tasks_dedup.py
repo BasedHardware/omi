@@ -18,69 +18,11 @@ within a few hours. The fix:
 These tests cover the contract of both pieces.
 """
 
-import sys
-import types
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-
-# Stub heavy deps before importing the modules under test.
-def _ensure_module(name):
-    if name not in sys.modules:
-        sys.modules[name] = types.ModuleType(name)
-    return sys.modules[name]
-
-
-for mod_name in [
-    'firebase_admin',
-    'firebase_admin.auth',
-    'google',
-    'google.api_core',
-    'google.api_core.exceptions',
-    'google.cloud',
-    'google.cloud.firestore',
-    'google.cloud.firestore_v1',
-    'google.cloud.firestore_v1.base_query',
-]:
-    _ensure_module(mod_name)
-
-
-class _FakeFirestoreClient:
-    def collection(self, *a, **kw):
-        return MagicMock()
-
-    def batch(self):
-        return MagicMock()
-
-
-sys.modules['google.cloud.firestore'].Client = _FakeFirestoreClient
-sys.modules['google.cloud.firestore'].SERVER_TIMESTAMP = object()
-sys.modules['google.cloud.firestore'].Query = MagicMock()
-
-
-class _FieldFilter:
-    def __init__(self, field, op, value):
-        self.field = field
-        self.op = op
-        self.value = value
-
-
-sys.modules['google.cloud.firestore'].FieldFilter = _FieldFilter
-sys.modules['google.cloud.firestore_v1'].FieldFilter = _FieldFilter
-sys.modules['google.cloud.firestore_v1.base_query'].FieldFilter = _FieldFilter
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['google.api_core.exceptions'].NotFound = type('NotFound', (Exception,), {})
-
-# Stub the firestore client singleton so importing the modules doesn't try
-# to authenticate against real Firestore.
-fake_db = MagicMock()
-client_stub = types.ModuleType('database._client')
-client_stub.db = fake_db
-sys.modules['database._client'] = client_stub
-
-
-from database import action_items as action_items_db  # noqa: E402
-from database import staged_tasks as staged_tasks_db  # noqa: E402
+from database import action_items as action_items_db
+from database import staged_tasks as staged_tasks_db
 
 # ---------------------------------------------------------------------------
 # _normalize_description

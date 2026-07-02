@@ -1,24 +1,18 @@
 import json
 import os
-import sys
+from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
 
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+import pytest
+
+from testing.import_isolation import load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
+
 os.environ['MCP_OAUTH_CHATGPT_CLIENT_ID'] = 'omi-chatgpt-prod'
 os.environ['MCP_OAUTH_CHATGPT_CLIENT_SECRET'] = 'client-secret'
 os.environ['MCP_OAUTH_CHATGPT_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
 os.environ['MCP_OAUTH_PUBLIC_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
-
-
-class _AutoMockModule(ModuleType):
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
 
 
 class _DocSnapshot:
@@ -94,18 +88,41 @@ class _Transaction:
         ref.set(data, merge=merge)
 
 
-sys.modules['google'] = _AutoMockModule('google')
-google_cloud = _AutoMockModule('google.cloud')
-firestore_module = _AutoMockModule('google.cloud.firestore')
-firestore_module.transactional = lambda fn: fn
-google_cloud.firestore = firestore_module
-sys.modules['google.cloud'] = google_cloud
-sys.modules['google.cloud.firestore'] = firestore_module
-database_client = ModuleType('database._client')
-database_client.db = _DB()
-sys.modules['database._client'] = database_client
+@pytest.fixture(scope="module", autouse=True)
+def _mcp_oauth_module():
+    """Load ``database.mcp_oauth`` fresh against a stubbed firestore chain.
 
-from database import mcp_oauth
+    ``database.mcp_oauth`` decorates its transaction helpers with
+    ``@firestore.transactional`` at import time. The real decorator requires a
+    live Firestore ``Transaction`` object (it reads ``_read_only`` /
+    ``_max_attempts`` and calls ``_commit``), which is incompatible with the
+    in-memory ``_Transaction`` these tests use. We therefore stub
+    ``google.cloud.firestore`` with an identity ``transactional`` and re-exec the
+    module via ``load_module_fresh`` so the decorator is a no-op, then swap ``db``
+    for the in-memory ``_DB``. The freshly loaded module is published as the
+    ``mcp_oauth`` global so the existing test bodies resolve to it unchanged. See
+    ``backend/docs/test_isolation.md`` (reserve ``stub_modules`` finder case).
+    """
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.transactional = lambda fn: fn
+
+    fakes = {
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore": firestore_stub,
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "database.mcp_oauth",
+            os.path.join(str(_BACKEND), "database", "mcp_oauth.py"),
+        )
+        module.db = _DB()
+        globals()["mcp_oauth"] = module
+        yield module
 
 
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
@@ -267,7 +284,7 @@ def test_chatgpt_prod_redirect_prefix_rejects_bypass_attempts(monkeypatch):
 
 
 def test_chatgpt_prod_configured_client_keeps_dynamic_connector_callback_prefix():
-    collection = database_client.db.collection('mcp_oauth_clients')
+    collection = mcp_oauth.db.collection('mcp_oauth_clients')
     original_docs = dict(collection._docs)
     try:
         collection.document('omi-chatgpt-prod').set(
