@@ -1,0 +1,4 @@
+# Omi Telegram helper runtime deps. Pinned loosely; the frozen binary is built
+# from a locked venv by build.sh.
+telethon==1.36.0
+opentele==1.15.1
