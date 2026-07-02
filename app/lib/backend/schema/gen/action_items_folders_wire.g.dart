@@ -40,16 +40,16 @@ class GeneratedActionItemResponse {
   factory GeneratedActionItemResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemResponse(
       appleReminderId: _readString(_readAny(json, const ["apple_reminder_id"])),
-      completed: _readBool(_readAny(json, const ["completed"])) ?? false,
+      completed: _required(_readBool(_readAny(json, const ["completed"])), "completed"),
       completedAt: _readDateTime(_readAny(json, const ["completed_at"])),
       conversationId: _readString(_readAny(json, const ["conversation_id"])),
       createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      description: _readString(_readAny(json, const ["description"])) ?? '',
+      description: _required(_readString(_readAny(json, const ["description"])), "description"),
       dueAt: _readDateTime(_readAny(json, const ["due_at"])),
       exportDate: _readDateTime(_readAny(json, const ["export_date"])),
       exportPlatform: _readString(_readAny(json, const ["export_platform"])),
       exported: _readBool(_readAny(json, const ["exported"])) ?? false,
-      id: _readString(_readAny(json, const ["id"])) ?? '',
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
       indentLevel: _readInt(_readAny(json, const ["indent_level"])) ?? 0,
       isLocked: _readBool(_readAny(json, const ["is_locked"])) ?? false,
       sortOrder: _readInt(_readAny(json, const ["sort_order"])) ?? 0,
@@ -89,7 +89,7 @@ class GeneratedActionItemsResponse {
 
   factory GeneratedActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemsResponse(
-      actionItems: _readObjectList(_readAny(json, const ["action_items"]), GeneratedActionItemResponse.fromJson),
+      actionItems: _required(_readObjectList(_readAny(json, const ["action_items"]), GeneratedActionItemResponse.fromJson), "action_items"),
       hasMore: _readBool(_readAny(json, const ["has_more"])) ?? false,
     );
   }
@@ -111,7 +111,7 @@ class GeneratedActionItemsSearchResponse {
 
   factory GeneratedActionItemsSearchResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemsSearchResponse(
-      actionItems: _readObjectList(_readAny(json, const ["action_items"]), GeneratedActionItemResponse.fromJson),
+      actionItems: _required(_readObjectList(_readAny(json, const ["action_items"]), GeneratedActionItemResponse.fromJson), "action_items"),
     );
   }
 
@@ -133,8 +133,8 @@ class GeneratedPendingSyncResponse {
 
   factory GeneratedPendingSyncResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPendingSyncResponse(
-      pendingExport: _readObjectList(_readAny(json, const ["pending_export"]), GeneratedActionItemResponse.fromJson),
-      syncedItems: _readObjectList(_readAny(json, const ["synced_items"]), GeneratedActionItemResponse.fromJson),
+      pendingExport: _required(_readObjectList(_readAny(json, const ["pending_export"]), GeneratedActionItemResponse.fromJson), "pending_export"),
+      syncedItems: _required(_readObjectList(_readAny(json, const ["synced_items"]), GeneratedActionItemResponse.fromJson), "synced_items"),
     );
   }
 
@@ -180,15 +180,15 @@ class GeneratedFolder {
       categoryMapping: _readString(_readAny(json, const ["category_mapping"])),
       color: _readString(_readAny(json, const ["color"])) ?? "#6B7280",
       conversationCount: _readInt(_readAny(json, const ["conversation_count"])) ?? 0,
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
       description: _readString(_readAny(json, const ["description"])),
       icon: _readString(_readAny(json, const ["icon"])) ?? "folder",
-      id: _readString(_readAny(json, const ["id"])) ?? '',
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
       isDefault: _readBool(_readAny(json, const ["is_default"])) ?? false,
       isSystem: _readBool(_readAny(json, const ["is_system"])) ?? false,
-      name: _readString(_readAny(json, const ["name"])) ?? '',
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
       order: _readInt(_readAny(json, const ["order"])) ?? 0,
-      updatedAt: _readDateTime(_readAny(json, const ["updated_at"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt: _required(_readDateTime(_readAny(json, const ["updated_at"])), "updated_at"),
     );
   }
 
@@ -219,7 +219,7 @@ class GeneratedFolderMutationResponse {
 
   factory GeneratedFolderMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFolderMutationResponse(
-      status: _readString(_readAny(json, const ["status"])) ?? '',
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
     );
   }
 
@@ -242,7 +242,7 @@ class GeneratedBulkMoveConversationsResponse {
   factory GeneratedBulkMoveConversationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedBulkMoveConversationsResponse(
       movedCount: _readInt(_readAny(json, const ["moved_count"])) ?? 0,
-      status: _readString(_readAny(json, const ["status"])) ?? '',
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
     );
   }
 
@@ -278,6 +278,13 @@ bool? _readBool(dynamic value) {
   if (value is bool) return value;
   if (value is String) return value.toLowerCase() == 'true';
   return null;
+}
+
+T _required<T>(T? value, String name) {
+  if (value == null) {
+    throw FormatException('Missing required field: $name');
+  }
+  return value;
 }
 
 DateTime? _readDateTime(dynamic value) {

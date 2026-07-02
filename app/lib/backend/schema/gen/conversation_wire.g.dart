@@ -13,8 +13,8 @@ class GeneratedTranslation {
 
   factory GeneratedTranslation.fromJson(Map<String, dynamic> json) {
     return GeneratedTranslation(
-      lang: _readString(_readAny(json, const ["lang"])) ?? '',
-      text: _readString(_readAny(json, const ["text"])) ?? '',
+      lang: _required(_readString(_readAny(json, const ["lang"])), "lang"),
+      text: _required(_readString(_readAny(json, const ["text"])), "text"),
     );
   }
 
@@ -55,16 +55,16 @@ class GeneratedTranscriptSegment {
 
   factory GeneratedTranscriptSegment.fromJson(Map<String, dynamic> json) {
     return GeneratedTranscriptSegment(
-      end: _readDouble(_readAny(json, const ["end"])) ?? 0.0,
+      end: _required(_readDouble(_readAny(json, const ["end"])), "end"),
       id: _readString(_readAny(json, const ["id"])),
-      isUser: _readBool(_readAny(json, const ["is_user"])) ?? false,
+      isUser: _required(_readBool(_readAny(json, const ["is_user"])), "is_user"),
       personId: _readString(_readAny(json, const ["person_id"])),
       speaker: _readString(_readAny(json, const ["speaker"])) ?? "SPEAKER_00",
       speakerId: _readInt(_readAny(json, const ["speaker_id"])),
       speechProfileProcessed: _readBool(_readAny(json, const ["speech_profile_processed"])) ?? true,
-      start: _readDouble(_readAny(json, const ["start"])) ?? 0.0,
+      start: _required(_readDouble(_readAny(json, const ["start"])), "start"),
       sttProvider: _readString(_readAny(json, const ["stt_provider"])),
-      text: _readString(_readAny(json, const ["text"])) ?? '',
+      text: _required(_readString(_readAny(json, const ["text"])), "text"),
       translations: _readAny(json, const ["translations"]) == null ? null : _readObjectList(_readAny(json, const ["translations"]), GeneratedTranslation.fromJson),
     );
   }
@@ -111,7 +111,7 @@ class GeneratedActionItem {
       completedAt: _readDateTime(_readAny(json, const ["completed_at"])),
       conversationId: _readString(_readAny(json, const ["conversation_id"])),
       createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      description: _readString(_readAny(json, const ["description"])) ?? '',
+      description: _required(_readString(_readAny(json, const ["description"])), "description"),
       dueAt: _readDateTime(_readAny(json, const ["due_at"])),
       updatedAt: _readDateTime(_readAny(json, const ["updated_at"])),
     );
@@ -142,7 +142,7 @@ class GeneratedAppResult {
   factory GeneratedAppResult.fromJson(Map<String, dynamic> json) {
     return GeneratedAppResult(
       appId: _readString(_readAny(json, const ["app_id", "appId"])),
-      content: _readString(_readAny(json, const ["content"])) ?? '',
+      content: _required(_readString(_readAny(json, const ["content"])), "content"),
     );
   }
 
@@ -165,7 +165,7 @@ class GeneratedPluginResult {
 
   factory GeneratedPluginResult.fromJson(Map<String, dynamic> json) {
     return GeneratedPluginResult(
-      content: _readString(_readAny(json, const ["content"])) ?? '',
+      content: _required(_readString(_readAny(json, const ["content"])), "content"),
       pluginId: _readString(_readAny(json, const ["plugin_id"])),
     );
   }
@@ -198,8 +198,8 @@ class GeneratedEvent {
       created: _readBool(_readAny(json, const ["created"])) ?? false,
       description: _readString(_readAny(json, const ["description"])) ?? "",
       duration: _readInt(_readAny(json, const ["duration"])) ?? 30,
-      start: _readDateTime(_readAny(json, const ["start", "startsAt"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      title: _readString(_readAny(json, const ["title"])) ?? '',
+      start: _required(_readDateTime(_readAny(json, const ["start", "startsAt"])), "start"),
+      title: _required(_readString(_readAny(json, const ["title"])), "title"),
     );
   }
 
@@ -273,9 +273,9 @@ class GeneratedGeolocation {
     return GeneratedGeolocation(
       address: _readString(_readAny(json, const ["address"])),
       googlePlaceId: _readString(_readAny(json, const ["google_place_id", "googlePlaceId"])),
-      latitude: _readDouble(_readAny(json, const ["latitude"])) ?? 0.0,
+      latitude: _required(_readDouble(_readAny(json, const ["latitude"])), "latitude"),
       locationType: _readString(_readAny(json, const ["location_type", "locationType"])),
-      longitude: _readDouble(_readAny(json, const ["longitude"])) ?? 0.0,
+      longitude: _required(_readDouble(_readAny(json, const ["longitude"])), "longitude"),
     );
   }
 
@@ -309,7 +309,7 @@ class GeneratedConversationPhoto {
 
   factory GeneratedConversationPhoto.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationPhoto(
-      base64: _readString(_readAny(json, const ["base64"])) ?? '',
+      base64: _required(_readString(_readAny(json, const ["base64"])), "base64"),
       createdAt: _readDateTime(_readAny(json, const ["created_at"])),
       dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
       description: _readString(_readAny(json, const ["description"])),
@@ -351,13 +351,13 @@ class GeneratedAudioFile {
 
   factory GeneratedAudioFile.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioFile(
-      chunkTimestamps: _readDoubleList(_readAny(json, const ["chunk_timestamps"])),
-      conversationId: _readString(_readAny(json, const ["conversation_id"])) ?? '',
-      duration: _readDouble(_readAny(json, const ["duration"])) ?? 0.0,
-      id: _readString(_readAny(json, const ["id"])) ?? '',
+      chunkTimestamps: _required(_readDoubleList(_readAny(json, const ["chunk_timestamps"])), "chunk_timestamps"),
+      conversationId: _required(_readString(_readAny(json, const ["conversation_id"])), "conversation_id"),
+      duration: _required(_readDouble(_readAny(json, const ["duration"])), "duration"),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
       provider: _readString(_readAny(json, const ["provider"])) ?? "gcp",
       startedAt: _readDateTime(_readAny(json, const ["started_at"])),
-      uid: _readString(_readAny(json, const ["uid"])) ?? '',
+      uid: _required(_readString(_readAny(json, const ["uid"])), "uid"),
     );
   }
 
@@ -397,11 +397,11 @@ class GeneratedCalendarEventLink {
     return GeneratedCalendarEventLink(
       attendeeEmails: _readAny(json, const ["attendee_emails"]) == null ? null : _readStringList(_readAny(json, const ["attendee_emails"])),
       attendees: _readAny(json, const ["attendees"]) == null ? null : _readStringList(_readAny(json, const ["attendees"])),
-      endTime: _readDateTime(_readAny(json, const ["end_time"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      eventId: _readString(_readAny(json, const ["event_id"])) ?? '',
+      endTime: _required(_readDateTime(_readAny(json, const ["end_time"])), "end_time"),
+      eventId: _required(_readString(_readAny(json, const ["event_id"])), "event_id"),
       htmlLink: _readString(_readAny(json, const ["html_link"])),
-      startTime: _readDateTime(_readAny(json, const ["start_time"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      title: _readString(_readAny(json, const ["title"])) ?? '',
+      startTime: _required(_readDateTime(_readAny(json, const ["start_time"])), "start_time"),
+      title: _required(_readString(_readAny(json, const ["title"])), "title"),
     );
   }
 
@@ -496,7 +496,7 @@ class GeneratedConversation {
       callId: _readString(_readAny(json, const ["call_id"])),
       clientDeviceId: _readString(_readAny(json, const ["client_device_id"])),
       clientPlatform: _readString(_readAny(json, const ["client_platform"])),
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
       dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
       deferred: _readBool(_readAny(json, const ["deferred"])) ?? false,
       discarded: _readBool(_readAny(json, const ["discarded"])) ?? false,
@@ -504,7 +504,7 @@ class GeneratedConversation {
       finishedAt: _readDateTime(_readAny(json, const ["finished_at"])),
       folderId: _readString(_readAny(json, const ["folder_id"])),
       geolocation: _readObject(_readAny(json, const ["geolocation"]), GeneratedGeolocation.fromJson),
-      id: _readString(_readAny(json, const ["id"])) ?? '',
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
       isLocked: _readBool(_readAny(json, const ["is_locked"])) ?? false,
       language: _readString(_readAny(json, const ["language"])),
       photos: _readAny(json, const ["photos"]) == null ? null : _readObjectList(_readAny(json, const ["photos"]), GeneratedConversationPhoto.fromJson),
@@ -516,7 +516,7 @@ class GeneratedConversation {
       starred: _readBool(_readAny(json, const ["starred"])) ?? false,
       startedAt: _readDateTime(_readAny(json, const ["started_at"])),
       status: _readString(_readAny(json, const ["status"])) ?? "completed",
-      structured: _readObject(_readAny(json, const ["structured"]), GeneratedStructured.fromJson) ?? GeneratedStructured.fromJson(const {}),
+      structured: _required(_readObject(_readAny(json, const ["structured"]), GeneratedStructured.fromJson), "structured"),
       suggestedSummarizationApps: _readAny(json, const ["suggested_summarization_apps"]) == null ? null : _readStringList(_readAny(json, const ["suggested_summarization_apps"])),
       transcriptSegments: _readAny(json, const ["transcript_segments"]) == null ? null : _readObjectList(_readAny(json, const ["transcript_segments"]), GeneratedTranscriptSegment.fromJson),
       transcriptSegmentsCompressed: _readBool(_readAny(json, const ["transcript_segments_compressed"])) ?? false,
@@ -586,6 +586,13 @@ bool? _readBool(dynamic value) {
   if (value is bool) return value;
   if (value is String) return value.toLowerCase() == 'true';
   return null;
+}
+
+T _required<T>(T? value, String name) {
+  if (value == null) {
+    throw FormatException('Missing required field: $name');
+  }
+  return value;
 }
 
 DateTime? _readDateTime(dynamic value) {

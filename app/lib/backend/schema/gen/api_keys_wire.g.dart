@@ -21,11 +21,11 @@ class GeneratedDevApiKey {
 
   factory GeneratedDevApiKey.fromJson(Map<String, dynamic> json) {
     return GeneratedDevApiKey(
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      id: _readString(_readAny(json, const ["id"])) ?? '',
-      keyPrefix: _readString(_readAny(json, const ["key_prefix"])) ?? '',
+      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      keyPrefix: _required(_readString(_readAny(json, const ["key_prefix"])), "key_prefix"),
       lastUsedAt: _readDateTime(_readAny(json, const ["last_used_at"])),
-      name: _readString(_readAny(json, const ["name"])) ?? '',
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
       scopes: _readAny(json, const ["scopes"]) == null ? null : _readStringList(_readAny(json, const ["scopes"])),
     );
   }
@@ -63,12 +63,12 @@ class GeneratedDevApiKeyCreated {
 
   factory GeneratedDevApiKeyCreated.fromJson(Map<String, dynamic> json) {
     return GeneratedDevApiKeyCreated(
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      id: _readString(_readAny(json, const ["id"])) ?? '',
-      key: _readString(_readAny(json, const ["key"])) ?? '',
-      keyPrefix: _readString(_readAny(json, const ["key_prefix"])) ?? '',
+      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      key: _required(_readString(_readAny(json, const ["key"])), "key"),
+      keyPrefix: _required(_readString(_readAny(json, const ["key_prefix"])), "key_prefix"),
       lastUsedAt: _readDateTime(_readAny(json, const ["last_used_at"])),
-      name: _readString(_readAny(json, const ["name"])) ?? '',
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
       scopes: _readAny(json, const ["scopes"]) == null ? null : _readStringList(_readAny(json, const ["scopes"])),
     );
   }
@@ -108,11 +108,11 @@ class GeneratedMcpApiKey {
   factory GeneratedMcpApiKey.fromJson(Map<String, dynamic> json) {
     return GeneratedMcpApiKey(
       appId: _readString(_readAny(json, const ["app_id"])),
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      id: _readString(_readAny(json, const ["id"])) ?? '',
-      keyPrefix: _readString(_readAny(json, const ["key_prefix"])) ?? '',
+      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      keyPrefix: _required(_readString(_readAny(json, const ["key_prefix"])), "key_prefix"),
       lastUsedAt: _readDateTime(_readAny(json, const ["last_used_at"])),
-      name: _readString(_readAny(json, const ["name"])) ?? '',
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
       scopes: _readAny(json, const ["scopes"]) == null ? null : _readStringList(_readAny(json, const ["scopes"])),
     );
   }
@@ -154,12 +154,12 @@ class GeneratedMcpApiKeyCreated {
   factory GeneratedMcpApiKeyCreated.fromJson(Map<String, dynamic> json) {
     return GeneratedMcpApiKeyCreated(
       appId: _readString(_readAny(json, const ["app_id"])),
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      id: _readString(_readAny(json, const ["id"])) ?? '',
-      key: _readString(_readAny(json, const ["key"])) ?? '',
-      keyPrefix: _readString(_readAny(json, const ["key_prefix"])) ?? '',
+      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      key: _required(_readString(_readAny(json, const ["key"])), "key"),
+      keyPrefix: _required(_readString(_readAny(json, const ["key_prefix"])), "key_prefix"),
       lastUsedAt: _readDateTime(_readAny(json, const ["last_used_at"])),
-      name: _readString(_readAny(json, const ["name"])) ?? '',
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
       scopes: _readAny(json, const ["scopes"]) == null ? null : _readStringList(_readAny(json, const ["scopes"])),
     );
   }
@@ -202,6 +202,13 @@ bool? _readBool(dynamic value) {
   if (value is bool) return value;
   if (value is String) return value.toLowerCase() == 'true';
   return null;
+}
+
+T _required<T>(T? value, String name) {
+  if (value == null) {
+    throw FormatException('Missing required field: $name');
+  }
+  return value;
 }
 
 DateTime? _readDateTime(dynamic value) {

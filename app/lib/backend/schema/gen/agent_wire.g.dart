@@ -13,7 +13,7 @@ class GeneratedAgentVmInfo {
 
   factory GeneratedAgentVmInfo.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentVmInfo(
-      hasVm: _readBool(_readAny(json, const ["has_vm"])) ?? false,
+      hasVm: _required(_readBool(_readAny(json, const ["has_vm"])), "has_vm"),
       status: _readString(_readAny(json, const ["status"])),
     );
   }
@@ -37,7 +37,7 @@ class GeneratedAgentKeepaliveResponse {
 
   factory GeneratedAgentKeepaliveResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentKeepaliveResponse(
-      ok: _readBool(_readAny(json, const ["ok"])) ?? false,
+      ok: _required(_readBool(_readAny(json, const ["ok"])), "ok"),
       reason: _readString(_readAny(json, const ["reason"])),
     );
   }
@@ -74,6 +74,13 @@ bool? _readBool(dynamic value) {
   if (value is bool) return value;
   if (value is String) return value.toLowerCase() == 'true';
   return null;
+}
+
+T _required<T>(T? value, String name) {
+  if (value == null) {
+    throw FormatException('Missing required field: $name');
+  }
+  return value;
 }
 
 DateTime? _readDateTime(dynamic value) {

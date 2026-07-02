@@ -60,6 +60,7 @@ def test_api_keys_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedMcpApiKeyCreated' in generated
     assert 'final List<String>? scopes;' in generated
     assert 'final String? appId;' in generated
+    assert 'createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at")' in generated
 
 
 def test_agent_wire_dart_is_generated_from_app_client_openapi():
@@ -69,7 +70,7 @@ def test_agent_wire_dart_is_generated_from_app_client_openapi():
     assert AGENT_DART_PATH.read_text() == generated
     assert 'class GeneratedAgentVmInfo' in generated
     assert 'class GeneratedAgentKeepaliveResponse' in generated
-    assert 'hasVm: _readBool(_readAny(json, const ["has_vm"])) ?? false' in generated
+    assert 'hasVm: _required(_readBool(_readAny(json, const ["has_vm"])), "has_vm")' in generated
 
 
 def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():
@@ -80,7 +81,7 @@ def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedPhoneNumberResponse' in generated
     assert 'class GeneratedPhoneNumbersResponse' in generated
     assert 'class GeneratedTokenResponse' in generated
-    assert 'accessToken: _readString(_readAny(json, const ["access_token"])) ??' in generated
+    assert 'accessToken: _required(_readString(_readAny(json, const ["access_token"])), "access_token")' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

@@ -17,10 +17,10 @@ class GeneratedVerifyPhoneNumberResponse {
 
   factory GeneratedVerifyPhoneNumberResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedVerifyPhoneNumberResponse(
-      phoneNumber: _readString(_readAny(json, const ["phone_number"])) ?? '',
-      status: _readString(_readAny(json, const ["status"])) ?? '',
-      validationCode: _readString(_readAny(json, const ["validation_code"])) ?? '',
-      verificationSid: _readString(_readAny(json, const ["verification_sid"])) ?? '',
+      phoneNumber: _required(_readString(_readAny(json, const ["phone_number"])), "phone_number"),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      validationCode: _required(_readString(_readAny(json, const ["validation_code"])), "validation_code"),
+      verificationSid: _required(_readString(_readAny(json, const ["verification_sid"])), "verification_sid"),
     );
   }
 
@@ -46,7 +46,7 @@ class GeneratedCheckVerificationResponse {
   factory GeneratedCheckVerificationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedCheckVerificationResponse(
       phoneNumberId: _readString(_readAny(json, const ["phone_number_id"])),
-      verified: _readBool(_readAny(json, const ["verified"])) ?? false,
+      verified: _required(_readBool(_readAny(json, const ["verified"])), "verified"),
     );
   }
 
@@ -76,10 +76,10 @@ class GeneratedPhoneNumberResponse {
   factory GeneratedPhoneNumberResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneNumberResponse(
       friendlyName: _readString(_readAny(json, const ["friendly_name"])),
-      id: _readString(_readAny(json, const ["id"])) ?? '',
-      isPrimary: _readBool(_readAny(json, const ["is_primary"])) ?? false,
-      phoneNumber: _readString(_readAny(json, const ["phone_number"])) ?? '',
-      verifiedAt: _readString(_readAny(json, const ["verified_at"])) ?? '',
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      isPrimary: _required(_readBool(_readAny(json, const ["is_primary"])), "is_primary"),
+      phoneNumber: _required(_readString(_readAny(json, const ["phone_number"])), "phone_number"),
+      verifiedAt: _required(_readString(_readAny(json, const ["verified_at"])), "verified_at"),
     );
   }
 
@@ -103,7 +103,7 @@ class GeneratedPhoneNumbersResponse {
 
   factory GeneratedPhoneNumbersResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneNumbersResponse(
-      numbers: _readObjectList(_readAny(json, const ["numbers"]), GeneratedPhoneNumberResponse.fromJson),
+      numbers: _required(_readObjectList(_readAny(json, const ["numbers"]), GeneratedPhoneNumberResponse.fromJson), "numbers"),
     );
   }
 
@@ -123,7 +123,7 @@ class GeneratedPhoneMutationResponse {
 
   factory GeneratedPhoneMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneMutationResponse(
-      success: _readBool(_readAny(json, const ["success"])) ?? false,
+      success: _required(_readBool(_readAny(json, const ["success"])), "success"),
     );
   }
 
@@ -147,9 +147,9 @@ class GeneratedTokenResponse {
 
   factory GeneratedTokenResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedTokenResponse(
-      accessToken: _readString(_readAny(json, const ["access_token"])) ?? '',
-      identity: _readString(_readAny(json, const ["identity"])) ?? '',
-      ttl: _readInt(_readAny(json, const ["ttl"])) ?? 0,
+      accessToken: _required(_readString(_readAny(json, const ["access_token"])), "access_token"),
+      identity: _required(_readString(_readAny(json, const ["identity"])), "identity"),
+      ttl: _required(_readInt(_readAny(json, const ["ttl"])), "ttl"),
     );
   }
 
@@ -186,6 +186,13 @@ bool? _readBool(dynamic value) {
   if (value is bool) return value;
   if (value is String) return value.toLowerCase() == 'true';
   return null;
+}
+
+T _required<T>(T? value, String name) {
+  if (value == null) {
+    throw FormatException('Missing required field: $name');
+  }
+  return value;
 }
 
 DateTime? _readDateTime(dynamic value) {

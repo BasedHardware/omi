@@ -204,46 +204,91 @@ def read_expr(field: Field) -> str:
     value = read_key_expr(field)
     typ = field.dart_type
     default = default_for(field)
+    has_schema_default = field.default is not None
     if typ.list_item:
         item = typ.list_item
         nullable_prefix = f'{value} == null ? null : ' if typ.nullable else ''
         if item.ref_schema:
-            return f'{nullable_prefix}_readObjectList({value}, {item.name}.fromJson)'
+            expr = f'{nullable_prefix}_readObjectList({value}, {item.name}.fromJson)'
+            return (
+                f'_required({expr}, {json.dumps(field.wire_name)})'
+                if field.required and not has_schema_default
+                else expr
+            )
         if item.name == 'String':
-            return f'{nullable_prefix}_readStringList({value})'
+            expr = f'{nullable_prefix}_readStringList({value})'
+            return (
+                f'_required({expr}, {json.dumps(field.wire_name)})'
+                if field.required and not has_schema_default
+                else expr
+            )
         if item.name == 'double':
-            return f'{nullable_prefix}_readDoubleList({value})'
+            expr = f'{nullable_prefix}_readDoubleList({value})'
+            return (
+                f'_required({expr}, {json.dumps(field.wire_name)})'
+                if field.required and not has_schema_default
+                else expr
+            )
         if item.name == 'int':
-            return f'{nullable_prefix}_readIntList({value})'
-        return f'{nullable_prefix}_readDynamicList({value})'
+            expr = f'{nullable_prefix}_readIntList({value})'
+            return (
+                f'_required({expr}, {json.dumps(field.wire_name)})'
+                if field.required and not has_schema_default
+                else expr
+            )
+        expr = f'{nullable_prefix}_readDynamicList({value})'
+        return (
+            f'_required({expr}, {json.dumps(field.wire_name)})' if field.required and not has_schema_default else expr
+        )
     if typ.ref_schema:
         if typ.nullable:
             return f'_readObject({value}, {typ.name}.fromJson)'
-        return f'_readObject({value}, {typ.name}.fromJson) ?? {default}'
+        expr = f'_readObject({value}, {typ.name}.fromJson)'
+        if field.required and not has_schema_default:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        return f'{expr} ?? {default}'
     if typ.is_date_time:
         if typ.nullable:
             return f'_readDateTime({value})'
-        return f'_readDateTime({value}) ?? {default}'
+        expr = f'_readDateTime({value})'
+        if field.required and not has_schema_default:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        return f'{expr} ?? {default}'
     if typ.is_map:
         if typ.nullable:
             return f'_readMap({value})'
-        return f'_readMap({value}) ?? const {{}}'
+        expr = f'_readMap({value})'
+        if field.required and not has_schema_default:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        return f'{expr} ?? const {{}}'
     if typ.name == 'String':
         if typ.nullable and field.default is None:
             return f'_readString({value})'
-        return f'_readString({value}) ?? {default}'
+        expr = f'_readString({value})'
+        if field.required and not has_schema_default:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        return f'{expr} ?? {default}'
     if typ.name == 'int':
         if typ.nullable and field.default is None:
             return f'_readInt({value})'
-        return f'_readInt({value}) ?? {default}'
+        expr = f'_readInt({value})'
+        if field.required and not has_schema_default:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        return f'{expr} ?? {default}'
     if typ.name == 'double':
         if typ.nullable and field.default is None:
             return f'_readDouble({value})'
-        return f'_readDouble({value}) ?? {default}'
+        expr = f'_readDouble({value})'
+        if field.required and not has_schema_default:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        return f'{expr} ?? {default}'
     if typ.name == 'bool':
         if typ.nullable and field.default is None:
             return f'_readBool({value})'
-        return f'_readBool({value}) ?? {default}'
+        expr = f'_readBool({value})'
+        if field.required and not has_schema_default:
+            return f'_required({expr}, {json.dumps(field.wire_name)})'
+        return f'{expr} ?? {default}'
     return value
 
 
@@ -344,6 +389,13 @@ bool? _readBool(dynamic value) {
   if (value is bool) return value;
   if (value is String) return value.toLowerCase() == 'true';
   return null;
+}
+
+T _required<T>(T? value, String name) {
+  if (value == null) {
+    throw FormatException('Missing required field: $name');
+  }
+  return value;
 }
 
 DateTime? _readDateTime(dynamic value) {
