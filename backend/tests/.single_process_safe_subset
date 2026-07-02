@@ -105,3 +105,5 @@ tests/unit/test_gpu_worker_submit_lock.py
 tests/unit/test_oom_reproduction.py
 tests/unit/test_vram_batch.py
 tests/unit/test_vad_gate.py
+tests/unit/test_neo_desktop_grandfather.py
+tests/unit/test_sync_playback_service.py
