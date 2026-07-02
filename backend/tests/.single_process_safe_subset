@@ -107,3 +107,13 @@ tests/unit/test_vram_batch.py
 tests/unit/test_vad_gate.py
 tests/unit/test_neo_desktop_grandfather.py
 tests/unit/test_sync_playback_service.py
+tests/unit/test_prompt_caching.py
+tests/unit/test_llm_gateway_chat_extraction_pilot.py
+tests/unit/test_l2_promotion_agent_v2.py
+tests/unit/test_parakeet_prerecorded.py
+tests/unit/test_parakeet_stream_session.py
+tests/unit/test_voice_message_language.py
+tests/routers/test_users.py
+tests/unit/v3_router_probes/fastapi_route_contract.py
+tests/integration/test_fair_use_api.py
+tests/integration/test_fair_use_live.py
