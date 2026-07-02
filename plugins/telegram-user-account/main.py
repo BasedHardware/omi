@@ -42,6 +42,7 @@ import simple_storage  # noqa: E402
 import telethon_client as _telethon_client  # noqa: E402  (read_session_from_stdin, TelethonClient)
 from auth import require_bearer  # noqa: E402
 from persona_client import chat as _persona_chat  # noqa: E402
+import flood_control  # noqa: E402  (plan §8: rate limit + FLOOD_WAIT detection)
 
 # Re-export the redactor so log records emitted during /persona_chat
 # are also scrubbed (defense in depth on top of the per-emit
@@ -273,10 +274,28 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
     # Map to the schema persona_client.chat expects.
     previous_messages = [{"role": m["role"], "text": m["text"]} for m in recent[-20:]]  # most recent 20
 
+    # plan §8: rate-limit cap BEFORE the persona call. Saves LLM
+    # tokens when the cap is hit -- otherwise we'd call the
+    # persona API only to discover we can't send. can_send is
+    # non-mutating; record_send is called only on successful
+    # outbound send.
+    if not flood_control.default_rate_limit.can_send():
+        retry_after = flood_control.default_rate_limit.seconds_until_next_slot()
+        logger.warning(
+            "rate limit hit: %d sends in last hour, blocking for %ds",
+            flood_control.default_rate_limit.in_window_count(),
+            retry_after,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit hit. Wait {retry_after}s before sending more.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     # Call the persona API. This is the same path the bot plugin
     # uses (shared persona_client.chat). We use the module-level
     # `_persona_chat` binding (imported at the top of this module)
-    # rather than re-importing inside the function — re-importing
+    # rather than re-importing inside the function -- re-importing
     # inside the function would create a fresh binding that the
     # test's `patch.object(main_module, "_persona_chat", ...)`
     # wouldn't reach.
@@ -297,12 +316,35 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
     try:
         sent = await client.send_message(body.chat_id, reply)
     except Exception as e:
+        # plan §8: detect FLOOD_WAIT specifically. Telegram's
+        # anti-flood systems return FLOOD_WAIT_* errors with a
+        # `seconds` field; surfacing this in the log + response
+        # lets the desktop show a clear "Telegram asked us to
+        # wait" message instead of a generic 502.
+        flood_seconds = flood_control.detect_flood_wait(e)
+        if flood_seconds is not None:
+            logger.warning(
+                "FLOOD_WAIT from Telegram for chat_id=%s: wait %ds. "
+                "This is Telegram's anti-flood signal -- slow down.",
+                body.chat_id,
+                flood_seconds,
+            )
+            raise HTTPException(
+                status_code=429,
+                detail=f"Telegram FLOOD_WAIT: wait {flood_seconds}s before sending.",
+                headers={"Retry-After": str(flood_seconds)},
+            )
         logger.error(
             "send_message failed for chat_id=%s: %s",
             body.chat_id,
             type(e).__name__,
         )
         raise HTTPException(status_code=502, detail="Telethon send_message failed")
+
+    # Only record_send on successful send. Failed sends do NOT
+    # consume the budget (avoids rate-limiting on persistent
+    # failures that need operator attention, not backoff).
+    flood_control.default_rate_limit.record_send()
 
     # Persist the turn to the chat's ring buffer so the next call
     # has the AI's reply in its context.

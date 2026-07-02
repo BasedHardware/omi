@@ -391,6 +391,166 @@ class TestPersonaChat:
 
 
 # ---------------------------------------------------------------------------
+# Section 4b: flood control integration (plan §8)
+# ---------------------------------------------------------------------------
+
+
+class FloodWaitError(Exception):  # noqa: N801
+    """Stand-in for telethon.errors.FloodWaitError, matched by
+    class name in flood_control.detect_flood_wait.
+    """
+
+    def __init__(self, seconds: int):
+        super().__init__(f"FLOOD_WAIT_{seconds}")
+        self.seconds = seconds
+
+
+class TestFloodControlIntegration:
+    def test_returns_429_when_rate_limit_hit(self, mock_app, monkeypatch):
+        import flood_control
+
+        rl = flood_control.RateLimit(max_per_hour=1, window_seconds=3600)
+        rl.record_send()
+        monkeypatch.setattr(flood_control, "default_rate_limit", rl, raising=False)
+
+        client, _, _ = mock_app
+        import simple_storage
+
+        simple_storage.users.clear()
+        simple_storage.users["choguun_handle"] = {
+            "telegram_user_id": "choguun_handle",
+            "omi_uid": "test-uid",
+            "persona_id": "persona-1",
+            "omi_dev_api_key": "dev-key",
+            "auto_reply_enabled": True,
+        }
+        simple_storage.chats["1"] = {"chat_id": "1", "recent_messages": []}
+
+        r = client.post(
+            "/persona_chat",
+            json={"chat_id": "1", "text": "hi", "sender_handle": "choguun_handle"},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 429
+        assert "Retry-After" in r.headers
+        assert int(r.headers["Retry-After"]) > 0
+
+    def test_returns_429_with_flood_wait_seconds_on_telegram_flood(self, mock_app, monkeypatch):
+        import flood_control
+
+        monkeypatch.setattr(
+            flood_control,
+            "default_rate_limit",
+            flood_control.RateLimit(max_per_hour=1000),
+            raising=False,
+        )
+
+        client, mock_client, main_module = mock_app
+        import simple_storage
+
+        simple_storage.users.clear()
+        simple_storage.users["choguun_handle"] = {
+            "telegram_user_id": "choguun_handle",
+            "omi_uid": "test-uid",
+            "persona_id": "persona-1",
+            "omi_dev_api_key": "dev-key",
+            "auto_reply_enabled": True,
+        }
+        simple_storage.chats["1"] = {"chat_id": "1", "recent_messages": []}
+
+        async def async_persona_chat(**kwargs):
+            return "reply text"
+
+        async def async_send_message_raises(chat_id, text):
+            raise FloodWaitError(seconds=42)
+
+        mock_client.send_message = async_send_message_raises
+
+        with patch.object(main_module, "_persona_chat", side_effect=async_persona_chat):
+            r = client.post(
+                "/persona_chat",
+                json={"chat_id": "1", "text": "hi", "sender_handle": "choguun_handle"},
+                headers={"Authorization": "Bearer test-bearer-token"},
+            )
+        assert r.status_code == 429
+        assert r.headers["Retry-After"] == "42"
+        body = r.json()
+        assert "FLOOD_WAIT" in body.get("detail", "") or "42" in body.get("detail", "")
+
+    def test_successful_send_records_to_rate_limit(self, mock_app, monkeypatch):
+        import flood_control
+
+        rl = flood_control.RateLimit(max_per_hour=100, window_seconds=3600)
+        monkeypatch.setattr(flood_control, "default_rate_limit", rl, raising=False)
+
+        client, mock_client, main_module = mock_app
+        import simple_storage
+
+        simple_storage.users.clear()
+        simple_storage.users["choguun_handle"] = {
+            "telegram_user_id": "choguun_handle",
+            "omi_uid": "test-uid",
+            "persona_id": "persona-1",
+            "omi_dev_api_key": "dev-key",
+            "auto_reply_enabled": True,
+        }
+        simple_storage.chats["1"] = {"chat_id": "1", "recent_messages": []}
+
+        async def async_persona_chat(**kwargs):
+            return "ok"
+
+        async def async_send_message_ok(chat_id, text):
+            return {"id": 1, "chat_id": str(chat_id), "date": None}
+
+        mock_client.send_message = async_send_message_ok
+
+        with patch.object(main_module, "_persona_chat", side_effect=async_persona_chat):
+            r = client.post(
+                "/persona_chat",
+                json={"chat_id": "1", "text": "hi", "sender_handle": "choguun_handle"},
+                headers={"Authorization": "Bearer test-bearer-token"},
+            )
+        assert r.status_code == 200
+        assert rl.in_window_count() == 1
+
+    def test_failed_send_does_not_record_to_rate_limit(self, mock_app, monkeypatch):
+        import flood_control
+
+        rl = flood_control.RateLimit(max_per_hour=100, window_seconds=3600)
+        monkeypatch.setattr(flood_control, "default_rate_limit", rl, raising=False)
+
+        client, mock_client, main_module = mock_app
+        import simple_storage
+
+        simple_storage.users.clear()
+        simple_storage.users["choguun_handle"] = {
+            "telegram_user_id": "choguun_handle",
+            "omi_uid": "test-uid",
+            "persona_id": "persona-1",
+            "omi_dev_api_key": "dev-key",
+            "auto_reply_enabled": True,
+        }
+        simple_storage.chats["1"] = {"chat_id": "1", "recent_messages": []}
+
+        async def async_persona_chat(**kwargs):
+            return "ok"
+
+        async def async_send_message_raises(chat_id, text):
+            raise ValueError("Telethon transport blew up")
+
+        mock_client.send_message = async_send_message_raises
+
+        with patch.object(main_module, "_persona_chat", side_effect=async_persona_chat):
+            r = client.post(
+                "/persona_chat",
+                json={"chat_id": "1", "text": "hi", "sender_handle": "choguun_handle"},
+                headers={"Authorization": "Bearer test-bearer-token"},
+            )
+        assert r.status_code == 502
+        assert rl.in_window_count() == 0
+
+
+# ---------------------------------------------------------------------------
 # Section 5: /chat_memory
 # ---------------------------------------------------------------------------
 
