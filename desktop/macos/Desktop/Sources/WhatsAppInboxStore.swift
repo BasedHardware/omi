@@ -36,7 +36,8 @@ final class WhatsAppInboxStore: ObservableObject {
   /// True only when a drafted reply can be delivered fully automatically (no user
   /// step) — i.e. 1:1 chats with a dialable number.
   func canAutoSend(_ chatID: String) -> Bool {
-    WhatsAppSenderService.phoneDigits(forChatID: chatID) != nil
+    if let chat = chats.first(where: { $0.chatID == chatID }), chat.dialablePhone != nil { return true }
+    return WhatsAppSenderService.phoneDigits(forChatID: chatID) != nil
   }
 
   func setAutoReply(_ enabled: Bool, for chatID: String) {
@@ -180,8 +181,10 @@ final class WhatsAppInboxStore: ObservableObject {
   /// chats the user explicitly enabled auto-reply on. Sent messages can't be
   /// unsent, so a send failure is logged and the draft is simply dropped.
   private func autoReply(_ chat: WhatsAppChat) async {
-    // Automated send only works for 1:1 chats with a dialable number.
-    guard WhatsAppSenderService.phoneDigits(forChatID: chat.chatID) != nil else {
+    // Automated send only works for 1:1 chats with a dialable number (from the
+    // JID, or — for @lid privacy chats — the session identifier).
+    let phone = chat.dialablePhone ?? WhatsAppSenderService.phoneDigits(forChatID: chat.chatID)
+    guard let phone else {
       NSLog("WhatsApp auto-reply skipped for \(chat.chatID): automated send unavailable for this chat")
       return
     }
@@ -196,7 +199,7 @@ final class WhatsAppInboxStore: ObservableObject {
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
     do {
-      try WhatsAppSenderService.send(text: text, toChatID: chat.chatID)
+      try WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: phone)
       appendSent(text, to: chat.id)
     } catch {
       NSLog("WhatsApp auto-reply send failed for \(chat.chatID): \(error.localizedDescription)")
@@ -241,7 +244,8 @@ final class WhatsAppInboxStore: ObservableObject {
       id: UUID().uuidString, text: text, isFromMe: true, date: Date(), senderName: nil)
     chats[idx] = WhatsAppChat(
       chatID: chat.chatID, displayName: chat.displayName, isGroup: chat.isGroup,
-      personRef: chat.personRef, bubbles: chat.bubbles + [bubble], avatarImageData: chat.avatarImageData)
+      personRef: chat.personRef, bubbles: chat.bubbles + [bubble], avatarImageData: chat.avatarImageData,
+      dialablePhone: chat.dialablePhone)
   }
 }
 

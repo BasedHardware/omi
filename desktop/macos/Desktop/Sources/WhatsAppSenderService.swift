@@ -47,19 +47,24 @@ enum WhatsAppSenderService {
     return digits.count >= 7 ? digits : nil
   }
 
-  /// Whether Omi can fully automate the send (1:1 chat with a phone AND
-  /// Accessibility granted). When false, the send path degrades to prefill-only.
-  static func canAutoSend(chatID: String) -> Bool {
-    phoneDigits(forChatID: chatID) != nil && WhatsAppPermissionPolicy.accessibilityGranted()
+  /// Whether Omi can fully automate the send (a dialable phone AND Accessibility
+  /// granted). `phone` is the chat's resolved dialable number (from the reader),
+  /// which for `@lid` privacy chats isn't derivable from the JID. When false, the
+  /// send path degrades to prefill-only.
+  static func canAutoSend(chatID: String, phone: String? = nil) -> Bool {
+    (phone ?? phoneDigits(forChatID: chatID)) != nil && WhatsAppPermissionPolicy.accessibilityGranted()
   }
 
   /// Prefill + (best-effort) send. Only ever called after the user taps Send, or
-  /// for chats the user explicitly enabled auto-reply on. Runs on the main actor
-  /// because NSWorkspace/CGEvent prefer the main run loop.
+  /// for chats the user explicitly enabled auto-reply on. `phone` overrides the
+  /// JID-derived number so `@lid` (new-contact) chats — whose dialable number lives
+  /// in the session's identifier, not the JID — can still be sent to. Runs on the
+  /// main actor because NSWorkspace/CGEvent prefer the main run loop.
   @MainActor
-  static func send(text: String, toChatID chatID: String) throws {
-    guard let phone = phoneDigits(forChatID: chatID) else {
-      // Group / opaque handle — can't deep-link a 1:1 send. Bring WhatsApp forward
+  static func send(text: String, toChatID chatID: String, phone explicitPhone: String? = nil) throws {
+    let digits = explicitPhone?.filter { $0.isNumber }
+    guard let phone = (digits?.count ?? 0) >= 7 ? digits : phoneDigits(forChatID: chatID) else {
+      // Group / no number — can't deep-link a 1:1 send. Bring WhatsApp forward
       // so the user can reply manually, then report the limitation.
       activateWhatsApp()
       throw WhatsAppSenderError.invalidTarget

@@ -382,7 +382,7 @@ private struct ChatDetailView: View {
     infoText = nil
     defer { isSending = false }
     do {
-      try WhatsAppSenderService.send(text: text, toChatID: chat.chatID)
+      try WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: chat.dialablePhone)
       // Auto-send scheduled (1:1 + Accessibility). Optimistically reflect it.
       store.appendSent(text)
       draft = ""

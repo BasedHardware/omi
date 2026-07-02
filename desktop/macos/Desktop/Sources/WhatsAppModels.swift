@@ -261,6 +261,7 @@ struct WhatsAppChat: Identifiable, Sendable {
   let personRef: String
   let bubbles: [WhatsAppChatBubble]  // ascending by date
   var avatarImageData: Data? = nil  // 1:1 contact photo
+  var dialablePhone: String? = nil  // digits for the whatsapp:// send deep link (1:1 only)
 
   var lastDate: Date { bubbles.last?.date ?? .distantPast }
   var lastPreview: String {

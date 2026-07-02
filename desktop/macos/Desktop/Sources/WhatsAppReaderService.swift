@@ -280,6 +280,32 @@ actor WhatsAppReaderService {
       return map
     }
 
+    // Dialable phone digits per chat JID, for the whatsapp:// send deep link.
+    //  - `@s.whatsapp.net` session → digits of the JID itself.
+    //  - `@lid` session (new-contact privacy chats) → digits of ZCONTACTIDENTIFIER,
+    //    which holds the `<phone>@s.whatsapp.net` for the person. Without this,
+    //    auto-reply/send silently no-op'd for every @lid chat.
+    let phoneByChat: [String: String] = try await dbQueue.read { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: "SELECT ZCONTACTJID AS jid, ZCONTACTIDENTIFIER AS ident FROM ZWACHATSESSION"
+      )
+      var map: [String: String] = [:]
+      for row in rows {
+        guard let jid = row["jid"] as? String else { continue }
+        let source: String? =
+          jid.hasSuffix("@s.whatsapp.net")
+          ? jid
+          : (jid.hasSuffix("@lid") ? (row["ident"] as? String) : nil)
+        guard let src = source, src.hasSuffix("@s.whatsapp.net"),
+          let digits = src.split(separator: "@").first.map({ String($0).filter { $0.isNumber } }),
+          digits.count >= 7
+        else { continue }
+        map[jid] = digits
+      }
+      return map
+    }
+
     // Reverse: @lid local part → phone digits, so a group sender who's only known
     // by an opaque @lid can still be shown as a phone number rather than an
     // unreadable "~tag" (when we have a 1:1 chat that reveals their number).
@@ -418,7 +444,8 @@ actor WhatsAppReaderService {
       chats.append(
         WhatsAppChat(
           chatID: chatID, displayName: title, isGroup: isGroup, personRef: personRef,
-          bubbles: bubbles, avatarImageData: avatar))
+          bubbles: bubbles, avatarImageData: avatar,
+          dialablePhone: isGroup ? nil : phoneByChat[chatID]))
     }
 
     chats.sort { $0.lastDate > $1.lastDate }
