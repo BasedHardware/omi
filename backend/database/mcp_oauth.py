@@ -197,6 +197,18 @@ def _builtin_public_chatgpt_client(client_id: str) -> Optional[dict]:
     }
 
 
+def _finalize_client(client: Optional[dict]) -> Optional[dict]:
+    """Apply built-in provider defaults to configured and generated clients."""
+    if not client:
+        return None
+    if client.get("id") not in PUBLIC_CHATGPT_CLIENT_IDS:
+        return client
+    prefixes = list(client.get("allowed_redirect_uri_prefixes") or [])
+    if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
+        prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
+    return {**client, "allowed_redirect_uri_prefixes": prefixes}
+
+
 def _default_public_client() -> Optional[dict]:
     redirect_uris = _public_redirect_uris()
     if not redirect_uris:
@@ -215,6 +227,7 @@ def _default_public_client() -> Optional[dict]:
 
 
 def get_client(client_id: str) -> Optional[dict]:
+    client = None
     doc = db.collection("mcp_oauth_clients").document(client_id).get()
     if doc.exists:
         data = doc.to_dict() or {}
@@ -223,22 +236,22 @@ def get_client(client_id: str) -> Optional[dict]:
         data.setdefault("allowed_scopes", SUPPORTED_SCOPES)
         data.setdefault("token_endpoint_auth_method", "client_secret_post")
         data.setdefault("allowed_redirect_uri_prefixes", [])
-        return data
-    env_client = _env_clients().get(client_id)
-    if env_client:
-        return env_client
-    if client_id == DEFAULT_CLIENT_ID:
-        return _legacy_chatgpt_client()
-    if client_id in PUBLIC_CHATGPT_CLIENT_IDS:
-        return _legacy_chatgpt_client(client_id)
-    if client_id == DEFAULT_CLAUDE_CLIENT_ID:
-        return _default_claude_client()
-    if client_id == DEFAULT_PUBLIC_CLIENT_ID:
-        return _default_public_client()
-    builtin_public = _builtin_public_chatgpt_client(client_id)
-    if builtin_public:
-        return builtin_public
-    return None
+        client = data
+    else:
+        env_client = _env_clients().get(client_id)
+        if env_client:
+            client = env_client
+        elif client_id == DEFAULT_CLIENT_ID:
+            client = _legacy_chatgpt_client()
+        elif client_id in PUBLIC_CHATGPT_CLIENT_IDS:
+            client = _legacy_chatgpt_client(client_id)
+        elif client_id == DEFAULT_CLAUDE_CLIENT_ID:
+            client = _default_claude_client()
+        elif client_id == DEFAULT_PUBLIC_CLIENT_ID:
+            client = _default_public_client()
+        else:
+            client = _builtin_public_chatgpt_client(client_id)
+    return _finalize_client(client)
 
 
 def verify_client_secret(client: dict, client_secret: Optional[str]) -> bool:
