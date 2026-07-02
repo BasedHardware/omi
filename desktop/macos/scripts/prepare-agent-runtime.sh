@@ -136,6 +136,22 @@ stage_local_node() {
     stage_universal_node
     return
   fi
+
+  # A local node can pass --version here yet still link non-system dylibs (e.g.
+  # Homebrew's /opt/homebrew/opt/libuv/lib/libuv.1.dylib), which load fine on the
+  # dev machine but are rejected by hardened-runtime library validation once the
+  # app is signed (different Team ID) — killing every bundled AgentRuntimeProcess
+  # task with processExited. Only official builds link solely system libraries, so
+  # reject any staged node with non-system dependencies and fall back to universal.
+  local nonsystem_libs
+  nonsystem_libs="$(otool -L "$NODE_RESOURCE" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -Ev '^(/usr/lib/|/System/)' || true)"
+  if [ -n "$nonsystem_libs" ]; then
+    log "Local Node at $node_bin links non-system libraries (rejected by hardened-runtime library validation once signed): $(echo "$nonsystem_libs" | tr '\n' ' ')"
+    log "Falling back to self-contained official Node $NODE_VERSION download"
+    rm -f "$NODE_RESOURCE"
+    stage_universal_node
+    return
+  fi
   log "Staged local Node $staged_version from $node_bin"
 }
 
