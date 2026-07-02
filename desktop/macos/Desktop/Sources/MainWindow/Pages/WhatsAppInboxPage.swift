@@ -397,6 +397,8 @@ private struct ChatBubbleView: View {
   let showSender: Bool
   let accent: Color
 
+  @State private var loadedImage: NSImage?
+
   var body: some View {
     HStack {
       if bubble.isFromMe { Spacer(minLength: 60) }
@@ -405,9 +407,39 @@ private struct ChatBubbleView: View {
           Text(sender).scaledFont(size: 10).foregroundColor(OmiColors.textTertiary)
             .padding(.leading, 12)
         }
-        messageBubble(bubble.text)
+        if let path = bubble.imagePath {
+          imageAttachment(path: path)
+          if !bubble.text.isEmpty { messageBubble(bubble.text) }
+        } else {
+          messageBubble(bubble.text)
+        }
       }
       if !bubble.isFromMe { Spacer(minLength: 60) }
+    }
+  }
+
+  @ViewBuilder
+  private func imageAttachment(path: String) -> some View {
+    Group {
+      if let img = loadedImage {
+        Image(nsImage: img)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(maxWidth: 220, maxHeight: 260)
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      } else {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(Color(red: 0.17, green: 0.17, blue: 0.19))
+          .frame(width: 160, height: 160)
+          .overlay(
+            Image(systemName: "photo")
+              .font(.system(size: 28))
+              .foregroundColor(OmiColors.textTertiary)
+          )
+      }
+    }
+    .task(id: path) {
+      loadedImage = await WhatsAppAttachmentImageCache.shared.image(atPath: path)
     }
   }
 
@@ -420,6 +452,41 @@ private struct ChatBubbleView: View {
       .padding(.vertical, 8)
       .background(bubble.isFromMe ? accent : Color(red: 0.17, green: 0.17, blue: 0.19))
       .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+  }
+}
+
+// MARK: - Attachment image cache
+
+/// Loads and caches WhatsApp attachment images off the SwiftUI render path
+/// (actor + NSCache), mirroring the iMessage attachment cache.
+private actor WhatsAppAttachmentImageCache {
+  static let shared = WhatsAppAttachmentImageCache()
+
+  private let cache: NSCache<NSString, NSImage> = {
+    let cache = NSCache<NSString, NSImage>()
+    cache.countLimit = 200
+    cache.totalCostLimit = 100 * 1024 * 1024  // 100MB
+    return cache
+  }()
+
+  func image(atPath path: String) -> NSImage? {
+    let key = path as NSString
+    if let cached = cache.object(forKey: key) { return cached }
+    if Task.isCancelled { return nil }
+    guard let image = NSImage(contentsOfFile: path) else { return nil }
+    cache.setObject(image, forKey: key, cost: Self.decodedByteCost(of: image))
+    return image
+  }
+
+  private static func decodedByteCost(of image: NSImage) -> Int {
+    var pixels = 0
+    for rep in image.representations {
+      pixels = max(pixels, rep.pixelsWide * rep.pixelsHigh)
+    }
+    if pixels == 0 {
+      pixels = Int(image.size.width * image.size.height)
+    }
+    return max(1, pixels * 4)
   }
 }
 

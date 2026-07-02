@@ -145,10 +145,7 @@ struct TelegramInboxPage: View {
           ForEach(chat.bubbles) { bubble in
             HStack {
               if bubble.isFromMe { Spacer() }
-              Text(bubble.text)
-                .padding(8)
-                .background(bubble.isFromMe ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.15),
-                  in: RoundedRectangle(cornerRadius: 10))
+              TelegramBubbleView(bubble: bubble)
               if !bubble.isFromMe { Spacer() }
             }
           }
@@ -195,5 +192,83 @@ struct TelegramInboxPage: View {
   private func sendComposed() {
     store.sendManual(composeText)
     composeText = ""
+  }
+}
+
+// MARK: - Bubble (text + inline photo)
+
+private struct TelegramBubbleView: View {
+  let bubble: TelegramChatBubble
+
+  @State private var loadedImage: NSImage?
+
+  var body: some View {
+    VStack(alignment: bubble.isFromMe ? .trailing : .leading, spacing: 2) {
+      if let path = bubble.imagePath {
+        imageAttachment(path: path)
+        if !bubble.text.isEmpty { textBubble }
+      } else {
+        textBubble
+      }
+    }
+  }
+
+  private var textBubble: some View {
+    Text(bubble.text)
+      .padding(8)
+      .background(
+        bubble.isFromMe ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.15),
+        in: RoundedRectangle(cornerRadius: 10))
+  }
+
+  @ViewBuilder
+  private func imageAttachment(path: String) -> some View {
+    Group {
+      if let img = loadedImage {
+        Image(nsImage: img)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(maxWidth: 220, maxHeight: 260)
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+      } else {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(Color.gray.opacity(0.15))
+          .frame(width: 160, height: 160)
+          .overlay(Image(systemName: "photo").font(.system(size: 28)).foregroundStyle(.secondary))
+      }
+    }
+    .task(id: path) {
+      loadedImage = await TelegramAttachmentImageCache.shared.image(atPath: path)
+    }
+  }
+}
+
+/// Loads and caches Telegram attachment images off the SwiftUI render path.
+private actor TelegramAttachmentImageCache {
+  static let shared = TelegramAttachmentImageCache()
+
+  private let cache: NSCache<NSString, NSImage> = {
+    let cache = NSCache<NSString, NSImage>()
+    cache.countLimit = 200
+    cache.totalCostLimit = 100 * 1024 * 1024  // 100MB
+    return cache
+  }()
+
+  func image(atPath path: String) -> NSImage? {
+    let key = path as NSString
+    if let cached = cache.object(forKey: key) { return cached }
+    if Task.isCancelled { return nil }
+    guard let image = NSImage(contentsOfFile: path) else { return nil }
+    cache.setObject(image, forKey: key, cost: Self.decodedByteCost(of: image))
+    return image
+  }
+
+  private static func decodedByteCost(of image: NSImage) -> Int {
+    var pixels = 0
+    for rep in image.representations {
+      pixels = max(pixels, rep.pixelsWide * rep.pixelsHigh)
+    }
+    if pixels == 0 { pixels = Int(image.size.width * image.size.height) }
+    return max(1, pixels * 4)
   }
 }

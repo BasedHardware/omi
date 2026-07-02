@@ -12,11 +12,13 @@ struct TelegramHelperMessage: Decodable, Sendable {
   let isFromMe: Bool
   let timestamp: Date
   let handle: String?  // "tg:<user_id>" of the sender; nil when isFromMe
+  var imagePath: String? = nil  // absolute path to a downloaded inline photo, if any
 
   enum CodingKeys: String, CodingKey {
     case text, timestamp, handle
     case messageID = "message_id"
     case isFromMe = "is_from_me"
+    case imagePath = "image_path"
   }
 }
 
@@ -185,6 +187,7 @@ struct TelegramChatBubble: Identifiable, Sendable {
   let isFromMe: Bool
   let date: Date
   let senderName: String?  // shown above bubble in group chats
+  var imagePath: String? = nil  // absolute path to an inline photo attachment, if any
 }
 
 /// A Telegram conversation with its recent message history.
@@ -197,7 +200,11 @@ struct TelegramChat: Identifiable, Sendable {
   let bubbles: [TelegramChatBubble]  // ascending by date
 
   var lastDate: Date { bubbles.last?.date ?? .distantPast }
-  var lastPreview: String { bubbles.last?.text ?? "" }
+  var lastPreview: String {
+    guard let last = bubbles.last else { return "" }
+    if !last.text.isEmpty { return last.text }
+    return last.imagePath != nil ? "📷 Photo" : ""
+  }
   var awaitingReply: Bool { !(bubbles.last?.isFromMe ?? true) }
 
   /// Recent thread as draft-reply context (last N messages).
@@ -226,7 +233,7 @@ extension TelegramChat {
     let bubbles = t.messages.map {
       TelegramChatBubble(
         id: $0.messageID, text: $0.text, isFromMe: $0.isFromMe, date: $0.timestamp,
-        senderName: nil)
+        senderName: nil, imagePath: $0.imagePath)
     }
     // The person to resolve server-side: the first non-me sender's tg handle.
     let partner = t.messages.first(where: { !$0.isFromMe && $0.handle != nil })?.handle

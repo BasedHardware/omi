@@ -233,19 +233,27 @@ actor WhatsAppReaderService {
       Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date(timeIntervalSince1970: 0)
     let cutoffSeconds = cutoffDate.timeIntervalSinceReferenceDate
 
+    // The visual chats tab (unlike ingest/draft) also surfaces inline IMAGES
+    // (ZMESSAGETYPE=1): LEFT JOIN the media item and accept either a real text row
+    // or an image row that has a local media path. Ingest stays text-only.
     let raws: [WhatsAppRecord] = try await dbQueue.read { db in
       let rows = try Row.fetchAll(
         db,
         sql: """
-            SELECT \(SQL.projection)
+            SELECT \(SQL.projection), mi.ZMEDIALOCALPATH AS media_path, m.ZMESSAGETYPE AS msg_type
             \(SQL.from)
+            LEFT JOIN ZWAMEDIAITEM mi ON mi.ZMESSAGE = m.Z_PK
             WHERE m.ZMESSAGEDATE >= ?
-              AND \(SQL.baseWhere)
+              AND (s.ZCONTACTJID LIKE '%@s.whatsapp.net' OR s.ZCONTACTJID LIKE '%@g.us')
+              AND (
+                (m.ZMESSAGETYPE = 0 AND m.ZTEXT IS NOT NULL AND m.ZTEXT <> '')
+                OR (m.ZMESSAGETYPE = 1 AND mi.ZMEDIALOCALPATH IS NOT NULL AND mi.ZMEDIALOCALPATH <> '')
+              )
             ORDER BY m.Z_PK DESC LIMIT ?
           """,
         arguments: [cutoffSeconds, 40000]
       )
-      return rows.compactMap { Self.record(from: $0) }
+      return rows.compactMap { Self.chatRecord(from: $0) }
     }
 
     // Per-group member directory (chat JID → member-id-digits → display name), used
@@ -312,16 +320,18 @@ actor WhatsAppReaderService {
       let members = isGroup ? (membersByChat[chatID] ?? [:]) : [:]
       var bubbles: [WhatsAppChatBubble] = []
       for r in recent {
-        guard !r.text.isEmpty else { continue }
+        guard !r.text.isEmpty || r.imagePath != nil else { continue }
         var senderImg: Data? = nil
         if isGroup, !r.isFromMe, let h = r.handle {
           senderImg = await resolver.imageData(for: h)
         }
+        let bubbleText = r.text.isEmpty ? "" : Self.resolveMentions(in: r.text, members: members)
         bubbles.append(
           WhatsAppChatBubble(
             id: r.messageId.isEmpty ? "\(chatID)-\(r.rowid)" : r.messageId,
-            text: Self.resolveMentions(in: r.text, members: members), isFromMe: r.isFromMe, date: r.date,
-            senderName: (isGroup && !r.isFromMe) ? r.senderName : nil, senderImage: senderImg))
+            text: bubbleText, isFromMe: r.isFromMe, date: r.date,
+            senderName: (isGroup && !r.isFromMe) ? r.senderName : nil, senderImage: senderImg,
+            imagePath: r.imagePath))
       }
 
       if bubbles.isEmpty { continue }
@@ -397,6 +407,57 @@ actor WhatsAppReaderService {
       chatDisplayName: nonEmpty(row["partner_name"] as? String),
       isGroup: isGroup,
       senderName: senderName
+    )
+  }
+
+  /// Like `record(from:)`, but for the visual chats tab: accepts image rows
+  /// (`ZMESSAGETYPE=1`) whose text may be empty, resolving `ZMEDIALOCALPATH` to an
+  /// absolute file path. Returns nil only when there's neither text nor an image.
+  private static func chatRecord(from row: Row) -> WhatsAppRecord? {
+    guard let chatJID = row["chat_jid"] as? String, !chatJID.isEmpty else { return nil }
+    let text = (row["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let imagePath: String? = {
+      guard let rel = row["media_path"] as? String,
+        let url = WhatsAppPermissionPolicy.mediaFileURL(forLocalPath: rel),
+        FileManager.default.fileExists(atPath: url.path)
+      else { return nil }
+      return url.path
+    }()
+    guard !text.isEmpty || imagePath != nil else { return nil }
+
+    let rowid = int64(row, "rowid")
+    let isFromMe = int64(row, "is_from_me") == 1
+    let seconds = (row["date"] as? Double) ?? Double(int64(row, "date"))
+    let messageId = (row["message_id"] as? String) ?? "\(chatJID)-\(rowid)"
+    let isGroup = chatJID.hasSuffix("@g.us")
+
+    var handle: String? = nil
+    var senderName: String? = nil
+    if !isFromMe {
+      if isGroup {
+        handle = (row["member_jid"] as? String).flatMap(Self.handle(fromJID:))
+        senderName =
+          sanitizedName(row["member_contact_name"] as? String)
+          ?? sanitizedName(row["member_first_name"] as? String)
+          ?? sanitizedName(row["push_name"] as? String)
+          ?? handle.map(Self.prettyHandle)
+      } else {
+        handle = Self.handle(fromJID: chatJID)
+      }
+    }
+
+    return WhatsAppRecord(
+      rowid: rowid,
+      messageId: messageId,
+      text: text,
+      isFromMe: isFromMe,
+      date: Date(timeIntervalSinceReferenceDate: seconds),
+      handle: handle,
+      chatID: chatJID,
+      chatDisplayName: nonEmpty(row["partner_name"] as? String),
+      isGroup: isGroup,
+      senderName: senderName,
+      imagePath: imagePath
     )
   }
 

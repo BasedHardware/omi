@@ -17,6 +17,7 @@ struct WhatsAppRecord: Sendable {
   let chatDisplayName: String?  // ZPARTNERNAME (contact name for 1:1, subject for groups)
   let isGroup: Bool
   let senderName: String?  // group member display name, shown above the bubble in groups
+  var imagePath: String? = nil  // absolute path to an image attachment (ZMESSAGETYPE=1), if any
 }
 
 // MARK: - API payloads (snake_case matches backend models/whatsapp.py)
@@ -248,6 +249,7 @@ struct WhatsAppChatBubble: Identifiable, Sendable {
   let date: Date
   let senderName: String?  // shown above bubble in group chats
   var senderImage: Data? = nil  // group sender's contact photo
+  var imagePath: String? = nil  // absolute path to an inline image attachment, if any
 }
 
 /// A full conversation with its recent message history.
@@ -261,7 +263,11 @@ struct WhatsAppChat: Identifiable, Sendable {
   var avatarImageData: Data? = nil  // 1:1 contact photo
 
   var lastDate: Date { bubbles.last?.date ?? .distantPast }
-  var lastPreview: String { bubbles.last?.text ?? "" }
+  var lastPreview: String {
+    guard let last = bubbles.last else { return "" }
+    if !last.text.isEmpty { return last.text }
+    return last.imagePath != nil ? "📷 Photo" : ""
+  }
   var awaitingReply: Bool { !(bubbles.last?.isFromMe ?? true) }
 
   /// Recent thread as draft-reply context (last N messages).

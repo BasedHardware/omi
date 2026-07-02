@@ -42,6 +42,7 @@ EVENTS (stdout):
 import argparse
 import asyncio
 import json
+import os
 import sys
 import threading
 from datetime import timezone
@@ -50,6 +51,29 @@ from datetime import timezone
 # `--selftest` (and error reporting) work even when they're not installed.
 
 THREAD_CONTEXT_LIMIT = 25  # recent messages included per new_message thread snapshot
+
+# On-device cache for downloaded message media (photos), surfaced to the app as
+# absolute `image_path`s the inbox renders inline. Kept out of the session dir so
+# it can be cleared independently.
+MEDIA_CACHE_DIR = os.path.expanduser("~/Library/Caches/omi-telegram-media")
+
+
+async def _download_photo(message, chat_id) -> str:
+    """Download a message's photo to the media cache and return its absolute path,
+    or "" when the message has no photo or the download fails. Cached by message id
+    so re-runs (backfills) don't re-download."""
+    if getattr(message, "photo", None) is None:
+        return ""
+    try:
+        os.makedirs(MEDIA_CACHE_DIR, exist_ok=True)
+        dest = os.path.join(MEDIA_CACHE_DIR, f"{chat_id}_{message.id}.jpg")
+        if os.path.exists(dest) and os.path.getsize(dest) > 0:
+            return dest
+        written = await message.download_media(file=dest)
+        return written or ""
+    except Exception as e:  # never let media failure break the thread snapshot
+        log(f"photo download failed for {chat_id}/{message.id}: {e}")
+        return ""
 
 
 def emit(event: dict) -> None:
@@ -220,19 +244,24 @@ class Helper:
         messages = []
         async for m in self.client.iter_messages(chat_id, limit=THREAD_CONTEXT_LIMIT):
             text = (m.message or "").strip()
-            if not text:
+            # Download an inline photo (if any) for the visual inbox. Photo-only
+            # messages (no caption) are kept so images still render; other media
+            # (video/doc/etc.) without text are still skipped for now.
+            image_path = await _download_photo(m, chat_id)
+            if not text and not image_path:
                 continue
             is_from_me = bool(m.out)
             handle = None if (is_from_me or m.sender_id is None) else _tg_handle(m.sender_id)
-            messages.append(
-                {
-                    "message_id": str(m.id),
-                    "text": text,
-                    "is_from_me": is_from_me,
-                    "timestamp": _iso(m.date),
-                    "handle": handle,
-                }
-            )
+            msg = {
+                "message_id": str(m.id),
+                "text": text,
+                "is_from_me": is_from_me,
+                "timestamp": _iso(m.date),
+                "handle": handle,
+            }
+            if image_path:
+                msg["image_path"] = image_path
+            messages.append(msg)
         messages.reverse()  # oldest -> newest
 
         return {

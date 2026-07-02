@@ -23,6 +23,20 @@ enum WhatsAppPermissionPolicy {
         isDirectory: false)
   }
 
+  /// WhatsApp stores message media files under `<group container>/Message/`.
+  /// A row's `ZWAMEDIAITEM.ZMEDIALOCALPATH` (e.g. `Media/<chat>/x/y/uuid.jpg`) is
+  /// relative to this directory.
+  static var messageMediaDirectoryURL: URL {
+    chatDatabaseURL.deletingLastPathComponent()
+      .appendingPathComponent("Message", isDirectory: true)
+  }
+
+  /// Absolute file URL for a `ZMEDIALOCALPATH`, or nil when empty.
+  static func mediaFileURL(forLocalPath localPath: String?) -> URL? {
+    guard let p = localPath?.trimmingCharacters(in: .whitespaces), !p.isEmpty else { return nil }
+    return messageMediaDirectoryURL.appendingPathComponent(p, isDirectory: false)
+  }
+
   /// WhatsApp.app bundle id (Mac App Store Catalyst build).
   static let whatsappBundleID = "net.whatsapp.WhatsApp"
 
