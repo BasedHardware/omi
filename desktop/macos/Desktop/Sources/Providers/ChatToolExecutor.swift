@@ -61,6 +61,13 @@ class ChatToolExecutor {
     case "manage_agent_pills":
       return await executeManageAgentPills(toolCall.arguments)
 
+    case "setup_agent_provider":
+      return await executeSetupAgentProvider(
+        toolCall.arguments,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
+
     case "execute_sql":
       return await executeSQL(toolCall.arguments)
 
@@ -495,6 +502,43 @@ class ChatToolExecutor {
     )
     return """
     Agent started as a floating agent pill.
+    id: \(pill.id.uuidString)
+    title: \(pill.title)
+    status: \(pill.status.displayLabel)
+    """
+  }
+
+  /// Install a missing local agent provider by spawning the code-built
+  /// "Install <Provider>" pill on Omi's default agent. The user's explicit
+  /// consent in the conversation is the boundary for calling this tool
+  /// (prompt-enforced); the pill itself runs through the normal agent
+  /// permission model. Idempotent for already-installed providers.
+  private static func executeSetupAgentProvider(
+    _ args: [String: Any],
+    originatingChatMode: ChatMode?,
+    originatingClientScope: String?
+  ) async -> String {
+    if originatingChatMode == .ask {
+      return "Error: setup_agent_provider is unavailable in Ask mode. Switch to Act mode before installing an agent provider."
+    }
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+      return "Error: setup_agent_provider is unavailable from an existing floating background agent."
+    }
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
+    }
+    if LocalAgentProviderDetector.isAvailable(provider) {
+      return "\(provider.displayName) is already installed and ready — no setup needed."
+    }
+    let model = ShortcutSettings.shared.selectedModel.isEmpty
+      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+    let pill = AgentPillsManager.shared.spawnInstallAssistPill(for: provider, model: model)
+    return """
+    Installer agent started as a floating agent pill — it runs the official \(provider.displayName) install command and verifies `\(provider.executableName)` afterwards. Interactive sign-in or onboarding steps are left to the user.
     id: \(pill.id.uuidString)
     title: \(pill.title)
     status: \(pill.status.displayLabel)

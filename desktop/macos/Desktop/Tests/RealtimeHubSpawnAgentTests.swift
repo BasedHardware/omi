@@ -37,6 +37,20 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 """))
   }
 
+  func testSetupAgentProviderIsConsentGatedAndIdempotent() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("case .setupAgentProvider:"))
+    // Idempotent already-installed path — no reinstall, no pill.
+    XCTAssertTrue(source.contains("is already installed and ready — no setup needed."))
+    // The installer pill runs Omi's default agent via the shared executor.
+    XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnInstallAssistPill(for: provider, model: setupModel)"))
+    XCTAssertTrue(source.contains("Installer agent started — it will verify \\(provider.executableName) once the install finishes."))
+    // Consent guard wording: the tool call itself is the consent boundary.
+    XCTAssertTrue(source.contains("Consent boundary: the model may only call this after the user"))
+    XCTAssertTrue(source.contains("explicitly agreed in this conversation (prompt-enforced)"))
+  }
+
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {
     let source = try agentControlServiceSource()
 

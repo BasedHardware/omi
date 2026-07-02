@@ -84,15 +84,17 @@ struct LocalAgentProviderAvailability: Equatable {
         return false
     }
 
+    /// Full setup guidance shown in the bar / returned to the model when the
+    /// provider is missing. Built from the provider's structured install data
+    /// so all providers keep the same shape; the SPOKEN surface stays clean
+    /// (voice only says `setupNeededStatus`).
     var setupPrompt: String {
-        switch provider {
-        case .hermes:
-            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
-        case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
-        case .codex:
-            return "I don't see the Codex ACP bridge installed. Run `npm install -g @openai/codex @agentclientprotocol/codex-acp`, then try again."
+        var prompt = "I don't see \(provider.displayName) installed. Run `\(provider.installCommand)`"
+        if let note = provider.postInstallNote {
+            prompt += ", then \(note)"
         }
+        prompt += ". Or just ask me to install it for you. Install guide: \(provider.installDocsURL)"
+        return prompt
     }
 
     var toolError: String {

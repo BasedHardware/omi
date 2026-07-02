@@ -83,6 +83,43 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instruction.contains("do NOT spawn a default agent"))
     }
 
+    func testLocalAgentProviderInstructionOffersInstallAssistOnConsent() {
+        let availability = [
+            LocalAgentProviderAvailability(provider: .openclaw, status: .available(command: "/usr/local/bin/openclaw")),
+            LocalAgentProviderAvailability(provider: .hermes, status: .missing),
+            LocalAgentProviderAvailability(provider: .codex, status: .missing),
+        ]
+        let instruction = RealtimeHubTools.localAgentProviderInstruction(availability: availability)
+
+        // Unavailable branch: needs-setup stance is kept, install assist is
+        // offered, and calling the tool is gated on explicit user consent.
+        XCTAssertTrue(instruction.contains("do NOT spawn a default agent"))
+        XCTAssertTrue(instruction.contains("mention you can install it for them"))
+        XCTAssertTrue(instruction.contains("If — and only if — the user explicitly agrees in this conversation, call setup_agent_provider with that provider."))
+        XCTAssertTrue(instruction.contains("NEVER call setup_agent_provider without the user's explicit consent."))
+        // The structured setup prompt (official command + docs URL) reaches the model.
+        XCTAssertTrue(instruction.contains(AgentPillsManager.DirectedProvider.hermes.installCommand))
+        XCTAssertTrue(instruction.contains(AgentPillsManager.DirectedProvider.hermes.installDocsURL))
+    }
+
+    func testRealtimeSetupAgentProviderToolIsAlwaysExposedWithAllProviders() {
+        // The tool stays in the schema even when every directed provider is
+        // missing (or installed): the hub session's tool list is frozen at
+        // session start, and the executor is idempotent for already-installed
+        // providers, so an always-present tool is the simplest correct shape.
+        let tools = RealtimeHubTools.openAITools(availableDirectedProviders: [])
+        let setupTool = tools.first { ($0["name"] as? String) == HubTool.setupAgentProvider.rawValue }
+        XCTAssertNotNil(setupTool)
+        XCTAssertTrue((setupTool?["description"] as? String ?? "").contains("explicitly"))
+        XCTAssertTrue((setupTool?["description"] as? String ?? "").contains("never unprompted"))
+
+        let parameters = setupTool?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+        let provider = properties?["provider"] as? [String: Any]
+        XCTAssertEqual(provider?["enum"] as? [String], ["openclaw", "hermes", "codex"])
+        XCTAssertEqual(parameters?["required"] as? [String], ["provider"])
+    }
+
     func testRealtimeTaskAgentStatusToolIsExposed() {
         let tools = RealtimeHubTools.openAITools
         let statusTool = tools.first { ($0["name"] as? String) == HubTool.getTaskAgentStatus.rawValue }

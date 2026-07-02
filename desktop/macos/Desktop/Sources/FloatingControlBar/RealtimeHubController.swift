@@ -301,6 +301,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     ensureWarm()
   }
 
+  /// A local agent provider was just installed (or removed) — re-warm the
+  /// session so the tool schema enum and provider instruction, both computed
+  /// at session start, pick up the change. Idle-only guard mirrors
+  /// systemDidWake: never interrupts an active turn or races a mint; when a
+  /// turn is in flight the change simply lands on the next reconnect.
+  func refreshForLocalAgentProviderChange() {
+    guard session != nil, !responding, !minting else { return }
+    log("RealtimeHub: local agent provider availability changed — re-warming session")
+    teardownSession()
+    ensureWarm()
+  }
+
   @objc private func settingsChanged() {
     // A new pick (user or Auto/AutoModelSelector) re-evaluates from the primary, dropping
     // any active failover so the freshly-selected provider is honored.
@@ -1065,6 +1077,45 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
         output: "Agent started.")
+    case .setupAgentProvider:
+      let setupProviderName = ((arguments["provider"] as? String) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      guard let provider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Unsupported agent provider '\(setupProviderName)'. Use 'hermes', 'openclaw', or 'codex'.")
+        return
+      }
+      // Idempotent: the tool is always advertised, so an already-installed
+      // provider just reports ready instead of reinstalling.
+      guard !LocalAgentProviderDetector.isAvailable(provider) else {
+        log("RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) already installed")
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "\(provider.displayName) is already installed and ready — no setup needed.")
+        return
+      }
+      // Consent boundary: the model may only call this after the user
+      // explicitly agreed in this conversation (prompt-enforced). The
+      // installer pill runs Omi's DEFAULT agent, which has shell tools — the
+      // missing directed provider obviously can't install itself.
+      let setupModel = ShortcutSettings.shared.selectedModel.isEmpty
+        ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
+      let installPill = AgentPillsManager.shared.spawnInstallAssistPill(for: provider, model: setupModel)
+      log("RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) → installer pill=\"\(installPill.title)\"")
+      if !audioReceivedThisTurn {
+        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ack = existingAck.isEmpty ? "Starting an installer agent for \(provider.displayName)." : existingAck
+        assistantText = ack
+        barState?.isVoiceResponseActive = true
+        speak(ack)
+      }
+      suppressAssistantOutputForCurrentTurn = true
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: "Installer agent started — it will verify \(provider.executableName) once the install finishes. Interactive sign-in or onboarding steps are left to the user.")
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
       // tool is just an ack — pushing another image here is the broken path (mid-tool-call

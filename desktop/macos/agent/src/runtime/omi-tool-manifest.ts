@@ -323,6 +323,35 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     adapters: piAndStdio(),
   },
   {
+    name: "setup_agent_provider",
+    label: "Setup Agent Provider",
+    description:
+      "Install a local agent provider (OpenClaw, Hermes, or Codex) that is not set up yet. Starts a background installer agent that runs the official install command and verifies the provider binary; interactive sign-in steps are left to the user. Idempotent: an already-installed provider just reports ready.",
+    promptSnippet: "setup_agent_provider - Install a missing local agent provider (openclaw, hermes, codex)",
+    promptGuidelines: [
+      "Call setup_agent_provider ONLY after the user explicitly agrees in this conversation to install that provider — never unprompted.",
+      "When a directed provider is reported as not installed, say it needs setup and offer to install it before calling anything.",
+      "The installer runs as a background agent pill; interactive login/onboarding steps are left to the user.",
+    ],
+    latency: "async background",
+    inputSchema: schema(
+      {
+        provider: {
+          type: "string",
+          enum: ["openclaw", "hermes", "codex"],
+          description: "Local agent provider to install.",
+        },
+      },
+      ["provider"],
+    ),
+    annotations: openWorldWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires Swift AgentBridge/floating pill support."],
+    adapters: piAndStdio(),
+  },
+  {
     name: "search_tasks",
     label: "Search Tasks",
     description: "Vector similarity search on tasks. Find tasks by meaning or topic.",

@@ -1321,7 +1321,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
             let floatingPillSystemPrompt = buildFloatingBarSystemPrompt(
                 contextString: promptContext,
-                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                excludingToolNames: ["spawn_agent", "delegate_agent", "setup_agent_provider"]
             )
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
                 ? ModelQoS.Claude.defaultSelection
@@ -3375,7 +3375,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         if cachedFloatingPillSystemPrompt.isEmpty {
                             cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
                                 contextString: formatMemoriesSection(),
-                                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                                excludingToolNames: ["spawn_agent", "delegate_agent", "setup_agent_provider"]
                             )
                         }
                         systemPrompt = cachedFloatingPillSystemPrompt

@@ -172,6 +172,10 @@ final class AgentPillsManager: ObservableObject {
     /// re-sends the brief with the same prompt as the original attempt.
     private var systemPromptSuffixByPill: [UUID: String] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
+    /// One-shot watchers for "Install <Provider>" pills — when the installer
+    /// finishes and the provider binary is actually detectable, the voice hub
+    /// session is re-warmed so its tool schema picks up the new provider.
+    private var installAssistWatchersByPill: [UUID: AnyCancellable] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
     private static let backgroundAgentSystemPromptSuffix = """
@@ -276,6 +280,49 @@ final class AgentPillsManager: ObservableObject {
 
         var setupNeededStatus: String {
             "\(displayName) needs setup"
+        }
+
+        /// Canonical install one-liner from the provider's official docs —
+        /// what we show the user (and the model) when the provider is missing.
+        var installCommand: String {
+            switch self {
+            case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+            case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash"
+            // The Codex CLI has no ACP mode, so the codex-acp bridge is
+            // required alongside it for task execution.
+            case .codex: return "npm install -g @openai/codex @agentclientprotocol/codex-acp"
+            }
+        }
+
+        /// Install command safe for an UNATTENDED installer agent: the
+        /// canonical curl installers launch interactive onboarding/setup
+        /// stages that would hang a non-interactive shell, so these variants
+        /// skip them (flags documented by each provider's installer).
+        var unattendedInstallCommand: String {
+            switch self {
+            case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive"
+            case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard"
+            case .codex: return "npm install -g @openai/codex @agentclientprotocol/codex-acp"
+            }
+        }
+
+        /// Official install documentation page.
+        var installDocsURL: String {
+            switch self {
+            case .hermes: return "https://hermes-agent.nousresearch.com/docs/getting-started/installation"
+            case .openclaw: return "https://docs.openclaw.ai/install"
+            case .codex: return "https://github.com/openai/codex"
+            }
+        }
+
+        /// Interactive step the user must run themselves after the install
+        /// command (installer agents never attempt interactive logins).
+        var postInstallNote: String? {
+            switch self {
+            case .hermes: return "run `hermes setup` to finish configuring it"
+            case .openclaw: return "run `openclaw onboard --install-daemon` to finish onboarding"
+            case .codex: return "run `codex login` if you haven't signed in"
+            }
         }
     }
 
@@ -733,6 +780,57 @@ final class AgentPillsManager: ObservableObject {
         )
     }
 
+    /// Code-built brief for the "install this provider for me" pill.
+    /// Deterministic — never model-authored — so the installer agent always
+    /// runs the official command, verifies the expected binary, and leaves
+    /// interactive steps to the user (integrations philosophy: code owns
+    /// contracts).
+    nonisolated static func installAssistBrief(for provider: DirectedProvider) -> String {
+        var steps = [
+            "Install the \(provider.displayName) local agent on this Mac so Omi can run tasks through it.",
+            "1. Run this exact official install command (it is non-interactive): `\(provider.unattendedInstallCommand)`",
+            "2. Verify the install: run `command -v \(provider.executableName)`; if that finds nothing, also look for an executable named `\(provider.executableName)` in ~/.local/bin, /opt/homebrew/bin, /usr/local/bin, and the npm global bin directory (`npm bin -g`).",
+            "3. Do NOT run any interactive login, onboarding, or setup wizard yourself.",
+        ]
+        if let note = provider.postInstallNote {
+            steps.append("4. Tell the user to \(note).")
+        }
+        steps.append(
+            "Finish with a concise report: whether `\(provider.executableName)` is now installed (include its path), or the failing command output if the install failed. If it succeeded, tell the user they can simply ask Omi to use \(provider.displayName) again."
+        )
+        return steps.joined(separator: "\n")
+    }
+
+    /// Spawn the "Install <Provider>" assist pill on Omi's DEFAULT agent
+    /// (`bridgeHarnessOverride: nil` — it has shell tools; the missing
+    /// provider obviously can't install itself). Shared executor body for the
+    /// setup_agent_provider tool on both the voice hub and typed chat.
+    @discardableResult
+    func spawnInstallAssistPill(for provider: DirectedProvider, model: String) -> AgentPill {
+        let pill = spawn(
+            query: Self.installAssistBrief(for: provider),
+            model: model,
+            fromVoice: false,
+            preFetchedTitle: "Install \(provider.displayName)",
+            bridgeHarnessOverride: nil
+        )
+        // Post-install freshness: the warm hub session's tool schema and
+        // provider instruction are computed at session start, so a fresh
+        // install stays invisible to voice until the next natural reconnect.
+        // When the installer pill finishes and the binary is detectable,
+        // re-warm the session (idle-only; same pattern as system wake).
+        installAssistWatchersByPill[pill.id] = pill.$status
+            .receive(on: DispatchQueue.main)
+            .filter(\.isFinished)
+            .first()
+            .sink { [weak self] _ in
+                self?.installAssistWatchersByPill.removeValue(forKey: pill.id)
+                guard LocalAgentProviderDetector.isAvailable(provider) else { return }
+                RealtimeHubController.shared.refreshForLocalAgentProviderChange()
+            }
+        return pill
+    }
+
     /// Spawn a new agent pill. Each pill gets its own ChatProvider so the
     /// pills truly run in parallel. Bridge boots are staggered through
     /// `bootChain` so we never race ACP startup; once a pill's bridge is
@@ -1185,6 +1283,8 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
+        installAssistWatchersByPill[pillID]?.cancel()
+        installAssistWatchersByPill[pillID] = nil
         providersByPill[pillID]?.stopAgent()
         streamsByPill[pillID]?.cancel()
         streamsByPill[pillID] = nil

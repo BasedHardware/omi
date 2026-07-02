@@ -30,6 +30,7 @@ describe("omi tool manifest", () => {
       "fill_cloud_connector_form",
       "spawn_agent",
       "manage_agent_pills",
+      "setup_agent_provider",
       "search_tasks",
       "complete_task",
       "delete_task",
@@ -55,6 +56,19 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='openclaw'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("'hermes'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("'codex'");
+  });
+
+  it("gates provider install assist on explicit user consent", () => {
+    const setupProvider = toolsForAdapter("pi-mono").find((tool) => tool.name === "setup_agent_provider");
+    const guidelines = setupProvider?.promptGuidelines?.join("\n") ?? "";
+
+    expect(setupProvider?.inputSchema.properties.provider).toMatchObject({
+      enum: ["openclaw", "hermes", "codex"],
+    });
+    expect(setupProvider?.inputSchema.required).toEqual(["provider"]);
+    expect(guidelines).toContain("ONLY after the user explicitly agrees");
+    expect(guidelines).toContain("never unprompted");
+    expect(guidelines).toContain("interactive login/onboarding steps are left to the user");
   });
 
   it("guides provider selection by strengths with the default agent as fallback", () => {

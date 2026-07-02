@@ -102,10 +102,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
-    XCTAssertEqual(
-      availability.toolError,
-      "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+      "I don't see OpenClaw installed. Run `curl -fsSL https://openclaw.ai/install.sh | bash`, "
+        + "then run `openclaw onboard --install-daemon` to finish onboarding. "
+        + "Or just ask me to install it for you. Install guide: https://docs.openclaw.ai/install")
+    XCTAssertEqual(availability.toolError, "Error: \(availability.setupPrompt)")
   }
 
   func testLocalAgentProviderDetectorFindsCodexAcpBridge() throws {
@@ -156,6 +156,9 @@ final class PiMonoWiringTests: XCTestCase {
 
     XCTAssertFalse(availability.isAvailable)
     XCTAssertTrue(availability.setupPrompt.contains("npm install -g @openai/codex @agentclientprotocol/codex-acp"))
+    XCTAssertTrue(availability.setupPrompt.contains("run `codex login` if you haven't signed in"))
+    XCTAssertTrue(availability.setupPrompt.contains("Install guide: https://github.com/openai/codex"))
+    XCTAssertTrue(availability.setupPrompt.contains("ask me to install it for you"))
   }
 
   // MARK: - ApiKeysResponse shape assertion
