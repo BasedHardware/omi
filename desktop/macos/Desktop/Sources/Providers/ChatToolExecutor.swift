@@ -469,35 +469,44 @@ class ChatToolExecutor {
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
       .replacingOccurrences(of: " ", with: "")
-    let directedProvider: AgentPillsManager.DirectedProvider?
+    let requestedProvider: AgentPillsManager.DirectedProvider?
     switch providerName {
-    case "openclaw": directedProvider = .openclaw
-    case "hermes": directedProvider = .hermes
-    case "": directedProvider = nil
+    case "openclaw": requestedProvider = .openclaw
+    case "hermes": requestedProvider = .hermes
+    case "codex": requestedProvider = .codex
+    case "": requestedProvider = nil
     default:
-      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
     }
-    if let directedProvider {
-      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
-      guard availability.isAvailable else {
-        return availability.toolError
-      }
-    }
-    let model = ShortcutSettings.shared.selectedModel.isEmpty
-      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    let pill = AgentPillsManager.shared.spawnFromUserQuery(
-      brief,
-      model: model,
-      fromVoice: false,
-      preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
-      bridgeHarnessOverride: directedProvider?.harnessMode
+    let resolution = await LocalAgentProviderRouting.resolveSpawnWithAutoInstall(
+      brief: brief,
+      requestedProvider: requestedProvider,
+      userRequestText: nil,
+      title: title
     )
-    return """
-    Agent started as a floating agent pill.
-    id: \(pill.id.uuidString)
-    title: \(pill.title)
-    status: \(pill.status.displayLabel)
-    """
+    switch resolution {
+    case .setupRequired(_, let setupPrompt, _):
+      return "Error: \(setupPrompt)"
+    case .spawn(let plan):
+      let model = ShortcutSettings.shared.selectedModel.isEmpty
+        ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(
+        brief,
+        model: model,
+        fromVoice: false,
+        preFetchedTitle: plan.title,
+        preFetchedAck: plan.ack,
+        bridgeHarnessOverride: plan.harnessOverride,
+        spawnContext: plan.context
+      )
+      let fallbackLine = plan.fallbackNote.map { "\nfallback: \($0)" } ?? ""
+      return """
+      Agent started as a floating agent pill.
+      id: \(pill.id.uuidString)
+      title: \(pill.title)
+      status: \(pill.status.displayLabel)\(fallbackLine)
+      """
+    }
   }
 
   private static func executeManageAgentPills(_ args: [String: Any]) async -> String {

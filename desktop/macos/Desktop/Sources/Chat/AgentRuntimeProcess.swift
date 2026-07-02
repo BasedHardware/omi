@@ -575,23 +575,14 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    let adapterPathDirs = [
-      "\(home)/.hermes/hermes-agent/venv/bin",
-      "\(home)/.hermes/node/bin",
-      "\(home)/.hermes/hermes-agent",
-    ]
-    let adapterSearchDirs = adapterPathDirs + [
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
+    let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
     ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
-    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
+    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterSearchDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }
@@ -609,6 +600,12 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let codex = firstExecutable(named: "codex", in: adapterSearchDirs)
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
+    }
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
@@ -617,6 +614,10 @@ actor AgentRuntimeProcess {
       return "\(shellQuote(nodePath)) \(shellQuote(openClawPath)) acp"
     }
     return "\(shellQuote(openClawPath)) acp"
+  }
+
+  static func codexAdapterCommand(codexPath: String) -> String {
+    "CODEX_PATH=\(shellQuote(codexPath)) npx -y @agentclientprotocol/codex-acp"
   }
 
   private static func shellQuote(_ value: String) -> String {

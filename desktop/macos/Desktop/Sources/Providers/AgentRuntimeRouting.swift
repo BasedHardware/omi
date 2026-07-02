@@ -89,11 +89,11 @@ struct LocalAgentProviderAvailability: Equatable {
     var setupPrompt: String {
         switch provider {
         case .hermes:
-            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
+            return "I don't see Hermes installed. Install it from github.com/NousResearch/hermes-agent with `pip install -e '.[acp]'` (or `uvx --from 'hermes-agent[acp]'`), then run `hermes model` to configure a provider, and try again."
         case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+            return "I don't see OpenClaw installed. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again."
         case .codex:
-            return "I don't see Codex installed. Please run 'npm install -g @openai/codex' and run 'codex' in your terminal to sign in, then try again."
+            return "I don't see Codex installed. Run `npm install -g @openai/codex` in your terminal, then run `codex` to sign in, and try again."
         }
     }
 
@@ -147,7 +147,7 @@ enum LocalAgentProviderDetector {
         fileManager: FileManager,
         homeDirectory: String
     ) -> String? {
-        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
+        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory, fileManager: fileManager) {
             let path = (dir as NSString).appendingPathComponent(name)
             if fileManager.isExecutableFile(atPath: path) {
                 return path
@@ -156,8 +156,11 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
-        [
+    static func adapterActivationSearchDirectories(
+        homeDirectory: String,
+        fileManager: FileManager = .default
+    ) -> [String] {
+        var directories = [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
@@ -167,5 +170,489 @@ enum LocalAgentProviderDetector {
             "/opt/homebrew/bin",
             "/usr/local/bin",
         ]
+        directories.append(contentsOf: nvmBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager))
+        return directories
+    }
+
+    private static func nvmBinDirectories(
+        homeDirectory: String,
+        fileManager: FileManager
+    ) -> [String] {
+        let nvmRoot = (homeDirectory as NSString).appendingPathComponent(".nvm/versions/node")
+        guard let versions = try? fileManager.contentsOfDirectory(atPath: nvmRoot) else {
+            return []
+        }
+        return versions
+            .sorted { lhs, rhs in lhs.compare(rhs, options: .numeric) == .orderedDescending }
+            .map { (nvmRoot as NSString).appendingPathComponent("\($0)/bin") }
+    }
+}
+
+enum AgentTaskKind: Equatable {
+    case coding
+    case automation
+    case general
+}
+
+struct AgentSpawnContext: Equatable {
+    let taskKind: AgentTaskKind
+    let explicitProvider: AgentPillsManager.DirectedProvider?
+    let fallbackChain: [AgentHarnessMode?]
+    var attemptedHarnesses: [AgentHarnessMode?]
+
+    func nextFallback(after current: AgentHarnessMode?) -> AgentHarnessMode?? {
+        // Consider ALL unattempted providers in fallbackChain, not just ones
+        // ranked after `current`. When the user explicitly requested a provider
+        // that isn't the first in the preference order, we still want to try
+        // higher-preference providers on failure.
+        return fallbackChain.first { harness in
+            harness != current && !attemptedHarnesses.contains(where: { $0 == harness })
+        }
+    }
+
+    mutating func recordAttempt(_ harness: AgentHarnessMode?) {
+        if !attemptedHarnesses.contains(where: { $0 == harness }) {
+            attemptedHarnesses.append(harness)
+        }
+    }
+}
+
+enum LocalAgentProviderRouting {
+    enum Resolution: Equatable {
+        case spawn(AgentSpawnPlan)
+        case setupRequired(
+            provider: AgentPillsManager.DirectedProvider,
+            prompt: String,
+            spokenStatus: String
+        )
+    }
+
+    struct AgentSpawnPlan: Equatable {
+        let harnessOverride: AgentHarnessMode?
+        let title: String
+        let ack: String
+        let selectedProvider: AgentPillsManager.DirectedProvider?
+        let usedFallback: Bool
+        let fallbackNote: String?
+        let context: AgentSpawnContext
+    }
+
+    static func classifyTask(_ text: String) -> AgentTaskKind {
+        let lower = text.lowercased()
+        let codingSignals = [
+            "code", "script", "debug", "refactor", "compile", "function", "class", "api",
+            "bug", "implement", "python", "swift", "typescript", "javascript", "repo",
+            "repository", "pull request", "unit test", "lint", "syntax",
+        ]
+        if codingSignals.contains(where: { lower.contains($0) }) {
+            return .coding
+        }
+        let automationSignals = [
+            "automate", "click", "open app", "send email", "browser", "download",
+            "upload", "reminder", "notes app", "messages app", "files app", "folder",
+        ]
+        if automationSignals.contains(where: { lower.contains($0) }) {
+            return .automation
+        }
+        return .general
+    }
+
+    static func preferredProviders(for task: AgentTaskKind) -> [AgentPillsManager.DirectedProvider] {
+        switch task {
+        case .coding:
+            return [.codex, .hermes, .openclaw]
+        case .automation:
+            return [.openclaw, .codex, .hermes]
+        case .general:
+            return [.openclaw, .codex, .hermes]
+        }
+    }
+
+    static func explicitProvider(in text: String) -> AgentPillsManager.DirectedProvider? {
+        AgentPillsManager.providerDirective(from: text)?.provider
+    }
+
+    static func isExplicitProviderRequest(
+        _ provider: AgentPillsManager.DirectedProvider,
+        in text: String
+    ) -> Bool {
+        if explicitProvider(in: text) == provider {
+            return true
+        }
+        let openClawPattern = #"(?i)\bopen\s*claw\b"#
+        switch provider {
+        case .openclaw:
+            return text.range(of: openClawPattern, options: .regularExpression) != nil
+        case .hermes, .codex:
+            let pattern = #"(?i)\b\#(provider.rawValue)\b"#
+            return text.range(of: pattern, options: .regularExpression) != nil
+        }
+    }
+
+    static func isRetriableSpawnFailure(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("not available")
+            || lower.contains("failed to start")
+            || lower.contains("adapter")
+            || lower.contains("enoent")
+            || lower.contains("command not found")
+            || lower.contains("activation")
+    }
+
+    static func resolveSpawn(
+        brief: String,
+        requestedProvider: AgentPillsManager.DirectedProvider?,
+        userRequestText: String?,
+        title: String?,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        homeDirectory: String = NSHomeDirectory()
+    ) -> Resolution {
+        let taskKind = classifyTask(brief)
+        // Only treat a provider as user-directed when it appears in the user's own
+        // words. The model-authored `brief` often names a provider the model chose
+        // (e.g. "use Hermes to refactor…") even when the user never said it.
+        // Match a bare mention ("codex", "use codex", "install codex"), not just a
+        // verb+name directive, so any task that names an agent routes to it.
+        let userText = userRequestText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let explicit = userText.isEmpty ? nil : AgentPillsManager.DirectedProvider.allCases.first {
+            isExplicitProviderRequest($0, in: userText)
+        }
+
+        if let explicit {
+            let availability = LocalAgentProviderDetector.availability(
+                for: explicit,
+                environment: environment,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            )
+            guard availability.isAvailable else {
+                return .setupRequired(
+                    provider: explicit,
+                    prompt: availability.setupPrompt,
+                    spokenStatus: explicit.setupNeededStatus
+                )
+            }
+            let resolvedTitle = normalizedTitle(title, provider: explicit)
+            return .spawn(
+                AgentSpawnPlan(
+                    harnessOverride: explicit.harnessMode,
+                    title: resolvedTitle,
+                    ack: "Asking \(explicit.displayName).",
+                    selectedProvider: explicit,
+                    usedFallback: false,
+                    fallbackNote: nil,
+                    context: spawnContext(
+                        taskKind: taskKind,
+                        explicitProvider: explicit,
+                        selectedHarness: explicit.harnessMode,
+                        environment: environment,
+                        fileManager: fileManager,
+                        homeDirectory: homeDirectory
+                    )
+                )
+            )
+        }
+
+        let orderedProviders = preferredProviders(for: taskKind)
+        let availableProviders = orderedProviders.filter {
+            LocalAgentProviderDetector.isAvailable(
+                $0,
+                environment: environment,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            )
+        }
+
+        if let requestedProvider {
+            if LocalAgentProviderDetector.isAvailable(
+                requestedProvider,
+                environment: environment,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            ) {
+                let resolvedTitle = normalizedTitle(title, provider: requestedProvider)
+                return .spawn(
+                    AgentSpawnPlan(
+                        harnessOverride: requestedProvider.harnessMode,
+                        title: resolvedTitle,
+                        ack: "Starting \(requestedProvider.displayName).",
+                        selectedProvider: requestedProvider,
+                        usedFallback: false,
+                        fallbackNote: nil,
+                        context: spawnContext(
+                            taskKind: taskKind,
+                            explicitProvider: nil,
+                            selectedHarness: requestedProvider.harnessMode,
+                            environment: environment,
+                            fileManager: fileManager,
+                            homeDirectory: homeDirectory
+                        )
+                    )
+                )
+            }
+
+            if let fallbackProvider = availableProviders.first {
+                let note = "\(requestedProvider.displayName) isn't installed; using \(fallbackProvider.displayName) instead."
+                let resolvedTitle = normalizedTitle(title, provider: fallbackProvider)
+                return .spawn(
+                    AgentSpawnPlan(
+                        harnessOverride: fallbackProvider.harnessMode,
+                        title: resolvedTitle,
+                        ack: note,
+                        selectedProvider: fallbackProvider,
+                        usedFallback: true,
+                        fallbackNote: note,
+                        context: spawnContext(
+                            taskKind: taskKind,
+                            explicitProvider: nil,
+                            selectedHarness: fallbackProvider.harnessMode,
+                            environment: environment,
+                            fileManager: fileManager,
+                            homeDirectory: homeDirectory
+                        )
+                    )
+                )
+            }
+        }
+
+        if let primary = availableProviders.first {
+            let resolvedTitle = normalizedTitle(title, provider: primary)
+            return .spawn(
+                AgentSpawnPlan(
+                    harnessOverride: primary.harnessMode,
+                    title: resolvedTitle,
+                    ack: "Starting \(primary.displayName).",
+                    selectedProvider: primary,
+                    usedFallback: false,
+                    fallbackNote: nil,
+                    context: spawnContext(
+                        taskKind: taskKind,
+                        explicitProvider: nil,
+                        selectedHarness: primary.harnessMode,
+                        environment: environment,
+                        fileManager: fileManager,
+                        homeDirectory: homeDirectory
+                    )
+                )
+            )
+        }
+
+        let resolvedTitle = normalizedTitle(title, provider: nil)
+        return .spawn(
+            AgentSpawnPlan(
+                harnessOverride: nil,
+                title: resolvedTitle,
+                ack: "Starting a background agent.",
+                selectedProvider: nil,
+                usedFallback: false,
+                fallbackNote: nil,
+                context: spawnContext(
+                    taskKind: taskKind,
+                    explicitProvider: nil,
+                    selectedHarness: nil,
+                    environment: environment,
+                    fileManager: fileManager,
+                    homeDirectory: homeDirectory
+                )
+            )
+        )
+    }
+
+    private static func normalizedTitle(
+        _ title: String?,
+        provider: AgentPillsManager.DirectedProvider?
+    ) -> String {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        return provider?.displayName ?? "Background agent"
+    }
+
+    private static func spawnContext(
+        taskKind: AgentTaskKind,
+        explicitProvider: AgentPillsManager.DirectedProvider?,
+        selectedHarness: AgentHarnessMode?,
+        environment: [String: String],
+        fileManager: FileManager,
+        homeDirectory: String
+    ) -> AgentSpawnContext {
+        let availableHarnesses = preferredProviders(for: taskKind)
+            .filter {
+                LocalAgentProviderDetector.isAvailable(
+                    $0,
+                    environment: environment,
+                    fileManager: fileManager,
+                    homeDirectory: homeDirectory
+                )
+            }
+            .map(\.harnessMode)
+        let fallbackChain = availableHarnesses + [nil]
+        return AgentSpawnContext(
+            taskKind: taskKind,
+            explicitProvider: explicitProvider,
+            fallbackChain: fallbackChain,
+            attemptedHarnesses: [selectedHarness]
+        )
+    }
+}
+
+enum LocalAgentProviderInstaller {
+    /// Only Codex can be auto-installed (non-interactive `npm install -g`).
+    /// Hermes needs interactive `hermes model` setup; OpenClaw has no public install.
+    static func canAutoInstall(_ provider: AgentPillsManager.DirectedProvider) -> Bool {
+        provider == .codex
+    }
+
+    static func installingStatus(for provider: AgentPillsManager.DirectedProvider) -> String {
+        switch provider {
+        case .codex:
+            return "Codex isn't installed. Installing it for you now — this takes a moment."
+        case .hermes, .openclaw:
+            return "\(provider.displayName) needs manual setup."
+        }
+    }
+
+    static func install(
+        _ provider: AgentPillsManager.DirectedProvider,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        homeDirectory: String = NSHomeDirectory()
+    ) async -> Bool {
+        switch provider {
+        case .codex:
+            return await installCodex(
+                environment: environment,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            )
+        case .hermes, .openclaw:
+            return false
+        }
+    }
+
+    private static func installCodex(
+        environment: [String: String],
+        fileManager: FileManager,
+        homeDirectory: String
+    ) async -> Bool {
+        guard let npmPath = findExecutable(
+            named: "npm",
+            environment: environment,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        ) else { return false }
+
+        // `npm` is a Node script; a LaunchServices-launched GUI app inherits only a
+        // minimal PATH, so prepend npm's own dir (which also holds `node`) to PATH,
+        // otherwise the npm shebang can't find node and the install silently fails.
+        let npmDir = (npmPath as NSString).deletingLastPathComponent
+        var childEnv = environment
+        let existingPath = childEnv["PATH"] ?? "/usr/bin:/bin"
+        childEnv["PATH"] = "\(npmDir):\(existingPath)"
+
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: npmPath)
+                process.arguments = ["install", "-g", "@openai/codex"]
+                process.environment = childEnv
+                let sink = Pipe()
+                process.standardOutput = sink
+                process.standardError = sink
+
+                // Guard against a hung npm (registry stall, unexpected prompt): kill
+                // it after a bounded wait so the awaiting spawn path never blocks forever.
+                let timeout = DispatchWorkItem {
+                    if process.isRunning { process.terminate() }
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 180, execute: timeout)
+
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    timeout.cancel()
+                    continuation.resume(returning: process.terminationStatus == 0)
+                } catch {
+                    timeout.cancel()
+                    continuation.resume(returning: false)
+                }
+            }
+        }
+    }
+
+    private static func findExecutable(
+        named name: String,
+        environment: [String: String],
+        fileManager: FileManager,
+        homeDirectory: String
+    ) -> String? {
+        if let path = environment["PATH"] {
+            for dir in path.split(separator: ":").map(String.init) {
+                let full = (dir as NSString).appendingPathComponent(name)
+                if fileManager.isExecutableFile(atPath: full) {
+                    return full
+                }
+            }
+        }
+        for dir in LocalAgentProviderDetector.adapterActivationSearchDirectories(
+            homeDirectory: homeDirectory,
+            fileManager: fileManager
+        ) {
+            let full = (dir as NSString).appendingPathComponent(name)
+            if fileManager.isExecutableFile(atPath: full) {
+                return full
+            }
+        }
+        return nil
+    }
+}
+
+extension LocalAgentProviderRouting {
+    /// Resolve a spawn, auto-installing Codex if the user explicitly asked for it
+    /// but it's not installed. Calls `onInstallStart` before the install runs so
+    /// the caller can speak/show a status message. Returns the final resolution.
+    static func resolveSpawnWithAutoInstall(
+        brief: String,
+        requestedProvider: AgentPillsManager.DirectedProvider?,
+        userRequestText: String?,
+        title: String?,
+        onInstallStart: ((AgentPillsManager.DirectedProvider) -> Void)? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        homeDirectory: String = NSHomeDirectory()
+    ) async -> Resolution {
+        let resolution = resolveSpawn(
+            brief: brief,
+            requestedProvider: requestedProvider,
+            userRequestText: userRequestText,
+            title: title,
+            environment: environment,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        )
+
+        guard case .setupRequired(let provider, _, _) = resolution,
+              LocalAgentProviderInstaller.canAutoInstall(provider)
+        else { return resolution }
+
+        onInstallStart?(provider)
+        let installed = await LocalAgentProviderInstaller.install(
+            provider,
+            environment: environment,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        )
+
+        guard installed else { return resolution }
+
+        return resolveSpawn(
+            brief: brief,
+            requestedProvider: requestedProvider,
+            userRequestText: userRequestText,
+            title: title,
+            environment: environment,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        )
     }
 }
