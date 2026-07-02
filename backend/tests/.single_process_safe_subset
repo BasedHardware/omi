@@ -77,9 +77,7 @@ tests/unit/test_proactive_notification_language.py
 tests/unit/test_mentor_notifications.py
 tests/unit/test_apps_review_reply_validation.py
 tests/unit/test_create_persona_user_none.py
-tests/unit/test_byok_security.py
 tests/unit/test_billable_transcription_seconds.py
-tests/unit/test_skip_classifier_restrict.py
 tests/unit/test_dg_start_guard.py
 tests/unit/test_parakeet_batch_engine.py
 tests/unit/test_parakeet_batch_engine.py
@@ -93,7 +91,6 @@ tests/unit/test_fair_use_async.py
 tests/unit/test_fair_use_classifier.py
 tests/unit/test_fair_use_engine.py
 tests/unit/test_fair_use_free_tier.py
-tests/unit/test_fair_use_upgrade.py
 tests/unit/test_sync_fair_use_gate.py
 tests/unit/test_vad_onnx.py
 tests/unit/test_patch_adapter.py
@@ -115,6 +112,4 @@ tests/unit/test_parakeet_stream_session.py
 tests/unit/test_voice_message_language.py
 tests/routers/test_users.py
 tests/unit/v3_router_probes/fastapi_route_contract.py
-tests/integration/test_fair_use_api.py
-tests/integration/test_fair_use_live.py
 tests/unit/test_desktop_transcribe.py
