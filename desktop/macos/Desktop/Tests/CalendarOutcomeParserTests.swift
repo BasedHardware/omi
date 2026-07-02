@@ -111,7 +111,26 @@ final class CalendarOutcomeParserTests: XCTestCase {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .network)
-    XCTAssertEqual(cls.asError(summary: summary), .networkError("Could not reach Google Calendar (HTTP 500)."))
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(error, .networkError("(HTTP 500)."))
+    XCTAssertEqual(error.errorDescription, "Couldn't reach Google Calendar: (HTTP 500).")
+  }
+
+  func testNetworkFailureWithoutSummaryAvoidsDoublePrefix() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "network",
+      "attempts": [],
+    ]
+    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected failure")
+    }
+    XCTAssertEqual(summary, cls.plainFallbackSummary)
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(
+      error.errorDescription,
+      "Couldn't reach Google Calendar: please check your connection and try again"
+    )
   }
 
   /// Diagnostics must be safe to log and upload: browser names, stages, and

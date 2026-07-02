@@ -592,7 +592,6 @@ final class DesktopAutomationActionRegistry {
           "status": "connected",
           "classification": "readable",
           "eventCount": "\(events.count)",
-          "firstSummary": events.first?.summary ?? "",
           "daysBack": "\(normalized.daysBack)",
           "daysForward": "\(normalized.daysForward)",
           "maxResults": "\(normalized.maxResults)",

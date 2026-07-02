@@ -108,15 +108,57 @@ enum CalendarFailureClass: String, Equatable {
   case network = "network"
   case unknown = "unknown"
 
+  /// Plain fallback text for logs and parse-time defaults — never a prefixed
+  /// `errorDescription`, so it can flow through `asError(summary:)` safely.
+  var plainFallbackSummary: String {
+    switch self {
+    case .noBrowser:
+      return "No supported browser with a readable session was found."
+    case .notSignedIn:
+      return "No browser is signed into Google. Sign into calendar.google.com and try again."
+    case .sessionExpired:
+      return "Your Google session expired. Reload calendar.google.com to refresh it."
+    case .decryptFailed:
+      return "browser session could not be decrypted"
+    case .network:
+      return "please check your connection and try again"
+    case .unknown:
+      return "unexpected error"
+    }
+  }
+
   var asError: CalendarReaderError {
     asError(summary: nil)
   }
 
+  /// Extract a detail fragment from a Python summary so `errorDescription` can
+  /// add its class-specific prefix exactly once.
+  func detailFragment(from summary: String?) -> String? {
+    guard let raw = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+      return nil
+    }
+
+    switch self {
+    case .network:
+      let prefix = "Could not reach Google Calendar"
+      if raw.hasPrefix(prefix) {
+        let tail = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        return tail.isEmpty ? nil : tail
+      }
+      return raw
+    case .decryptFailed:
+      if raw == "Your browser session could not be read." {
+        return nil
+      }
+      return raw
+    case .noBrowser, .notSignedIn, .sessionExpired, .unknown:
+      return nil
+    }
+  }
+
   func asError(summary: String?) -> CalendarReaderError {
-    let detail = summary?.trimmingCharacters(in: .whitespacesAndNewlines)
     func detailOr(_ fallback: String) -> String {
-      guard let detail, !detail.isEmpty else { return fallback }
-      return detail
+      detailFragment(from: summary) ?? fallback
     }
 
     switch self {
@@ -157,7 +199,7 @@ enum CalendarOutcomeParser {
     let cls = CalendarFailureClass(rawValue: json["error_class"] as? String ?? "") ?? .unknown
     let summary =
       (json["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-      ?? cls.asError.errorDescription ?? "Unknown error"
+      ?? cls.plainFallbackSummary
     return .failure(cls, summary: summary, attempts: attempts)
   }
 
