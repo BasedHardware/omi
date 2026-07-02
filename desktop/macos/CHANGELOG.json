@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.591",
+      "date": "2026-07-02",
+      "changes": [
+        "Fixes ChatGPT MCP connector setup to use the accepted public OAuth client",
+        "Hardened macOS connector probes, browser cookie discovery, Gmail imports, and OpenClaw memory setup against stale status, privacy leaks, and hung helper processes"
+      ]
+    },
+    {
       "version": "0.11.590",
       "date": "2026-07-02",
       "changes": [

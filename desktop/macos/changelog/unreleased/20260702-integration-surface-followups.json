@@ -1,3 +1,0 @@
-{
-  "change": "Hardened macOS connector probes, browser cookie discovery, Gmail imports, and OpenClaw memory setup against stale status, privacy leaks, and hung helper processes"
-}
