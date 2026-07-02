@@ -88,6 +88,56 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertNil(try? AICloneKeychain.get(.pluginBearerToken))
     }
 
+    // MARK: - Telegram user-session (plan §7)
+
+    func testTelegramUserSessionGoesToKeychainNotUserDefaults() {
+        // The Telethon session string is a fully-compromising identity
+        // secret. It must NEVER land in UserDefaults (plaintext on
+        // disk, readable by any process as the same user). It goes
+        // to Keychain (encrypted at rest, locked-screen gated).
+        let config = AICloneConfig(defaults: customDefaults)
+        let session = "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        config.setTelegramUserSession(session)
+        XCTAssertEqual(
+            try? AICloneKeychain.get(.telegramUserSession),
+            session
+        )
+        // Pin: UserDefaults has no key for the session string. We use
+        // telegramAccountEnabled (a boolean flag), not the session
+        // itself, for the UserDefaults entry.
+        XCTAssertNil(customDefaults.string(
+            forKey: "ai_clone.telegram_user_session"
+        ))
+    }
+
+    func testSettingEmptyTelegramSessionDisablesAccount() {
+        // Calling setTelegramUserSession("") is the "Sign out" path.
+        // It must clear the Keychain entry AND flip the enabled
+        // flag off.
+        let config = AICloneConfig(defaults: customDefaults)
+        try? AICloneKeychain.set(
+            .telegramUserSession,
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        config.telegramAccountEnabled = true
+        config.setTelegramUserSession("")
+        XCTAssertNil(try? AICloneKeychain.get(.telegramUserSession))
+        XCTAssertFalse(config.telegramAccountEnabled)
+    }
+
+    func testInitFlipsTelegramAccountEnabledWhenSessionInKeychain() {
+        // The session in Keychain is the authoritative source of
+        // truth. If the UserDefaults flag is off but the session
+        // IS in Keychain, init() should flip the flag on.
+        try? AICloneKeychain.set(
+            .telegramUserSession,
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        customDefaults.set(false, forKey: "ai_clone.telegram_user_enabled")
+        let config = AICloneConfig(defaults: customDefaults)
+        XCTAssertTrue(config.telegramAccountEnabled)
+    }
+
     // MARK: - Reload from Keychain on init
 
     func testInitLoadsExistingSecretsFromKeychain() {

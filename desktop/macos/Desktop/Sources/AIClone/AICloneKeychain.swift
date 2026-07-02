@@ -74,6 +74,15 @@ enum AICloneKeychain {
     enum Key: String {
         case pluginBearerToken = "ai_clone.plugin_bearer_token"
         case devApiKey = "ai_clone.omi_dev_api_key"
+        /// Telethon session string for the user-account plugin. This
+        /// is a FULLY-COMPROMISING identity secret — anyone with the
+        /// string can read all of the user's Telegram chats, send
+        /// as the user, and the only revocation path is Settings →
+        /// Devices on the user's phone. Held in Keychain (encrypted at
+        /// rest, only readable when the screen is unlocked) rather
+        /// than UserDefaults (plaintext plist readable by any process
+        /// as the same user). See plan §7 for the threat model.
+        case telegramUserSession = "ai_clone.telegram_user_session"
     }
 
     enum KeychainError: Error, LocalizedError {

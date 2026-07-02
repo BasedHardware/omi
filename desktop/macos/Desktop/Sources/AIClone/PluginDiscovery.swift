@@ -49,6 +49,18 @@ struct PluginDiscovery {
         return home + "/.config/omi/ai-clone-plugin.json"
     }
 
+    /// User-account plugin (plan §7) discovery file. Distinct from
+    /// the bot plugin's `ai-clone-plugin.json` — the user-account
+    /// plugin authenticates as the user's PERSONAL Telegram account
+    /// (Telethon), so the discovery payload carries account
+    /// metadata (phone, name, device_label) and the URL/bearer used
+    /// to reach the local FastAPI service. The Telethon session
+    /// string is NOT in the file (it's in Keychain only).
+    static var userAccountFilePath: String {
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+        return home + "/.config/omi/ai-clone-telegram-user.json"
+    }
+
     /// Read + parse the discovery file. Returns nil if the file doesn't
     /// exist, is malformed, or has an unsupported version.
     static func read() -> Info? {
@@ -146,5 +158,60 @@ struct PluginDiscovery {
         guard info.startedAt > 0 else { return true }  // no timestamp = assume fresh
         let age = Date().timeIntervalSince1970 - info.startedAt
         return age < maxAgeSeconds
+    }
+
+    // MARK: - User-account plugin (plan §7)
+
+    /// Parsed payload of `ai-clone-telegram-user.json`. The user-account
+    /// plugin writes this file at startup so the desktop can auto-fill
+    /// the personal Telegram plugin's URL + bearer token + account
+    /// metadata. The Telethon session string is NOT in the file (it's
+    /// held in Keychain on the desktop side, plumbed to the plugin
+    /// via a one-shot stdin pipe at startup).
+    struct UserAccountInfo {
+        let pluginURL: String
+        let bearerToken: String
+        let phone: String?
+        let name: String?
+        let deviceLabel: String?
+    }
+
+    /// Read + parse the user-account discovery file. Returns nil if
+    /// the file doesn't exist, is malformed, has an unsupported
+    /// version, or is missing the required fields (plugin_url,
+    /// bearer_token). The session string is NOT a required field —
+    /// it's held in Keychain, not on disk.
+    static func readUserAccount() -> UserAccountInfo? {
+        let path = userAccountFilePath
+        guard FileManager.default.fileExists(atPath: path) else {
+            return nil
+        }
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            NSLog("PluginDiscovery: user-account file exists but could not parse JSON at \(path)")
+            return nil
+        }
+        guard let version = json["version"] as? Int, version == 1 else {
+            NSLog("PluginDiscovery: user-account unsupported version")
+            return nil
+        }
+        guard let pluginURL = json["plugin_url"] as? String, !pluginURL.isEmpty,
+              let bearerToken = json["bearer_token"] as? String, !bearerToken.isEmpty
+        else {
+            NSLog("PluginDiscovery: user-account missing plugin_url or bearer_token")
+            return nil
+        }
+        guard Self.isLikelyValidPluginURL(pluginURL) else {
+            NSLog("PluginDiscovery: user-account plugin_url is not a valid http(s) URL — ignoring")
+            return nil
+        }
+        return UserAccountInfo(
+            pluginURL: pluginURL,
+            bearerToken: bearerToken,
+            phone: json["phone"] as? String,
+            name: json["name"] as? String,
+            deviceLabel: json["device_label"] as? String,
+        )
     }
 }

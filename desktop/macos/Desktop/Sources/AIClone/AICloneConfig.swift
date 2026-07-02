@@ -41,12 +41,82 @@ final class AICloneConfig: ObservableObject {
 
     private enum DefaultsKeys {
         static let pluginURL = "ai_clone_plugin_url"
+        // On-disk state for the user-account plugin: whether the
+        // user has finished the Telethon session setup and which
+        // chats they have auto-reply enabled for. The session
+        // string itself is NEVER stored in UserDefaults — it lives
+        // in Keychain only (see setTelegramUserSession below).
+        static let telegramAccountEnabled = "ai_clone.telegram_user_enabled"
     }
 
     private let defaults: UserDefaults
 
     @Published var pluginURL: String {
         didSet { defaults.set(pluginURL, forKey: DefaultsKeys.pluginURL) }
+    }
+
+    // MARK: - Telegram user-account plugin (plan §7)
+
+    /// Whether the user has finished the Telethon session setup.
+    /// `false` means the Connect sheet shows a "Generate session"
+    /// button. `true` means the session is in Keychain and the
+    /// user-account plugin is ready to use.
+    ///
+    /// The session string itself is NOT stored in this property;
+    /// it lives in Keychain via setTelegramUserSession / get.
+    @Published var telegramAccountEnabled: Bool = false {
+        didSet {
+            defaults.set(
+                telegramAccountEnabled,
+                forKey: DefaultsKeys.telegramAccountEnabled
+            )
+        }
+    }
+
+    /// Account metadata populated from Telethon's get_me() after
+    /// the session is connected. Surfaced to the UI as a
+    /// "logged in as Alice (+1...)" badge.
+    @Published var telegramAccountMeta: [String: String] = [:]
+
+    /// Set the Telethon session string (from session_string_generator.py
+    /// subprocess stdout). The session lives in Keychain (encrypted
+    /// at rest, only readable when the screen is unlocked). After
+    /// setting, the desktop's Connect sheet can hand control to the
+    /// user-account plugin.
+    ///
+    /// SECURITY (plan §7): the session string is a fully-compromising
+    /// identity secret. It is NEVER written to UserDefaults, NEVER
+    /// logged, and NEVER included in any HTTP response. The desktop
+    /// holds it only in Keychain; the user-account plugin process
+    /// receives it via a one-shot stdin pipe.
+    func setTelegramUserSession(_ session: String) throws {
+        if session.isEmpty {
+            // Empty string: clear the keychain entry AND flip the
+            // enabled flag off. Used by the "Sign out" path.
+            try? AICloneKeychain.delete(.telegramUserSession)
+            telegramAccountEnabled = false
+            telegramAccountMeta = [:]
+            return
+        }
+        try AICloneKeychain.set(.telegramUserSession, session)
+        telegramAccountEnabled = true
+    }
+
+    /// Read the Telethon session from Keychain. Returns nil if no
+    /// session is stored. The user-account plugin's stack-runner
+    /// reads this and pipes it into the plugin subprocess's stdin
+    /// at startup.
+    func getTelegramUserSession() throws -> String? {
+        return try AICloneKeychain.get(.telegramUserSession)
+    }
+
+    /// Clear the Telethon session from Keychain. Used by the "Sign
+    /// out" path. After this, the user-account plugin can't connect
+    /// until a new session is generated.
+    func clearTelegramUserSession() {
+        try? AICloneKeychain.delete(.telegramUserSession)
+        telegramAccountEnabled = false
+        telegramAccountMeta = [:]
     }
 
     @Published var bearerToken: String {
@@ -114,6 +184,18 @@ final class AICloneConfig: ObservableObject {
         // Load current values from Keychain (may be empty).
         self.bearerToken = (try? AICloneKeychain.get(.pluginBearerToken)) ?? ""
         self.omiDevApiKey = (try? AICloneKeychain.get(.devApiKey)) ?? ""
+
+        // Load the user-account plugin's state. The session string
+        // itself is read from Keychain; the on/off flag from
+        // UserDefaults. If the session is in Keychain but the flag
+        // is off, we flip the flag on (the session is the more
+        // authoritative source of truth).
+        self.telegramAccountEnabled = defaults.bool(
+            forKey: DefaultsKeys.telegramAccountEnabled
+        )
+        if let _ = try? AICloneKeychain.get(.telegramUserSession) {
+            self.telegramAccountEnabled = true
+        }
 
         // Discovery is now applied EXPLICITLY via applyDiscovery() —
         // called from app startup (OmiApp.swift), not from init. P2
@@ -204,6 +286,53 @@ final class AICloneConfig: ObservableObject {
             log("AICloneConfig: auto-discovered plugin at \(discoveryURL) (type=\(discovery.pluginType), devMode=\(discovery.devMode))")
             self.isAutoDiscovered = true
         }
+    }
+
+    /// Apply the user-account plugin's discovery file. Called from
+    /// app startup (OmiApp.swift) when the "Reply as me" mode is
+    /// enabled. Distinct from `applyDiscovery()` (which handles the
+    /// bot plugin's `ai-clone-plugin.json`) because the user-account
+    /// plugin authenticates as the user's PERSONAL Telegram account
+    /// and has a different discovery schema.
+    func applyUserAccountDiscovery() {
+        let path = PluginDiscovery.userAccountFilePath
+        log("AICloneConfig: checking user-account discovery file at \(path)")
+        guard let info = PluginDiscovery.readUserAccount() else {
+            log("AICloneConfig: no user-account discovery file found")
+            return
+        }
+        // Persist URL + bearer to disk (first-time only) and
+        // ALWAYS refresh in-memory. Same pattern as applyDiscovery.
+        let isFirstDiscovery = self.pluginURL.isEmpty && self.bearerToken.isEmpty
+        if isFirstDiscovery {
+            defaults.set(info.pluginURL, forKey: DefaultsKeys.pluginURL)
+            try? AICloneKeychain.set(.pluginBearerToken, info.bearerToken)
+        }
+        self.pluginURL = info.pluginURL
+        self.bearerToken = info.bearerToken
+        // User-account plugin doesn't write publicURL/omiBaseURL to
+        // its discovery file (no tunnel — runs locally; uses the
+        // Omi backend at https://api.omi.me by default). These are
+        // not relevant for the user-account plugin but we keep them
+        // populated for any UI that reads them.
+        self.publicBaseURL = nil
+        self.pluginDevMode = false
+        self.discoveryBackendURL = nil
+        // Account metadata from the Telethon session's get_me().
+        // Surfaced in the Connect sheet as "Logged in as Alice
+        // (+1...)" so the user can confirm they're using the right
+        // Telegram account.
+        if let phone = info.phone, let name = info.name {
+            self.telegramAccountMeta = [
+                "phone": phone,
+                "name": name,
+                "device_label": info.deviceLabel ?? "Omi Desktop",
+            ]
+        }
+        // The session is the source of truth. Flip the flag on if
+        // the user-account discovery file exists.
+        self.telegramAccountEnabled = true
+        log("AICloneConfig: auto-discovered user-account plugin at \(info.pluginURL) (phone=\(info.phone ?? "?"), name=\(info.name ?? "?"))")
     }
 
     /// Move legacy UserDefaults-stored secrets into the Keychain.
