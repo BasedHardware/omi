@@ -644,6 +644,26 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(viewSource.contains("let onBackToOmi: () -> Void"))
   }
 
+  func testNonNotchExpandedChatUsesUnifiedSurface() throws {
+    let viewSource = try floatingControlBarViewSource()
+
+    guard let bodyRange = viewSource.range(of: "var body: some View"),
+      let bodyEnd = viewSource.range(of: "private var barNeedsFullWidth")
+    else {
+      return XCTFail("Expected floating bar body section")
+    }
+    let bodySource = String(viewSource[bodyRange.lowerBound..<bodyEnd.lowerBound])
+
+    XCTAssertTrue(bodySource.contains("if state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible {\n                unifiedFloatingSurface"))
+    XCTAssertTrue(viewSource.contains("private var unifiedFloatingSurface: some View"))
+    XCTAssertTrue(viewSource.contains("if state.showingAIConversation {\n                conversationView"))
+    XCTAssertFalse(bodySource.contains("conversationView"))
+    XCTAssertFalse(bodySource.contains("AskAIInputView("))
+    XCTAssertFalse(bodySource.contains("AIResponseView("))
+    XCTAssertTrue(viewSource.contains("private var barChrome: some View"))
+    XCTAssertTrue(viewSource.contains("chrome only ever shows the idle pill, hover hints, and voice states"))
+  }
+
   func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
     let source = try floatingControlBarWindowSource()
 

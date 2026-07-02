@@ -3712,7 +3712,7 @@ extension FloatingControlBarWindow {
     /// Resize the window to the normal Ask Omi input height after exiting an
     /// agent surface to `.mainInput`. Cancels the response-height observer and
     /// installs the input-height observer so non-Notch displays preserve the
-    /// legacy "back to Omi chat" behavior instead of using Notch row navigation.
+    /// pill-mode "back to Omi chat" behavior instead of using Notch row navigation.
     func resizeForMainInputAfterAgentExit() {
         responseHeightCancellable?.cancel()
         responseHeightCancellable = nil
