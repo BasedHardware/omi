@@ -92,12 +92,6 @@ FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
 
 
-def _developer_read_auth(auth_or_uid) -> ApiKeyAuth:
-    if isinstance(auth_or_uid, ApiKeyAuth):
-        return auth_or_uid
-    return ApiKeyAuth(uid=str(auth_or_uid), scopes=None)
-
-
 def _developer_request_ip(request: Optional[Request]) -> Optional[str]:
     client = getattr(request, 'client', None)
     if not client:
@@ -1364,10 +1358,9 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
-    should_check_transcript_limit = isinstance(uid, ApiKeyAuth)
-    auth = _developer_read_auth(uid)
+    auth = uid
     uid = auth.uid
-    if include_transcript and should_check_transcript_limit:
+    if include_transcript:
         check_conversation_transcript_read_limit(auth)
 
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
@@ -1534,10 +1527,9 @@ def get_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to retrieve
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
-    should_check_transcript_limit = isinstance(uid, ApiKeyAuth)
-    auth = _developer_read_auth(uid)
+    auth = uid
     uid = auth.uid
-    if include_transcript and should_check_transcript_limit:
+    if include_transcript:
         check_conversation_transcript_read_limit(auth)
 
     conversation = conversations_db.get_conversation(uid, conversation_id)

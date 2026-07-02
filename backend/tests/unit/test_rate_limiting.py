@@ -67,6 +67,16 @@ redis_db_stub.check_rate_limit = _check_rate_limit
 from utils.rate_limit_config import RATE_POLICIES, get_effective_limit, RATE_LIMIT_BOOST
 
 
+def _drop_stubbed_endpoints_module():
+    endpoints_module = sys.modules.get('utils.other.endpoints')
+    if endpoints_module is None or getattr(endpoints_module, '__file__', None):
+        return
+    sys.modules.pop('utils.other.endpoints', None)
+    parent = sys.modules.get('utils.other')
+    if parent is not None and getattr(parent, 'endpoints', None) is endpoints_module:
+        delattr(parent, 'endpoints')
+
+
 class TestRatePolicies(unittest.TestCase):
     """Validate rate limit policy definitions."""
 
@@ -175,6 +185,7 @@ class TestEnforceRateLimit(unittest.TestCase):
 
     def setUp(self):
         # Import here after stubs are in place
+        _drop_stubbed_endpoints_module()
         from utils.other import endpoints as ep_mod
 
         self.ep = ep_mod
@@ -266,6 +277,7 @@ class TestWithRateLimitWrapper(unittest.TestCase):
     """Test with_rate_limit() wrapper behavior."""
 
     def setUp(self):
+        _drop_stubbed_endpoints_module()
         from utils.other import endpoints as ep_mod
 
         self.ep = ep_mod
