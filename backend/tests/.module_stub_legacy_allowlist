@@ -61,6 +61,7 @@ backend/tests/unit/test_mcp_profile_contact.py
 backend/tests/unit/test_mcp_search_conversations_poison.py
 backend/tests/unit/test_memories_batch.py
 backend/tests/unit/test_memories_pagination_clamp.py
+backend/tests/unit/test_memory_imports.py
 backend/tests/unit/test_new_usage_tracking_gaps.py
 backend/tests/unit/test_oauth_callback_uid_guard.py
 backend/tests/unit/test_omi_qos_tiers.py
