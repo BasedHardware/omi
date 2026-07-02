@@ -97,11 +97,20 @@ actor AICloneClient {
     /// sheet and the plugin card so the user can see how close
     /// they are to the per-hour cap and whether Telegram has
     /// placed a temporary cooldown on the account.
+    ///
+    /// cubic review 4619143030 P2: nested fields are optional
+    /// so a partial or drifted `rate_limit` payload (e.g. a
+    /// plugin that adds a new field the desktop doesn't know
+    /// about, or omits a field during a graceful degradation)
+    /// does NOT fail the entire /status decode. The desktop
+    /// only fills in the fields it knows about and treats
+    /// the rest as missing. This matches the
+    /// StatusResponse-level optionality.
     struct RateLimitState: Decodable {
-        let maxPerHour: Int
-        let inWindowCount: Int
-        let isBlocked: Bool
-        let secondsUntilNextSlot: Int
+        let maxPerHour: Int?
+        let inWindowCount: Int?
+        let isBlocked: Bool?
+        let secondsUntilNextSlot: Int?
         enum CodingKeys: String, CodingKey {
             case maxPerHour = "max_per_hour"
             case inWindowCount = "in_window_count"

@@ -562,16 +562,48 @@ final class AICloneConfigTests: XCTestCase {
     }
 
     func testSignOutStopsStatusPoll() {
-        // Sign-out should cancel the poll so we don't keep
-        // hammering a signed-out plugin.
+        // cubic review 4619143030 P2: merely dropping the last
+        // reference to a Task does not cancel it -- the task
+        // keeps running its body until it returns or is
+        // explicitly cancelled. We need to capture the old
+        // task BEFORE sign-out and assert isCancelled on it
+        // AFTER. If a future change to
+        // stopTelegramUserAccountStatusPoll() drops the
+        // .cancel() call while keeping `telegramStatusPollTask
+        // = nil`, this test would fail (the old task would
+        // still be running with isCancelled == false).
         let config = AICloneConfig(defaults: customDefaults)
         try? config.setTelegramUserSession(
             "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
         )
         config.startTelegramUserAccountStatusPoll()
-        XCTAssertNotNil(config.telegramStatusPollTask)
+        let oldTask = config.telegramStatusPollTask
+        XCTAssertNotNil(oldTask)
         try? config.clearTelegramUserSession()
         XCTAssertNil(config.telegramStatusPollTask, (
             "Sign-out must cancel the status poll"
         ))
+        XCTAssertTrue(oldTask?.isCancelled ?? false, (
+            "Sign-out must CANCEL the old task (not just drop "
+            "the reference). Without explicit cancel(), the "
+            "task continues to make /status requests every 30s "
+            "after the user has signed out."
+        ))
+    }
+
+    func testEmptyStringSignOutAlsoCancelsStatusPoll() {
+        // Symmetry check: the empty-string sign-out path in
+        // setTelegramUserSession must ALSO cancel the poll,
+        // not just the clearTelegramUserSession path. Both
+        // are valid sign-out routes; both must stop the poll.
+        let config = AICloneConfig(defaults: customDefaults)
+        try? config.setTelegramUserSession(
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        config.startTelegramUserAccountStatusPoll()
+        let oldTask = config.telegramStatusPollTask
+        XCTAssertNotNil(oldTask)
+        try? config.setTelegramUserSession("")
+        XCTAssertNil(config.telegramStatusPollTask)
+        XCTAssertTrue(oldTask?.isCancelled ?? false)
     }

@@ -485,13 +485,23 @@ final class AICloneConfig: ObservableObject {
             )
             // Update @Published state on the main actor.
             // (We're already @MainActor-isolated.)
+            // cubic review 4619143030 P2: nested RateLimitState
+            // fields are optional. We only update the @Published
+            // state for fields the plugin actually reported;
+            // missing fields are KEPT at their current value
+            // rather than reset to .empty / 0. This avoids
+            // flapping the badge if a partial /status response
+            // arrives (e.g. a transient decode error on the
+            // plugin side, or a graceful degradation during
+            // a reload).
             if let rl = resp.rateLimit {
-                telegramRateLimit = RateLimitDisplay(
-                    maxPerHour: rl.maxPerHour,
-                    inWindowCount: rl.inWindowCount,
-                    isBlocked: rl.isBlocked,
-                    secondsUntilNextSlot: rl.secondsUntilNextSlot,
+                let new = RateLimitDisplay(
+                    maxPerHour: rl.maxPerHour ?? telegramRateLimit.maxPerHour,
+                    inWindowCount: rl.inWindowCount ?? telegramRateLimit.inWindowCount,
+                    isBlocked: rl.isBlocked ?? telegramRateLimit.isBlocked,
+                    secondsUntilNextSlot: rl.secondsUntilNextSlot ?? telegramRateLimit.secondsUntilNextSlot,
                 )
+                telegramRateLimit = new
             }
             if let count = resp.messagesSentToday {
                 telegramMessagesSentToday = count
