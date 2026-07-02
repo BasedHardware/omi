@@ -318,6 +318,174 @@ class GeneratedCustomerPortalSessionResponse {
   }
 }
 
+class GeneratedPaymentPricingOption {
+  final String? description;
+  final String? eyebrow;
+  final String id;
+  final String interval;
+  final bool isActive;
+  final String planId;
+  final String priceString;
+  final String? subtitle;
+  final String title;
+  final int unitAmount;
+
+  const GeneratedPaymentPricingOption({
+    this.description,
+    this.eyebrow,
+    required this.id,
+    required this.interval,
+    this.isActive = false,
+    this.planId = "",
+    required this.priceString,
+    this.subtitle,
+    required this.title,
+    required this.unitAmount,
+  });
+
+  factory GeneratedPaymentPricingOption.fromJson(Map<String, dynamic> json) {
+    return GeneratedPaymentPricingOption(
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      eyebrow: _readFieldValue<String>(_readField(json, const ["eyebrow"]), "eyebrow", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      interval: _required(_readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString, requiredField: true, nullable: false), "interval"),
+      isActive: _required(_readFieldValue<bool>(_readField(json, const ["is_active"]), "is_active", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_active"),
+      planId: _required(_readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString, requiredField: false, nullable: false, defaultValue: ""), "plan_id"),
+      priceString: _required(_readFieldValue<String>(_readField(json, const ["price_string"]), "price_string", _readString, requiredField: true, nullable: false), "price_string"),
+      subtitle: _readFieldValue<String>(_readField(json, const ["subtitle"]), "subtitle", _readString, requiredField: false, nullable: true),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      unitAmount: _required(_readFieldValue<int>(_readField(json, const ["unit_amount"]), "unit_amount", _readInt, requiredField: true, nullable: false), "unit_amount"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'description': description,
+      'eyebrow': eyebrow,
+      'id': id,
+      'interval': interval,
+      'is_active': isActive,
+      'plan_id': planId,
+      'price_string': priceString,
+      'subtitle': subtitle,
+      'title': title,
+      'unit_amount': unitAmount,
+    };
+  }
+}
+
+class GeneratedAvailablePlansResponse {
+  final List<GeneratedPaymentPricingOption> plans;
+
+  const GeneratedAvailablePlansResponse({
+    required this.plans,
+  });
+
+  factory GeneratedAvailablePlansResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAvailablePlansResponse(
+      plans: _required(_readFieldValue<List<GeneratedPaymentPricingOption>>(_readField(json, const ["plans"]), "plans", (value) => _readObjectList(value, GeneratedPaymentPricingOption.fromJson), requiredField: true, nullable: false), "plans"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'plans': plans.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedAppSubscriptionDetails {
+  final bool? cancelAtPeriodEnd;
+  final int? currentPeriodEnd;
+  final String? customerId;
+  final String? id;
+  final String? priceId;
+  final String? status;
+
+  const GeneratedAppSubscriptionDetails({
+    this.cancelAtPeriodEnd,
+    this.currentPeriodEnd,
+    this.customerId,
+    this.id,
+    this.priceId,
+    this.status,
+  });
+
+  factory GeneratedAppSubscriptionDetails.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppSubscriptionDetails(
+      cancelAtPeriodEnd: _readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: true),
+      currentPeriodEnd: _readFieldValue<int>(_readField(json, const ["current_period_end"]), "current_period_end", _readInt, requiredField: false, nullable: true),
+      customerId: _readFieldValue<String>(_readField(json, const ["customer_id"]), "customer_id", _readString, requiredField: false, nullable: true),
+      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
+      priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: false, nullable: true),
+      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'cancel_at_period_end': cancelAtPeriodEnd,
+      'current_period_end': currentPeriodEnd,
+      'customer_id': customerId,
+      'id': id,
+      'price_id': priceId,
+      'status': status,
+    };
+  }
+}
+
+class GeneratedAppSubscriptionResponse {
+  final GeneratedAppSubscriptionDetails? subscription;
+
+  const GeneratedAppSubscriptionResponse({
+    this.subscription,
+  });
+
+  factory GeneratedAppSubscriptionResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppSubscriptionResponse(
+      subscription: _readFieldValue<GeneratedAppSubscriptionDetails>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedAppSubscriptionDetails.fromJson), requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'subscription': subscription?.toJson(),
+    };
+  }
+}
+
+class GeneratedAppSubscriptionCancelResponse {
+  final bool? cancelAtPeriodEnd;
+  final int? currentPeriodEnd;
+  final String message;
+  final String status;
+
+  const GeneratedAppSubscriptionCancelResponse({
+    this.cancelAtPeriodEnd,
+    this.currentPeriodEnd,
+    required this.message,
+    required this.status,
+  });
+
+  factory GeneratedAppSubscriptionCancelResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppSubscriptionCancelResponse(
+      cancelAtPeriodEnd: _readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: true),
+      currentPeriodEnd: _readFieldValue<int>(_readField(json, const ["current_period_end"]), "current_period_end", _readInt, requiredField: false, nullable: true),
+      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'cancel_at_period_end': cancelAtPeriodEnd,
+      'current_period_end': currentPeriodEnd,
+      'message': message,
+      'status': status,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;

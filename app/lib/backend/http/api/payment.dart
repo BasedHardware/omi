@@ -92,7 +92,9 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
     body: '',
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    var jsonResponse = wire.GeneratedAppSubscriptionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
     Logger.debug('getAppSubscription response: ${response.body}');
     return jsonResponse;
   }
@@ -107,7 +109,9 @@ Future<Map<String, dynamic>?> getAvailablePlans() async {
     body: '',
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    var jsonResponse = wire.GeneratedAvailablePlansResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
     Logger.debug('getAvailablePlans response: ${response.body}');
     return jsonResponse;
   }
@@ -139,7 +143,9 @@ Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
     body: '',
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    var jsonResponse = wire.GeneratedAppSubscriptionCancelResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
     Logger.debug('cancelAppSubscription response: ${response.body}');
     return jsonResponse;
   }

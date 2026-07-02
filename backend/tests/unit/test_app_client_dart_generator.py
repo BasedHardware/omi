@@ -356,6 +356,9 @@ def test_payments_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedCustomerPortalSessionResponse' in generated
     assert 'class GeneratedPaymentStatusMessageResponse' in generated
     assert 'class GeneratedPaymentSubscriptionResponse' in generated
+    assert 'class GeneratedAvailablePlansResponse' in generated
+    assert 'class GeneratedAppSubscriptionResponse' in generated
+    assert 'class GeneratedAppSubscriptionCancelResponse' in generated
     assert 'final String? defaultValue;' in generated
     assert 'defaultValue: _readFieldValue<String>' in generated
     assert "'default': defaultValue" in generated

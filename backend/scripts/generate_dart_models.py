@@ -261,6 +261,11 @@ SCHEMA_GROUPS = {
             'PaymentCheckoutSessionResponse',
             'PaymentUpgradeSubscriptionResponse',
             'CustomerPortalSessionResponse',
+            'routers__payment__PricingOption',
+            'AvailablePlansResponse',
+            'AppSubscriptionDetails',
+            'AppSubscriptionResponse',
+            'AppSubscriptionCancelResponse',
         ),
     },
     'memories': {
@@ -289,6 +294,9 @@ ALIASES = {
 }
 DART_FIELD_NAME_OVERRIDES = {
     'default': 'defaultValue',
+}
+DART_CLASS_NAME_OVERRIDES = {
+    'routers__payment__PricingOption': 'PaymentPricingOption',
 }
 
 
@@ -328,7 +336,7 @@ def dart_field_name(wire_name: str) -> str:
 
 
 def generated_class_name(schema_name: str) -> str:
-    return f'Generated{schema_name}'
+    return f'Generated{DART_CLASS_NAME_OVERRIDES.get(schema_name, schema_name)}'
 
 
 def unwrap_nullable(schema: dict[str, Any]) -> tuple[dict[str, Any], bool]:
