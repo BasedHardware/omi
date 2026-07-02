@@ -108,8 +108,6 @@ enum CalendarFailureClass: String, Equatable {
   case network = "network"
   case unknown = "unknown"
 
-  /// Plain fallback text for logs and parse-time defaults — never a prefixed
-  /// `errorDescription`, so it can flow through `asError(summary:)` safely.
   var plainFallbackSummary: String {
     switch self {
     case .noBrowser:
@@ -131,8 +129,6 @@ enum CalendarFailureClass: String, Equatable {
     asError(summary: nil)
   }
 
-  /// Extract a detail fragment from a Python summary so `errorDescription` can
-  /// add its class-specific prefix exactly once.
   func detailFragment(from summary: String?) -> String? {
     guard let raw = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
       return nil
@@ -212,75 +208,6 @@ enum CalendarOutcomeParser {
   }
 }
 
-// MARK: - Browser Config (same as Gmail)
-
-private struct CalBrowserConfig {
-  let name: String
-  let keychainService: String
-  let cookiePath: String
-
-  private struct BrowserFamily {
-    let name: String
-    let keychainService: String
-    let userDataPath: String
-  }
-
-  private static func cookiePaths(in userDataPath: String) -> [String] {
-    let fm = FileManager.default
-    guard let entries = try? fm.contentsOfDirectory(atPath: userDataPath) else { return [] }
-
-    return
-      entries
-      .filter { $0 == "Default" || $0.hasPrefix("Profile ") }
-      .sorted { lhs, rhs in
-        if lhs == "Default" { return true }
-        if rhs == "Default" { return false }
-        return lhs.localizedStandardCompare(rhs) == .orderedAscending
-      }
-      .map { "\(userDataPath)/\($0)/Cookies" }
-      .filter { fm.fileExists(atPath: $0) }
-  }
-
-  static func allBrowsers() -> [CalBrowserConfig] {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let families = [
-      BrowserFamily(
-        name: "Arc",
-        keychainService: "Arc Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/Arc/User Data"
-      ),
-      BrowserFamily(
-        name: "Chrome",
-        keychainService: "Chrome Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/Google/Chrome"
-      ),
-      BrowserFamily(
-        name: "Brave",
-        keychainService: "Brave Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/BraveSoftware/Brave-Browser"
-      ),
-      BrowserFamily(
-        name: "Edge",
-        keychainService: "Microsoft Edge Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/Microsoft Edge"
-      ),
-    ]
-
-    return families.flatMap { family in
-      cookiePaths(in: family.userDataPath).map { cookiePath in
-        let profileName = URL(fileURLWithPath: cookiePath).deletingLastPathComponent()
-          .lastPathComponent
-        let browserName = profileName == "Default" ? family.name : "\(family.name) (\(profileName))"
-        return CalBrowserConfig(
-          name: browserName,
-          keychainService: family.keychainService,
-          cookiePath: cookiePath
-        )
-      }
-    }
-  }
-}
-
 // MARK: - CalendarReaderService
 
 actor CalendarReaderService {
@@ -292,9 +219,8 @@ actor CalendarReaderService {
   func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
     -> [CalendarEvent]
   {
-    let parameters = CalendarFetchParameters.normalized(
+    let events = try fetchCalendarViaCookies(
       daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
-    let events = try fetchCalendarViaCookies(parameters: parameters)
     return events.sorted { $0.startTime > $1.startTime }
   }
 
@@ -307,8 +233,7 @@ actor CalendarReaderService {
   /// green result guarantees the whole chain (cookies → auth → API) works.
   func verifyConnection() async -> CalendarConnectionStatus {
     do {
-      _ = try fetchCalendarViaCookies(
-        parameters: CalendarFetchParameters.normalized(daysBack: 1, daysForward: 1, maxResults: 1))
+      _ = try fetchCalendarViaCookies(daysBack: 1, daysForward: 1, maxResults: 1)
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
@@ -527,22 +452,18 @@ actor CalendarReaderService {
 
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
 
-  private func fetchCalendarViaCookies(parameters: CalendarFetchParameters) throws
+  private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
     -> [CalendarEvent]
   {
+    let parameters = CalendarFetchParameters.normalized(
+      daysBack: daysBack,
+      daysForward: daysForward,
+      maxResults: maxResults
+    )
+
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
-    var browserConfigs: [[String: String]] = []
-    for browser in CalBrowserConfig.allBrowsers() {
-      guard FileManager.default.fileExists(atPath: browser.cookiePath) else { continue }
-      guard let password = getKeychainPassword(service: browser.keychainService) else { continue }
-
-      browserConfigs.append([
-        "name": browser.name,
-        "db_path": browser.cookiePath,
-        "password": password,
-      ])
-    }
+    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "CalendarReaderService")
 
     guard !browserConfigs.isEmpty else {
       throw CalendarReaderError.noBrowserFound
@@ -559,99 +480,14 @@ actor CalendarReaderService {
     // No temp file cleanup needed — we read the original DB directly in read-only mode
 
     let pythonScript = """
-      import sys, json, os, sqlite3, hashlib, time, urllib.request, urllib.error, urllib.parse
-      from http.cookiejar import MozillaCookieJar, Cookie
+      \(BrowserGoogleSession.chromiumCookiePythonSupport)
+      import urllib.request, urllib.error, urllib.parse
       from datetime import datetime, timedelta, timezone
 
-      try:
-          from Crypto.Cipher import AES
-      except ImportError:
-          try:
-              from Cryptodome.Cipher import AES
-          except ImportError:
-              import subprocess
-              def decrypt_aes_cbc(key, iv, data):
-                  p = subprocess.run(['openssl', 'enc', '-aes-128-cbc', '-d', '-K', key.hex(), '-iv', iv.hex(), '-nopad'],
-                                     input=data, capture_output=True)
-                  return p.stdout
-              USE_OPENSSL = True
-          else:
-              USE_OPENSSL = False
-      else:
-          USE_OPENSSL = False
-
-      browsers = json.loads(sys.argv[1])
-      days_back = int(sys.argv[2]) if len(sys.argv) > 2 else 30
-      days_forward = int(sys.argv[3]) if len(sys.argv) > 3 else 14
-      max_results = int(sys.argv[4]) if len(sys.argv) > 4 else 100
-
-      def decrypt_cookies(db_path, password):
-          key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
-          iv = b' ' * 16
-          try:
-              conn = sqlite3.connect(f'file:{db_path}?mode=ro&immutable=1', uri=True, timeout=5)
-              c = conn.cursor()
-              c.execute('SELECT value FROM meta WHERE key="version"')
-              row = c.fetchone()
-              db_version = int(row[0]) if row else 0
-              c.execute("SELECT host_key, name, encrypted_value, path, is_secure, expires_utc FROM cookies WHERE host_key LIKE '%google.com%'")
-              rows = c.fetchall()
-              conn.close()
-          except Exception as e:
-              return None, str(e)
-
-          cookies = []
-          for host_key, name, enc, path, is_secure, expires_utc in rows:
-              if not enc:
-                  continue
-              enc = bytes(enc) if not isinstance(enc, bytes) else enc
-              value = None
-              if enc[:3] in (b'v10', b'v11'):
-                  ciphertext = enc[3:]
-                  try:
-                      if USE_OPENSSL:
-                          decrypted = decrypt_aes_cbc(key, iv, ciphertext)
-                      else:
-                          cipher = AES.new(key, AES.MODE_CBC, IV=iv)
-                          decrypted = cipher.decrypt(ciphertext)
-                      pad_len = decrypted[-1] if decrypted else 0
-                      if 1 <= pad_len <= 16:
-                          decrypted = decrypted[:-pad_len]
-                      if db_version >= 24 and len(decrypted) > 32:
-                          decrypted = decrypted[32:]
-                      value = decrypted.decode('utf-8', errors='replace')
-                  except Exception:
-                      continue
-              elif enc:
-                  try:
-                      value = enc.decode('utf-8', errors='replace')
-                  except Exception:
-                      continue
-              if value:
-                  cookies.append({
-                      'domain': host_key,
-                      'name': name,
-                      'value': value,
-                      'path': path or '/',
-                      'secure': bool(is_secure),
-                  })
-          return cookies, None
-
-      def make_cookie_jar(cookie_list):
-          jar = MozillaCookieJar()
-          for c in cookie_list:
-              cookie = Cookie(
-                  version=0, name=c['name'], value=c['value'],
-                  port=None, port_specified=False,
-                  domain=c['domain'], domain_specified=True,
-                  domain_initial_dot=c['domain'].startswith('.'),
-                  path=c['path'], path_specified=True,
-                  secure=c['secure'], expires=int(time.time()) + 86400,
-                  discard=False, comment=None, comment_url=None,
-                  rest={}, rfc2109=False
-              )
-              jar.set_cookie(cookie)
-          return jar
+      browsers = json.loads(sys.stdin.read())
+      days_back = int(sys.argv[1]) if len(sys.argv) > 1 else 30
+      days_forward = int(sys.argv[2]) if len(sys.argv) > 2 else 14
+      max_results = int(sys.argv[3]) if len(sys.argv) > 3 else 100
 
       def get_sapisidhash(sapisid, origin):
           timestamp = str(int(time.time()))
@@ -753,15 +589,14 @@ actor CalendarReaderService {
 
       # Try each browser/profile
       for browser in browsers:
-          cookies, err = decrypt_cookies(browser['db_path'], browser['password'])
+          cookies, err = decrypt_google_cookies(browser['db_path'], browser['password'])
           if err or not cookies:
               attempts.append({'browser': browser['name'], 'stage': 'decrypt',
                                'reason': (err or 'no cookies'), 'had_auth': False})
               continue
 
           # Check for auth cookies
-          auth_names = {'SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'}
-          found_auth = [c for c in cookies if c['name'] in auth_names]
+          found_auth = [c for c in cookies if c['name'] in GOOGLE_AUTH_COOKIE_NAMES]
           if not found_auth:
               attempts.append({'browser': browser['name'], 'stage': 'auth',
                                'reason': 'no Google auth cookies', 'had_auth': False})
@@ -798,90 +633,39 @@ actor CalendarReaderService {
 
           attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
           # Write to temp file to avoid pipe buffer truncation with large event lists
-          import tempfile
-          outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
-          with open(outfile, 'w') as f:
-              json.dump({'ok': True, 'browser': browser['name'], 'events': result_events,
-                         'count': len(result_events), 'attempts': attempts}, f)
-          print(outfile)
+          write_json_result('omi_cal_', {'ok': True, 'browser': browser['name'], 'events': result_events,
+                                         'count': len(result_events), 'attempts': attempts})
           sys.exit(0)
 
       error_class, summary = classify(attempts)
-      import tempfile
-      outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
-      with open(outfile, 'w') as f:
-          json.dump({'ok': False, 'error_class': error_class, 'summary': summary,
-                     'attempts': attempts}, f)
-      print(outfile)
+      write_json_result('omi_cal_', {'ok': False, 'error_class': error_class, 'summary': summary,
+                                     'attempts': attempts})
       sys.exit(0)
       """
 
-    // Find Python
-    let pythonPaths = ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
-    guard let pythonPath = pythonPaths.first(where: { FileManager.default.fileExists(atPath: $0) })
-    else {
-      throw CalendarReaderError.pythonNotFound
-    }
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: pythonPath)
-    process.arguments = [
-      "-c", pythonScript, configJSON,
-      String(parameters.daysBack), String(parameters.daysForward), String(parameters.maxResults),
-    ]
-    let pipe = Pipe()
-    let errPipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = errPipe
-
-    // Read pipe data asynchronously to avoid deadlock
-    // (waitUntilExit blocks if pipe buffers are full)
-    var outputData = Data()
-    var errData = Data()
-    let outputSem = DispatchSemaphore(value: 0)
-    let errSem = DispatchSemaphore(value: 0)
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-      let d = handle.availableData
-      if d.isEmpty {
-        pipe.fileHandleForReading.readabilityHandler = nil
-        outputSem.signal()
-      } else {
-        outputData.append(d)
-      }
-    }
-    errPipe.fileHandleForReading.readabilityHandler = { handle in
-      let d = handle.availableData
-      if d.isEmpty {
-        errPipe.fileHandleForReading.readabilityHandler = nil
-        errSem.signal()
-      } else {
-        errData.append(d)
-      }
-    }
-
+    let result: BrowserPythonRunner.Result
     do {
-      try process.run()
-      // Timeout after 60 seconds
-      DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(60)) {
-        if process.isRunning { process.terminate() }
-      }
-      process.waitUntilExit()
+      result = try BrowserPythonRunner.run(
+        script: pythonScript,
+        arguments: [
+          String(parameters.daysBack), String(parameters.daysForward), String(parameters.maxResults),
+        ],
+        stdinData: Data(configJSON.utf8)
+      )
+    } catch BrowserPythonRunnerError.pythonNotFound {
+      throw CalendarReaderError.pythonNotFound
     } catch {
-      throw CalendarReaderError.networkError("Failed to run Python: \(error.localizedDescription)")
+      throw CalendarReaderError.networkError(error.localizedDescription)
     }
 
-    // Wait for pipe reads to finish (max 5s after process exit)
-    _ = outputSem.wait(timeout: .now() + .seconds(5))
-    _ = errSem.wait(timeout: .now() + .seconds(5))
-
-    let errOutput = String(data: errData, encoding: .utf8) ?? ""
+    let errOutput = String(data: result.stderr, encoding: .utf8) ?? ""
     if !errOutput.isEmpty {
       log("CalendarReaderService: Python stderr: \(errOutput.prefix(500))")
     }
 
     // Python writes JSON to a temp file and prints the path to stdout
     let outputPath =
-      String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      String(data: result.stdout, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
       ?? ""
     guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
       throw CalendarReaderError.networkError(
@@ -921,30 +705,6 @@ actor CalendarReaderService {
           description: dict["description"] as? String ?? "",
           isAllDay: dict["is_all_day"] as? Bool ?? false
         )
-      }
-    }
-  }
-
-  // MARK: - Keychain
-
-  private func getKeychainPassword(service: String) -> String? {
-    BrowserKeychainCache.shared.password(for: service) {
-      let process = Process()
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-      process.arguments = ["find-generic-password", "-s", service, "-w"]
-      let pipe = Pipe()
-      let errPipe = Pipe()
-      process.standardOutput = pipe
-      process.standardError = errPipe
-      do {
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-        return output?.isEmpty == false ? output : nil
-      } catch {
-        return nil
       }
     }
   }

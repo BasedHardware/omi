@@ -31,6 +31,7 @@ enum PipeProcessRunner {
   static func run(
     executableURL: URL,
     arguments: [String],
+    stdinData: Data? = nil,
     timeoutSeconds: TimeInterval,
     killGraceSeconds: TimeInterval = 2
   ) throws -> PipeProcessResult {
@@ -42,6 +43,10 @@ enum PipeProcessRunner {
     let stderrPipe = Pipe()
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
+    let stdinPipe = Pipe()
+    if stdinData != nil {
+      process.standardInput = stdinPipe
+    }
 
     let stdout = LockedData()
     let stderr = LockedData()
@@ -82,6 +87,10 @@ enum PipeProcessRunner {
 
     do {
       try process.run()
+      if let stdinData {
+        stdinPipe.fileHandleForWriting.write(stdinData)
+        try? stdinPipe.fileHandleForWriting.close()
+      }
     } catch {
       stdoutPipe.fileHandleForReading.readabilityHandler = nil
       stderrPipe.fileHandleForReading.readabilityHandler = nil

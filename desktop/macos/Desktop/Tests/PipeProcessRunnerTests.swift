@@ -46,4 +46,19 @@ final class PipeProcessRunnerTests: XCTestCase {
       XCTAssertTrue(message.contains("timed out"), message)
     }
   }
+
+  func testWritesStdinAndDrainsStdout() throws {
+    let result = try PipeProcessRunner.run(
+      executableURL: URL(fileURLWithPath: "/usr/bin/python3"),
+      arguments: [
+        "-c",
+        "import sys; sys.stdout.write(sys.stdin.read().upper())",
+      ],
+      stdinData: Data("browser config".utf8),
+      timeoutSeconds: 5
+    )
+
+    XCTAssertEqual(result.terminationStatus, 0)
+    XCTAssertEqual(String(data: result.stdout, encoding: .utf8), "BROWSER CONFIG")
+  }
 }
