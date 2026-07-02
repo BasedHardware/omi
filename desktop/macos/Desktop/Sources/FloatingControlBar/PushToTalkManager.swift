@@ -655,7 +655,15 @@ class PushToTalkManager: ObservableObject {
       }
       // Real speech — commit. The hub speaks the reply and dispatches tools
       // itself; no transcript/router/LLM hop here.
-      RealtimeHubController.shared.commitTurn()
+      let commitResult = RealtimeHubController.shared.commitTurn()
+      if commitResult == .rejectedNoSession {
+        log("PushToTalkManager: realtime hub rejected commit — falling back to buffered transcription")
+        batchAudioLock.lock()
+        batchAudioBuffer = turnAudio
+        batchAudioLock.unlock()
+        transcribeBufferedWarmWaitAudio()
+        return
+      }
       silentMicRecoveryPolicy.recordSuccessfulHubTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       // Collapse the bar on release — the hub speaks its reply as audio (no inline
@@ -663,7 +671,7 @@ class PushToTalkManager: ObservableObject {
       updateBarState()
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-      log("PushToTalkManager: hub turn committed (instant ack)")
+      log("PushToTalkManager: hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed")")
       return
     }
 
@@ -1075,13 +1083,21 @@ class PushToTalkManager: ObservableObject {
       updateBarState()
       return
     }
-    RealtimeHubController.shared.commitTurn()
+    let commitResult = RealtimeHubController.shared.commitTurn()
+    if commitResult == .rejectedNoSession {
+      log("PushToTalkManager: buffered hub commit rejected — falling back to buffered transcription")
+      batchAudioLock.lock()
+      batchAudioBuffer = turnAudio
+      batchAudioLock.unlock()
+      transcribeBufferedWarmWaitAudio()
+      return
+    }
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-    log("PushToTalkManager: buffered hub turn committed after warm wait")
+    log("PushToTalkManager: buffered hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed") after warm wait")
   }
 
   private func transcribeBufferedWarmWaitAudio() {

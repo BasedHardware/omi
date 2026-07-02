@@ -555,22 +555,27 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("enum RealtimeHubBargeInStrategy"))
     XCTAssertTrue(sessionSource.contains("provider == .gemini ? .freshSession : .inSessionCancel"))
     XCTAssertTrue(hubSource.contains("private var sessionAuth: HubAuth?"))
-    XCTAssertTrue(hubSource.contains("private var bargeInReplacementInFlight = false"))
-    XCTAssertTrue(hubSource.contains("private var bargeInReplacementPendingCommit = false"))
-    XCTAssertTrue(hubSource.contains("private var bargeInReplacementAudioBuffer: [Data] = []"))
+    XCTAssertTrue(hubSource.contains("private struct PendingBargeInReplacementTurn"))
+    XCTAssertTrue(hubSource.contains("private var pendingBargeInReplacement: PendingBargeInReplacementTurn?"))
+    XCTAssertTrue(hubSource.contains("func commitTurn() -> RealtimeHubCommitResult"))
     XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn() -> Bool"))
     XCTAssertTrue(hubSource.contains("case .ephemeral:\n      remintReplacementSessionForBargeIn(provider: provider)"))
     XCTAssertTrue(hubSource.contains("token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
     XCTAssertTrue(hubSource.contains("startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))"))
-    XCTAssertTrue(hubSource.contains("bargeInReplacementAudioBuffer.append(pcm16k)"))
-    XCTAssertTrue(hubSource.contains("bargeInReplacementPendingCommit = true"))
+    XCTAssertTrue(hubSource.contains("barge-in replacement queued behind existing token mint"))
+    XCTAssertTrue(hubSource.contains("finishBargeInReplacementAfterSessionStart(provider: provider)"))
+    XCTAssertTrue(hubSource.contains("pendingBargeInReplacement?.audioBuffer.append(pcm16k)"))
+    XCTAssertTrue(hubSource.contains("pendingBargeInReplacement?.pendingCommit = true"))
+    XCTAssertTrue(hubSource.contains("return .deferredForReplacement"))
+    XCTAssertTrue(hubSource.contains("return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
     XCTAssertTrue(hubSource.contains("if provider == .gemini, let speculativeScreenshot"))
     XCTAssertTrue(hubSource.contains("session?.sendVideoFrame(speculativeScreenshot, mime: \"image/jpeg\")"))
     XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
     XCTAssertTrue(hubSource.contains("exitVoiceUI(clearResponseGlow: true)"))
-    XCTAssertTrue(hubSource.contains("} else {\n        responding = false\n        exitVoiceUI(clearResponseGlow: true)\n      }"))
+    XCTAssertTrue(hubSource.contains("} else {\n        responding = false\n        exitVoiceUI(clearResponseGlow: true)\n        return .rejectedNoSession\n      }"))
     XCTAssertTrue(hubSource.contains("let providerResponseInFlight = responding"))
+    XCTAssertTrue(hubSource.contains("preserveInterruptedTurnForContinuity()"))
     XCTAssertTrue(hubSource.contains("var replacementSessionOwnsInputTurn = false"))
     XCTAssertTrue(hubSource.contains("case .freshSession:"))
     XCTAssertTrue(hubSource.contains("replace the connection and let the fresh session buffer this new turn while it opens"))
@@ -625,6 +630,12 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(
       hubSource.contains("let shouldRedactProviderMessage: Bool"),
       "Credential close logs must redact raw provider auth/quota payloads")
+    XCTAssertTrue(
+      hubSource.contains("private func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
+      "Provider switching must be centralized and limited to stable credential/quota failures")
+    XCTAssertFalse(
+      hubSource.contains("if aliveFor < 10, failoverToAlternateProvider() { return }\n    // Re-warm"),
+      "Transient fast closes should not switch voice providers")
   }
 
   func testSpeechSynthesizerDidCancelClearsGlow() throws {

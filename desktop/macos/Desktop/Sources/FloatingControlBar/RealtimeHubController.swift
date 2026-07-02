@@ -65,6 +65,18 @@ enum RealtimeHubCloseClassifier {
   }
 }
 
+enum RealtimeHubCommitResult: Equatable {
+  case accepted
+  case deferredForReplacement
+  case rejectedNoSession
+}
+
+private struct PendingBargeInReplacementTurn {
+  var pendingBegin = true
+  var pendingCommit = false
+  var audioBuffer: [Data] = []
+}
+
 /// Keeps the response glow tied to perceived playback instead of raw PCM chunk
 /// boundaries. Realtime providers can leave short gaps between streamed audio
 /// buffers; clearing the glow on every empty queue makes the notch resize and
@@ -210,10 +222,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// A Gemini active-reply barge-in replaces the whole session. Managed sessions
   /// need a fresh one-use token first, so hold early mic chunks/commit until the
   /// replacement session exists and can use its normal socket-open buffering.
-  private var bargeInReplacementInFlight = false
-  private var bargeInReplacementPendingTurn = false
-  private var bargeInReplacementPendingCommit = false
-  private var bargeInReplacementAudioBuffer: [Data] = []
+  private var pendingBargeInReplacement: PendingBargeInReplacementTurn?
 
   /// Failover chain: when the Auto-selected (primary) provider can't connect, the hub
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
@@ -243,6 +252,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     teardownSession()
     ensureWarm()
     return true
+  }
+
+  private func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool {
+    switch failureClass {
+    case .providerAuthFailed, .providerQuotaExceeded:
+      return true
+    case .backendUnauthorized, .requiresLogin, .paywalled, .byokEnrollmentMismatch,
+         .backendTransient, .providerTransient, .providerPolicyClose, .unknown, .none:
+      return false
+    }
   }
 
   /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
@@ -404,6 +423,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       guard self.effectiveProvider == provider, self.session == nil
       else { return }
       self.startSession(provider: provider, auth: .ephemeral(token))
+      if self.pendingBargeInReplacement != nil {
+        self.finishBargeInReplacementAfterSessionStart(provider: provider)
+      }
     }
   }
 
@@ -444,10 +466,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   private func clearBargeInReplacementState() {
-    bargeInReplacementInFlight = false
-    bargeInReplacementPendingTurn = false
-    bargeInReplacementPendingCommit = false
-    bargeInReplacementAudioBuffer.removeAll()
+    pendingBargeInReplacement = nil
   }
 
   @discardableResult
@@ -459,10 +478,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     sessionProvider = nil
     sessionAuth = nil
     hubConnected = false
-    bargeInReplacementInFlight = true
-    bargeInReplacementPendingTurn = true
-    bargeInReplacementPendingCommit = false
-    bargeInReplacementAudioBuffer.removeAll()
+    pendingBargeInReplacement = PendingBargeInReplacementTurn()
     switch auth {
     case .byokKey:
       startReplacementSessionForBargeIn(provider: provider, auth: auth)
@@ -474,8 +490,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   private func remintReplacementSessionForBargeIn(provider: RealtimeHubProvider) {
     guard !minting else {
-      log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement skipped; token mint already in flight")
-      clearBargeInReplacementState()
+      log("RealtimeHub[\(provider.displayName)]: barge-in replacement queued behind existing token mint")
       return
     }
     minting = true
@@ -483,7 +498,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
     Task { [weak self] in
       guard let self else { return }
-      guard self.bargeInReplacementInFlight else {
+      guard self.pendingBargeInReplacement != nil else {
         self.minting = false
         return
       }
@@ -500,16 +515,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         self.minting = false
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
-        if !error.failureClass.isAccountWide, !self.failoverToAlternateProvider() {
+        if self.shouldFailoverToAlternate(for: error.failureClass), self.failoverToAlternateProvider() {
+          return
+        } else if !error.failureClass.isAccountWide {
           log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
         }
         return
       } catch {
         self.minting = false
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
-        if !self.failoverToAlternateProvider() {
-          log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
-        }
+        log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
         return
       }
       self.minting = false
@@ -519,23 +534,28 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   private func startReplacementSessionForBargeIn(provider: RealtimeHubProvider, auth: HubAuth) {
     startSession(provider: provider, auth: auth)
-    bargeInReplacementInFlight = false
-    if bargeInReplacementPendingTurn {
-      bargeInReplacementPendingTurn = false
+    finishBargeInReplacementAfterSessionStart(provider: provider)
+  }
+
+  private func finishBargeInReplacementAfterSessionStart(provider: RealtimeHubProvider) {
+    guard var pending = pendingBargeInReplacement else { return }
+    pendingBargeInReplacement = nil
+    if pending.pendingBegin {
+      pending.pendingBegin = false
       session?.beginInputTurn(interrupting: false)
     }
     if provider == .gemini, let speculativeScreenshot {
       session?.sendVideoFrame(speculativeScreenshot, mime: "image/jpeg")
     }
-    flushBargeInReplacementAudioBuffer()
-    if bargeInReplacementPendingCommit {
-      bargeInReplacementPendingCommit = false
+    flushBargeInReplacementAudioBuffer(pending.audioBuffer)
+    if pending.pendingCommit {
+      pending.pendingCommit = false
       session?.commitInputTurn()
     }
   }
 
   private func failBargeInReplacement(provider: RealtimeHubProvider, reason: String) {
-    let hadCommittedTurn = bargeInReplacementPendingCommit
+    let hadCommittedTurn = pendingBargeInReplacement?.pendingCommit == true
     clearBargeInReplacementState()
     guard hadCommittedTurn else { return }
     log("RealtimeHub[\(provider.displayName)]: barge-in replacement failed after commit — \(reason)")
@@ -547,10 +567,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     exitVoiceUI(clearResponseGlow: true)
   }
 
-  private func flushBargeInReplacementAudioBuffer() {
-    guard let s = session, !bargeInReplacementAudioBuffer.isEmpty else { return }
-    let bufferedChunks = bargeInReplacementAudioBuffer
-    bargeInReplacementAudioBuffer.removeAll()
+  private func flushBargeInReplacementAudioBuffer(_ bufferedChunks: [Data]) {
+    guard let s = session, !bufferedChunks.isEmpty else { return }
     for pcm16k in bufferedChunks {
       sendAudio(pcm16k, to: s)
     }
@@ -584,6 +602,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // started talking again?
     let providerResponseInFlight = responding
     let bargeIn = responding || realtimePlaybackActive || localSpeechActive || speech.isSpeaking
+    if bargeIn {
+      preserveInterruptedTurnForContinuity()
+    }
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
@@ -654,11 +675,28 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     }
   }
 
+  private func preserveInterruptedTurnForContinuity() {
+    guard !turnRecorded else { return }
+    let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !heard.isEmpty else { return }
+    let partialReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let interruptedReply: String
+    if partialReply.isEmpty {
+      interruptedReply = "Interrupted before the assistant finished responding."
+    } else {
+      interruptedReply = "\(partialReply)\n\n[Interrupted by the next push-to-talk turn before completion.]"
+    }
+    turnRecorded = true
+    FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: interruptedReply)
+  }
+
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
   func feedAudio(_ pcm16k: Data) {
     guard let s = session else {
-      if bargeInReplacementInFlight {
-        bargeInReplacementAudioBuffer.append(pcm16k)
+      if pendingBargeInReplacement != nil {
+        pendingBargeInReplacement?.audioBuffer.append(pcm16k)
+      } else {
+        log("RealtimeHub[\(providerTag)]: dropping mic audio because no realtime session owns this turn")
       }
       return
     }
@@ -672,20 +710,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   /// PTT-up: end the turn; the model now responds (and may call tools).
-  func commitTurn() {
+  func commitTurn() -> RealtimeHubCommitResult {
     responding = true
     // (The screen frame is sent at turn START — see beginTurn — so it has time to
     // upload/decode before the model answers. Nothing to attach here.)
     guard session != nil else {
-      if bargeInReplacementInFlight {
-        bargeInReplacementPendingCommit = true
+      if pendingBargeInReplacement != nil {
+        pendingBargeInReplacement?.pendingCommit = true
+        return .deferredForReplacement
       } else {
         responding = false
         exitVoiceUI(clearResponseGlow: true)
+        return .rejectedNoSession
       }
-      return
     }
     session?.commitInputTurn()
+    return .accepted
   }
 
   /// Abandon the turn without committing (silent tap / cancel). Must leave NO open
@@ -1292,9 +1332,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     }
     exitVoiceUI(clearResponseGlow: true)
     teardownSession()
-    // A session that died fast (connected, then the provider rejected/aborted it — e.g.
-    // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
-    // before the cascade. One that lived long was a normal idle-close → re-warm the same.
+    // Provider switching changes the user's voice identity and can fragment model-local
+    // context. Only switch for stable credential/quota classes; transient fast closes
+    // re-warm the same provider and rely on the shared continuity packet.
     if case .providerAuthFailed = credentialFailureClass {
       if aliveFor < 10, failoverToAlternateProvider() { return }
       return
@@ -1303,7 +1343,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       if failoverToAlternateProvider() { return }
       return
     }
-    if aliveFor < 10, failoverToAlternateProvider() { return }
     // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
     // the socket (~2.5 min, close 1008) even before the first turn; managed users have
     // no BYOK key, so once `session` is nil `isActive` is false and PTT silently falls
