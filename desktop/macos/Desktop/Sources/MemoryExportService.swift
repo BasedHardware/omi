@@ -439,7 +439,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         ("auth_url", Self.mcpAuthorizeURL),
         ("token_url", Self.mcpTokenURL),
       ])
-    } else {
+    } else if !usesPublicCloudOAuthClient {
       nativeToolArgs.append(contentsOf: [
         ("oauth_client_id", "omi"),
         ("oauth_client_secret", key),

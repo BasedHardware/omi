@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+os.environ['MCP_OAUTH_CHATGPT_CLIENT_ID'] = 'omi-chatgpt-prod'
 os.environ['MCP_OAUTH_CHATGPT_CLIENT_SECRET'] = 'client-secret'
 os.environ['MCP_OAUTH_CHATGPT_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
 os.environ['MCP_OAUTH_PUBLIC_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
@@ -108,18 +109,19 @@ from database import mcp_oauth
 
 
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
-    client = mcp_oauth.get_client('omi')
-    assert mcp_oauth.verify_client_secret(client, 'client-secret')
-    assert mcp_oauth.verify_client_auth(client, 'client-secret')
+    client = mcp_oauth.get_client('omi-chatgpt-prod')
+    assert client['token_endpoint_auth_method'] == 'none'
+    assert mcp_oauth.verify_client_auth(client, None)
+    assert not mcp_oauth.verify_client_auth(client, 'client-secret')
     assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector_platform_oauth_redirect')
 
     scopes = mcp_oauth.normalize_scopes('memories.read conversations.read', client)
     verifier = 'a' * 64
-    grant = mcp_oauth.create_or_update_grant('user-1', 'omi', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    grant = mcp_oauth.create_or_update_grant('user-1', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
     code = mcp_oauth.issue_authorization_code(
         'user-1',
         grant['id'],
-        'omi',
+        'omi-chatgpt-prod',
         'https://chatgpt.com/connector_platform_oauth_redirect',
         mcp_oauth.MCP_RESOURCE_URL,
         scopes,
@@ -127,12 +129,20 @@ def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
     )
 
     token_pair = mcp_oauth.exchange_authorization_code_for_tokens(
-        code, 'omi', 'https://chatgpt.com/connector_platform_oauth_redirect', mcp_oauth.MCP_RESOURCE_URL, verifier
+        code,
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        verifier,
     )
     assert token_pair['access_token'].startswith('omi_oat_')
     assert (
         mcp_oauth.exchange_authorization_code_for_tokens(
-            code, 'omi', 'https://chatgpt.com/connector_platform_oauth_redirect', mcp_oauth.MCP_RESOURCE_URL, verifier
+            code,
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            mcp_oauth.MCP_RESOURCE_URL,
+            verifier,
         )
         is None
     )
@@ -385,32 +395,46 @@ def test_default_clients_can_request_all_supported_tool_scopes():
         ]
     )
 
-    assert mcp_oauth.normalize_scopes(requested_scopes, mcp_oauth.get_client('omi')) == sorted(requested_scopes.split())
+    assert mcp_oauth.normalize_scopes(requested_scopes, mcp_oauth.get_client('omi-chatgpt-prod')) == sorted(
+        requested_scopes.split()
+    )
     assert mcp_oauth.normalize_scopes(requested_scopes, mcp_oauth.get_client('omi-mcp-public')) == sorted(
         requested_scopes.split()
     )
 
 
+def test_legacy_omi_client_id_is_not_registered_by_default():
+    assert mcp_oauth.get_client('omi') is None
+
+
 def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
     scopes = ['memories.read']
-    grant = mcp_oauth.create_or_update_grant('user-2', 'omi', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    grant = mcp_oauth.create_or_update_grant('user-2', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
     first_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
 
-    second_pair = mcp_oauth.rotate_refresh_token(first_pair['refresh_token'], 'omi', mcp_oauth.MCP_RESOURCE_URL)
+    second_pair = mcp_oauth.rotate_refresh_token(
+        first_pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL
+    )
     assert second_pair['refresh_token'] != first_pair['refresh_token']
     assert mcp_oauth.validate_access_token(second_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)['uid'] == 'user-2'
 
-    assert mcp_oauth.rotate_refresh_token(first_pair['refresh_token'], 'omi', mcp_oauth.MCP_RESOURCE_URL) is None
+    assert (
+        mcp_oauth.rotate_refresh_token(first_pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
+        is None
+    )
     assert mcp_oauth.validate_access_token(second_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
 
-    new_grant = mcp_oauth.create_or_update_grant('user-2', 'omi', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    new_grant = mcp_oauth.create_or_update_grant('user-2', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
     assert new_grant['id'] != grant['id']
-    assert mcp_oauth.rotate_refresh_token(second_pair['refresh_token'], 'omi', mcp_oauth.MCP_RESOURCE_URL) is None
+    assert (
+        mcp_oauth.rotate_refresh_token(second_pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
+        is None
+    )
 
 
 def test_revoke_user_grant_invalidates_tokens():
     scopes = ['memories.read']
-    grant = mcp_oauth.create_or_update_grant('user-3', 'omi', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    grant = mcp_oauth.create_or_update_grant('user-3', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
     token_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
 
     assert len(mcp_oauth.list_user_grants('user-3')) == 1
