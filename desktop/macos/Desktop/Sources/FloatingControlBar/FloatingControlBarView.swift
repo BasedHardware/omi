@@ -1359,7 +1359,7 @@ private struct AgentMainChatView: View {
         switch pill.status {
         case .queued, .starting, .running:
             return true
-        case .done, .failed:
+        case .done, .stopped, .failed:
             return false
         }
     }
@@ -1465,20 +1465,42 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBadge: some View {
-        Group {
-            if pill.status == .done {
-                Button {
-                    manager.dismiss(pillID: pill.id)
-                    onBackToAgentRows()
-                } label: {
+        HStack(spacing: 6) {
+            Group {
+                if pill.status == .done {
+                    Button {
+                        manager.dismiss(pillID: pill.id)
+                        onBackToAgentRows()
+                    } label: {
+                        statusBadgeLabel
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss completed agent")
+                } else {
                     statusBadgeLabel
                 }
-                .buttonStyle(.plain)
-                .help("Dismiss completed agent")
-            } else {
-                statusBadgeLabel
+            }
+
+            if isRunning {
+                stopButton
             }
         }
+    }
+
+    private var stopButton: some View {
+        Button {
+            manager.stop(pillID: pill.id)
+        } label: {
+            Image(systemName: "stop.fill")
+                .scaledFont(size: 8, weight: .bold)
+                .foregroundColor(.black.opacity(0.82))
+                .frame(width: 22, height: 22)
+                .background(pill.status.tintColor)
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Stop subagent")
+        .help("Stop subagent")
     }
 
     private var statusBadgeLabel: some View {
@@ -1495,6 +1517,8 @@ private struct AgentMainChatView: View {
         switch pill.status {
         case .queued, .starting, .running, .done:
             return .black.opacity(0.86)
+        case .stopped:
+            return .black.opacity(0.78)
         case .failed:
             return .white
         }
@@ -1502,7 +1526,7 @@ private struct AgentMainChatView: View {
 
     private var statusBackgroundOpacity: Double {
         switch pill.status {
-        case .queued, .starting, .running, .done:
+        case .queued, .starting, .running, .done, .stopped:
             return 1
         case .failed:
             return 0.75
@@ -1582,7 +1606,7 @@ private struct AgentMainChatView: View {
     private func agentAssistantContent(_ message: ChatMessage) -> some View {
         if !message.contentBlocks.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(ContentBlockGroup.group(message.contentBlocks)) { group in
+                ForEach(groupedContentBlocks(for: message)) { group in
                     switch group {
                     case .text(_, let text):
                         if !text.isEmpty {
@@ -1610,6 +1634,32 @@ private struct AgentMainChatView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
+        let grouped = ContentBlockGroup.group(message.contentBlocks)
+
+        return grouped.filter { group in
+            switch group {
+            case .text, .discoveryCard:
+                return true
+            case .toolCalls(_, let calls):
+                if calls.contains(where: { $0.spawnedAgentID != nil }) {
+                    return true
+                }
+                if message.isStreaming {
+                    return calls.contains { block in
+                        if case .toolCall(_, _, let status, _, _, _) = block {
+                            return status.isInFlight
+                        }
+                        return false
+                    }
+                }
+                return false
+            case .thinking:
+                return message.isStreaming
             }
         }
     }
@@ -2058,6 +2108,8 @@ private struct NotchAgentListRow: View {
             return "sparkles"
         case .done:
             return "checkmark"
+        case .stopped:
+            return "stop.fill"
         case .failed:
             return "exclamationmark"
         }
@@ -2068,6 +2120,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
     case running
     case queued
     case failed
+    case stopped
     case done
 
     var id: String { rawValue }
@@ -2080,6 +2133,8 @@ private enum NotchAgentStatusGroup: String, Identifiable {
             self = .queued
         case .failed:
             self = .failed
+        case .stopped:
+            self = .stopped
         case .done:
             self = .done
         }
@@ -2090,6 +2145,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return "Running"
         case .queued: return "Queued"
         case .failed: return "Failed"
+        case .stopped: return "Stopped"
         case .done: return "Done"
         }
     }
@@ -2099,6 +2155,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return Color(red: 1.0, green: 0.80, blue: 0.40)
         case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
+        case .stopped: return Color(red: 0.64, green: 0.66, blue: 0.70)
         case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
         }
     }
@@ -2108,6 +2165,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return Color(red: 1.0, green: 0.62, blue: 0.20)
         case .queued: return Color(red: 0.08, green: 0.52, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.46, blue: 0.12)
+        case .stopped: return Color(red: 0.42, green: 0.44, blue: 0.48)
         case .done: return Color(red: 0.08, green: 0.78, blue: 0.62)
         }
     }
@@ -2117,6 +2175,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return Color(red: 0.72, green: 0.36, blue: 0.04)
         case .queued: return Color(red: 0.00, green: 0.44, blue: 0.95)
         case .failed: return Color(red: 0.78, green: 0.08, blue: 0.18)
+        case .stopped: return Color(red: 0.24, green: 0.25, blue: 0.28)
         case .done: return Color(red: 0.02, green: 0.50, blue: 0.24)
         }
     }
@@ -2126,7 +2185,8 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .running: return 0
         case .queued: return 1
         case .failed: return 2
-        case .done: return 3
+        case .stopped: return 3
+        case .done: return 4
         }
     }
 
