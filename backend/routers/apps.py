@@ -138,8 +138,6 @@ logger = logging.getLogger(__name__)
 _firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 _public_router = APIRouter()
 router = APIRouter()
-router.include_router(_firebase_router)
-router.include_router(_public_router)
 
 
 def _write_file(path: str, data: bytes):
@@ -2084,3 +2082,7 @@ def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
         return {'status': 'ok', 'message': f'App {app_id} removed from conversation summary apps'}
     else:
         raise HTTPException(status_code=404, detail=f'App {app_id} not found in conversation summary apps')
+
+
+router.include_router(_firebase_router)
+router.include_router(_public_router)
