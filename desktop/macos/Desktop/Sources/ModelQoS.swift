@@ -42,6 +42,11 @@ struct ModelQoS {
         /// Synthesis extraction tasks (calendar, gmail, notes, memory import)
         static var synthesis: String { "claude-haiku-4-5-20251001" }
 
+        /// AI Clone voice work (persona synthesis, reply generation, critic).
+        /// Accuracy-first: imitating a specific person's voice is the whole product,
+        /// so this stays on Sonnet even in the cost-optimized tier.
+        static var cloneVoice: String { "claude-sonnet-4-6" }
+
         /// ChatLab test queries
         static var chatLabQuery: String { "claude-sonnet-4-20250514" }
 

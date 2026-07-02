@@ -1,0 +1,3 @@
+{
+  "change": "Improved AI Clone reply accuracy with per-message example retrieval, measured style matching, and multi-candidate selection; burst replies now render as separate bubbles in Preview Chat"
+}

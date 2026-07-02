@@ -622,6 +622,16 @@ private struct AIClonePreviewChatSheet: View {
     .frame(width: 460, height: 560)
     .background(OmiColors.backgroundPrimary)
     .onAppear { inputFocused = true }
+    .task {
+      // Build the retrieval index so replies get dynamic few-shot examples from the
+      // real history (no-op if already built for this contact).
+      if let messages = try? await IMessageReaderService.shared.messages(
+        for: contact, limit: 1500)
+      {
+        await AICloneRetrievalService.shared.ensureIndex(
+          contactId: contact.id, messages: messages.map { $0.asImportedMessage() })
+      }
+    }
   }
 
   // MARK: Header
@@ -784,7 +794,12 @@ private struct AIClonePreviewChatSheet: View {
       do {
         let reply = try await AIClonePersonaService.shared.respond(
           as: persona, to: text, context: context)
-        messages.append(AIClonePreviewMessage(kind: .reply, text: reply))
+        // A burst reply comes back as newline-joined bubbles — render each as its own
+        // message bubble, exactly like the real person's multi-text bursts.
+        for bubble in reply.components(separatedBy: "\n")
+        where !bubble.trimmingCharacters(in: .whitespaces).isEmpty {
+          messages.append(AIClonePreviewMessage(kind: .reply, text: bubble))
+        }
       } catch {
         errorMessage = error.localizedDescription
       }

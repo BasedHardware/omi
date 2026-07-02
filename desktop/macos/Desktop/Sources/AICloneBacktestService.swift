@@ -8,6 +8,9 @@ struct BacktestPair: Sendable, Identifiable {
   let id = UUID()
   let contactMessage: String
   let actualReply: String
+  /// When the contact's turn started — used to key this exact historical instance so
+  /// retrieval can exclude it (and only it) while predicting its held-out reply.
+  var turnDate: Date = Date(timeIntervalSinceReferenceDate: 0)
   /// The few messages (both directions, oldest first) that preceded `contactMessage`.
   var context: [ConversationTurn] = []
   var predictedReply: String?
@@ -65,29 +68,63 @@ actor AICloneBacktestService {
   /// Score `persona` against `holdoutCount` real (their-message → my-reply) pairs that were
   /// NOT used as training examples. `messages` are any platform, newest-first. Returns the
   /// per-pair predictions/scores and the average.
+  ///
+  /// - `seed`: deterministic holdout sampling (same pairs every run for fair comparison).
+  /// - `pinnedPairs`: evaluate exactly these (them → actual) pairs instead of sampling —
+  ///   lets different architectures be scored on an identical eval set across runs.
+  /// - `excludePairKeys`: text-keys never to sample (e.g. the fixed eval set, during
+  ///   training iterations, so refinement can't memorize eval answers).
   func runBacktest(
     for contact: ImportedContact, messages: [ImportedMessage], persona: ContactPersona,
-    holdoutCount: Int = 8
+    holdoutCount: Int = 8, seed: UInt64? = nil,
+    pinnedPairs: [(them: String, me: String)]? = nil,
+    excludePairKeys: Set<String> = []
   ) async throws -> BacktestResult {
     let chronological = Array(messages.reversed())
+
+    // The retrieval index must exist before respond() so dynamic few-shots work even when
+    // the persona was loaded from disk in a fresh session.
+    await AICloneRetrievalService.shared.ensureIndex(contactId: contact.id, messages: messages)
 
     // Extract real turn-pairs, then drop any that duplicate the persona's few-shot examples
     // so we never test on data the model was trained on.
     let trainingKeys = Set(persona.exampleExchanges.map { Self.pairKey(them: $0.them, me: $0.me) })
-    let pairs = Self.buildPairs(from: chronological).filter {
-      !trainingKeys.contains(Self.pairKey(them: $0.contactMessage, me: $0.actualReply))
+    let allPairs = Self.buildPairs(from: chronological)
+    let pairs = allPairs.filter {
+      let key = Self.pairKey(them: $0.contactMessage, me: $0.actualReply)
+      return !trainingKeys.contains(key) && !excludePairKeys.contains(key)
     }
     guard !pairs.isEmpty else { throw BacktestError.notEnoughData }
 
-    var sampled = Array(pairs.shuffled().prefix(holdoutCount))
+    var sampled: [BacktestPair]
+    if let pinnedPairs {
+      let wanted = Set(pinnedPairs.map { Self.pairKey(them: $0.them, me: $0.me) })
+      var seen = Set<String>()
+      sampled = allPairs.filter { pair in
+        let key = Self.pairKey(them: pair.contactMessage, me: pair.actualReply)
+        return wanted.contains(key) && seen.insert(key).inserted
+      }
+      guard sampled.count >= max(1, pinnedPairs.count / 2) else {
+        throw BacktestError.notEnoughData
+      }
+    } else {
+      // With a seed the holdout is deterministic (same pairs every run) so different
+      // architectures/personas are compared on identical data instead of fresh noise.
+      sampled = Array(Self.sample(pairs, count: holdoutCount, seed: seed))
+    }
 
     // Predict the user's reply for each held-out contact message. Sequential on purpose —
     // each respond() spins up its own agent bridge against the shared runtime, so we avoid
-    // overlapping requests.
+    // overlapping requests. Each pair excludes ITS OWN historical instance from retrieval
+    // so the clone is never handed the exact answer it's being tested on.
     for index in sampled.indices {
+      let pair = sampled[index]
+      let leakKey = AICloneRetrievalService.instanceKey(
+        them: pair.contactMessage, me: pair.actualReply, date: pair.turnDate)
       do {
         sampled[index].predictedReply = try await AIClonePersonaService.shared.respond(
-          as: persona, to: sampled[index].contactMessage, context: sampled[index].context)
+          as: persona, to: pair.contactMessage, context: pair.context,
+          excludingPairKeys: [leakKey])
       } catch {
         log("AICloneBacktest: prediction failed for a pair: \(error)")
         sampled[index].predictedReply = nil
@@ -241,6 +278,7 @@ actor AICloneBacktestService {
     targetScore: Double = 0.80,
     maxIterations: Int = 5,
     holdoutCount: Int = 8,
+    excludePairKeys: Set<String> = [],
     onProgress: (@Sendable (BacktestProgress) -> Void)? = nil
   ) async throws -> (persona: ContactPersona, result: BacktestResult) {
     func tick(_ iteration: Int, _ phase: String, _ avg: Double?) {
@@ -261,7 +299,8 @@ actor AICloneBacktestService {
       totalIterations = iteration
       tick(iteration, "Backtesting", best?.result.averageScore)
       let result = try await runBacktest(
-        for: contact, messages: messages, persona: current, holdoutCount: holdoutCount)
+        for: contact, messages: messages, persona: current, holdoutCount: holdoutCount,
+        excludePairKeys: excludePairKeys)
 
       if best == nil || result.averageScore > best!.result.averageScore {
         best = (current, result)
@@ -311,12 +350,22 @@ actor AICloneBacktestService {
   // MARK: - Pair extraction & helpers
 
   /// How many preceding messages to attach as conversation context per pair.
-  private static let contextWindow = 4
+  private static let contextWindow = 10
+
+  /// A "my reply" only counts as a reply if it lands within this window of the contact's
+  /// last message. Beyond it, the from-me run is me starting a new conversation, not
+  /// answering — pairing those poisons both training examples and the holdout.
+  private static let replyGapLimit: TimeInterval = 4 * 60 * 60
+
+  /// Caps on how many bubbles of a run to keep (very long runs are monologues; keeping
+  /// the boundary-adjacent bubbles preserves the actual stimulus/response).
+  private static let maxThemBubbles = 6
+  private static let maxMeBubbles = 8
 
   /// Walk the chronological transcript and emit (their-run → my-run) pairs. Consecutive
   /// messages from the same sender are concatenated (multi-bubble bursts become one turn).
   /// Each pair also carries up to `contextWindow` preceding messages as context.
-  private static func buildPairs(from chronological: [ImportedMessage]) -> [BacktestPair] {
+  static func buildPairs(from chronological: [ImportedMessage]) -> [BacktestPair] {
     var pairs: [BacktestPair] = []
     var index = 0
     let count = chronological.count
@@ -330,12 +379,19 @@ actor AICloneBacktestService {
 
       let themStart = index
       var themParts: [String] = []
+      var themLastDate = chronological[index].date
       while index < count && !chronological[index].isFromMe {
         themParts.append(clean(chronological[index].text))
+        themLastDate = chronological[index].date
         index += 1
       }
 
       guard index < count, chronological[index].isFromMe else { continue }
+
+      // If my first message comes hours later, it's a new conversation I started — skip.
+      guard chronological[index].date.timeIntervalSince(themLastDate) <= replyGapLimit else {
+        continue
+      }
 
       var meParts: [String] = []
       while index < count && chronological[index].isFromMe {
@@ -343,20 +399,40 @@ actor AICloneBacktestService {
         index += 1
       }
 
-      let them = themParts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-      let me = meParts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-      if !them.isEmpty, !me.isEmpty {
+      let them = themParts.suffix(maxThemBubbles)
+        .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+      let me = meParts.prefix(maxMeBubbles)
+        .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+      // A reply that is only attachment placeholders can't be predicted from text — skip.
+      let meIsOnlyAttachments = meParts.allSatisfy { $0 == "[attachment]" || $0.isEmpty }
+      if !them.isEmpty, !me.isEmpty, !meIsOnlyAttachments {
         // Context = the messages immediately before this contact turn, oldest first.
         let contextSlice = chronological[max(0, themStart - contextWindow)..<themStart]
         let context = contextSlice.compactMap { message -> ConversationTurn? in
           let text = clean(message.text)
           return text.isEmpty ? nil : ConversationTurn(isFromMe: message.isFromMe, text: text)
         }
-        pairs.append(BacktestPair(contactMessage: them, actualReply: me, context: context))
+        pairs.append(
+          BacktestPair(
+            contactMessage: them, actualReply: me,
+            turnDate: chronological[themStart].date, context: context))
       }
     }
 
     return pairs
+  }
+
+  /// Deterministically sample `count` pairs when `seed` is provided (SplitMix64-driven
+  /// Fisher–Yates), otherwise fall back to system randomness.
+  private static func sample(_ pairs: [BacktestPair], count: Int, seed: UInt64?) -> [BacktestPair] {
+    guard let seed else { return Array(pairs.shuffled().prefix(count)) }
+    var rng = SplitMix64(seed: seed)
+    var indices = Array(pairs.indices)
+    for i in stride(from: indices.count - 1, to: 0, by: -1) {
+      let j = Int(rng.next() % UInt64(i + 1))
+      indices.swapAt(i, j)
+    }
+    return indices.prefix(count).map { pairs[$0] }
   }
 
   /// The lowest-scoring predicted pairs (with the judge's reasoning), for refinement.
@@ -374,7 +450,20 @@ actor AICloneBacktestService {
     text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private static func pairKey(them: String, me: String) -> String {
+  /// Tiny deterministic RNG (SplitMix64) for reproducible holdout sampling.
+  struct SplitMix64 {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+      state &+= 0x9E37_79B9_7F4A_7C15
+      var z = state
+      z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+      z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+      return z ^ (z >> 31)
+    }
+  }
+
+  static func pairKey(them: String, me: String) -> String {
     func norm(_ s: String) -> String {
       s.lowercased()
         .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
