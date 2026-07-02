@@ -8,189 +8,183 @@ Tests cover:
 - _process_mentor_proactive_notification() end-to-end with mocks
 - Source-level checks (no raw OpenAI client)
 - Legacy evaluate_proactive_notification (kept for eval backward compatibility)
+
+Hermeticity: every runtime fake is wired into the real production modules by the
+``_apply_fakes`` autouse fixture via ``monkeypatch`` (auto-restored at teardown), so
+no ``sys.modules`` pollution leaks to co-run test files. ``redis_mod``/``mem_mod``
+are ``SimpleNamespace`` views over the same mock objects patched at the consumption
+sites, so legacy test lines like ``redis_mod.get_daily_notification_count.return_value``
+keep working unchanged.
 """
 
-import os
-import sys
 import time
-import types
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+import pytest
+
+import database.conversations as conversations_db
+import database.dev_api_key as dev_api_key_db
+import database.mem_db as _mem_db_module
+import database.notifications as notifications_db
+import database.redis_db as _redis_db_module
+import utils.app_integrations as app_int
+import utils.llm.clients as llm_clients_mod
+import utils.llm.proactive_notification as pn_mod
+import utils.mentor_notifications as mentor_mod
+from utils.llm.proactive_notification import (
+    FREQUENCY_GUIDANCE,
+    FREQUENCY_TO_BASE_THRESHOLD,
+    MAX_DAILY_NOTIFICATIONS,
+    NotificationDraft,
+    ProactiveAdvice,
+    ProactiveNotificationResult,
+    RelevanceResult,
+    ValidationResult,
+    evaluate_proactive_notification,
+    evaluate_relevance,
+    generate_notification,
+    validate_notification,
 )
+from utils.mentor_notifications import MessageBuffer, message_buffer, process_mentor_notification
 
-# Ensure backend root is on sys.path for real imports
-_backend_root = str(Path(__file__).resolve().parent.parent.parent)
-if _backend_root not in sys.path:
-    sys.path.insert(0, _backend_root)
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
-def _stub_module(name: str) -> types.ModuleType:
-    if name not in sys.modules:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    return sys.modules[name]
+# ── Shared runtime mocks ───────────────────────────────────────────────────────
+# These are plain mock objects (NOT sys.modules mutation). The autouse fixture
+# below wires them into the real consumption sites each test and auto-restores.
 
-
-# --- Stub database package and submodules ---
-database_mod = _stub_module("database")
-if not hasattr(database_mod, '__path__'):
-    database_mod.__path__ = []
-for submodule in [
-    "redis_db",
-    "memories",
-    "conversations",
-    "users",
-    "tasks",
-    "trends",
-    "action_items",
-    "folders",
-    "calendar_meetings",
-    "vector_db",
-    "apps",
-    "llm_usage",
-    "_client",
-    "chat",
-    "goals",
-    "knowledge_graph",
-    "daily_summaries",
-    "mem_db",
-    "notifications",
-    "webhook_health",
-    "dev_api_key",
-]:
-    mod = _stub_module(f"database.{submodule}")
-    setattr(database_mod, submodule, mod)
-
-sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
-# Default: not a developer, so the daily-cap tests exercise the cap path.
-sys.modules["database.dev_api_key"].get_dev_keys_for_user = MagicMock(return_value=[])
-sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=3)
-
-# Stub _client.db for auth.py top-level import
-sys.modules["database._client"].db = MagicMock()
-
-# Stub goals
-mock_get_user_goals = MagicMock(
-    return_value=[
-        {"title": "Exercise 3x per week", "is_active": True},
-        {"title": "Read 2 books per month", "is_active": True},
-    ]
-)
-sys.modules["database.goals"].get_user_goals = mock_get_user_goals
-
-# Stub redis_db daily notification functions
-redis_mod = sys.modules.get("database.redis_db") or _stub_module("database.redis_db")
-redis_mod.get_generic_cache = MagicMock(return_value=None)
-redis_mod.set_generic_cache = MagicMock()
-redis_mod.get_proactive_noti_sent_at = MagicMock(return_value=None)
-redis_mod.set_proactive_noti_sent_at = MagicMock()
-redis_mod.get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
-redis_mod.incr_daily_notification_count = MagicMock(return_value=1)
-redis_mod.get_daily_notification_count = MagicMock(return_value=0)
-redis_mod.cache_user_name = MagicMock()
-redis_mod.get_cached_user_name = MagicMock(return_value=None)
-
-# Stub mem_db
-mem_mod = sys.modules.get("database.mem_db") or _stub_module("database.mem_db")
-mem_mod.get_proactive_noti_sent_at = MagicMock(return_value=None)
-mem_mod.set_proactive_noti_sent_at = MagicMock()
-
-# --- Stub LLM clients ---
 mock_llm_mini = MagicMock()
 mock_llm_mini.invoke = MagicMock(return_value=MagicMock(content='test'))
 
-clients_mod = _stub_module("utils.llm.clients")
-clients_mod.llm_mini = mock_llm_mini
-clients_mod.generate_embedding = MagicMock(return_value=[0] * 3072)
-clients_mod.get_llm = MagicMock(return_value=mock_llm_mini)
-
-# Stub usage tracker — set __path__ to real directory so proactive_notification.py can be found
-utils_mod = _stub_module("utils")
-if not hasattr(utils_mod, '__path__'):
-    utils_mod.__path__ = [os.path.join(_backend_root, "utils")]
-llm_mod = _stub_module("utils.llm")
-if not hasattr(llm_mod, '__path__'):
-    llm_mod.__path__ = [os.path.join(_backend_root, "utils", "llm")]
-tracker_mod = _stub_module("utils.llm.usage_tracker")
-tracker_mod.get_usage_callback = MagicMock(return_value=[])
-tracker_mod.track_usage = MagicMock()
-tracker_mod.Features = MagicMock()
-
-# Stub utils.llms.memory (get_prompt_memories)
-llms_mod = _stub_module("utils.llms")
-if not hasattr(llms_mod, '__path__'):
-    llms_mod.__path__ = [os.path.join(_backend_root, "utils", "llms")]
-memory_mod = _stub_module("utils.llms.memory")
+mock_get_user_goals = MagicMock(
+    return_value=[
+        {'title': 'Exercise 3x per week', 'is_active': True},
+        {'title': 'Read 2 books per month', 'is_active': True},
+    ]
+)
 mock_get_prompt_memories = MagicMock(return_value=("TestUser", "TestUser likes hiking and coding."))
-memory_mod.get_prompt_memories = mock_get_prompt_memories
+mock_get_app_messages = MagicMock(return_value=[])
+mock_get_user_language = MagicMock(return_value='en')
+mock_generate_embedding = MagicMock(return_value=[0] * 3072)
+mock_query_vectors = MagicMock(return_value=[])
+mock_get_convos_by_id = MagicMock(return_value=[])
+mock_get_convos = MagicMock(return_value=[])
+mock_deserialize_convos = MagicMock(return_value=[])
+mock_convos_to_string = MagicMock(return_value='')
+mock_get_available_apps = MagicMock(return_value=[])
+mock_is_trial_paywalled = MagicMock(return_value=False)
+
+mock_get_freq = MagicMock(return_value=3)
+mock_get_dev_keys = MagicMock(return_value=[])
+mock_send_notification = MagicMock()
+
+# redis_mod / mem_mod aggregate the redis/mem-backed mocks. Each attribute is the
+# very mock object patched at the consumption site, so legacy test lines such as
+# ``redis_mod.get_daily_notification_count.return_value = 9`` work unchanged.
+redis_mod = SimpleNamespace(
+    get_generic_cache=MagicMock(return_value=None),
+    set_generic_cache=MagicMock(),
+    get_proactive_noti_sent_at=MagicMock(return_value=None),
+    set_proactive_noti_sent_at=MagicMock(),
+    get_proactive_noti_sent_at_ttl=MagicMock(return_value=0),
+    incr_daily_notification_count=MagicMock(return_value=1),
+    get_daily_notification_count=MagicMock(return_value=0),
+    cache_user_name=MagicMock(),
+    get_cached_user_name=MagicMock(return_value=None),
+    delete_app_cache_by_id=MagicMock(),
+)
+mem_mod = SimpleNamespace(
+    get_proactive_noti_sent_at=MagicMock(return_value=None),
+    set_proactive_noti_sent_at=MagicMock(),
+)
+
+
+@contextmanager
+def _null_context(*args, **kwargs):
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _apply_fakes(monkeypatch):
+    """Wire the shared mocks into every real consumption site (hermetic)."""
+    # mentor_notifications.get_mentor_notification_frequency (local binding) +
+    # database.notifications source + app_integrations local binding all share mock_get_freq.
+    monkeypatch.setattr(mentor_mod, 'get_mentor_notification_frequency', mock_get_freq)
+    monkeypatch.setattr(notifications_db, 'get_mentor_notification_frequency', mock_get_freq)
+    monkeypatch.setattr(app_int, 'get_mentor_notification_frequency', mock_get_freq)
+    mock_get_freq.return_value = 3
+
+    # proactive_notification.get_llm -> mock_llm_mini (so the real evaluate_relevance /
+    # generate_notification / validate_notification / evaluate_proactive_notification
+    # use it when tests configure mock_llm_mini.with_structured_output).
+    monkeypatch.setattr(pn_mod, 'get_llm', MagicMock(return_value=mock_llm_mini))
+    # utils.llm.clients.get_llm -> fresh chain mock for _process_proactive_notification's
+    # in-function `from utils.llm.clients import get_llm`.
+    monkeypatch.setattr(llm_clients_mod, 'get_llm', MagicMock())
+
+    # app_integrations local bindings (from X import Y).
+    monkeypatch.setattr(app_int, 'get_user_goals', mock_get_user_goals)
+    monkeypatch.setattr(app_int, 'get_prompt_memories', mock_get_prompt_memories)
+    monkeypatch.setattr(app_int, 'get_app_messages', mock_get_app_messages)
+    monkeypatch.setattr(app_int, 'get_user_language_preference', mock_get_user_language)
+    monkeypatch.setattr(app_int, 'generate_embedding', mock_generate_embedding)
+    monkeypatch.setattr(app_int, 'query_vectors_by_metadata', mock_query_vectors)
+    monkeypatch.setattr(app_int, 'conversations_to_string', mock_convos_to_string)
+    monkeypatch.setattr(app_int, 'deserialize_conversations', mock_deserialize_convos)
+    monkeypatch.setattr(app_int, 'get_available_apps', mock_get_available_apps)
+    monkeypatch.setattr(app_int, 'is_trial_paywalled', mock_is_trial_paywalled)
+    monkeypatch.setattr(app_int, 'send_notification', mock_send_notification)
+    monkeypatch.setattr(app_int, 'incr_daily_notification_count', redis_mod.incr_daily_notification_count)
+    monkeypatch.setattr(app_int, 'get_daily_notification_count', redis_mod.get_daily_notification_count)
+    monkeypatch.setattr(app_int, 'delete_app_cache_by_id', redis_mod.delete_app_cache_by_id)
+    monkeypatch.setattr(app_int, 'NotificationMessage', MagicMock())
+    monkeypatch.setattr(app_int, 'Conversation', MagicMock())
+    monkeypatch.setattr(app_int, 'ConversationSource', MagicMock())
+    monkeypatch.setattr(app_int, 'Message', MagicMock())
+    monkeypatch.setattr(app_int, 'get_app_by_id_db', MagicMock(return_value=None))
+    monkeypatch.setattr(app_int, 'record_app_usage', MagicMock())
+    monkeypatch.setattr(app_int, 'add_app_message', MagicMock())
+    monkeypatch.setattr(app_int, 'record_app_webhook_failure', MagicMock(return_value=0))
+    monkeypatch.setattr(app_int, 'record_app_webhook_success', MagicMock())
+    monkeypatch.setattr(app_int, 'is_app_webhook_disabled', MagicMock(return_value=False))
+    monkeypatch.setattr(app_int, 'disable_app_in_firestore', MagicMock())
+    monkeypatch.setattr(app_int, 'track_usage', _null_context)
+    monkeypatch.setattr(app_int, 'Features', MagicMock())
+
+    # Module-reference targets inside app_integrations (mem_db / redis_db /
+    # conversations_db / dev_api_key_db). The same mock objects back redis_mod/mem_mod.
+    monkeypatch.setattr(_mem_db_module, 'get_proactive_noti_sent_at', mem_mod.get_proactive_noti_sent_at)
+    monkeypatch.setattr(_mem_db_module, 'set_proactive_noti_sent_at', mem_mod.set_proactive_noti_sent_at)
+    monkeypatch.setattr(_redis_db_module, 'get_proactive_noti_sent_at', redis_mod.get_proactive_noti_sent_at)
+    monkeypatch.setattr(_redis_db_module, 'set_proactive_noti_sent_at', redis_mod.set_proactive_noti_sent_at)
+    monkeypatch.setattr(_redis_db_module, 'get_proactive_noti_sent_at_ttl', redis_mod.get_proactive_noti_sent_at_ttl)
+    monkeypatch.setattr(_redis_db_module, 'incr_daily_notification_count', redis_mod.incr_daily_notification_count)
+    monkeypatch.setattr(_redis_db_module, 'get_daily_notification_count', redis_mod.get_daily_notification_count)
+    monkeypatch.setattr(_redis_db_module, 'delete_app_cache_by_id', redis_mod.delete_app_cache_by_id)
+    monkeypatch.setattr(conversations_db, 'get_conversations_by_id', mock_get_convos_by_id)
+    monkeypatch.setattr(conversations_db, 'get_conversations', mock_get_convos)
+    monkeypatch.setattr(dev_api_key_db, 'get_dev_keys_for_user', mock_get_dev_keys)
+
+    yield
 
 
 def _setup_app_integrations_stubs():
-    """Stub all app_integrations dependencies so it can be imported in tests."""
-    apps_mod = sys.modules.get("database.apps") or _stub_module("database.apps")
-    apps_mod.get_app_by_id_db = MagicMock(return_value=None)
-    apps_mod.record_app_usage = MagicMock()
-    chat_db_mod = sys.modules.get("database.chat") or _stub_module("database.chat")
-    chat_db_mod.add_app_message = MagicMock()
-    chat_db_mod.get_app_messages = MagicMock(return_value=[])
-
-    vec_mod = sys.modules.get("database.vector_db") or _stub_module("database.vector_db")
-    vec_mod.query_vectors_by_metadata = MagicMock(return_value=[])
-    conv_db_mod = sys.modules.get("database.conversations") or _stub_module("database.conversations")
-    conv_db_mod.get_conversations_by_id = MagicMock(return_value=[])
-    conv_db_mod.get_conversations = MagicMock(return_value=[])
-    users_db_mod = sys.modules.get("database.users") or _stub_module("database.users")
-    users_db_mod.get_user_language_preference = MagicMock(return_value='en')
-
-    noti_msg_mod = _stub_module("models.notification_message")
-    mock_noti_msg = MagicMock()
-    mock_noti_msg.get_message_as_dict = MagicMock(return_value={})
-    noti_msg_mod.NotificationMessage = mock_noti_msg
-
-    conv_mod = sys.modules.get("models.conversation") or _stub_module("models.conversation")
-    if not hasattr(conv_mod, 'Conversation'):
-        conv_mod.Conversation = MagicMock()
-    if not hasattr(conv_mod, 'ConversationSource'):
-        conv_mod.ConversationSource = MagicMock()
-
-    chat_mod = sys.modules.get("models.chat") or _stub_module("models.chat")
-    if not hasattr(chat_mod, 'Message'):
-        chat_mod.Message = MagicMock()
-
-    apps_util_mod = _stub_module("utils.apps")
-    apps_util_mod.get_available_apps = MagicMock(return_value=[])
-
-    subscription_mod = _stub_module("utils.subscription")
-    subscription_mod.is_trial_paywalled = MagicMock(return_value=False)
-
-    notifications_util_mod = _stub_module("utils.notifications")
-    mock_send = MagicMock()
-    notifications_util_mod.send_notification = mock_send
-
-    redis_mod.delete_app_cache_by_id = MagicMock()
-
-    webhook_health_mod = sys.modules.get("database.webhook_health") or _stub_module("database.webhook_health")
-    webhook_health_mod.record_app_webhook_failure = MagicMock(return_value=0)
-    webhook_health_mod.record_app_webhook_success = MagicMock()
-    webhook_health_mod.is_app_webhook_disabled = MagicMock(return_value=False)
-    webhook_health_mod.disable_app_in_firestore = MagicMock()
-
-    # Ensure database.notifications has get_mentor_notification_frequency for app_integrations import
-    noti_db_mod = sys.modules.get("database.notifications") or _stub_module("database.notifications")
-    if not hasattr(noti_db_mod, 'get_mentor_notification_frequency'):
-        noti_db_mod.get_mentor_notification_frequency = MagicMock(return_value=3)
-
-    # Remove any stale stub so the real module loads
-    if "utils.llm.proactive_notification" in sys.modules:
-        real_mod = sys.modules["utils.llm.proactive_notification"]
-        if not hasattr(real_mod, 'ProactiveAdvice'):
-            del sys.modules["utils.llm.proactive_notification"]
-
-    return mock_send
+    """Reset the app_integrations-runtime shared mocks to a clean default state."""
+    mock_send_notification.reset_mock()
+    mock_get_dev_keys.reset_mock()
+    mock_get_dev_keys.return_value = []
+    mock_get_freq.return_value = 3
+    redis_mod.get_proactive_noti_sent_at.return_value = None
+    redis_mod.set_proactive_noti_sent_at.reset_mock()
+    redis_mod.get_daily_notification_count.return_value = 0
+    redis_mod.incr_daily_notification_count.reset_mock()
+    mem_mod.get_proactive_noti_sent_at.return_value = None
+    mem_mod.set_proactive_noti_sent_at.reset_mock()
+    return mock_send_notification
 
 
 def _make_segments(count: int) -> list:
@@ -289,8 +283,6 @@ def test_no_extract_topics_in_mentor():
 
 def test_message_buffer_creates_session():
     """MessageBuffer should create a new session buffer."""
-    from utils.mentor_notifications import MessageBuffer
-
     buf = MessageBuffer()
     data = buf.get_buffer("session_1")
     assert data['messages'] == []
@@ -301,8 +293,6 @@ def test_message_buffer_creates_session():
 
 def test_message_buffer_silence_detection():
     """MessageBuffer should detect silence after threshold."""
-    from utils.mentor_notifications import MessageBuffer
-
     buf = MessageBuffer()
     buf.silence_threshold = 0.1  # Very short for testing
 
@@ -317,8 +307,6 @@ def test_message_buffer_silence_detection():
 
 def test_message_buffer_cleanup():
     """MessageBuffer cleanup should remove old sessions."""
-    from utils.mentor_notifications import MessageBuffer
-
     buf = MessageBuffer()
     buf.buffers["old_session"] = {
         'messages': [],
@@ -337,8 +325,6 @@ def test_message_buffer_cleanup():
 
 def test_process_mentor_notification_returns_list():
     """process_mentor_notification should return a list of message dicts when enough segments accumulate."""
-    from utils.mentor_notifications import process_mentor_notification, message_buffer
-
     message_buffer.buffers.clear()
 
     # Need 10+ segments to trigger (MIN_NEW_SEGMENTS_FOR_ANALYSIS = 10)
@@ -357,9 +343,7 @@ def test_process_mentor_notification_returns_list():
 
 def test_process_mentor_notification_disabled():
     """process_mentor_notification returns None when frequency is 0."""
-    sys.modules["database.notifications"].get_mentor_notification_frequency.return_value = 0
-
-    from utils.mentor_notifications import process_mentor_notification, message_buffer
+    notifications_db.get_mentor_notification_frequency.return_value = 0
 
     message_buffer.buffers.clear()
 
@@ -369,13 +353,11 @@ def test_process_mentor_notification_disabled():
     assert result is None
 
     # Reset
-    sys.modules["database.notifications"].get_mentor_notification_frequency.return_value = 3
+    notifications_db.get_mentor_notification_frequency.return_value = 3
 
 
 def test_process_mentor_notification_not_enough_segments():
     """process_mentor_notification returns None with insufficient segments."""
-    from utils.mentor_notifications import process_mentor_notification, message_buffer
-
     message_buffer.buffers.clear()
 
     segments = [
@@ -388,8 +370,6 @@ def test_process_mentor_notification_not_enough_segments():
 
 def test_process_mentor_notification_accumulates():
     """process_mentor_notification should accumulate across calls and not clear on evaluation."""
-    from utils.mentor_notifications import process_mentor_notification, message_buffer
-
     message_buffer.buffers.clear()
 
     # First batch: 5 segments (not enough)
@@ -411,8 +391,6 @@ def test_process_mentor_notification_accumulates():
 
 def test_process_mentor_notification_no_prompt_or_triggers():
     """process_mentor_notification result should NOT have prompt/triggers/params keys."""
-    from utils.mentor_notifications import process_mentor_notification, message_buffer
-
     message_buffer.buffers.clear()
 
     segments = _make_segments(12)
@@ -429,8 +407,6 @@ def test_process_mentor_notification_no_prompt_or_triggers():
 
 def test_evaluate_relevance():
     """evaluate_relevance should return RelevanceResult."""
-    from utils.llm.proactive_notification import RelevanceResult, evaluate_relevance
-
     mock_result = RelevanceResult(
         is_relevant=True,
         relevance_score=0.85,
@@ -457,8 +433,6 @@ def test_evaluate_relevance():
 
 def test_evaluate_relevance_rejects():
     """evaluate_relevance should return is_relevant=False for generic conversation."""
-    from utils.llm.proactive_notification import RelevanceResult, evaluate_relevance
-
     mock_result = RelevanceResult(
         is_relevant=False,
         relevance_score=0.20,
@@ -484,8 +458,6 @@ def test_evaluate_relevance_rejects():
 
 def test_generate_notification():
     """generate_notification should return NotificationDraft."""
-    from utils.llm.proactive_notification import NotificationDraft, generate_notification
-
     mock_result = NotificationDraft(
         notification_text="Their offer is 30% below market — push back on valuation",
         reasoning="User's Series A target is $10M but the offer discussed is $7M.",
@@ -514,8 +486,6 @@ def test_generate_notification():
 
 def test_validate_notification_approves():
     """validate_notification should approve high-quality notifications."""
-    from utils.llm.proactive_notification import ValidationResult, validate_notification
-
     mock_result = ValidationResult(
         approved=True,
         reasoning="This is genuinely useful — user would miss this valuation gap.",
@@ -538,8 +508,6 @@ def test_validate_notification_approves():
 
 def test_validate_notification_rejects():
     """validate_notification should reject low-quality notifications."""
-    from utils.llm.proactive_notification import ValidationResult, validate_notification
-
     mock_result = ValidationResult(
         approved=False,
         reasoning="This is just restating what the user already knows.",
@@ -565,12 +533,6 @@ def test_validate_notification_rejects():
 
 def test_evaluate_proactive_notification_with_advice():
     """evaluate_proactive_notification should return structured result with advice."""
-    from utils.llm.proactive_notification import (
-        ProactiveAdvice,
-        ProactiveNotificationResult,
-        evaluate_proactive_notification,
-    )
-
     mock_result = ProactiveNotificationResult(
         has_advice=True,
         advice=ProactiveAdvice(
@@ -604,8 +566,6 @@ def test_evaluate_proactive_notification_with_advice():
 
 def test_evaluate_proactive_notification_no_advice():
     """evaluate_proactive_notification should return has_advice=False for generic context."""
-    from utils.llm.proactive_notification import ProactiveNotificationResult, evaluate_proactive_notification
-
     mock_result = ProactiveNotificationResult(
         has_advice=False,
         advice=None,
@@ -636,8 +596,6 @@ def test_evaluate_proactive_notification_no_advice():
 def test_process_mentor_proactive_notification_sends():
     """_process_mentor_proactive_notification should send notification when all 3 steps pass."""
     mock_send = _setup_app_integrations_stubs()
-
-    from utils.llm.proactive_notification import RelevanceResult, NotificationDraft, ValidationResult
 
     # Mock the 3 sequential LLM calls
     gate_result = RelevanceResult(
@@ -674,11 +632,6 @@ def test_process_mentor_proactive_notification_sends():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 0
 
-    # Force reimport to pick up stubs
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
     messages = [
         {"text": "I'll skip the gym today", "is_user": True},
         {"text": "You sure?", "is_user": False},
@@ -696,8 +649,6 @@ def test_process_mentor_proactive_notification_gate_rejects():
     """_process_mentor_proactive_notification should return None when gate rejects."""
     _setup_app_integrations_stubs()
 
-    from utils.llm.proactive_notification import RelevanceResult
-
     gate_result = RelevanceResult(
         is_relevant=False,
         relevance_score=0.20,
@@ -713,10 +664,6 @@ def test_process_mentor_proactive_notification_gate_rejects():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 0
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
     messages = [{"text": "Just chatting about the weather", "is_user": True}]
     result = app_int._process_mentor_proactive_notification("test_uid_gate", messages)
 
@@ -726,8 +673,6 @@ def test_process_mentor_proactive_notification_gate_rejects():
 def test_process_mentor_proactive_notification_critic_rejects():
     """_process_mentor_proactive_notification should return None when critic rejects."""
     _setup_app_integrations_stubs()
-
-    from utils.llm.proactive_notification import RelevanceResult, NotificationDraft, ValidationResult
 
     gate_result = RelevanceResult(
         is_relevant=True,
@@ -761,10 +706,6 @@ def test_process_mentor_proactive_notification_critic_rejects():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 0
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
     messages = [{"text": "Working on stuff", "is_user": True}]
     result = app_int._process_mentor_proactive_notification("test_uid_critic", messages)
 
@@ -778,10 +719,6 @@ def test_process_mentor_proactive_notification_rate_limited():
     # Set rate limit as hit
     mem_mod.get_proactive_noti_sent_at.return_value = int(time.time())  # Just sent
     redis_mod.get_proactive_noti_sent_at.return_value = None
-
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
 
     messages = [{"text": "test", "is_user": True}]
     result = app_int._process_mentor_proactive_notification("test_uid_rl", messages)
@@ -800,10 +737,6 @@ def test_process_mentor_proactive_notification_daily_cap():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 12  # At cap
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
     messages = [{"text": "test", "is_user": True}]
     result = app_int._process_mentor_proactive_notification("test_uid_cap", messages)
 
@@ -816,8 +749,6 @@ def test_process_mentor_proactive_notification_daily_cap():
 def test_process_mentor_proactive_notification_below_threshold():
     """_process_mentor_proactive_notification should reject when gate score below threshold."""
     _setup_app_integrations_stubs()
-
-    from utils.llm.proactive_notification import RelevanceResult
 
     # Gate passes is_relevant=True but score is below threshold for frequency 3 (0.78)
     gate_result = RelevanceResult(
@@ -835,10 +766,6 @@ def test_process_mentor_proactive_notification_below_threshold():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 0
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
     messages = [
         {"text": "Just chatting", "is_user": True},
         {"text": "Cool", "is_user": False},
@@ -854,11 +781,7 @@ def test_process_mentor_proactive_notification_disabled():
     """_process_mentor_proactive_notification should return None when frequency is 0."""
     _setup_app_integrations_stubs()
 
-    sys.modules["database.notifications"].get_mentor_notification_frequency.return_value = 0
-
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
+    notifications_db.get_mentor_notification_frequency.return_value = 0
 
     messages = [{"text": "test", "is_user": True}]
     result = app_int._process_mentor_proactive_notification("test_uid_off", messages)
@@ -866,7 +789,7 @@ def test_process_mentor_proactive_notification_disabled():
     assert result is None
 
     # Reset
-    sys.modules["database.notifications"].get_mentor_notification_frequency.return_value = 3
+    notifications_db.get_mentor_notification_frequency.return_value = 3
 
 
 # ── Frequency threshold tests ──
@@ -874,8 +797,6 @@ def test_process_mentor_proactive_notification_disabled():
 
 def test_frequency_thresholds():
     """FREQUENCY_TO_BASE_THRESHOLD should have correct values."""
-    from utils.llm.proactive_notification import FREQUENCY_TO_BASE_THRESHOLD
-
     assert FREQUENCY_TO_BASE_THRESHOLD[0] is None
     assert FREQUENCY_TO_BASE_THRESHOLD[1] == 0.92
     assert FREQUENCY_TO_BASE_THRESHOLD[2] == 0.85
@@ -886,20 +807,14 @@ def test_frequency_thresholds():
 
 def test_max_daily_notifications():
     """MAX_DAILY_NOTIFICATIONS defaults under 10 (the #4859 target) and is env-tunable."""
-    from utils.llm.proactive_notification import MAX_DAILY_NOTIFICATIONS
-
     assert MAX_DAILY_NOTIFICATIONS == 9
     assert MAX_DAILY_NOTIFICATIONS < 10
 
 
 def _fresh_app_integrations():
     _setup_app_integrations_stubs()
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
     # The developer-status cache lives in utils.dev_cache, which persists across
-    # re-imports of app_integrations, so clear it for test isolation.
+    # tests, so clear it for test isolation.
     app_int.dev_cache._DEV_STATUS_CACHE.clear()
     return app_int
 
@@ -907,7 +822,7 @@ def _fresh_app_integrations():
 def test_is_developer_detection():
     """A user with any developer API key is a developer; a lookup error fails closed."""
     app_int = _fresh_app_integrations()
-    dev_mod = sys.modules["database.dev_api_key"]
+    dev_mod = dev_api_key_db
 
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
     assert app_int._is_developer("u") is False
@@ -926,7 +841,7 @@ def test_is_developer_detection():
 def test_is_developer_is_cached():
     """The developer lookup is cached, so a second cap check does not re-hit the DB."""
     app_int = _fresh_app_integrations()
-    dev_mod = sys.modules["database.dev_api_key"]
+    dev_mod = dev_api_key_db
     app_int.dev_cache._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
 
@@ -938,7 +853,7 @@ def test_is_developer_is_cached():
 def test_invalidate_developer_cache_takes_effect_immediately():
     """Invalidating after a key change forces the next check to re-read, not serve stale status."""
     app_int = _fresh_app_integrations()
-    dev_mod = sys.modules["database.dev_api_key"]
+    dev_mod = dev_api_key_db
     app_int.dev_cache._DEV_STATUS_CACHE.clear()
 
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
@@ -953,25 +868,23 @@ def test_invalidate_developer_cache_takes_effect_immediately():
 
 def test_resolve_daily_cap_bounds():
     """The env override is clamped: invalid falls back to the default, and 0/huge are bounded."""
-    import utils.llm.proactive_notification as pn
-
-    assert pn._resolve_daily_cap(default=9) == 9  # env unset in tests
-    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "0"}):
-        assert pn._resolve_daily_cap(default=9, minimum=1) == 1  # cannot silently disable
-    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "-5"}):
-        assert pn._resolve_daily_cap(default=9, minimum=1) == 1
-    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "999999"}):
-        assert pn._resolve_daily_cap(default=9, maximum=1000) == 1000  # cannot remove throttling
-    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "not-an-int"}):
-        assert pn._resolve_daily_cap(default=9) == 9  # falls back
-    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "6"}):
-        assert pn._resolve_daily_cap(default=9) == 6  # valid override honored
+    assert pn_mod._resolve_daily_cap(default=9) == 9  # env unset in tests
+    with patch.dict("os.environ", {"MAX_DAILY_NOTIFICATIONS": "0"}):
+        assert pn_mod._resolve_daily_cap(default=9, minimum=1) == 1  # cannot silently disable
+    with patch.dict("os.environ", {"MAX_DAILY_NOTIFICATIONS": "-5"}):
+        assert pn_mod._resolve_daily_cap(default=9, minimum=1) == 1
+    with patch.dict("os.environ", {"MAX_DAILY_NOTIFICATIONS": "999999"}):
+        assert pn_mod._resolve_daily_cap(default=9, maximum=1000) == 1000  # cannot remove throttling
+    with patch.dict("os.environ", {"MAX_DAILY_NOTIFICATIONS": "not-an-int"}):
+        assert pn_mod._resolve_daily_cap(default=9) == 9  # falls back
+    with patch.dict("os.environ", {"MAX_DAILY_NOTIFICATIONS": "6"}):
+        assert pn_mod._resolve_daily_cap(default=9) == 6  # valid override honored
 
 
 def test_proactive_daily_cap_helper():
     """The shared cap triggers at/above MAX_DAILY_NOTIFICATIONS, and developers are exempt (#3346)."""
     app_int = _fresh_app_integrations()
-    dev_mod = sys.modules["database.dev_api_key"]
+    dev_mod = dev_api_key_db
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
 
     redis_mod.get_daily_notification_count.return_value = 0
@@ -997,7 +910,7 @@ def test_app_proactive_notification_respects_daily_cap():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 9  # at the default cap
     redis_mod.incr_daily_notification_count.reset_mock()
-    sys.modules["database.dev_api_key"].get_dev_keys_for_user = MagicMock(return_value=[])
+    dev_api_key_db.get_dev_keys_for_user = MagicMock(return_value=[])
 
     app = MagicMock()
     app.has_capability.return_value = True
@@ -1018,8 +931,8 @@ def test_app_proactive_notification_increments_shared_budget():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 0  # under cap
     redis_mod.incr_daily_notification_count.reset_mock()
-    sys.modules["database.dev_api_key"].get_dev_keys_for_user = MagicMock(return_value=[])
-    sys.modules["utils.llm.clients"].get_llm.return_value.invoke.return_value.content = "Here is a useful nudge."
+    dev_api_key_db.get_dev_keys_for_user = MagicMock(return_value=[])
+    llm_clients_mod.get_llm.return_value.invoke.return_value.content = "Here is a useful nudge."
 
     app = MagicMock()
     app.has_capability.return_value = True
@@ -1035,8 +948,6 @@ def test_app_proactive_notification_increments_shared_budget():
 
 def test_frequency_guidance_all_levels():
     """FREQUENCY_GUIDANCE should have entries for levels 1-5."""
-    from utils.llm.proactive_notification import FREQUENCY_GUIDANCE
-
     for level in range(1, 6):
         assert level in FREQUENCY_GUIDANCE
         assert isinstance(FREQUENCY_GUIDANCE[level], str)
@@ -1048,8 +959,6 @@ def test_frequency_guidance_all_levels():
 
 def test_proactive_advice_model():
     """ProactiveAdvice should validate correctly."""
-    from utils.llm.proactive_notification import ProactiveAdvice
-
     advice = ProactiveAdvice(
         notification_text="Test notification",
         reasoning="User's goal X connects to current conversation Y",
@@ -1062,8 +971,6 @@ def test_proactive_advice_model():
 
 def test_proactive_notification_result_model():
     """ProactiveNotificationResult should validate correctly."""
-    from utils.llm.proactive_notification import ProactiveNotificationResult
-
     result = ProactiveNotificationResult(
         has_advice=False,
         advice=None,
@@ -1076,8 +983,6 @@ def test_proactive_notification_result_model():
 
 def test_relevance_result_model():
     """RelevanceResult should validate correctly."""
-    from utils.llm.proactive_notification import RelevanceResult
-
     result = RelevanceResult(
         is_relevant=True,
         relevance_score=0.88,
@@ -1090,8 +995,6 @@ def test_relevance_result_model():
 
 def test_notification_draft_model():
     """NotificationDraft should validate correctly."""
-    from utils.llm.proactive_notification import NotificationDraft
-
     draft = NotificationDraft(
         notification_text="Push back on the $7M offer",
         reasoning="Target was $10M.",
@@ -1105,8 +1008,6 @@ def test_notification_draft_model():
 
 def test_validation_result_model():
     """ValidationResult should validate correctly."""
-    from utils.llm.proactive_notification import ValidationResult
-
     result = ValidationResult(
         approved=True,
         reasoning="This would genuinely help the user.",
