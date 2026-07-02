@@ -245,6 +245,15 @@ def _record_import_scope_stmt(
             _record_import_scope_stmt(stmt, aliases, eval_annotations, out)
         return
 
+    if isinstance(node, ast.AnnAssign):
+        # The assigned value executes at import/class-body time. The annotation
+        # expression only executes when postponed annotations are not enabled.
+        if node.value is not None:
+            _record_offenders_in_expr(node.value, aliases, out)
+        if eval_annotations:
+            _record_offenders_in_expr(node.annotation, aliases, out)
+        return
+
     _record_offenders_in_expr(node, aliases, out)
 
 
