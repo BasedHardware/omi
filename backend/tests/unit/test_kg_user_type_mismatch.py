@@ -222,6 +222,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "utils.memory.memory_system",
         "utils.memory.memory_system_pin",
         "utils.memory.canonical_memory_adapter",
+        "utils.memory.memory_api_contract",
         "utils.executors",
     ]:
         add(name)
