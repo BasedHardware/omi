@@ -246,85 +246,47 @@ class TestBearerAuth:
         # (≈ 120 since the fake clock doesn't advance).
         assert 100 <= data["rate_limit"]["seconds_until_next_slot"] <= 120
 
-    def test_status_messages_sent_today_counts_ai_messages(self, mock_app):
+    def test_status_messages_sent_today_reflects_successful_sends(self, mock_app, monkeypatch):
         # plan §8: daily "messages sent today" counter. The
-        # endpoint computes the count from simple_storage's
-        # chat ring buffers, counting role == "ai" messages
-        # with a timestamp >= today's UTC midnight.
-        import time
-        import simple_storage
-        from datetime import datetime, timezone
+        # endpoint reports the in-memory daily counter on
+        # RateLimit (NOT the per-chat ring buffer, which is
+        # bounded by CHAT_HISTORY_MAX and undercounts on
+        # very active chats -- cubic 4618627789 P2). The
+        # daily counter is exact, monotonic since local-time
+        # midnight, and bumped by record_send() on every
+        # successful outbound send.
+        import flood_control
 
-        now = datetime.now(timezone.utc)
-        midnight_ts = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-
-        simple_storage.chats.clear()
-        simple_storage.chats["c1"] = {
-            "chat_id": "c1",
-            "recent_messages": [
-                {"role": "ai", "text": "m1", "ts": midnight_ts + 100},
-                {"role": "ai", "text": "m2", "ts": midnight_ts + 200},
-                {"role": "human", "text": "m3", "ts": midnight_ts + 300},
-                {"role": "ai", "text": "old", "ts": midnight_ts - 1000},
-                {"role": "ai", "text": "no-ts"},
-            ],
-        }
+        rl = flood_control.RateLimit(max_per_hour=1000)
+        for _ in range(2):
+            rl.record_send()
+        monkeypatch.setattr(flood_control, "default_rate_limit", rl, raising=False)
         client, _, _ = mock_app
         r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
         assert r.status_code == 200
-        # 2 ai messages today (m1, m2). The "old" one is
-        # before midnight. The "no-ts" one is excluded
-        # (no timestamp = no day attribution). The "human"
-        # one is excluded (we count AI sends only).
         assert r.json()["messages_sent_today"] == 2
 
-    def test_status_messages_sent_today_is_bounded_by_ring_buffer(self, mock_app):
-        # cubic review 4618627789 P2: the daily counter is
-        # BEST-EFFORT and bounded by the per-chat ring buffer
-        # (CHAT_HISTORY_MAX = 10). When a chat exceeds that,
-        # older entries are evicted, so the count undercounts
-        # on very active chats. This test pins the bounded
-        # behavior: a chat with 15 ai messages today will
-        # report at most CHAT_HISTORY_MAX (10) messages,
-        # not 15. The contract is "do not overcount" -- the
-        # undercount is a known limitation documented in the
-        # /status docstring.
-        import simple_storage
-        from datetime import datetime, timezone
+    def test_status_messages_sent_today_is_exact_not_bounded(self, mock_app, monkeypatch):
+        # cubic review 4618627789 P2: the previous counter
+        # was bounded by the per-chat ring buffer
+        # (CHAT_HISTORY_MAX = 10) and undercounted on very
+        # active chats. The fix moves the source of truth
+        # to flood_control.default_rate_limit.daily_count(),
+        # which is an exact in-memory monotonic counter that
+        # resets on local-time day rollover. This test pins
+        # the new "exact, not bounded" contract: 15 record_send
+        # calls produce 15 in messages_sent_today, regardless
+        # of per-chat buffer state.
+        import flood_control
 
-        now = datetime.now(timezone.utc)
-        midnight_ts = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-        # Seed 15 messages today, well over CHAT_HISTORY_MAX
-        # (which is 10 in simple_storage). The ring buffer
-        # evicts older entries; the counter only sees the
-        # remaining in-buffer ones.
-        simple_storage.chats.clear()
-        # Manually build a buffer with all 15 entries, but
-        # the ring-buffer cap is enforced at append_message
-        # time. For this test, the *raw* chat dict has all
-        # 15 -- which is the actual undercount risk if a
-        # future change accidentally drops the cap.
-        # Pin that the counter reports the actual length
-        # (15), not a magic value.
-        simple_storage.chats["c1"] = {
-            "chat_id": "c1",
-            "recent_messages": [{"role": "ai", "text": f"m{i}", "ts": midnight_ts + 100 + i} for i in range(15)],
-        }
+        rl = flood_control.RateLimit(max_per_hour=1000)
+        for _ in range(15):
+            rl.record_send()
+        monkeypatch.setattr(flood_control, "default_rate_limit", rl, raising=False)
         client, _, _ = mock_app
         r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
         assert r.status_code == 200
-        # The count is whatever's in the buffer at read time.
-        # If the buffer were capped at append time, this would
-        # be 10. The test pins "no overcount" (i.e. we don't
-        # double-count or extrapolate).
         assert r.json()["messages_sent_today"] == 15
-        # Now drop the buffer down to CHAT_HISTORY_MAX and
-        # verify the count drops with it. This documents the
-        # bounded behavior: the count is at most what the
-        # buffer holds.
-        simple_storage.chats["c1"]["recent_messages"] = simple_storage.chats["c1"]["recent_messages"][-10:]
-        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
-        assert r.json()["messages_sent_today"] == 10
 
     def test_recent_messages_requires_bearer(self, mock_app):
         client, _, _ = mock_app

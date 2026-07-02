@@ -35,6 +35,7 @@ from __future__ import annotations
 import os
 import time
 from collections import deque
+from datetime import date
 from threading import Lock
 from typing import Optional
 
@@ -71,10 +72,14 @@ class RateLimit:
         max_per_hour: int = MAX_PER_HOUR,
         window_seconds: int = WINDOW_SECONDS,
         clock: Optional[callable] = None,  # for tests
+        wall_clock: Optional[callable] = None,  # for tests
     ) -> None:
         self.max_per_hour = max_per_hour
         self.window_seconds = window_seconds
         self._now = clock or time.monotonic
+        # Wall clock for the daily counter. In production this
+        # is time.localtime; tests inject a fixed return.
+        self._wall_clock = wall_clock or time.localtime
         self._send_times: "deque[float]" = deque()
         # cubic review 4617059500 P1: external cooldown
         # timestamp. While self._blocked_until > self._now(),
@@ -84,6 +89,18 @@ class RateLimit:
         # tokens on the persona call) for the duration Telegram
         # requested.
         self._blocked_until: float = 0.0
+        # Daily counter for plan §8 "messages sent today" --
+        # monotonic, resets on local-time day rollover. This
+        # complements the in-memory rolling-window cap (which
+        # is exact but covers only 60 min) and the simple_storage
+        # ring buffer (which is durable but bounded by
+        # CHAT_HISTORY_MAX = 10 per chat). The exact daily
+        # count lives in process memory; plugin restarts reset
+        # it. Cubic review 4618627789 P2: better to expose
+        # an EXACT in-memory daily counter than to read a
+        # bounded undercounting source from simple_storage.
+        self._daily_count: int = 0
+        self._daily_date: Optional[date] = None
         self._lock = Lock()
 
     def _trim(self, now: float) -> None:
@@ -120,10 +137,27 @@ class RateLimit:
             return len(self._send_times) < self.max_per_hour
 
     def record_send(self, now: Optional[float] = None) -> None:
+        """Record a successful outbound send. Called AFTER send
+        success -- failed sends do NOT consume the budget.
+        Also bumps the in-memory daily counter (plan §8
+        "messages sent today"). The daily counter resets on
+        local-time day rollover.
+        """
         with self._lock:
             now = self._now() if now is None else now
             self._trim(now)
             self._send_times.append(now)
+            self._bump_daily_locked()
+
+    def _bump_daily_locked(self) -> None:
+        """Increment the daily counter, resetting on day
+        rollover. Caller must hold self._lock.
+        """
+        today = date(*self._wall_clock()[:3])
+        if self._daily_date != today:
+            self._daily_date = today
+            self._daily_count = 0
+        self._daily_count += 1
 
     def seconds_until_next_slot(self) -> int:
         """If the limit is hit, how many seconds until a slot is
@@ -150,6 +184,23 @@ class RateLimit:
         with self._lock:
             self._trim(self._now())
             return len(self._send_times)
+
+    def daily_count(self) -> int:
+        """Number of successful sends since the most recent
+        local-time midnight. plan §8 "messages sent today".
+        In-memory only: plugin restarts reset the counter.
+        Exact (not bounded by per-chat ring buffers).
+        """
+        with self._lock:
+            today = date(*self._wall_clock()[:3])
+            if self._daily_date != today:
+                # Day rolled over with no record_send call
+                # since midnight. Reset lazily on read so the
+                # counter shows 0 for the new day even if no
+                # send has happened yet.
+                self._daily_date = today
+                self._daily_count = 0
+            return self._daily_count
 
     def is_blocked(self) -> bool:
         """True iff an external cooldown is currently active."""

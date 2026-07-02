@@ -268,3 +268,89 @@ class TestDefaultRateLimit:
         finally:
             monkeypatch.delenv("TELEGRAM_USER_RATE_PER_HOUR", raising=False)
             importlib.reload(flood_control)
+
+
+# ---------------------------------------------------------------------------
+# Section 5: daily counter (plan §8 messages-sent-today)
+# ---------------------------------------------------------------------------
+
+
+from datetime import date as _date
+
+
+def _fixed_wall_clock(year, month, day):
+    """Build a wall_clock callable that returns a fixed
+    (year, month, day, ...) tuple. Only the date portion
+    matters for the daily counter.
+    """
+
+    def _wall():
+        return (year, month, day, 0, 0, 0, 0, 0, 0)
+
+    return _wall
+
+
+class TestDailyCounter:
+    def test_starts_at_zero(self):
+        rl = flood_control.RateLimit(
+            max_per_hour=10,
+            wall_clock=_fixed_wall_clock(2026, 7, 2),
+        )
+        assert rl.daily_count() == 0
+
+    def test_record_send_bumps_daily_count(self):
+        rl = flood_control.RateLimit(
+            max_per_hour=10,
+            wall_clock=_fixed_wall_clock(2026, 7, 2),
+        )
+        rl.record_send()
+        rl.record_send()
+        rl.record_send()
+        assert rl.daily_count() == 3
+
+    def test_daily_count_independent_of_window(self):
+        # The daily counter survives window eviction -- unlike
+        # in_window_count which trims to the rolling 60 min.
+        # For a daily counter, we want the FULL count for the
+        # day, not just the most-recent-hour.
+        rl = flood_control.RateLimit(
+            max_per_hour=1000,  # high cap so the window doesn't trim
+            wall_clock=_fixed_wall_clock(2026, 7, 2),
+        )
+        for _ in range(50):
+            rl.record_send()
+        assert rl.daily_count() == 50
+        # in_window_count also shows 50 (cap is 1000).
+        assert rl.in_window_count() == 50
+
+    def test_day_rollover_resets_count(self):
+        # Day 1: 5 sends.
+        # Day 2: 3 more sends. The daily_count() call on day 2
+        # should report 3, not 8.
+        day1_wall = [_fixed_wall_clock(2026, 7, 2)]
+        day2_wall = [_fixed_wall_clock(2026, 7, 3)]
+        rl = flood_control.RateLimit(max_per_hour=1000, wall_clock=day1_wall[0])
+        for _ in range(5):
+            rl.record_send()
+        assert rl.daily_count() == 5
+        # Switch the wall clock to day 2.
+        rl._wall_clock = day2_wall[0]
+        # 3 more sends on day 2.
+        for _ in range(3):
+            rl.record_send()
+        # daily_count() lazily resets on rollover -- reports 3.
+        assert rl.daily_count() == 3
+
+    def test_daily_count_resets_on_read_after_rollover(self):
+        # If the clock advanced but no record_send has been
+        # called yet, daily_count() should still show 0 (lazy
+        # reset on read).
+        day1_wall = _fixed_wall_clock(2026, 7, 2)
+        day2_wall = _fixed_wall_clock(2026, 7, 3)
+        rl = flood_control.RateLimit(max_per_hour=1000, wall_clock=day1_wall)
+        for _ in range(7):
+            rl.record_send()
+        assert rl.daily_count() == 7
+        # Time advances to day 2, no new sends.
+        rl._wall_clock = day2_wall
+        assert rl.daily_count() == 0

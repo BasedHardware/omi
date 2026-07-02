@@ -225,7 +225,7 @@ async def status():
             "account_name": None,
             "device_label": None,
             "rate_limit": rl_state,
-            "messages_sent_today": _messages_sent_today(),
+            "messages_sent_today": flood_control.default_rate_limit.daily_count(),
         }
     connected = await _client.is_connected()
     return {
@@ -234,46 +234,8 @@ async def status():
         "account_name": _account_meta.get("name"),
         "device_label": _account_meta.get("device_label"),
         "rate_limit": rl_state,
-        "messages_sent_today": _messages_sent_today(),
+        "messages_sent_today": flood_control.default_rate_limit.daily_count(),
     }
-
-
-def _messages_sent_today() -> int:
-    """Best-effort count of outbound sends today (UTC day).
-
-    plan §8: "Daily 'messages sent today' counter on the
-    plugin card". Cubic review 4618627789 P2: this is a
-    BEST-EFFORT count bounded by the per-chat ring buffer
-    (CHAT_HISTORY_MAX, currently 10). When a chat exceeds
-    that, older entries are evicted -- so the daily count
-    UNDERCOUNTS on very active chats. The counter is
-    cosmetic per plan §8; do NOT use it for billing,
-    enforcement, or any load-bearing decision. A separate
-    append-only audit log would be needed for an exact count.
-
-    Counts: any message where role == "ai" with a timestamp
-    >= today's UTC midnight. Human messages and un-timestamped
-    messages are excluded.
-    """
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc)
-    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    midnight_ts = midnight.timestamp()
-    count = 0
-    for chat_id, chat in simple_storage.chats.items():
-        for msg in chat.get("recent_messages", []):
-            if msg.get("role") != "ai":
-                continue
-            ts = msg.get("ts")
-            if ts is None:
-                continue
-            try:
-                if float(ts) >= midnight_ts:
-                    count += 1
-            except (ValueError, TypeError):
-                continue
-    return count
 
 
 @app.get("/recent_messages", dependencies=[Depends(require_bearer)])
