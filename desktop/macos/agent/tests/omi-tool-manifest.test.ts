@@ -33,6 +33,7 @@ describe("omi tool manifest", () => {
       "inspect_agent_artifacts",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
+      "spawn_background_agent",
       "delegate_agent",
       "fill_cloud_connector_form",
       "spawn_agent",

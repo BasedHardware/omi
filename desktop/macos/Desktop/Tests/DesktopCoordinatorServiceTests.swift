@@ -122,14 +122,17 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("Do not read raw ids aloud."))
   }
 
-  func testPTTIsTranscriptMirroredButNotYetRoutingUnified() throws {
+  func testPTTVoiceSpawnUsesCanonicalBackgroundAgentProjection() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let pillSource = try sourceFile("FloatingControlBar/AgentPill.swift")
 
     XCTAssertTrue(chatSource.contains("func recordVoiceTurn(userText: String, assistantText: String)"))
     XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)"))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("spawnFromUserQuery"))
+    XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.spawnBackgroundAgent("))
+    XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }
 
   func testPTTSeedsFreshRealtimeSessionsWithTopLevelConversationContext() throws {

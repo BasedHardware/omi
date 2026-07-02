@@ -7,7 +7,7 @@ import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
 import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
-const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"]);
+const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
@@ -209,6 +209,23 @@ const sendAgentMessageSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
+const spawnBackgroundAgentSchema = strictObject({
+  prompt: z.string().min(1),
+  title: z.string().min(1).optional(),
+  surfaceKind: z.string().min(1).default("background_agent"),
+  externalRefKind: z.string().min(1).optional(),
+  externalRefId: z.string().min(1).optional(),
+  ownerId: z.string().min(1).optional(),
+  adapterId: z.string().min(1).optional(),
+  defaultAdapterId: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  mode: runModeSchema.default("act"),
+  requestId: z.string().min(1).optional(),
+  clientId: z.string().min(1).default("omi-control-tools"),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
+
 const delegateAgentSchema = z
   .strictObject({
     mode: delegationModeSchema,
@@ -257,6 +274,7 @@ export const agentControlToolSchemas = {
   inspect_agent_artifacts: inspectAgentArtifactsSchema,
   update_agent_artifact_lifecycle: updateAgentArtifactLifecycleSchema,
   send_agent_message: sendAgentMessageSchema,
+  spawn_background_agent: spawnBackgroundAgentSchema,
   delegate_agent: delegateAgentSchema,
 } as const;
 
@@ -588,6 +606,33 @@ export async function handleAgentControlToolCall(
           adapterSessionId: result.adapterSessionId,
           terminalStatus: result.terminalStatus,
           text: result.text,
+        });
+      }
+      case "spawn_background_agent": {
+        const parsed = agentControlToolSchemas.spawn_background_agent.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `background-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? "acp";
+        const result = await context.kernel.spawnBackgroundAgent({
+          ...parsed,
+          adapterId,
+          defaultAdapterId: adapterId,
+          ownerId,
+          requestId,
+          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          mcpServers: buildControlRunMcpServers(context, {
+            mode: parsed.mode,
+            cwd: parsed.cwd,
+            ownerId,
+            requestId,
+            clientId: parsed.clientId,
+            adapterId,
+          }),
+        });
+        return stringifyToolResult({
+          session: serializeSession(result.session),
+          run: serializeRun(result.run),
+          attempt: result.attempt ? serializeAttempt(result.attempt) : null,
         });
       }
       case "delegate_agent": {

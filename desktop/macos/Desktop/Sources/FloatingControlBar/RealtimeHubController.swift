@@ -12,7 +12,7 @@ import Foundation
 //     (OpenAI native audio → StreamingPCMPlayer; Gemini text → AVSpeechSynthesizer),
 //   • executes the model's tool calls against EXISTING app code / endpoints:
 //       ask_higher_model → POST /v2/chat/completions (Claude, prompt-cached)
-//       spawn_agent      → AgentPillsManager.spawnFromUserQuery (AgentBridge, non-blocking)
+//       spawn_agent      → canonical background agent + floating pill projection
 //       screenshot       → ScreenCaptureManager (+ inject into the session)
 //       point_click      → local CGEvent click
 //
@@ -1123,15 +1123,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       }
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
-      // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
-      // own ChatProvider/AgentBridge. We don't await it on the voice loop.
+      // Non-blocking: spawn renders a pill projection and starts canonical
+      // background work. We don't await completion on the voice loop.
       // fromVoice:false — the hub model speaks its own natural acknowledgment, so the pill
       // must NOT also speak its canned randomAck ("on it") or we double up.
       let pill = AgentPillsManager.shared.spawnFromUserQuery(
         brief, model: model, fromVoice: false,
         preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
         bridgeHarnessOverride: directedProvider?.harnessMode)
-      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → canonical pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
       if !audioReceivedThisTurn {
         let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck

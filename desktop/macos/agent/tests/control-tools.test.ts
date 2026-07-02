@@ -56,6 +56,7 @@ describe("agent control tools", () => {
       "inspect_agent_artifacts",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
+      "spawn_background_agent",
       "delegate_agent",
     ]);
     for (const tool of agentControlToolDefinitions) {
@@ -139,7 +140,7 @@ describe("agent control tools", () => {
     expect(delegateAgent?.description).toContain("does not create or manage floating pill UI");
     expect(delegateAgent?.promptSnippet).toContain("canonical Omi child agent");
     expect(delegateAgent?.promptGuidelines).toContain(
-      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
     );
     expect(delegateAgent?.runtimePreconditions).toContain(
       "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI.",
@@ -1446,6 +1447,37 @@ describe("agent control tools", () => {
       },
     });
     expect(invalid.error.message).toContain("childSessionId");
+    store.close();
+  });
+
+  it("spawns a canonical top-level background agent without a parent run", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_background_agent", {
+        prompt: "draft a story idea",
+        title: "Story Idea",
+        externalRefKind: "pill",
+        externalRefId: "pill-1",
+        requestId: "background-1",
+        clientId: "background-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    expect(spawned.session).toMatchObject({
+      ownerId: "owner",
+      title: "Story Idea",
+      surfaceKind: "background_agent",
+      externalRefKind: "pill",
+      externalRefId: "pill-1",
+    });
+    expect(spawned.run).toMatchObject({
+      omiSessionId: spawned.session.omiSessionId,
+      parentRunId: null,
+      mode: "act",
+      status: "queued",
+    });
     store.close();
   });
 

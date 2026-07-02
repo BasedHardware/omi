@@ -49,6 +49,7 @@ export interface AgentControlManifestTool {
     | "inspect_agent_artifacts"
     | "update_agent_artifact_lifecycle"
     | "send_agent_message"
+    | "spawn_background_agent"
     | "delegate_agent";
   label: string;
   description: string;
@@ -131,7 +132,7 @@ Returns canonical Omi session IDs, latest/active run summaries, and adapter bind
       status: { type: "string", enum: ["open", "archived", "closed"] },
       surfaceKind: {
         type: "string",
-        enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"],
+        enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"],
         description: "Filter to a canonical surface kind.",
       },
       limit: { type: "number", description: "Maximum sessions to return. Default 50, max 200." },
@@ -508,6 +509,44 @@ Creates a new run in that session through the runtime kernel. Use this for multi
     required: ["sessionId", "prompt"],
   },
   {
+    name: "spawn_background_agent",
+    label: "Spawn Background Agent",
+    description: `Create a canonical Omi-managed background agent session/run without requiring a parent run.
+
+Use this for top-level chat or realtime requests that need visible background work. UI surfaces may project the returned canonical session/run into a floating pill, but the runtime remains the source of truth.`,
+    promptSnippet: "spawn_background_agent - Start a canonical top-level background agent",
+    promptGuidelines: [
+      "Use for top-level background work when there is no parent run to pass to delegate_agent.",
+      "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
+      "Do not use this to create UI-owned ChatProvider runtime state.",
+    ],
+    latency: "async background",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlManagePolicy,
+    runtimePreconditions: [
+      "Defaults ownerId to the active signed-in owner when omitted.",
+      "Creates a canonical background_agent session/run and executes it asynchronously.",
+    ],
+    timeoutClass: "long",
+    properties: {
+      prompt: { type: "string", description: "Self-contained background-agent task prompt." },
+      title: { type: "string", description: "Optional visible session title." },
+      surfaceKind: { type: "string", description: "Optional session surface kind. Default background_agent." },
+      externalRefKind: { type: "string", description: "Optional external reference kind for UI projection." },
+      externalRefId: { type: "string", description: "Optional external reference id for UI projection." },
+      ownerId: { type: "string", description: "Owner id. Defaults to the active signed-in owner." },
+      adapterId: { type: "string", description: "Optional adapter override." },
+      defaultAdapterId: { type: "string", description: "Optional session default adapter." },
+      cwd: { type: "string", description: "Optional working directory." },
+      model: { type: "string", description: "Optional model override." },
+      mode: { type: "string", enum: ["ask", "act"], description: "Run mode. Default act." },
+      requestId: { type: "string", description: "Optional caller-provided request correlation id." },
+      clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
+      metadata: { type: "object", description: "Small structured metadata for this run.", additionalProperties: true },
+    },
+    required: ["prompt"],
+  },
+  {
     name: "delegate_agent",
     label: "Delegate Agent",
     description: `Create or continue a distinct delegated child agent session linked to a parent run.
@@ -516,7 +555,7 @@ Supports call, spawn, and continue modes. Child context is intentionally minimal
     promptSnippet: "delegate_agent - Create or continue a canonical Omi child agent",
     promptGuidelines: [
       "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
-      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
       "Pass a concise objective and optional short context; do not pass full transcripts by default.",
     ],
     latency: "async background",

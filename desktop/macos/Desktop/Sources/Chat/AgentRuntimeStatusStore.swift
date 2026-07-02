@@ -22,7 +22,7 @@ struct AgentSurfaceReference: Hashable, Sendable {
   }
 
   static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
-    AgentSurfaceReference(surfaceKind: "floating_pill", externalRefKind: "pill", externalRefId: pillId.uuidString)
+    AgentSurfaceReference(surfaceKind: "background_agent", externalRefKind: "pill", externalRefId: pillId.uuidString)
   }
 }
 
@@ -156,6 +156,17 @@ final class AgentRuntimeStatusStore: ObservableObject {
 
   func recordLocalCancellation(surface: AgentSurfaceReference, message: String? = nil) {
     update(surface: surface, status: .cancelled, statusText: nil, errorMessage: message, terminal: true)
+  }
+
+  func recordAcceptedRun(surface: AgentSurfaceReference, sessionId: String, runId: String, attemptId: String?, statusText: String?) {
+    var payload: [String: Any] = [
+      "sessionId": sessionId,
+      "runId": runId,
+    ]
+    if let attemptId, !attemptId.isEmpty {
+      payload["attemptId"] = attemptId
+    }
+    update(surface: surface, status: .running, statusText: statusText, terminal: false, payload: payload)
   }
 
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {

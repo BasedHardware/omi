@@ -1093,6 +1093,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
     send_agent_message: ["sessionId", "prompt"],
+    spawn_background_agent: ["prompt"],
     delegate_agent: ["mode", "parentRunId", "objective"],
     spawn_agent: ["brief"],
     manage_agent_pills: ["action"],
@@ -1152,15 +1153,15 @@ test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfac
   assert.match(delegateAgent?.description ?? "", /does not create or manage floating pill UI/);
   assert.ok(
     delegateAgent?.promptGuidelines?.includes(
-      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
     ),
   );
 
   const spawnAgent = OMI_TOOLS.find((tool) => tool.name === "spawn_agent");
-  assert.match(spawnAgent?.description ?? "", /legacy floating-bar UI workflow/);
+  assert.match(spawnAgent?.description ?? "", /canonical Omi background work/);
   assert.ok(
     spawnAgent?.promptGuidelines?.includes(
-      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+      "Use delegate_agent instead when the new work must be linked to a known parent run.",
     ),
   );
 });

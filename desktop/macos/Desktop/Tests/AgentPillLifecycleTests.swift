@@ -4,13 +4,13 @@ import XCTest
 @testable import Omi_Computer
 
 final class AgentPillLifecycleTests: XCTestCase {
-  func testFloatingPillUsesBackgroundAgentPrompt() throws {
+  func testFloatingPillSpawnsCanonicalBackgroundAgentRun() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("You are running inside a visible floating background agent pill."))
-    XCTAssertTrue(source.contains("Do the requested work now; do not merely acknowledge"))
-    XCTAssertTrue(source.contains("systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix"))
-    XCTAssertTrue(source.contains("Do not call spawn_agent or delegate_agent just to hand off this same task."))
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnBackgroundAgent("))
+    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
+    XCTAssertTrue(source.contains("await self.pollCanonicalRun(for: pill)"))
+    XCTAssertFalse(source.contains("Self.backgroundAgentSystemPromptSuffix"))
   }
 
   func testFloatingPillPromptRemovesNestedSpawnCapabilities() throws {
@@ -824,7 +824,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let statusStoreSource = try agentRuntimeStatusStoreSource()
 
     XCTAssertTrue(source.contains("if pill.status.isFinished {\n            return\n        }"))
-    XCTAssertTrue(source.contains("guard !pill.status.isFinished || projection.status.isTerminal else { return }"))
+    XCTAssertTrue(source.contains("if pill.status.isFinished, pill.viewedAt != nil"))
     XCTAssertTrue(source.contains("let activity = Self.describeActivity(for: aiMessage)"))
     XCTAssertFalse(source.contains("AgentRuntimeStatusStore.shared.recordPresentationCompletion("))
     XCTAssertFalse(statusStoreSource.contains("func recordPresentationCompletion("))
@@ -851,10 +851,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     let logoMarkSource = try agentProviderLogoMarkSource()
     let viewSource = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = bridgeHarnessOverride != nil"))
-    XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
-    XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
-    XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
+    XCTAssertTrue(source.contains("let modelOverride = bridgeHarnessOverride == nil"))
+    XCTAssertTrue(source.contains("model: modelOverride ?? pill.model"))
+    XCTAssertTrue(source.contains("harnessMode: bridgeHarnessOverride"))
     XCTAssertTrue(viewSource.contains("AgentProviderLogoMark("))
     XCTAssertTrue(viewSource.contains("provider: pill.bridgeHarnessOverride"))
     XCTAssertTrue(logoMarkSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))

@@ -474,7 +474,7 @@ enum RealtimeHubTools {
             ],
             "surfaceKind": [
               "type": "string",
-              "enum": ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"],
+              "enum": ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"],
               "description": "Optional canonical surface filter.",
             ],
             "limit": [

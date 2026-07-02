@@ -106,6 +106,21 @@ struct DesktopCoordinatorCompletionDelta: Codable {
   let prompt: String
 }
 
+struct DesktopCoordinatorSpawnedAgent: Codable {
+  let sessionId: String
+  let runId: String
+  let attemptId: String?
+  let title: String
+}
+
+struct DesktopCoordinatorAgentRunInspection: Codable {
+  let sessionId: String?
+  let runId: String?
+  let status: String
+  let finalText: String?
+  let errorMessage: String?
+}
+
 @MainActor
 final class DesktopCoordinatorService {
   static let shared = DesktopCoordinatorService()
@@ -119,7 +134,9 @@ final class DesktopCoordinatorService {
     static let routeIntent = "route_desktop_intent"
     static let createDispatch = "create_desktop_dispatch"
     static let resolveDispatch = "resolve_desktop_dispatch"
+    static let cancelAgentRun = "cancel_agent_run"
     static let sendAgentMessage = "send_agent_message"
+    static let spawnBackgroundAgent = "spawn_background_agent"
     static let delegateAgent = "delegate_agent"
   }
 
@@ -242,6 +259,60 @@ final class DesktopCoordinatorService {
     return try await callRuntimeControlTool(ToolName.getAgentRun, input: input)
   }
 
+  func cancelAgentRun(runId: String, reason: String = "Stopped by user") async throws -> String {
+    try await callRuntimeControlTool(
+      ToolName.cancelAgentRun,
+      input: ["runId": runId]
+    )
+  }
+
+  func spawnBackgroundAgent(
+    prompt: String,
+    title: String?,
+    pillId: UUID,
+    model: String?,
+    harnessMode: AgentHarnessMode?,
+    cwd: String?
+  ) async throws -> DesktopCoordinatorSpawnedAgent {
+    var input: [String: Any] = [
+      "prompt": prompt,
+      "surfaceKind": "background_agent",
+      "externalRefKind": "pill",
+      "externalRefId": pillId.uuidString,
+      "clientId": "desktop-floating-pill",
+      "mode": "act",
+      "metadata": [
+        "uiProjection": "floating_pill",
+        "pillId": pillId.uuidString,
+      ],
+    ]
+    if let title, !title.isEmpty { input["title"] = title }
+    if let model, !model.isEmpty { input["model"] = model }
+    if let harnessMode { input["adapterId"] = AgentRuntimeRouting.adapterId(for: harnessMode).rawValue }
+    if let cwd, !cwd.isEmpty { input["cwd"] = cwd }
+
+    let raw = try await callRuntimeControlTool(ToolName.spawnBackgroundAgent, input: input)
+    return try parseSpawnedAgent(from: raw)
+  }
+
+  func continueAgent(sessionId: String, prompt: String, model: String?, cwd: String?) async throws -> DesktopCoordinatorAgentRunInspection {
+    var input: [String: Any] = [
+      "sessionId": sessionId,
+      "prompt": prompt,
+      "mode": "act",
+      "clientId": "desktop-floating-pill",
+      "metadata": ["uiProjection": "floating_pill"],
+    ]
+    if let model, !model.isEmpty { input["model"] = model }
+    if let cwd, !cwd.isEmpty { input["cwd"] = cwd }
+    let raw = try await callRuntimeControlTool(ToolName.sendAgentMessage, input: input)
+    return parseInspectedRun(from: raw)
+  }
+
+  func inspectAgentRun(sessionId: String?, runId: String?) async throws -> DesktopCoordinatorAgentRunInspection {
+    parseInspectedRun(from: try await inspectRun(sessionId: sessionId, runId: runId))
+  }
+
   func completedAgentDeltaPrompt(surfaceKind: String, limit: Int = 5) async -> String? {
     guard let delta = await peekCompletedAgentDelta(surfaceKind: surfaceKind, limit: limit) else {
       return nil
@@ -354,7 +425,9 @@ final class DesktopCoordinatorService {
       ToolName.routeIntent,
       ToolName.createDispatch,
       ToolName.resolveDispatch,
+      ToolName.cancelAgentRun,
       ToolName.sendAgentMessage,
+      ToolName.spawnBackgroundAgent,
       ToolName.delegateAgent,
     ]
   }
@@ -568,6 +641,42 @@ final class DesktopCoordinatorService {
   private func jsonObject(from raw: String) -> [String: Any]? {
     guard let data = raw.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  private func parseSpawnedAgent(from raw: String) throws -> DesktopCoordinatorSpawnedAgent {
+    guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else {
+      throw NSError(domain: "DesktopCoordinatorService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid background-agent spawn response"])
+    }
+    let session = object["session"] as? [String: Any] ?? [:]
+    let run = object["run"] as? [String: Any] ?? [:]
+    let attempt = object["attempt"] as? [String: Any] ?? [:]
+    guard let sessionId = stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+      let runId = stringValue(run["runId"])
+    else {
+      throw NSError(domain: "DesktopCoordinatorService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Background-agent spawn response did not include canonical handles"])
+    }
+    return DesktopCoordinatorSpawnedAgent(
+      sessionId: sessionId,
+      runId: runId,
+      attemptId: stringValue(attempt["attemptId"]),
+      title: stringValue(session["title"]) ?? "Background agent"
+    )
+  }
+
+  private func parseInspectedRun(from raw: String) -> DesktopCoordinatorAgentRunInspection {
+    guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else {
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run")
+    }
+    let session = object["session"] as? [String: Any] ?? [:]
+    let run = object["run"] as? [String: Any] ?? [:]
+    let result = run["result"] as? [String: Any] ?? [:]
+    return DesktopCoordinatorAgentRunInspection(
+      sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+      runId: stringValue(run["runId"]),
+      status: stringValue(run["status"]) ?? stringValue(object["terminalStatus"]) ?? "unknown",
+      finalText: stringValue(run["finalText"]) ?? stringValue(result["text"]) ?? stringValue(object["text"]),
+      errorMessage: stringValue(run["errorMessage"]) ?? stringValue(object["error"])
+    )
   }
 
   private func stringValue(_ value: Any?) -> String? {

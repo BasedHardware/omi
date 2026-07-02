@@ -361,6 +361,30 @@ export interface SendAgentMessageInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface SpawnBackgroundAgentInput {
+  ownerId: string;
+  clientId: string;
+  requestId: string;
+  prompt: string;
+  title?: string;
+  surfaceKind?: string;
+  externalRefKind?: string;
+  externalRefId?: string;
+  adapterId?: string;
+  defaultAdapterId?: string;
+  cwd?: string;
+  model?: string;
+  mcpServers?: Record<string, unknown>[];
+  mode?: RunMode;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SpawnBackgroundAgentResult {
+  session: AgentSession;
+  run: AgentRun;
+  attempt?: RunAttempt;
+}
+
 export interface DelegateAgentInput {
   mode: DelegationMode;
   parentRunId: string;
@@ -474,6 +498,37 @@ export class AgentRuntimeKernel {
       mcpServers: input.mcpServers,
       metadata: input.metadata,
     });
+  }
+
+  async spawnBackgroundAgent(input: SpawnBackgroundAgentInput): Promise<SpawnBackgroundAgentResult> {
+    const runInput: ExecuteAgentRunInput = {
+      ownerId: input.ownerId,
+      surfaceKind: input.surfaceKind ?? "background_agent",
+      externalRefKind: input.externalRefKind,
+      externalRefId: input.externalRefId,
+      title: input.title ?? `Background: ${input.prompt.slice(0, 80)}`,
+      defaultAdapterId: input.defaultAdapterId ?? input.adapterId,
+      adapterId: input.adapterId ?? input.defaultAdapterId,
+      clientId: input.clientId,
+      requestId: input.requestId,
+      prompt: input.prompt,
+      mode: input.mode ?? "act",
+      cwd: input.cwd,
+      model: input.model,
+      mcpServers: input.mcpServers,
+      metadata: {
+        ...(input.metadata ?? {}),
+        spawnKind: "background_agent",
+      },
+    };
+    const accepted = this.createAcceptedRun(runInput);
+    void this.executeAcceptedRun(runInput, accepted).catch(() => {
+      // executeAcceptedRun records the failed run/attempt and emits events.
+    });
+    return {
+      session: accepted.session,
+      run: accepted.run,
+    };
   }
 
   async delegateAgent(input: DelegateAgentInput): Promise<DelegateAgentResult> {
