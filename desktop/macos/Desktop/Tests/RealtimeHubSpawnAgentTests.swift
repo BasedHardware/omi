@@ -9,32 +9,28 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
     XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
-    XCTAssertTrue(source.contains("output: \"Agent started.\""))
+    XCTAssertTrue(source.contains("toolOutput = \"Agent started.\""))
+    XCTAssertTrue(source.contains("toolOutput = \"Agent started with fallback. \\(fallbackNote)\""))
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 
   func testSpawnAgentProvidesLocalAckWhenModelDidNotSpeakBeforeToolCall() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("if !audioReceivedThisTurn {"))
-    XCTAssertTrue(source.contains("let existingAck = assistantText.trimmingCharacters"))
-    XCTAssertTrue(source.contains("let ack = existingAck.isEmpty ? \"Starting a background agent.\" : existingAck"))
-    XCTAssertTrue(source.contains("speak(ack)"))
+    XCTAssertTrue(source.contains("if !self.audioReceivedThisTurn {"))
+    XCTAssertTrue(source.contains("let existingAck = self.assistantText.trimmingCharacters"))
+    XCTAssertTrue(source.contains("let ack = existingAck.isEmpty ? plan.ack : existingAck"))
+    XCTAssertTrue(source.contains("self.speak(ack)"))
   }
 
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directedProvider)"))
-    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
-    XCTAssertTrue(source.contains("assistantText = setupPrompt"))
-    XCTAssertTrue(source.contains("output: availability.toolError"))
-    XCTAssertTrue(source.contains("""
-          sendToolResultIfCurrent(
-            source: source, callId: callId, name: name,
-            output: availability.toolError)
-          return
-"""))
+    XCTAssertTrue(source.contains("LocalAgentProviderRouting.resolveSpawnWithAutoInstall("))
+    XCTAssertTrue(source.contains("case .setupRequired(let provider, let setupPrompt, _):"))
+    XCTAssertTrue(source.contains("self.assistantText = setupPrompt"))
+    XCTAssertTrue(source.contains("self.speak(setupPrompt)"))
+    XCTAssertTrue(source.contains("output: \"Error: \\(setupPrompt)\""))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {
