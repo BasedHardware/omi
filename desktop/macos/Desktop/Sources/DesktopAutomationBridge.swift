@@ -676,6 +676,8 @@ final class DesktopAutomationActionRegistry {
           classification = "session_expired"
         case .cookieDecryptionFailed:
           classification = "decrypt_failed"
+        case .configurationError:
+          classification = "configuration"
         case .networkError:
           classification = "network"
         case .pythonNotFound:

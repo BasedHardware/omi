@@ -1,0 +1,3 @@
+{
+    "change": "Google Calendar imports now wait for desktop API keys to load before checking your browser session"
+}
