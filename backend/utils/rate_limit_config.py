@@ -86,6 +86,11 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "goals:suggest": (30, 3600),
     "goals:advice": (30, 3600),
     "goals:extract": (30, 3600),
+    # Goal create — a Firestore write that retires the oldest active goal once the user hits the
+    # active-goal cap (data churn), and an agent can loop, so cap creation per hour. Kept at the
+    # memories:create tier so it is not easier to spam than other MCP writes; update/progress/delete
+    # operate on existing goals and ride the shared mcp:sse / per-request auth limits.
+    "goals:write": (60, 3600),
     # Search
     "conversations:search": (60, 3600),
     # Expensive background ops

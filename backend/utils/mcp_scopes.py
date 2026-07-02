@@ -8,6 +8,7 @@ MCP_FULL_ACCESS_SCOPES = [
     "action_items.read",
     "action_items.write",
     "goals.read",
+    "goals.write",
     "chat.read",
     "screen_activity.read",
     "people.read",

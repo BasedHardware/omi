@@ -50,6 +50,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+import utils.mcp_goals as mcp_goals
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -689,6 +690,103 @@ def get_goals(
 ):
     logger.info(f"get_goals {uid} include_inactive={include_inactive}")
     return goals_db.get_all_goals(uid, include_inactive=include_inactive)
+
+
+@router.get("/v1/mcp/goals/{goal_id}/history", tags=["mcp"])
+def get_goal_history(goal_id: str, days: int = 30, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        return mcp_goals.get_goal_history(uid, goal_id, days=days)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except mcp_goals.GoalError as e:
+        raise _goal_write_error(e)
+
+
+class McpCreateGoal(BaseModel):
+    title: str
+    target_value: float
+    goal_type: str = "scale"
+    current_value: float = 0
+    min_value: float = 0
+    max_value: float = 10
+    unit: Optional[str] = None
+
+
+class McpUpdateGoal(BaseModel):
+    title: Optional[str] = None
+    target_value: Optional[float] = None
+    current_value: Optional[float] = None
+    unit: Optional[str] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+
+
+def _goal_write_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, mcp_goals.GoalNotFound):
+        return HTTPException(status_code=404, detail="Goal not found")
+    return HTTPException(status_code=500, detail="Goal write failed")
+
+
+@router.post("/v1/mcp/goals", tags=["mcp"])
+def create_goal(
+    body: McpCreateGoal,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "goals:write")),
+):
+    logger.info(f"create_goal {uid} type={body.goal_type}")
+    try:
+        return mcp_goals.create_goal(
+            uid,
+            body.title,
+            body.target_value,
+            goal_type=body.goal_type,
+            current_value=body.current_value,
+            min_value=body.min_value,
+            max_value=body.max_value,
+            unit=body.unit,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.patch("/v1/mcp/goals/{goal_id}", tags=["mcp"])
+def update_goal(goal_id: str, body: McpUpdateGoal, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"update_goal {uid} id={goal_id}")
+    try:
+        return mcp_goals.update_goal(
+            uid,
+            goal_id,
+            title=body.title,
+            target_value=body.target_value,
+            current_value=body.current_value,
+            unit=body.unit,
+            min_value=body.min_value,
+            max_value=body.max_value,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except mcp_goals.GoalError as e:
+        raise _goal_write_error(e)
+
+
+@router.post("/v1/mcp/goals/{goal_id}/progress", tags=["mcp"])
+def update_goal_progress(goal_id: str, current_value: float, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"update_goal_progress {uid} id={goal_id}")
+    try:
+        return mcp_goals.update_goal_progress(uid, goal_id, current_value)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except mcp_goals.GoalError as e:
+        raise _goal_write_error(e)
+
+
+@router.delete("/v1/mcp/goals/{goal_id}", tags=["mcp"])
+def delete_goal(goal_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"delete_goal {uid} id={goal_id}")
+    try:
+        mcp_goals.delete_goal(uid, goal_id)
+    except mcp_goals.GoalError as e:
+        raise _goal_write_error(e)
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------
