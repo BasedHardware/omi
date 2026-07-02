@@ -338,11 +338,7 @@ def _desktop_transcribe_isolation():
         os.environ.setdefault(
             'ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv'
         )
-
-        @pytest.fixture(autouse=True)
-        def _ensure_tmp_dir():
-            _restore_package_paths()
-            os.makedirs('/tmp', exist_ok=True)
+        os.makedirs('/tmp', exist_ok=True)
 
         # Stub transitive imports for utils.chat (avoid pulling in all of utils.llm etc.)
         # Do NOT stub utils.other.endpoints — it contains the @timeit decorator that must
