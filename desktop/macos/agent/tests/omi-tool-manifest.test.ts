@@ -57,6 +57,19 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("'codex'");
   });
 
+  it("guides provider selection by strengths with the default agent as fallback", () => {
+    const spawnAgent = toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent");
+    const guidelines = spawnAgent?.promptGuidelines?.join("\n") ?? "";
+
+    expect(guidelines).toContain("When the user does not name an agent");
+    expect(guidelines).toContain("OpenClaw: messaging/channels (WhatsApp, Telegram, Discord)");
+    expect(guidelines).toContain("Hermes: long-running or recurring automations");
+    expect(guidelines).toContain("Codex: coding, repositories, and terminal/software-engineering work");
+    expect(guidelines).toContain("omit provider to use Omi's default agent");
+    expect(guidelines).toContain("Never pass a provider that is not connected");
+    expect(guidelines).toContain("when the user names an agent, always use that one");
+  });
+
   it("projects stdio onboarding-only tools only in onboarding context", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));

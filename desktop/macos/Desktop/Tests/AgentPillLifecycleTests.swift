@@ -9,7 +9,8 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("You are running inside a visible floating background agent pill."))
     XCTAssertTrue(source.contains("Do the requested work now; do not merely acknowledge"))
-    XCTAssertTrue(source.contains("systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix"))
+    XCTAssertTrue(source.contains("systemPromptSuffixByPill[pill.id] = systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix"))
+    XCTAssertTrue(source.contains("let systemPromptSuffix = systemPromptSuffixByPill[pill.id] ?? Self.backgroundAgentSystemPromptSuffix"))
     XCTAssertTrue(source.contains("Do not call spawn_agent or delegate_agent just to hand off this same task."))
   }
 
@@ -62,7 +63,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
     XCTAssertTrue(source.contains("bridgeHarnessOverride: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
-    XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
+    XCTAssertTrue(agentPillSource.contains("@Published private(set) var bridgeHarnessOverride: AgentHarnessMode?"))
     XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
     XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
     XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
@@ -397,7 +398,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let viewSource = try floatingControlBarViewSource()
 
     XCTAssertTrue(agentSource.contains("@Published var conversationMessages: [ChatMessage] = []"))
-    XCTAssertTrue(agentSource.contains("pill.conversationMessages = displayMessages"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages = pill.providerFallbackNotices + displayMessages"))
     XCTAssertTrue(agentSource.contains("message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty"))
     XCTAssertTrue(viewSource.contains("private var displayedMessages: [ChatMessage]"))
     XCTAssertTrue(viewSource.contains("ChatMessage(id: \"\\(pill.id.uuidString)-query\", text: pill.query, sender: .user)"))
@@ -788,6 +789,58 @@ final class AgentPillLifecycleTests: XCTestCase {
 
                 switch projection.status {
         """))
+  }
+
+  func testProviderStartupFallbackChainOrderAndCap() {
+    // Remaining available providers in fixed [openclaw, hermes, codex] order,
+    // ending with the Omi default agent (nil).
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.openclaw], available: [.openclaw, .hermes, .codex]),
+      [.hermes, .codex, nil])
+
+    // The fixed order wins regardless of the order of `available`.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.hermes], available: [.codex, .openclaw, .hermes]),
+      [.openclaw, .codex, nil])
+
+    // Unavailable providers are never part of the chain.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.hermes], available: [.hermes, .codex]),
+      [.codex, nil])
+
+    // Nothing left → the default agent is the only remaining attempt.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.codex], available: [.codex]),
+      [nil])
+
+    // Attempt cap: requested + at most 2 directed fallbacks + default.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(
+        afterFailed: [.openclaw, .hermes, .codex],
+        available: [.openclaw, .hermes, .codex]),
+      [nil])
+  }
+
+  func testProviderStartupFallbackNeverRunsAfterTaskOutput() throws {
+    let source = try agentPillSource()
+
+    // HARD SAFETY RULE: fallback must be gated on the failed attempt having
+    // produced no output — re-running a partially-executed brief could repeat
+    // side effects (e.g. double-send messages).
+    XCTAssertTrue(source.contains("guard !pill.hasProducedTaskOutput else { return false }"))
+    XCTAssertTrue(source.contains("HARD SAFETY RULE: never fall back once the failed attempt produced"))
+    // The output flag flips as soon as any assistant text or tool/thinking
+    // content block streams in, and startup fallback only applies to initial
+    // runs — follow-up turns must never retry the brief on another provider.
+    XCTAssertTrue(source.contains("pill.markTaskOutputProduced()"))
+    XCTAssertTrue(source.contains("allowStartupFallback: Bool = false"))
+    XCTAssertTrue(source.contains("self.complete(pill: pill, provider: provider, finalText: finalText, allowStartupFallback: true)"))
+    // The failed attempt's terminal projection is cleared eagerly so a stray
+    // publish can't re-fail the retried pill.
+    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.beginRequest("))
+    // The switch is surfaced to the user in the pill chat + activity line.
+    XCTAssertTrue(source.contains("failed to start — continuing with"))
+    XCTAssertTrue(source.contains("AgentPill: provider fallback"))
   }
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {

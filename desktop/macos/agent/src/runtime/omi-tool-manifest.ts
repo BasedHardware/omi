@@ -274,6 +274,8 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
       "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
       "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
       "If the user asks to use OpenClaw, Hermes, or Codex, pass provider='openclaw', 'hermes', or 'codex' instead of treating that name as a session to inspect.",
+      "When the user does not name an agent, pick the connected provider whose strengths clearly match the task — OpenClaw: messaging/channels (WhatsApp, Telegram, Discord) and the user's OpenClaw automations; Hermes: long-running or recurring automations, learned skills, and broad research; Codex: coding, repositories, and terminal/software-engineering work — otherwise omit provider to use Omi's default agent.",
+      "Never pass a provider that is not connected; when the user names an agent, always use that one.",
       "Return immediately after spawning; the pill keeps working in the background.",
     ],
     latency: "async background",

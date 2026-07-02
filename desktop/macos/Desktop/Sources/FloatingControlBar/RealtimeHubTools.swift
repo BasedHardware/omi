@@ -69,10 +69,17 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
-  private static let directedProviders: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
+  private static let directedProviders: [AgentPillsManager.DirectedProvider] = AgentPillsManager.orderedDirectedProviders
 
   private static func localAgentProviderInstruction() -> String {
-    let availability = directedProviders.map { LocalAgentProviderDetector.availability(for: $0) }
+    localAgentProviderInstruction(
+      availability: directedProviders.map { LocalAgentProviderDetector.availability(for: $0) })
+  }
+
+  /// Availability-parameterized seam (same pattern as
+  /// `openAITools(availableDirectedProviders:)`) so instruction content is
+  /// testable without filesystem-dependent provider detection.
+  static func localAgentProviderInstruction(availability: [LocalAgentProviderAvailability]) -> String {
     let available = availability.filter(\.isAvailable).map(\.provider)
     let unavailable = availability.filter { !$0.isAvailable }
 
@@ -80,6 +87,10 @@ enum RealtimeHubTools {
     if !available.isEmpty {
       let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
       parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+      let strengthsText = available
+        .map { "\($0.displayName): \($0.strengths)" }
+        .joined(separator: "; ")
+      parts.append("When the user does not name an agent, pick the provider whose strengths clearly match the task — \(strengthsText) — otherwise omit provider to use Omi's default agent. When the user names an agent, always use that one.")
     }
     if unavailable.isEmpty {
       parts.append("Treat those as available local providers, not as sessions to inspect.")

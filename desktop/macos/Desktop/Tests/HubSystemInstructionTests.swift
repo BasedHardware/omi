@@ -50,6 +50,39 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertNotNil(properties?["brief"])
     }
 
+    func testLocalAgentProviderInstructionMatchesStrengthsToAvailability() {
+        let availability = [
+            LocalAgentProviderAvailability(provider: .openclaw, status: .available(command: "/usr/local/bin/openclaw")),
+            LocalAgentProviderAvailability(provider: .hermes, status: .missing),
+            LocalAgentProviderAvailability(provider: .codex, status: .available(command: "/usr/local/bin/codex-acp")),
+        ]
+        let instruction = RealtimeHubTools.localAgentProviderInstruction(availability: availability)
+
+        // Available providers advertise their strengths for informed selection.
+        XCTAssertTrue(instruction.contains("When the user does not name an agent, pick the provider whose strengths clearly match the task"))
+        XCTAssertTrue(instruction.contains("OpenClaw: \(AgentPillsManager.DirectedProvider.openclaw.strengths)"))
+        XCTAssertTrue(instruction.contains("Codex: \(AgentPillsManager.DirectedProvider.codex.strengths)"))
+        // Unavailable providers must never be offered as a selection target.
+        XCTAssertFalse(instruction.contains("Hermes: \(AgentPillsManager.DirectedProvider.hermes.strengths)"))
+        XCTAssertTrue(instruction.contains("I don't see Hermes installed"))
+        // Conservative defaults: explicit user mention always wins, and the
+        // default agent remains the choice when no provider clearly matches.
+        XCTAssertTrue(instruction.contains("omit provider to use Omi's default agent"))
+        XCTAssertTrue(instruction.contains("When the user names an agent, always use that one."))
+    }
+
+    func testLocalAgentProviderInstructionOmitsStrengthsWhenNoneAvailable() {
+        let availability = [
+            LocalAgentProviderAvailability(provider: .openclaw, status: .missing),
+            LocalAgentProviderAvailability(provider: .hermes, status: .missing),
+            LocalAgentProviderAvailability(provider: .codex, status: .missing),
+        ]
+        let instruction = RealtimeHubTools.localAgentProviderInstruction(availability: availability)
+
+        XCTAssertFalse(instruction.contains("When the user does not name an agent"))
+        XCTAssertTrue(instruction.contains("do NOT spawn a default agent"))
+    }
+
     func testRealtimeTaskAgentStatusToolIsExposed() {
         let tools = RealtimeHubTools.openAITools
         let statusTool = tools.first { ($0["name"] as? String) == HubTool.getTaskAgentStatus.rawValue }

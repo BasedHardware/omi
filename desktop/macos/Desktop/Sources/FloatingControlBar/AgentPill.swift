@@ -59,7 +59,10 @@ final class AgentPill: ObservableObject, Identifiable {
     let query: String
     let createdAt: Date
     let model: String
-    let bridgeHarnessOverride: AgentHarnessMode?
+    /// Mutable (unlike the other identity fields) because a provider startup
+    /// fallback can move the pill onto the next directed provider — or the
+    /// Omi default agent (`nil`) — before the task produced any output.
+    @Published private(set) var bridgeHarnessOverride: AgentHarnessMode?
 
     @Published var title: String
     @Published var status: Status = .queued
@@ -71,6 +74,42 @@ final class AgentPill: ObservableObject, Identifiable {
     @Published var viewedAt: Date?
     @Published var suggestedFollowUps: [String] = []
     @Published var contentRevision: Int = 0
+
+    /// Directed providers that already failed during startup for this pill —
+    /// drives the deterministic fallback chain and caps the retry attempts.
+    private(set) var failedStartupProviders: [AgentPillsManager.DirectedProvider] = []
+    /// Provider-switch notices pinned above the streamed transcript so the
+    /// fallback handoff stays visible after new messages rebuild the list.
+    private(set) var providerFallbackNotices: [ChatMessage] = []
+    /// True once the current provider attempt produced any task output (text
+    /// or tool/thinking content blocks). Gates the startup-fallback path.
+    private(set) var hasProducedTaskOutput = false
+
+    var currentDirectedProvider: AgentPillsManager.DirectedProvider? {
+        bridgeHarnessOverride.flatMap { AgentPillsManager.DirectedProvider(harnessMode: $0) }
+    }
+
+    func markTaskOutputProduced() {
+        hasProducedTaskOutput = true
+    }
+
+    /// Move the pill onto the next link of the startup-fallback chain and
+    /// surface the switch in the pill's chat and activity line.
+    func adoptFallbackProvider(
+        _ next: AgentPillsManager.DirectedProvider?,
+        afterStartupFailureOf failed: AgentPillsManager.DirectedProvider
+    ) {
+        failedStartupProviders.append(failed)
+        bridgeHarnessOverride = next?.harnessMode
+        hasProducedTaskOutput = false
+        let notice = "\(failed.displayName) failed to start — continuing with \(next?.displayName ?? "Omi's default agent")."
+        providerFallbackNotices.append(ChatMessage(text: notice, sender: .ai))
+        conversationMessages = providerFallbackNotices + conversationMessages.filter { $0.sender == .user }
+        status = .starting
+        completedAt = nil
+        latestActivity = notice
+        markContentChanged()
+    }
 
     /// Convenience: how long the agent has been running (or ran).
     var elapsed: TimeInterval {
@@ -129,6 +168,9 @@ final class AgentPillsManager: ObservableObject {
     private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
     private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
+    /// Resolved system-prompt suffix per pill so a startup-fallback retry
+    /// re-sends the brief with the same prompt as the original attempt.
+    private var systemPromptSuffixByPill: [UUID: String] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
@@ -178,6 +220,15 @@ final class AgentPillsManager: ObservableObject {
         case openclaw
         case codex
 
+        init?(harnessMode: AgentHarnessMode) {
+            switch harnessMode {
+            case .hermes: self = .hermes
+            case .openclaw: self = .openclaw
+            case .codex: self = .codex
+            case .piMono, .acp: return nil
+            }
+        }
+
         var displayName: String {
             switch self {
             case .hermes: return "Hermes"
@@ -191,6 +242,19 @@ final class AgentPillsManager: ObservableObject {
             case .hermes: return .hermes
             case .openclaw: return .openclaw
             case .codex: return .codex
+            }
+        }
+
+        /// One-line task-fit summary used by prompt surfaces so the model can
+        /// pick the best provider when the user doesn't name one.
+        var strengths: String {
+            switch self {
+            case .hermes:
+                return "long-running or recurring automations, learned skills, and broad research"
+            case .openclaw:
+                return "messaging/channels (WhatsApp, Telegram, Discord) and the user's OpenClaw automations"
+            case .codex:
+                return "coding, repositories, and terminal/software-engineering work"
             }
         }
 
@@ -215,6 +279,27 @@ final class AgentPillsManager: ObservableObject {
         var setupNeededStatus: String {
             "\(displayName) needs setup"
         }
+    }
+
+    /// Canonical directed-provider order — used for prompt listings and as
+    /// the fixed preference order of the startup fallback chain.
+    nonisolated static let orderedDirectedProviders: [DirectedProvider] = [.openclaw, .hermes, .codex]
+
+    /// Providers to try after the given startup failures: the remaining
+    /// AVAILABLE directed providers in fixed order, then the Omi default
+    /// agent (`nil`) as the final link. Caps total attempts at the requested
+    /// provider + at most 2 directed fallbacks + the default agent.
+    nonisolated static func fallbackChain(
+        afterFailed failed: [DirectedProvider],
+        available: [DirectedProvider]
+    ) -> [DirectedProvider?] {
+        let remainingDirectedSlots = max(0, 3 - failed.count)
+        var chain: [DirectedProvider?] = orderedDirectedProviders
+            .filter { available.contains($0) && !failed.contains($0) }
+            .prefix(remainingDirectedSlots)
+            .map { Optional($0) }
+        chain.append(nil)
+        return chain
     }
 
     struct ProviderDirective: Equatable {
@@ -676,29 +761,8 @@ final class AgentPillsManager: ObservableObject {
         }
 
         pills.append(pill)
+        systemPromptSuffixByPill[pill.id] = systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix
 
-        let provider = ChatProvider(bridgeHarnessOverride: bridgeHarnessOverride)
-        let hasBridgeHarnessOverride = bridgeHarnessOverride != nil
-        if let floating = FloatingControlBarManager.shared.sharedFloatingProvider {
-            provider.workingDirectory = floating.workingDirectory
-            // Directed Hermes/OpenClaw pills must not inherit the floating bar's
-            // Claude model override. Those harnesses can reject Omi's Claude
-            // aliases during session/set_model, so leave model selection to the
-            // provider-native default when a harness override is present.
-            if !hasBridgeHarnessOverride {
-                provider.modelOverride = floating.modelOverride
-            }
-        }
-        providersByPill[pill.id] = provider
-
-        let messageCountBefore = provider.messages.count
-        messageCountByPill[pill.id] = messageCountBefore
-        streamsByPill[pill.id] = provider.$messages
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self, weak pill] messages in
-                guard let self, let pill else { return }
-                self.handle(messages: messages, since: messageCountBefore, for: pill)
-            }
         let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
         projectionStreamsByPill[pill.id] = AgentRuntimeStatusStore.shared.$projectionsBySurface
             .receive(on: DispatchQueue.main)
@@ -708,15 +772,7 @@ final class AgentPillsManager: ObservableObject {
                 AgentPillsManager.apply(projection: projection, to: pill)
             }
 
-        // Stagger bridge boots: chain this pill's warmup after the previous
-        // pill's. Once warmed, the actual sendMessage runs in parallel with
-        // every other warmed pill.
-        let previousBoot = bootChain
-        let myBoot = Task { [weak provider] in
-            await previousBoot.value
-            await provider?.warmupBridge()
-        }
-        bootChain = myBoot
+        startProviderAttempt(for: pill)
 
         pill.status = .starting
         if let preFetchedAck, !preFetchedAck.isEmpty {
@@ -749,6 +805,52 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
+        return pill
+    }
+
+    /// Wire one provider attempt for a pill: fresh ChatProvider, message
+    /// stream, staggered bridge boot, and the run task that sends the pill's
+    /// brief. Used by the initial spawn and by startup-fallback retries — a
+    /// retry replaces the failed provider's wiring but keeps the same pill
+    /// (id, projection stream, chat surface).
+    private func startProviderAttempt(for pill: AgentPill) {
+        let bridgeHarnessOverride = pill.bridgeHarnessOverride
+        let provider = ChatProvider(bridgeHarnessOverride: bridgeHarnessOverride)
+        let hasBridgeHarnessOverride = bridgeHarnessOverride != nil
+        if let floating = FloatingControlBarManager.shared.sharedFloatingProvider {
+            provider.workingDirectory = floating.workingDirectory
+            // Directed Hermes/OpenClaw pills must not inherit the floating bar's
+            // Claude model override. Those harnesses can reject Omi's Claude
+            // aliases during session/set_model, so leave model selection to the
+            // provider-native default when a harness override is present.
+            if !hasBridgeHarnessOverride {
+                provider.modelOverride = floating.modelOverride
+            }
+        }
+        providersByPill[pill.id] = provider
+
+        let messageCountBefore = provider.messages.count
+        messageCountByPill[pill.id] = messageCountBefore
+        streamsByPill[pill.id]?.cancel()
+        streamsByPill[pill.id] = provider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak pill] messages in
+                guard let self, let pill else { return }
+                self.handle(messages: messages, since: messageCountBefore, for: pill)
+            }
+
+        // Stagger bridge boots: chain this pill's warmup after the previous
+        // pill's. Once warmed, the actual sendMessage runs in parallel with
+        // every other warmed pill.
+        let previousBoot = bootChain
+        let myBoot = Task { [weak provider] in
+            await previousBoot.value
+            await provider?.warmupBridge()
+        }
+        bootChain = myBoot
+
+        let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
+        let systemPromptSuffix = systemPromptSuffixByPill[pill.id] ?? Self.backgroundAgentSystemPromptSuffix
         let runTask = Task { [weak self, weak pill, weak provider] in
             await myBoot.value
             guard !Task.isCancelled else { return }
@@ -761,18 +863,83 @@ final class AgentPillsManager: ObservableObject {
             let finalText = await provider.sendMessage(
                 pill.query,
                 model: Self.modelForSend(pill: pill, provider: provider),
-                systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
+                systemPromptSuffix: systemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
                 legacyClientScope: AgentLegacyClientScope.floatingPill
             )
             guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider, finalText: finalText)
+            self.complete(pill: pill, provider: provider, finalText: finalText, allowStartupFallback: true)
         }
         runTasksByPill[pill.id] = runTask
+    }
 
-        return pill
+    /// Deterministic startup fallback: when a directed provider fails before
+    /// its task produced any output, retry the same brief on the next link of
+    /// the fallback chain (remaining available providers in
+    /// `orderedDirectedProviders` order, then the Omi default agent).
+    /// Returns true when a retry was scheduled — the caller must not commit a
+    /// terminal failed state in that case.
+    private func attemptProviderStartupFallback(for pill: AgentPill, errorText: String) -> Bool {
+        // Only directed pills fall back; the Omi default agent (nil override)
+        // is already the last link of the chain.
+        guard let failedProvider = pill.currentDirectedProvider else { return false }
+        // HARD SAFETY RULE: never fall back once the failed attempt produced
+        // any task output (text delta or tool activity). Re-running a
+        // partially-executed brief could repeat side effects (e.g. double-send
+        // a message), so mid-task failures must surface as failures instead of
+        // retrying on another provider.
+        guard !pill.hasProducedTaskOutput else { return false }
+        // A user-stopped pill never retries.
+        guard pill.status != .stopped else { return false }
+
+        let available = Self.orderedDirectedProviders.filter { LocalAgentProviderDetector.isAvailable($0) }
+        let chain = Self.fallbackChain(afterFailed: pill.failedStartupProviders + [failedProvider], available: available)
+        guard let next = chain.first else { return false }
+
+        log(
+            "AgentPill: provider fallback \(failedProvider.rawValue) → \(next?.rawValue ?? "omi-default") "
+                + "for pill \(pill.id.uuidString.prefix(8)) after startup failure: \(errorText)"
+        )
+        pill.adoptFallbackProvider(next, afterStartupFailureOf: failedProvider)
+        // Clear the failed attempt's terminal projection right away so a
+        // stray publish from another surface can't re-apply the stale failure
+        // to the retried pill before its next query begins. statusText stays
+        // nil so the fallback notice keeps owning the activity line.
+        AgentRuntimeStatusStore.shared.beginRequest(
+            surface: .floatingPill(pillId: pill.id),
+            statusText: nil
+        )
+        startProviderAttempt(for: pill)
+        return true
+    }
+
+    /// Classify a completed attempt as a startup-failure candidate for the
+    /// fallback path. Returns nil for successful or user-cancelled runs.
+    private static func startupFailureText(provider: ChatProvider, finalText: String?, pillId: UUID) -> String? {
+        if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pillId),
+            projection.status.isTerminal {
+            switch projection.status {
+            case .failed, .timedOut, .orphaned:
+                return projection.failure?.displayMessage
+                    ?? projection.errorMessage
+                    ?? provider.errorMessage
+                    ?? "Agent failed"
+            default:
+                return nil
+            }
+        }
+        if let errorText = provider.errorMessage, !errorText.isEmpty {
+            return errorText
+        }
+        if finalText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            // No error surfaced but the run ended without any result — for a
+            // pre-output directed attempt this means the provider never ran
+            // the task (e.g. adapter process died during activation).
+            return "Agent ended before reporting a final result"
+        }
+        return nil
     }
 
     // MARK: - Voice follow-up (continue THIS agent's session)
@@ -1005,6 +1172,7 @@ final class AgentPillsManager: ObservableObject {
         projectionStreamsByPill[pillID] = nil
         providersByPill[pillID] = nil
         messageCountByPill[pillID] = nil
+        systemPromptSuffixByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
     }
 
@@ -1098,12 +1266,24 @@ final class AgentPillsManager: ObservableObject {
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
         guard messages.count > since else { return }
         let recent = Array(messages.suffix(from: since))
+        // Any real assistant output (streamed text or tool/thinking blocks)
+        // marks the attempt as executing — from that point on, provider
+        // startup fallback is permanently off for the attempt (hard safety
+        // rule in attemptProviderStartupFallback).
+        if !pill.hasProducedTaskOutput,
+            recent.contains(where: { message in
+                message.sender == .ai
+                    && (!message.contentBlocks.isEmpty
+                        || !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }) {
+            pill.markTaskOutputProduced()
+        }
         let displayMessages = recent.filter { message in
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty
         }
         if !displayMessages.isEmpty {
-            pill.conversationMessages = displayMessages
+            pill.conversationMessages = pill.providerFallbackNotices + displayMessages
             pill.markContentChanged()
         }
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
@@ -1156,8 +1336,18 @@ final class AgentPillsManager: ObservableObject {
         return "Working…"
     }
 
-    private func complete(pill: AgentPill, provider: ChatProvider, finalText: String?) {
+    private func complete(pill: AgentPill, provider: ChatProvider, finalText: String?, allowStartupFallback: Bool = false) {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Startup fallback runs before any terminal state is committed so a
+        // directed provider that failed to start can hand the same brief to
+        // the next provider in the chain. Only initial runs are eligible —
+        // follow-up turns (continueAgent) never retry on another provider.
+        if allowStartupFallback,
+            trimmedFinalText?.isEmpty != false,
+            let failureText = Self.startupFailureText(provider: provider, finalText: finalText, pillId: pill.id),
+            attemptProviderStartupFallback(for: pill, errorText: failureText) {
+            return
+        }
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
             if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
                 var finalMessage = pill.aiMessage ?? ChatMessage(text: trimmedFinalText, sender: .ai)
