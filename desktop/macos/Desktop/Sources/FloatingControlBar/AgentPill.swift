@@ -1228,6 +1228,10 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
+        if pill.status == .stopped && projection.status != .cancelled {
+            return
+        }
+
         switch projection.status {
         case .queued:
             pill.status = .queued
