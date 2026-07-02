@@ -22,6 +22,9 @@ IMPORTS_INTEGRATIONS_DART_PATH = (
 WRAPPED_TASK_INTEGRATIONS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'wrapped_task_integrations_wire.g.dart'
 )
+SUBSCRIPTION_USAGE_DART_PATH = (
+    ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'subscription_usage_wire.g.dart'
+)
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -129,6 +132,19 @@ def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openap
     assert 'class GeneratedDefaultTaskIntegrationResponse' in generated
     assert 'status: _required(_readString(_readAny(json, const ["status"])), "status")' in generated
     assert 'integrations: _required(_readMap(_readAny(json, const ["integrations"])), "integrations")' in generated
+
+
+def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'subscription_usage')
+
+    assert SUBSCRIPTION_USAGE_DART_PATH.read_text() == generated
+    assert 'class GeneratedUserSubscriptionResponse' in generated
+    assert 'class GeneratedUserUsageResponse' in generated
+    assert 'final List<String> features;' in generated
+    assert 'limits: _readObject(_readAny(json, const ["limits"]), GeneratedPlanLimits.fromJson)' in generated
+    assert 'GeneratedPlanLimits.fromJson(const {})' in generated
+    assert 'transcriptionSeconds: _readInt(_readAny(json, const ["transcription_seconds"])) ?? 0' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

@@ -33,7 +33,7 @@ class GeneratedTranscriptSegment {
   final String? personId;
   final String? speaker;
   final int? speakerId;
-  final bool? speechProfileProcessed;
+  final bool speechProfileProcessed;
   final double start;
   final String? sttProvider;
   final String text;
@@ -44,13 +44,13 @@ class GeneratedTranscriptSegment {
     this.id,
     required this.isUser,
     this.personId,
-    this.speaker,
+    required this.speaker,
     this.speakerId,
-    this.speechProfileProcessed,
+    required this.speechProfileProcessed,
     required this.start,
     this.sttProvider,
     required this.text,
-    this.translations,
+    required this.translations,
   });
 
   factory GeneratedTranscriptSegment.fromJson(Map<String, dynamic> json) {
@@ -87,7 +87,7 @@ class GeneratedTranscriptSegment {
 }
 
 class GeneratedActionItem {
-  final bool? completed;
+  final bool completed;
   final DateTime? completedAt;
   final String? conversationId;
   final DateTime? createdAt;
@@ -96,7 +96,7 @@ class GeneratedActionItem {
   final DateTime? updatedAt;
 
   const GeneratedActionItem({
-    this.completed,
+    required this.completed,
     this.completedAt,
     this.conversationId,
     this.createdAt,
@@ -179,16 +179,16 @@ class GeneratedPluginResult {
 }
 
 class GeneratedEvent {
-  final bool? created;
-  final String? description;
-  final int? duration;
+  final bool created;
+  final String description;
+  final int duration;
   final DateTime start;
   final String title;
 
   const GeneratedEvent({
-    this.created,
-    this.description,
-    this.duration,
+    required this.created,
+    required this.description,
+    required this.duration,
     required this.start,
     required this.title,
   });
@@ -216,19 +216,19 @@ class GeneratedEvent {
 
 class GeneratedStructured {
   final List<GeneratedActionItem>? actionItems;
-  final String? category;
-  final String? emoji;
+  final String category;
+  final String emoji;
   final List<GeneratedEvent>? events;
-  final String? overview;
-  final String? title;
+  final String overview;
+  final String title;
 
   const GeneratedStructured({
     this.actionItems,
-    this.category,
-    this.emoji,
+    required this.category,
+    required this.emoji,
     this.events,
-    this.overview,
-    this.title,
+    required this.overview,
+    required this.title,
   });
 
   factory GeneratedStructured.fromJson(Map<String, dynamic> json) {
@@ -295,7 +295,7 @@ class GeneratedConversationPhoto {
   final DateTime? createdAt;
   final String? dataProtectionLevel;
   final String? description;
-  final bool? discarded;
+  final bool discarded;
   final String? id;
 
   const GeneratedConversationPhoto({
@@ -303,7 +303,7 @@ class GeneratedConversationPhoto {
     this.createdAt,
     this.dataProtectionLevel,
     this.description,
-    this.discarded,
+    required this.discarded,
     this.id,
   });
 
@@ -335,7 +335,7 @@ class GeneratedAudioFile {
   final String conversationId;
   final double duration;
   final String id;
-  final String? provider;
+  final String provider;
   final DateTime? startedAt;
   final String uid;
 
@@ -344,7 +344,7 @@ class GeneratedAudioFile {
     required this.conversationId,
     required this.duration,
     required this.id,
-    this.provider,
+    required this.provider,
     this.startedAt,
     required this.uid,
   });
@@ -375,8 +375,8 @@ class GeneratedAudioFile {
 }
 
 class GeneratedCalendarEventLink {
-  final List<String>? attendeeEmails;
-  final List<String>? attendees;
+  final List<String> attendeeEmails;
+  final List<String> attendees;
   final DateTime endTime;
   final String eventId;
   final String? htmlLink;
@@ -384,8 +384,8 @@ class GeneratedCalendarEventLink {
   final String title;
 
   const GeneratedCalendarEventLink({
-    this.attendeeEmails,
-    this.attendees,
+    required this.attendeeEmails,
+    required this.attendees,
     required this.endTime,
     required this.eventId,
     this.htmlLink,
@@ -395,8 +395,8 @@ class GeneratedCalendarEventLink {
 
   factory GeneratedCalendarEventLink.fromJson(Map<String, dynamic> json) {
     return GeneratedCalendarEventLink(
-      attendeeEmails: _readAny(json, const ["attendee_emails"]) == null ? null : _readStringList(_readAny(json, const ["attendee_emails"])),
-      attendees: _readAny(json, const ["attendees"]) == null ? null : _readStringList(_readAny(json, const ["attendees"])),
+      attendeeEmails: _readStringList(_readAny(json, const ["attendee_emails"])),
+      attendees: _readStringList(_readAny(json, const ["attendees"])),
       endTime: _required(_readDateTime(_readAny(json, const ["end_time"])), "end_time"),
       eventId: _required(_readString(_readAny(json, const ["event_id"])), "event_id"),
       htmlLink: _readString(_readAny(json, const ["html_link"])),
@@ -420,78 +420,78 @@ class GeneratedCalendarEventLink {
 
 class GeneratedConversation {
   final String? appId;
-  final List<GeneratedAppResult>? appsResults;
-  final List<GeneratedAudioFile>? audioFiles;
+  final List<GeneratedAppResult> appsResults;
+  final List<GeneratedAudioFile> audioFiles;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
   final String? clientDeviceId;
   final String? clientPlatform;
   final DateTime createdAt;
   final String? dataProtectionLevel;
-  final bool? deferred;
-  final bool? discarded;
+  final bool deferred;
+  final bool discarded;
   final Map<String, dynamic>? externalData;
   final DateTime? finishedAt;
   final String? folderId;
   final GeneratedGeolocation? geolocation;
   final String id;
-  final bool? isLocked;
+  final bool isLocked;
   final String? language;
-  final List<GeneratedConversationPhoto>? photos;
-  final List<GeneratedPluginResult>? pluginsResults;
-  final bool? privateCloudSyncEnabled;
+  final List<GeneratedConversationPhoto> photos;
+  final List<GeneratedPluginResult> pluginsResults;
+  final bool privateCloudSyncEnabled;
   final String? processingConversationId;
   final String? processingMemoryId;
   final String? source;
-  final bool? starred;
+  final bool starred;
   final DateTime? startedAt;
   final String? status;
   final GeneratedStructured structured;
-  final List<String>? suggestedSummarizationApps;
-  final List<GeneratedTranscriptSegment>? transcriptSegments;
+  final List<String> suggestedSummarizationApps;
+  final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
-  final String? visibility;
+  final String visibility;
 
   const GeneratedConversation({
     this.appId,
-    this.appsResults,
-    this.audioFiles,
+    required this.appsResults,
+    required this.audioFiles,
     this.calendarEvent,
     this.callId,
     this.clientDeviceId,
     this.clientPlatform,
     required this.createdAt,
     this.dataProtectionLevel,
-    this.deferred,
-    this.discarded,
+    required this.deferred,
+    required this.discarded,
     this.externalData,
     required this.finishedAt,
     this.folderId,
     this.geolocation,
     required this.id,
-    this.isLocked,
+    required this.isLocked,
     this.language,
-    this.photos,
-    this.pluginsResults,
-    this.privateCloudSyncEnabled,
+    required this.photos,
+    required this.pluginsResults,
+    required this.privateCloudSyncEnabled,
     this.processingConversationId,
     this.processingMemoryId,
-    this.source,
-    this.starred,
+    required this.source,
+    required this.starred,
     required this.startedAt,
-    this.status,
+    required this.status,
     required this.structured,
-    this.suggestedSummarizationApps,
-    this.transcriptSegments,
-    this.transcriptSegmentsCompressed,
-    this.visibility,
+    required this.suggestedSummarizationApps,
+    required this.transcriptSegments,
+    required this.transcriptSegmentsCompressed,
+    required this.visibility,
   });
 
   factory GeneratedConversation.fromJson(Map<String, dynamic> json) {
     return GeneratedConversation(
       appId: _readString(_readAny(json, const ["app_id"])),
-      appsResults: _readAny(json, const ["apps_results"]) == null ? null : _readObjectList(_readAny(json, const ["apps_results"]), GeneratedAppResult.fromJson),
-      audioFiles: _readAny(json, const ["audio_files"]) == null ? null : _readObjectList(_readAny(json, const ["audio_files"]), GeneratedAudioFile.fromJson),
+      appsResults: _readObjectList(_readAny(json, const ["apps_results"]), GeneratedAppResult.fromJson),
+      audioFiles: _readObjectList(_readAny(json, const ["audio_files"]), GeneratedAudioFile.fromJson),
       calendarEvent: _readObject(_readAny(json, const ["calendar_event"]), GeneratedCalendarEventLink.fromJson),
       callId: _readString(_readAny(json, const ["call_id"])),
       clientDeviceId: _readString(_readAny(json, const ["client_device_id"])),
@@ -507,8 +507,8 @@ class GeneratedConversation {
       id: _required(_readString(_readAny(json, const ["id"])), "id"),
       isLocked: _readBool(_readAny(json, const ["is_locked"])) ?? false,
       language: _readString(_readAny(json, const ["language"])),
-      photos: _readAny(json, const ["photos"]) == null ? null : _readObjectList(_readAny(json, const ["photos"]), GeneratedConversationPhoto.fromJson),
-      pluginsResults: _readAny(json, const ["plugins_results"]) == null ? null : _readObjectList(_readAny(json, const ["plugins_results"]), GeneratedPluginResult.fromJson),
+      photos: _readObjectList(_readAny(json, const ["photos"]), GeneratedConversationPhoto.fromJson),
+      pluginsResults: _readObjectList(_readAny(json, const ["plugins_results"]), GeneratedPluginResult.fromJson),
       privateCloudSyncEnabled: _readBool(_readAny(json, const ["private_cloud_sync_enabled"])) ?? false,
       processingConversationId: _readString(_readAny(json, const ["processing_conversation_id"])),
       processingMemoryId: _readString(_readAny(json, const ["processing_memory_id"])),
@@ -517,8 +517,8 @@ class GeneratedConversation {
       startedAt: _readDateTime(_readAny(json, const ["started_at"])),
       status: _readString(_readAny(json, const ["status"])) ?? "completed",
       structured: _required(_readObject(_readAny(json, const ["structured"]), GeneratedStructured.fromJson), "structured"),
-      suggestedSummarizationApps: _readAny(json, const ["suggested_summarization_apps"]) == null ? null : _readStringList(_readAny(json, const ["suggested_summarization_apps"])),
-      transcriptSegments: _readAny(json, const ["transcript_segments"]) == null ? null : _readObjectList(_readAny(json, const ["transcript_segments"]), GeneratedTranscriptSegment.fromJson),
+      suggestedSummarizationApps: _readStringList(_readAny(json, const ["suggested_summarization_apps"])),
+      transcriptSegments: _readObjectList(_readAny(json, const ["transcript_segments"]), GeneratedTranscriptSegment.fromJson),
       transcriptSegmentsCompressed: _readBool(_readAny(json, const ["transcript_segments_compressed"])) ?? false,
       visibility: _readString(_readAny(json, const ["visibility"])) ?? "private",
     );
@@ -527,8 +527,8 @@ class GeneratedConversation {
   Map<String, dynamic> toJson() {
     return {
       'app_id': appId,
-      'apps_results': appsResults?.map((value) => value.toJson()).toList(),
-      'audio_files': audioFiles?.map((value) => value.toJson()).toList(),
+      'apps_results': appsResults.map((value) => value.toJson()).toList(),
+      'audio_files': audioFiles.map((value) => value.toJson()).toList(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
       'client_device_id': clientDeviceId,
@@ -544,8 +544,8 @@ class GeneratedConversation {
       'id': id,
       'is_locked': isLocked,
       'language': language,
-      'photos': photos?.map((value) => value.toJson()).toList(),
-      'plugins_results': pluginsResults?.map((value) => value.toJson()).toList(),
+      'photos': photos.map((value) => value.toJson()).toList(),
+      'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,
@@ -555,7 +555,7 @@ class GeneratedConversation {
       'status': status,
       'structured': structured.toJson(),
       'suggested_summarization_apps': suggestedSummarizationApps,
-      'transcript_segments': transcriptSegments?.map((value) => value.toJson()).toList(),
+      'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'visibility': visibility,
     };

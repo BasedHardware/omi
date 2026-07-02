@@ -91,6 +91,20 @@ SCHEMA_GROUPS = {
             'DefaultTaskIntegrationResponse',
         ),
     },
+    'subscription_usage': {
+        'output': DEFAULT_OUTPUT_DIR / 'subscription_usage_wire.g.dart',
+        'schemas': (
+            'PlanLimits',
+            'Subscription',
+            'PricingOption',
+            'SubscriptionPlan',
+            'PhoneCallQuota',
+            'UserSubscriptionResponse',
+            'UsageStats',
+            'UsageHistoryPoint',
+            'UserUsageResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
@@ -180,6 +194,8 @@ def dart_type_for(
 
 
 def default_for(field: Field) -> str:
+    if field.dart_type.ref_schema and isinstance(field.default, dict):
+        return f'{field.dart_type.name}.fromJson(const {{}})'
     if field.default is not None:
         return dart_literal(field.default)
     if field.dart_type.list_item:
@@ -338,12 +354,13 @@ def fields_for_schema(
     required = set(schema.get('required', []))
     fields: list[Field] = []
     for wire_name, prop_schema in schema.get('properties', {}).items():
+        is_required = wire_name in required or prop_schema.get('default') is not None
         fields.append(
             Field(
                 wire_name=wire_name,
                 dart_name=snake_to_camel(wire_name),
-                dart_type=dart_type_for(prop_schema, wire_name in required, target_schemas, all_schemas),
-                required=wire_name in required,
+                dart_type=dart_type_for(prop_schema, is_required, target_schemas, all_schemas),
+                required=is_required,
                 default=prop_schema.get('default'),
                 aliases=ALIASES.get(schema_name, {}).get(wire_name, ()),
             )

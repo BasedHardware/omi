@@ -12,11 +12,11 @@ class GeneratedActionItemResponse {
   final DateTime? dueAt;
   final DateTime? exportDate;
   final String? exportPlatform;
-  final bool? exported;
+  final bool exported;
   final String id;
-  final int? indentLevel;
-  final bool? isLocked;
-  final int? sortOrder;
+  final int indentLevel;
+  final bool isLocked;
+  final int sortOrder;
   final DateTime? updatedAt;
 
   const GeneratedActionItemResponse({
@@ -29,11 +29,11 @@ class GeneratedActionItemResponse {
     this.dueAt,
     this.exportDate,
     this.exportPlatform,
-    this.exported,
+    required this.exported,
     required this.id,
-    this.indentLevel,
-    this.isLocked,
-    this.sortOrder,
+    required this.indentLevel,
+    required this.isLocked,
+    required this.sortOrder,
     this.updatedAt,
   });
 
@@ -80,11 +80,11 @@ class GeneratedActionItemResponse {
 
 class GeneratedActionItemsResponse {
   final List<GeneratedActionItemResponse> actionItems;
-  final bool? hasMore;
+  final bool hasMore;
 
   const GeneratedActionItemsResponse({
     required this.actionItems,
-    this.hasMore,
+    required this.hasMore,
   });
 
   factory GeneratedActionItemsResponse.fromJson(Map<String, dynamic> json) {
@@ -148,30 +148,30 @@ class GeneratedPendingSyncResponse {
 
 class GeneratedFolder {
   final String? categoryMapping;
-  final String? color;
-  final int? conversationCount;
+  final String color;
+  final int conversationCount;
   final DateTime createdAt;
   final String? description;
-  final String? icon;
+  final String icon;
   final String id;
-  final bool? isDefault;
-  final bool? isSystem;
+  final bool isDefault;
+  final bool isSystem;
   final String name;
-  final int? order;
+  final int order;
   final DateTime updatedAt;
 
   const GeneratedFolder({
     this.categoryMapping,
-    this.color,
-    this.conversationCount,
+    required this.color,
+    required this.conversationCount,
     required this.createdAt,
     this.description,
-    this.icon,
+    required this.icon,
     required this.id,
-    this.isDefault,
-    this.isSystem,
+    required this.isDefault,
+    required this.isSystem,
     required this.name,
-    this.order,
+    required this.order,
     required this.updatedAt,
   });
 
@@ -231,11 +231,11 @@ class GeneratedFolderMutationResponse {
 }
 
 class GeneratedBulkMoveConversationsResponse {
-  final int? movedCount;
+  final int movedCount;
   final String status;
 
   const GeneratedBulkMoveConversationsResponse({
-    this.movedCount,
+    required this.movedCount,
     required this.status,
   });
 

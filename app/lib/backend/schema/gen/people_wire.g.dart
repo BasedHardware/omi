@@ -7,8 +7,8 @@ class GeneratedPerson {
   final String id;
   final String name;
   final List<String>? speechSampleTranscripts;
-  final List<String>? speechSamples;
-  final int? speechSamplesVersion;
+  final List<String> speechSamples;
+  final int speechSamplesVersion;
   final DateTime? updatedAt;
 
   const GeneratedPerson({
@@ -16,8 +16,8 @@ class GeneratedPerson {
     required this.id,
     required this.name,
     this.speechSampleTranscripts,
-    this.speechSamples,
-    this.speechSamplesVersion,
+    required this.speechSamples,
+    required this.speechSamplesVersion,
     this.updatedAt,
   });
 
@@ -27,7 +27,7 @@ class GeneratedPerson {
       id: _required(_readString(_readAny(json, const ["id"])), "id"),
       name: _required(_readString(_readAny(json, const ["name"])), "name"),
       speechSampleTranscripts: _readAny(json, const ["speech_sample_transcripts"]) == null ? null : _readStringList(_readAny(json, const ["speech_sample_transcripts"])),
-      speechSamples: _readAny(json, const ["speech_samples"]) == null ? null : _readStringList(_readAny(json, const ["speech_samples"])),
+      speechSamples: _readStringList(_readAny(json, const ["speech_samples"])),
       speechSamplesVersion: _readInt(_readAny(json, const ["speech_samples_version"])) ?? 3,
       updatedAt: _readDateTime(_readAny(json, const ["updated_at"])),
     );

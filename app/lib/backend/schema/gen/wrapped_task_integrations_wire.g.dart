@@ -7,14 +7,14 @@ class GeneratedWrappedStatusResponse {
   final Map<String, dynamic>? progress;
   final Map<String, dynamic>? result;
   final String status;
-  final int? year;
+  final int year;
 
   const GeneratedWrappedStatusResponse({
     this.error,
     this.progress,
     this.result,
     required this.status,
-    this.year,
+    required this.year,
   });
 
   factory GeneratedWrappedStatusResponse.fromJson(Map<String, dynamic> json) {
