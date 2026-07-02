@@ -1,8 +1,49 @@
 from __future__ import annotations
 
+from typing import Any
+
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import Runnable
+
+from utils.llm import clients, gateway_shadow
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, get_llm_gateway_base_url
 from utils.llm.clients import get_llm_gateway_chat_structured
+
+
+class FakeChatModel(BaseChatModel):
+    name: str
+    calls: list
+
+    @property
+    def _llm_type(self) -> str:
+        return f'fake-{self.name}'
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self.calls.append({'messages': messages, 'kwargs': kwargs})
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=f'{self.name} response'))])
+
+    def with_structured_output(self, schema, *, include_raw: bool = False, **kwargs: Any):
+        return FakeStructuredRunnable(self.name, self.calls)
+
+
+class FakeStructuredRunnable(Runnable):
+    def __init__(self, name: str, calls: list):
+        self.name = name
+        self.calls = calls
+
+    def invoke(self, input: Any, config=None, **kwargs: Any) -> dict[str, str]:
+        self.calls.append({'input': input, 'kwargs': kwargs})
+        return {'result': self.name}
 
 
 def test_llm_gateway_base_url_defaults_to_local_service(monkeypatch):
@@ -36,3 +77,63 @@ def test_gateway_langchain_client_uses_internal_gateway_base_url_and_auth(monkey
     assert captured['base_url'] == 'http://gateway.internal:8080/v1'
     assert captured['default_headers']['X-Omi-Service-Caller'] == 'backend'
     assert captured['default_headers']['Authorization'] == 'Bearer service-token'
+
+
+def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
+    submitted = []
+    legacy = FakeChatModel(name='legacy', calls=[])
+    gateway = FakeChatModel(name='gateway', calls=[])
+
+    def immediate_submit(_executor, fn, *args, **kwargs):
+        submitted.append(fn.__name__)
+        fn(*args, **kwargs)
+
+    monkeypatch.setenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, 'true')
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+    monkeypatch.setattr(gateway_shadow, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: gateway)
+    monkeypatch.setattr(gateway_shadow, 'submit_with_context', immediate_submit)
+
+    result = clients.get_llm('conv_discard').invoke('hello')
+
+    assert result.content == 'legacy response'
+    assert len(legacy.calls) == 1
+    assert len(gateway.calls) == 1
+    assert submitted == ['_run_sync_shadow']
+
+
+def test_get_llm_dev_shadow_wraps_structured_output(monkeypatch):
+    submitted = []
+    legacy = FakeChatModel(name='legacy', calls=[])
+    gateway = FakeChatModel(name='gateway', calls=[])
+
+    def immediate_submit(_executor, fn, *args, **kwargs):
+        submitted.append(fn.__name__)
+        fn(*args, **kwargs)
+
+    monkeypatch.setenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, 'true')
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+    monkeypatch.setattr(gateway_shadow, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: gateway)
+    monkeypatch.setattr(gateway_shadow, 'submit_with_context', immediate_submit)
+
+    result = clients.get_llm('chat_extraction').with_structured_output(dict).invoke('hello')
+
+    assert result == {'result': 'legacy'}
+    assert legacy.calls == [{'input': 'hello', 'kwargs': {}}]
+    assert gateway.calls == [{'input': 'hello', 'kwargs': {}}]
+    assert submitted == ['_run_sync_shadow']
+
+
+def test_get_llm_dev_shadow_is_disabled_for_prod_like_runtime(monkeypatch):
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    monkeypatch.setenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, 'true')
+    monkeypatch.setenv('K_SERVICE', 'prod-omi-backend')
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('conv_discard')
+
+    assert result is legacy
