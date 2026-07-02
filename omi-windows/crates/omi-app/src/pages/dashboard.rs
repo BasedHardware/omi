@@ -6,6 +6,7 @@ use crate::app::Db;
 use crate::config::AppConfig;
 use crate::proactive::ProactiveEngine;
 use crate::recording::{LiveTranscript, RecordingStatus, StopRecording};
+use omi_db::schema::{Conversation, Memory};
 
 #[component]
 pub fn DashboardPage() -> Element {
@@ -28,11 +29,68 @@ pub fn DashboardPage() -> Element {
 
     let has_api_key = !config.read().deepgram_api_key.is_empty();
 
+    let mut stats_conversations = use_signal(|| 0i64);
+    let mut stats_memories = use_signal(|| 0i64);
+    let mut stats_screenshots = use_signal(|| 0i64);
+    let mut stats_tasks = use_signal(|| 0i64);
+    let mut stats_clipboard = use_signal(|| 0i64);
+    let mut stats_apps = use_signal(|| 0usize);
+    let mut recent_conversations = use_signal(Vec::<Conversation>::new);
+    let mut recent_memories = use_signal(Vec::<Memory>::new);
+
+    use_effect(move || {
+        let db_snap = db.read().clone();
+        if let Some(Db(d)) = db_snap {
+            if let Ok(s) = d.get_today_stats() {
+                stats_conversations.set(s.conversations);
+                stats_memories.set(s.memories);
+                stats_screenshots.set(s.screenshots);
+                stats_tasks.set(s.tasks_completed);
+                stats_clipboard.set(s.clipboard_items);
+                stats_apps.set(s.apps_used.len());
+            }
+            if let Ok(convos) = d.list_conversations(5) {
+                recent_conversations.set(convos);
+            }
+            if let Ok(mems) = d.list_memories(5) {
+                recent_memories.set(mems);
+            }
+        }
+    });
+
     rsx! {
         div { class: "page",
             h1 { class: "page-title", "Dashboard" }
             p { class: if is_error { "page-subtitle text-error" } else { "page-subtitle" },
                 "{status_text}"
+            }
+
+            // ── Today's Stats ────────────────────────────────────────────
+            div { class: "stats-grid",
+                div { class: "stat-card",
+                    span { class: "stat-value", "{stats_conversations}" }
+                    span { class: "stat-label text-muted", "Conversations" }
+                }
+                div { class: "stat-card",
+                    span { class: "stat-value", "{stats_memories}" }
+                    span { class: "stat-label text-muted", "Memories" }
+                }
+                div { class: "stat-card",
+                    span { class: "stat-value", "{stats_screenshots}" }
+                    span { class: "stat-label text-muted", "Screenshots" }
+                }
+                div { class: "stat-card",
+                    span { class: "stat-value", "{stats_tasks}" }
+                    span { class: "stat-label text-muted", "Tasks Done" }
+                }
+                div { class: "stat-card",
+                    span { class: "stat-value", "{stats_clipboard}" }
+                    span { class: "stat-label text-muted", "Clipboard" }
+                }
+                div { class: "stat-card",
+                    span { class: "stat-value", "{stats_apps}" }
+                    span { class: "stat-label text-muted", "Apps Used" }
+                }
             }
 
             // Record controls
@@ -55,7 +113,6 @@ pub fn DashboardPage() -> Element {
                     button {
                         class: "btn btn-secondary",
                         onclick: move |_| {
-                            // Restart: stop current recording then start again after a short delay
                             if let Some(handle) = stop_handle.write().take() {
                                 handle.stop();
                             }
@@ -68,7 +125,6 @@ pub fn DashboardPage() -> Element {
                             let mut stop_handle_clone = stop_handle.clone();
                             let pe_restart = Some(proactive_engine.read().clone());
                             spawn(async move {
-                                // small pause to allow resources to release
                                 tokio::time::sleep(std::time::Duration::from_millis(400)).await;
                                 let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
                                 stop_handle_clone.set(Some(crate::recording::StopRecording::new(stop_tx)));
@@ -91,9 +147,7 @@ pub fn DashboardPage() -> Element {
                             let db_val = db.read().clone();
                             let mut status = recording_status.clone();
                             let mut transcript = live_transcript.clone();
-                            // Create stop channel here so the sender is available immediately
                             let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-                            // Store stop handle in global app context so it survives tab changes
                             stop_handle.set(Some(crate::recording::StopRecording::new(stop_tx)));
                             let pe_start = Some(proactive_engine.read().clone());
                             spawn(async move {
@@ -128,6 +182,59 @@ pub fn DashboardPage() -> Element {
                                         class: if seg.is_final { "transcript-segment final" } else { "transcript-segment interim" },
                                         span { class: "speaker-badge", "S{seg.speaker}" }
                                         span { class: "segment-text", "{seg.text}" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Recent Conversations ─────────────────────────────────────
+            if !recent_conversations.read().is_empty() {
+                div { class: "section",
+                    h2 { class: "section-title", "Recent Conversations" }
+                    div { class: "recent-list",
+                        for convo in recent_conversations.read().iter() {
+                            {
+                                let title = convo.title.as_deref().unwrap_or("Untitled");
+                                let time = convo.started_at.format("%b %d %H:%M").to_string();
+                                let dur_min = (convo.duration_secs / 60.0) as i64;
+                                let summary_short = convo.summary.as_deref().unwrap_or("").chars().take(120).collect::<String>();
+                                rsx! {
+                                    div { class: "recent-card",
+                                        div { class: "recent-card-header",
+                                            span { class: "recent-card-title", "{title}" }
+                                            span { class: "text-muted", "{time} · {dur_min}m" }
+                                        }
+                                        if !summary_short.is_empty() {
+                                            p { class: "recent-card-summary text-muted", "{summary_short}" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Recent Memories ──────────────────────────────────────────
+            if !recent_memories.read().is_empty() {
+                div { class: "section",
+                    h2 { class: "section-title", "Recent Memories" }
+                    div { class: "recent-list",
+                        for mem in recent_memories.read().iter() {
+                            {
+                                let time = mem.created_at.format("%b %d %H:%M").to_string();
+                                let cat = mem.category.as_deref().unwrap_or("general");
+                                let preview = mem.content.chars().take(160).collect::<String>();
+                                rsx! {
+                                    div { class: "recent-card",
+                                        div { class: "recent-card-header",
+                                            span { class: "badge", "{cat}" }
+                                            span { class: "text-muted", "{time}" }
+                                        }
+                                        p { class: "recent-card-summary", "{preview}" }
                                     }
                                 }
                             }
