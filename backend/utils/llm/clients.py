@@ -51,6 +51,7 @@ from utils.llm.providers import (
     _llm_cache,
 )
 from utils.llm.gateway_client import CHAT_STRUCTURED_AUTO_LANE_ID
+from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -322,6 +323,14 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
         )
     else:
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
+
+    result = maybe_wrap_dev_gateway_shadow(
+        feature=feature,
+        model=model,
+        provider=provider,
+        streaming=streaming,
+        legacy_model=result,
+    )
 
     if cache_key and supports_prompt_cache(model):
         return result.bind(prompt_cache_key=cache_key)

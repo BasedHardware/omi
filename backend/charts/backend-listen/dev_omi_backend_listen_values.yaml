@@ -119,6 +119,10 @@ env:
     value: "true"
   - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE
     value: "1.0"
+  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED
+    value: "true"
+  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE
+    value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:
       secretKeyRef:

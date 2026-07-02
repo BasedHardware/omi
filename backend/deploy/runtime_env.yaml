@@ -24,6 +24,12 @@ environments:
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
             value: "1.0"
             category: rollout
+          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+            value: "true"
+            category: rollout
+          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
+            value: "1.0"
+            category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
               name: dev-omi-backend-secrets
@@ -75,6 +81,12 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
             MEMORY_MODE:
               value: write
               category: memory_rollout
@@ -122,6 +134,12 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
             MEMORY_MODE:
               value: write
               category: memory_rollout
@@ -167,6 +185,12 @@ environments:
               value: "true"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             MEMORY_MODE:
