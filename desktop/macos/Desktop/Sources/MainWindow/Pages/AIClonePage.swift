@@ -1,8 +1,10 @@
+import AppKit
 import SwiftUI
 
 /// AI Clone page — an AI-powered messaging assistant that learns to reply to your
-/// contacts in your voice. Contacts are the user's real top iMessage correspondents
-/// (ranked by message count), read locally via `IMessageReaderService`.
+/// contacts in your voice. Contacts are the user's real top correspondents (ranked by
+/// message count) from iMessage (read locally via `IMessageReaderService`) plus any
+/// Telegram/WhatsApp exports the user has imported this session.
 struct AIClonePage: View {
   private enum LoadState: Equatable {
     case loading
@@ -13,31 +15,42 @@ struct AIClonePage: View {
   }
 
   @State private var state: LoadState = .loading
-  @State private var contacts: [IMessageContact] = []
+  @State private var contacts: [ImportedContact] = []
   @State private var selectedHandles: Set<String> = []
   /// How many top contacts to auto-select. Defaults to 5; re-applied whenever changed.
   @State private var autoSelectCount = 5
   /// Bumped to force `.task` to re-run (e.g. after the user grants Full Disk Access).
   @State private var reloadToken = UUID()
 
-  /// Generated personas keyed by contact handle (hydrated from disk on load).
+  /// Generated personas keyed by contact id (hydrated from disk on load).
   @State private var personas: [String: ContactPersona] = [:]
-  /// Handles currently generating a persona (drives the per-row spinner).
+  /// Contact ids currently generating a persona (drives the per-row spinner).
   @State private var trainingHandles: Set<String> = []
-  /// Last training error per handle, shown inline on that row.
+  /// Last training error per contact id, shown inline on that row.
   @State private var trainingErrors: [String: String] = [:]
   /// Non-nil while the "Preview Chat" sheet is open for a trained contact.
   @State private var chatTarget: AICloneChatTarget?
-  /// Per-handle backtest UI state (progress while running, result when done).
+  /// Per-contact backtest UI state (progress while running, result when done).
   @State private var backtestStates: [String: AICloneBacktestUIState] = [:]
   /// Non-nil while the backtest-results detail sheet is open.
   @State private var backtestDetail: AICloneBacktestDetail?
 
+  /// Non-nil while the Telegram "which one is you" sheet is open.
+  @State private var telegramSenderPicker: TelegramSenderPickerState?
+  /// Non-nil while the WhatsApp "which one is you" sheet is open.
+  @State private var whatsAppSenderPicker: WhatsAppSenderPickerState?
+  @State private var telegramImportError: String?
+  @State private var whatsAppImportError: String?
+
   private var maxSelectable: Int { contacts.count }
+  private var hasTelegramContacts: Bool { contacts.contains { $0.platform == "telegram" } }
+  private var hasWhatsAppContacts: Bool { contacts.contains { $0.platform == "whatsapp" } }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 24) {
       header
+
+      importControls
 
       content
     }
@@ -50,6 +63,24 @@ struct AIClonePage: View {
     }
     .sheet(item: $backtestDetail) { detail in
       AICloneBacktestSheet(contact: detail.contact, result: detail.result)
+    }
+    .sheet(item: $telegramSenderPicker) { picker in
+      TelegramSenderSheet(senders: picker.senders) { chosen in
+        telegramSenderPicker = nil
+        Task {
+          await TelegramImportService.shared.setSelfID(chosen.senderID ?? chosen.id)
+          await refreshTelegramContacts()
+        }
+      }
+    }
+    .sheet(item: $whatsAppSenderPicker) { picker in
+      WhatsAppSenderSheet(options: picker.options, preselected: picker.preselected) { chosen in
+        whatsAppSenderPicker = nil
+        Task {
+          await WhatsAppImportService.shared.setSelfName(chosen)
+          await refreshWhatsAppContacts()
+        }
+      }
     }
   }
 
@@ -65,6 +96,65 @@ struct AIClonePage: View {
         .scaledFont(size: 15, weight: .regular)
         .foregroundColor(OmiColors.textSecondary)
     }
+  }
+
+  // MARK: - Import controls (Telegram / WhatsApp)
+
+  private var importControls: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 10) {
+        importButton(title: "Import Telegram", systemImage: "paperplane.fill", action: importTelegram)
+        if hasTelegramContacts {
+          changeButton(action: changeTelegramSelf)
+        }
+
+        importButton(
+          title: "Import WhatsApp", systemImage: "phone.bubble.left.fill", action: importWhatsApp)
+        if hasWhatsAppContacts {
+          changeButton(action: changeWhatsAppSelf)
+        }
+
+        Spacer()
+      }
+
+      if let telegramImportError {
+        Text(telegramImportError)
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.warning)
+      }
+      if let whatsAppImportError {
+        Text(whatsAppImportError)
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.warning)
+      }
+    }
+  }
+
+  private func importButton(title: String, systemImage: String, action: @escaping () -> Void)
+    -> some View
+  {
+    Button(action: action) {
+      HStack(spacing: 6) {
+        Image(systemName: systemImage)
+          .font(.system(size: 12, weight: .semibold))
+        Text(title)
+          .scaledFont(size: 13, weight: .semibold)
+      }
+      .foregroundColor(OmiColors.textPrimary)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 8)
+      .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func changeButton(action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Text("Change")
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(OmiColors.textTertiary)
+    }
+    .buttonStyle(.plain)
   }
 
   // MARK: - Content (state machine)
@@ -93,11 +183,14 @@ struct AIClonePage: View {
         Text("No conversations found")
           .scaledFont(size: 16, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text("Once you have direct message threads in Messages, your top contacts will appear here.")
-          .scaledFont(size: 13, weight: .regular)
-          .foregroundColor(OmiColors.textTertiary)
-          .multilineTextAlignment(.center)
-          .frame(maxWidth: 360)
+        Text(
+          "Once you have direct message threads in Messages, or import a Telegram/WhatsApp "
+            + "export, your top contacts will appear here."
+        )
+        .scaledFont(size: 13, weight: .regular)
+        .foregroundColor(OmiColors.textTertiary)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: 360)
       }
 
     case .failed(let message):
@@ -207,7 +300,8 @@ struct AIClonePage: View {
 
       Text(
         "Omi reads your Messages history locally on this Mac to learn how you write. "
-          + "Grant Full Disk Access in System Settings, then reload."
+          + "Grant Full Disk Access in System Settings, then reload — or import a "
+          + "Telegram/WhatsApp export above instead."
       )
       .scaledFont(size: 13, weight: .regular)
       .foregroundColor(OmiColors.textTertiary)
@@ -259,27 +353,44 @@ struct AIClonePage: View {
 
   private func load() async {
     state = .loading
+    personas = await AIClonePersonaService.shared.allPersonas()
     do {
       let result = try await IMessageReaderService.shared.topContacts(limit: 20)
-      // Restore any personas generated in a previous session so "Trained" badges persist.
-      personas = await AIClonePersonaService.shared.allPersonas()
-      contacts = result
-      if result.isEmpty {
-        selectedHandles = []
-        state = .empty
-        return
-      }
-      // Default: auto-select the top 5 (clamped to however many contacts exist).
-      autoSelectCount = min(5, result.count)
-      applyTopXSelection()
-      state = .loaded
+      // Re-fetch after the await so imports finished during load aren't clobbered.
+      let otherContacts = await importedPlatformContacts()
+      finishLoad(result.map { $0.asImportedContact() } + otherContacts)
     } catch IMessageReaderError.fullDiskAccessDenied {
-      state = .needsFullDiskAccess
+      let otherContacts = await importedPlatformContacts()
+      if otherContacts.isEmpty {
+        state = .needsFullDiskAccess
+      } else {
+        finishLoad(otherContacts)
+      }
     } catch IMessageReaderError.chatDatabaseNotFound {
-      state = .empty
+      let otherContacts = await importedPlatformContacts()
+      finishLoad(otherContacts)
     } catch {
       state = .failed(error.localizedDescription)
     }
+  }
+
+  /// Session-imported Telegram/WhatsApp contacts (empty until the user imports one).
+  private func importedPlatformContacts() async -> [ImportedContact] {
+    async let telegram = TelegramImportService.shared.topContacts(limit: 20)
+    async let whatsApp = WhatsAppImportService.shared.topContacts(limit: 20)
+    return await telegram + whatsApp
+  }
+
+  private func finishLoad(_ imported: [ImportedContact]) {
+    contacts = imported.sorted { $0.messageCount > $1.messageCount }
+    if contacts.isEmpty {
+      selectedHandles = []
+      state = .empty
+      return
+    }
+    autoSelectCount = min(5, contacts.count)
+    applyTopXSelection()
+    state = .loaded
   }
 
   /// Select exactly the top-N contacts by rank. Called on load and whenever the user
@@ -289,7 +400,7 @@ struct AIClonePage: View {
     selectedHandles = Set(contacts.prefix(clamped).map { $0.id })
   }
 
-  private func toggleSelection(_ contact: IMessageContact) {
+  private func toggleSelection(_ contact: ImportedContact) {
     if selectedHandles.contains(contact.id) {
       selectedHandles.remove(contact.id)
     } else {
@@ -299,15 +410,32 @@ struct AIClonePage: View {
 
   /// Generate a persona for one contact. Runs on the MainActor-isolated view, so state
   /// mutations after the `await` are safe. Errors surface inline on the row.
-  private func train(_ contact: IMessageContact) {
+  private func train(_ contact: ImportedContact) {
     guard !trainingHandles.contains(contact.id) else { return }
     trainingHandles.insert(contact.id)
     trainingErrors[contact.id] = nil
     Task {
+      if contact.platform == "telegram",
+        await TelegramImportService.shared.hasSelfIdentity() == false
+      {
+        telegramSenderPicker = TelegramSenderPickerState(
+          senders: await TelegramImportService.shared.currentSenders())
+        trainingHandles.remove(contact.id)
+        return
+      }
+      if contact.platform == "whatsapp",
+        await WhatsAppImportService.shared.hasSelfIdentity() == false
+      {
+        let options = await WhatsAppImportService.shared.currentSenderOptions()
+        let preselected = options.first(where: \.appearsInEveryChat)?.name
+        whatsAppSenderPicker = WhatsAppSenderPickerState(options: options, preselected: preselected)
+        trainingHandles.remove(contact.id)
+        return
+      }
       do {
-        let (generic, messages) = try await Self.loadImported(contact)
+        let messages = try await Self.loadMessages(for: contact, limit: 500)
         let persona = try await AIClonePersonaService.shared.generatePersona(
-          for: generic, messages: messages)
+          for: contact, messages: messages)
         personas[contact.id] = persona
       } catch {
         trainingErrors[contact.id] = error.localizedDescription
@@ -316,27 +444,52 @@ struct AIClonePage: View {
     }
   }
 
-  /// Fetch this iMessage contact's history and convert to the platform-agnostic shapes the
-  /// AI Clone services now consume.
-  private static func loadImported(
-    _ contact: IMessageContact
-  ) async throws -> (ImportedContact, [ImportedMessage]) {
-    let messages = try await IMessageReaderService.shared.messages(for: contact, limit: 500)
-      .map { $0.asImportedMessage() }
-    return (contact.asImportedContact(), messages)
+  /// Fetch this contact's history, branching by platform. `fileprivate` so
+  /// `AIClonePreviewChatSheet` in this file can reuse the same loading logic.
+  fileprivate static func loadMessages(
+    for contact: ImportedContact, limit: Int = 500
+  ) async throws -> [ImportedMessage] {
+    switch contact.platform {
+    case "telegram":
+      return await TelegramImportService.shared.messages(for: contact.id, limit: limit)
+    case "whatsapp":
+      return await WhatsAppImportService.shared.messages(for: contact.id, limit: limit)
+    default:
+      let imContact = IMessageContact(
+        id: contact.id, displayName: contact.displayName, messageCount: contact.messageCount)
+      return try await IMessageReaderService.shared.messages(for: imContact, limit: limit)
+        .map { $0.asImportedMessage() }
+    }
   }
 
   /// Run the full backtest + refine loop for one contact, streaming progress into the row.
-  private func runBacktest(_ contact: IMessageContact) {
+  private func runBacktest(_ contact: ImportedContact) {
     if case .running = backtestStates[contact.id] { return }
     backtestStates[contact.id] = .running(
       AICloneBacktestProgressUI(iteration: 1, maxIterations: 5, phase: "Starting", latestAverage: nil))
 
     Task {
+      if contact.platform == "telegram",
+        await TelegramImportService.shared.hasSelfIdentity() == false
+      {
+        telegramSenderPicker = TelegramSenderPickerState(
+          senders: await TelegramImportService.shared.currentSenders())
+        backtestStates[contact.id] = nil
+        return
+      }
+      if contact.platform == "whatsapp",
+        await WhatsAppImportService.shared.hasSelfIdentity() == false
+      {
+        let options = await WhatsAppImportService.shared.currentSenderOptions()
+        let preselected = options.first(where: \.appearsInEveryChat)?.name
+        whatsAppSenderPicker = WhatsAppSenderPickerState(options: options, preselected: preselected)
+        backtestStates[contact.id] = nil
+        return
+      }
       do {
-        let (generic, messages) = try await Self.loadImported(contact)
+        let messages = try await Self.loadMessages(for: contact, limit: 500)
         let (persona, result) = try await AICloneBacktestService.shared.trainToTarget(
-          for: generic,
+          for: contact,
           messages: messages,
           onProgress: { progress in
             Task { @MainActor in
@@ -360,13 +513,229 @@ struct AIClonePage: View {
       }
     }
   }
+
+  // MARK: - Import actions
+
+  private func importTelegram() {
+    let panel = NSOpenPanel()
+    panel.message = "Select your Telegram export (result.json, or the export folder)"
+    panel.prompt = "Import"
+    panel.allowedContentTypes = [.json]
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+
+    telegramImportError = nil
+    Task {
+      do {
+        let senders = try await TelegramImportService.shared.importExport(at: url)
+        await refreshTelegramContacts()
+        if !senders.isEmpty {
+          telegramSenderPicker = TelegramSenderPickerState(senders: senders)
+        }
+      } catch {
+        telegramImportError = error.localizedDescription
+      }
+    }
+  }
+
+  private func changeTelegramSelf() {
+    Task {
+      let senders = await TelegramImportService.shared.currentSenders()
+      guard !senders.isEmpty else { return }
+      telegramSenderPicker = TelegramSenderPickerState(senders: senders)
+    }
+  }
+
+  private func importWhatsApp() {
+    let panel = NSOpenPanel()
+    panel.message = "Select one or more WhatsApp \"Export Chat\" .txt files"
+    panel.prompt = "Import"
+    panel.allowedContentTypes = [.plainText]
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = true
+    guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+    let urls = panel.urls
+
+    whatsAppImportError = nil
+    Task {
+      do {
+        let options = try await WhatsAppImportService.shared.importFiles(at: urls)
+        if !options.isEmpty {
+          let preselected = options.first(where: \.appearsInEveryChat)?.name
+          whatsAppSenderPicker = WhatsAppSenderPickerState(options: options, preselected: preselected)
+        }
+      } catch {
+        whatsAppImportError = error.localizedDescription
+      }
+      // Show any chats that imported successfully even if a later file failed mid-batch.
+      await refreshWhatsAppContacts()
+    }
+  }
+
+  private func changeWhatsAppSelf() {
+    Task {
+      let options = await WhatsAppImportService.shared.currentSenderOptions()
+      guard !options.isEmpty else { return }
+      let preselected = options.first(where: \.appearsInEveryChat)?.name
+      whatsAppSenderPicker = WhatsAppSenderPickerState(options: options, preselected: preselected)
+    }
+  }
+
+  private func refreshTelegramContacts() async {
+    let imported = await TelegramImportService.shared.topContacts(limit: 20)
+    mergeContacts(imported)
+  }
+
+  private func refreshWhatsAppContacts() async {
+    let imported = await WhatsAppImportService.shared.topContacts(limit: 20)
+    mergeContacts(imported)
+  }
+
+  /// Merge freshly-imported contacts into the existing list (by id) without disturbing
+  /// contacts from other platforms already showing.
+  private func mergeContacts(_ imported: [ImportedContact]) {
+    guard !imported.isEmpty else { return }
+    var byID = Dictionary(uniqueKeysWithValues: contacts.map { ($0.id, $0) })
+    for contact in imported { byID[contact.id] = contact }
+    contacts = byID.values.sorted { $0.messageCount > $1.messageCount }
+    if state != .loaded { state = .loaded }
+  }
+}
+
+// MARK: - Sender picker sheets
+
+/// Identifies an in-progress Telegram "which one is you" prompt.
+private struct TelegramSenderPickerState: Identifiable {
+  let id = UUID()
+  let senders: [TelegramSender]
+}
+
+/// Identifies an in-progress WhatsApp "which one is you" prompt.
+private struct WhatsAppSenderPickerState: Identifiable {
+  let id = UUID()
+  let options: [WhatsAppSenderOption]
+  let preselected: String?
+}
+
+private struct TelegramSenderSheet: View {
+  let senders: [TelegramSender]
+  let onSelect: (TelegramSender) -> Void
+
+  var body: some View {
+    SenderPickerSheet(
+      subtitle: "Pick your name so Omi knows which Telegram messages are yours."
+    ) {
+      ForEach(senders) { sender in
+        SenderPickerRow(
+          name: sender.name ?? "Unknown", messageCount: sender.messageCount, badge: nil,
+          onSelect: { onSelect(sender) })
+      }
+    }
+  }
+}
+
+private struct WhatsAppSenderSheet: View {
+  let options: [WhatsAppSenderOption]
+  let preselected: String?
+  let onSelect: (String) -> Void
+
+  var body: some View {
+    SenderPickerSheet(
+      subtitle: "Pick your name so Omi knows which WhatsApp messages are yours."
+    ) {
+      ForEach(options) { option in
+        SenderPickerRow(
+          name: option.name, messageCount: option.messageCount,
+          badge: option.name == preselected ? "likely you" : nil,
+          onSelect: { onSelect(option.name) })
+      }
+    }
+  }
+}
+
+/// Shared chrome for the Telegram/WhatsApp "which one is you" sheets.
+private struct SenderPickerSheet<Rows: View>: View {
+  let subtitle: String
+  let rows: Rows
+
+  init(subtitle: String, @ViewBuilder rows: () -> Rows) {
+    self.subtitle = subtitle
+    self.rows = rows()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Which one is you?")
+          .scaledFont(size: 16, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(subtitle)
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+      .padding(16)
+      Divider().overlay(OmiColors.border)
+      ScrollView {
+        LazyVStack(spacing: 6) {
+          rows
+        }
+        .padding(16)
+      }
+    }
+    .frame(width: 380, height: 420)
+    .background(OmiColors.backgroundPrimary)
+  }
+}
+
+private struct SenderPickerRow: View {
+  let name: String
+  let messageCount: Int
+  let badge: String?
+  let onSelect: () -> Void
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    Button(action: {
+      onSelect()
+      dismiss()
+    }) {
+      HStack(spacing: 8) {
+        Text(name)
+          .scaledFont(size: 14, weight: .medium)
+          .foregroundColor(OmiColors.textPrimary)
+          .lineLimit(1)
+
+        if let badge {
+          Text(badge)
+            .scaledFont(size: 10, weight: .semibold)
+            .foregroundColor(OmiColors.textTertiary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(OmiColors.backgroundTertiary))
+        }
+
+        Spacer()
+
+        Text("\(messageCount) messages")
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 10)
+      .background(RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundSecondary))
+    }
+    .buttonStyle(.plain)
+  }
 }
 
 // MARK: - Contact Row
 
 private struct AICloneContactRow: View {
   let rank: Int
-  let contact: IMessageContact
+  let contact: ImportedContact
   let isSelected: Bool
   let isTraining: Bool
   let persona: ContactPersona?
@@ -381,6 +750,16 @@ private struct AICloneContactRow: View {
   @State private var isHovered = false
 
   private var isTrained: Bool { persona != nil }
+
+  /// Small platform badge shown next to the name for non-iMessage sources. No purple
+  /// (per AGENTS.md) — neutral white/gray SF Symbols.
+  private var platformIcon: String? {
+    switch contact.platform {
+    case "telegram": return "paperplane.fill"
+    case "whatsapp": return "phone.bubble.left.fill"
+    default: return nil
+    }
+  }
 
   var body: some View {
     HStack(spacing: 14) {
@@ -404,11 +783,18 @@ private struct AICloneContactRow: View {
       }
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(contact.displayName)
-          .scaledFont(size: 15, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
-          .lineLimit(1)
-          .truncationMode(.middle)
+        HStack(spacing: 6) {
+          if let platformIcon {
+            Image(systemName: platformIcon)
+              .font(.system(size: 10, weight: .semibold))
+              .foregroundColor(OmiColors.textQuaternary)
+          }
+          Text(contact.displayName)
+            .scaledFont(size: 15, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+        }
 
         Text("\(contact.messageCount.formatted()) messages")
           .scaledFont(size: 12, weight: .regular)
@@ -584,7 +970,7 @@ private struct AICloneContactRow: View {
 
 /// Identifies which trained contact the preview-chat sheet is for.
 private struct AICloneChatTarget: Identifiable {
-  let contact: IMessageContact
+  let contact: ImportedContact
   let persona: ContactPersona
   var id: String { contact.id }
 }
@@ -601,7 +987,7 @@ private struct AIClonePreviewMessage: Identifiable {
 /// Minimal manual chat tool: type a message as the contact, see how the persona (you)
 /// would reply. In-memory only — nothing is persisted.
 private struct AIClonePreviewChatSheet: View {
-  let contact: IMessageContact
+  let contact: ImportedContact
   let persona: ContactPersona
 
   @Environment(\.dismiss) private var dismiss
@@ -625,11 +1011,9 @@ private struct AIClonePreviewChatSheet: View {
     .task {
       // Build the retrieval index so replies get dynamic few-shot examples from the
       // real history (no-op if already built for this contact).
-      if let messages = try? await IMessageReaderService.shared.messages(
-        for: contact, limit: 1500)
-      {
+      if let messages = try? await AIClonePage.loadMessages(for: contact, limit: 1500) {
         await AICloneRetrievalService.shared.ensureIndex(
-          contactId: contact.id, messages: messages.map { $0.asImportedMessage() })
+          contactId: contact.id, messages: messages)
       }
     }
   }
@@ -853,7 +1237,7 @@ struct AICloneBacktestProgressUI {
 
 /// Identifies which contact's backtest results the detail sheet shows.
 private struct AICloneBacktestDetail: Identifiable {
-  let contact: IMessageContact
+  let contact: ImportedContact
   let result: BacktestResult
   var id: String { contact.id }
 }
@@ -878,7 +1262,7 @@ enum AICloneScoreFormat {
 /// Shows the average score prominently and the held-out pairs so the user can eyeball
 /// quality: their message / what the clone predicted / what the user actually said / score.
 private struct AICloneBacktestSheet: View {
-  let contact: IMessageContact
+  let contact: ImportedContact
   let result: BacktestResult
 
   @Environment(\.dismiss) private var dismiss
