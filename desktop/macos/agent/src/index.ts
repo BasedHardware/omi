@@ -58,8 +58,11 @@ import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
 import {
   adapterActivationError,
   adapterIdForHarnessMode,
+  adapterIsActivated,
   ensureRegisteredAdapter,
 } from "./runtime/adapter-selection.js";
+import { PRODUCTION_ADAPTER_IDS } from "./adapters/interface.js";
+import { selectAgent, type AgentId } from "./runtime/agent-selector.js";
 import {
   activeControlToolOwnerId,
   controlRequestKey,
@@ -808,6 +811,39 @@ process.stderr.on("error", (err) => {
   }
 });
 
+// Adapters that are currently activated (env-configured) and can be selected.
+function availableAgentIds(): AgentId[] {
+  return PRODUCTION_ADAPTER_IDS.filter((id) => adapterIsActivated(id)) as AgentId[];
+}
+
+// Resolve the adapter for a query. An explicit adapterId is honored as-is. The
+// sentinel "auto" opts into capability-based best-agent selection over the
+// currently-available adapters (used by the voice "run this task" path when the
+// user did not name a specific agent). Absent adapterId keeps the legacy default
+// so the settings-chosen chat provider is unaffected.
+function resolveQueryAdapterId(
+  query: QueryMessage,
+  defaultAdapterId: string,
+  log: (message: string) => void
+): string {
+  const requested = query.adapterId?.trim();
+  if (requested && requested !== "auto") return requested;
+  if (requested !== "auto") return defaultAdapterId;
+  const outcome = selectAgent({
+    taskText: query.prompt ?? "",
+    available: availableAgentIds(),
+    userDefault: (PRODUCTION_ADAPTER_IDS as readonly string[]).includes(defaultAdapterId)
+      ? (defaultAdapterId as AgentId)
+      : undefined,
+  });
+  if (outcome.kind === "selected") {
+    log(`Agent selector -> ${outcome.primary} (category=${outcome.category}, chain=${outcome.chain.join(",")}): ${outcome.reason}`);
+    return outcome.primary;
+  }
+  log(`Agent selector needs install for ${outcome.agent}; using default ${defaultAdapterId}`);
+  return defaultAdapterId;
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
@@ -925,8 +961,16 @@ async function main(): Promise<void> {
       onCreate: (adapter) => localAcpAdapters.add(adapter),
     });
   };
+  const ensureCodexAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "codex", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
+  const codexAvailable = await ensureCodexAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
@@ -941,6 +985,12 @@ async function main(): Promise<void> {
   }
   if (!openClawAvailable && defaultAdapterId === "openclaw") {
     const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!codexAvailable && defaultAdapterId === "codex") {
+    const msg = adapterActivationError("codex") ?? "Codex adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -997,7 +1047,7 @@ async function main(): Promise<void> {
       case "query":
         (async () => {
           const query = msg as QueryMessage;
-          const adapterId = query.adapterId ?? defaultAdapterId;
+          const adapterId = resolveQueryAdapterId(query, defaultAdapterId, logErr);
           if (query.protocolVersion === 2 && !query.clientId?.trim()) {
             throw new Error("protocol v2 query requires clientId");
           }
@@ -1026,6 +1076,10 @@ async function main(): Promise<void> {
             } else if (adapterId === "openclaw") {
               if (!(await ensureOpenClawAdapter())) {
                 throw new Error(adapterActivationError("openclaw"));
+              }
+            } else if (adapterId === "codex") {
+              if (!(await ensureCodexAdapter())) {
+                throw new Error(adapterActivationError("codex"));
               }
             }
             await facade.handleQuery(query);

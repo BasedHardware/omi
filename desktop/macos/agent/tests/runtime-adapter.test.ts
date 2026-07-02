@@ -478,7 +478,7 @@ describe("adapter capability matrix", () => {
     expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual(
       [...PRODUCTION_ADAPTER_IDS, ...PLACEHOLDER_ADAPTER_IDS].sort()
     );
-    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw"]);
+    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw", "codex"]);
     expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["a2a"]);
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
