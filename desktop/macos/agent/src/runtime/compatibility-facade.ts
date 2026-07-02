@@ -14,7 +14,7 @@ import type {
   WarmupSessionConfig,
 } from "../protocol.js";
 import { requestIdFor } from "../protocol.js";
-import type { RuntimeFailure } from "./failures.js";
+import { AdapterRuntimeError, type RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 
@@ -253,7 +253,13 @@ export class JsonlCompatibilityFacade {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
       this.log(`Compatibility query error: ${messageText}`);
-      const errorMessage: ErrorMessage = { type: "error", message: messageText };
+      const errorMessage: ErrorMessage = {
+        type: "error",
+        message: messageText,
+        // Preserve structured failures (code/source/phase) thrown as
+        // AdapterRuntimeError so Swift can classify them without string matching.
+        failure: error instanceof AdapterRuntimeError ? error.failure : undefined,
+      };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
       this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));

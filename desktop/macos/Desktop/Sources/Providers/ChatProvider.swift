@@ -1220,6 +1220,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         _ = await ensureBridgeStarted()
     }
 
+    /// Fully release this provider's agent bridge: interrupt any in-flight
+    /// query and unregister the bridge client from the shared Node runtime
+    /// (active requests are resumed with `.stopped`; the shared process stops
+    /// once no clients remain). ChatProvider has no deinit teardown, so a
+    /// provider instance discarded while the app keeps running (e.g. one
+    /// displaced by an agent pill's startup-fallback retry) must call this —
+    /// otherwise its bridge clientId stays registered forever.
+    func shutdownBridge() async {
+        if isSending {
+            stopAgent()
+        }
+        await agentBridge.stopAndWaitForExit()
+        agentBridgeStarted = false
+    }
+
     /// Drop a cached ACP session so the next query recreates it with fresh prompt context.
     func invalidateAgentSession(sessionKey: String) async {
         guard agentBridgeStarted else { return }

@@ -73,6 +73,7 @@ import {
   type AgentControlToolContext,
   type ResolvedControlRequestContext,
 } from "./runtime/control-tools.js";
+import { AdapterRuntimeError } from "./runtime/failures.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
@@ -99,6 +100,22 @@ const playwrightCli = join(
 const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
+
+/**
+ * Structured activation failure for a directed adapter whose activation env
+ * is unset (provider not installed/connected). Thrown by the per-query gate
+ * BEFORE facade.handleQuery, so it is provably pre-execution (phase startup).
+ */
+function adapterNotActivatedError(adapterId: "hermes" | "openclaw" | "codex"): AdapterRuntimeError {
+  return new AdapterRuntimeError({
+    code: "adapter_not_activated",
+    source: "runtime",
+    adapterId,
+    retryable: false,
+    phase: "startup",
+    userMessage: adapterActivationError(adapterId) ?? `${adapterId} adapter is unavailable.`,
+  });
+}
 
 function send(msg: OutboundMessage): void {
   try {
@@ -1035,15 +1052,15 @@ async function main(): Promise<void> {
               await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
             } else if (adapterId === "hermes") {
               if (!(await ensureHermesAdapter())) {
-                throw new Error(adapterActivationError("hermes"));
+                throw adapterNotActivatedError("hermes");
               }
             } else if (adapterId === "openclaw") {
               if (!(await ensureOpenClawAdapter())) {
-                throw new Error(adapterActivationError("openclaw"));
+                throw adapterNotActivatedError("openclaw");
               }
             } else if (adapterId === "codex") {
               if (!(await ensureCodexAdapter())) {
-                throw new Error(adapterActivationError("codex"));
+                throw adapterNotActivatedError("codex");
               }
             }
             await facade.handleQuery(query);
@@ -1058,6 +1075,9 @@ async function main(): Promise<void> {
           send({
             type: "error",
             message: String(err),
+            // Preserve the structured failure (code/source/phase) so Swift can
+            // classify startup-class errors without string matching.
+            failure: err instanceof AdapterRuntimeError ? err.failure : undefined,
             protocolVersion: query.protocolVersion,
             requestId: requestIdFor(query),
             clientId: query.clientId,

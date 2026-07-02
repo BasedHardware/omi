@@ -221,12 +221,10 @@ final class AgentPillsManager: ObservableObject {
         case codex
 
         init?(harnessMode: AgentHarnessMode) {
-            switch harnessMode {
-            case .hermes: self = .hermes
-            case .openclaw: self = .openclaw
-            case .codex: self = .codex
-            case .piMono, .acp: return nil
-            }
+            // Directed cases share raw values with AgentHarnessMode; the
+            // non-directed harnesses ("piMono", "acp") match no case here and
+            // correctly return nil.
+            self.init(rawValue: harnessMode.rawValue)
         }
 
         var displayName: String {
@@ -293,7 +291,7 @@ final class AgentPillsManager: ObservableObject {
         afterFailed failed: [DirectedProvider],
         available: [DirectedProvider]
     ) -> [DirectedProvider?] {
-        let remainingDirectedSlots = max(0, 3 - failed.count)
+        let remainingDirectedSlots = max(0, orderedDirectedProviders.count - failed.count)
         var chain: [DirectedProvider?] = orderedDirectedProviders
             .filter { available.contains($0) && !failed.contains($0) }
             .prefix(remainingDirectedSlots)
@@ -313,6 +311,11 @@ final class AgentPillsManager: ObservableObject {
         let id: String
         let title: String
         let status: String
+        /// Provider currently running the pill — a directed provider rawValue
+        /// ("openclaw"/"hermes"/"codex") or "omi" for the default agent.
+        /// Reflects startup fallbacks, so the hub can tell which provider a
+        /// retried pill actually landed on.
+        let provider: String
         let latestActivity: String
         let query: String
         let createdAt: String
@@ -813,7 +816,18 @@ final class AgentPillsManager: ObservableObject {
     /// brief. Used by the initial spawn and by startup-fallback retries — a
     /// retry replaces the failed provider's wiring but keeps the same pill
     /// (id, projection stream, chat surface).
-    private func startProviderAttempt(for pill: AgentPill) {
+    private func startProviderAttempt(for pill: AgentPill, isFallbackRetry: Bool = false) {
+        // Tear down the attempt being displaced before installing the new
+        // one: cancel its run task and shut its provider's bridge down so the
+        // old AgentBridge clientId is unregistered from the shared Node
+        // runtime (ChatProvider has no deinit teardown — without this, every
+        // displaced attempt would stay registered forever).
+        runTasksByPill[pill.id]?.cancel()
+        runTasksByPill[pill.id] = nil
+        if let displaced = providersByPill[pill.id] {
+            Task { await displaced.shutdownBridge() }
+        }
+
         let bridgeHarnessOverride = pill.bridgeHarnessOverride
         let provider = ChatProvider(bridgeHarnessOverride: bridgeHarnessOverride)
         let hasBridgeHarnessOverride = bridgeHarnessOverride != nil
@@ -834,20 +848,32 @@ final class AgentPillsManager: ObservableObject {
         streamsByPill[pill.id]?.cancel()
         streamsByPill[pill.id] = provider.$messages
             .receive(on: DispatchQueue.main)
-            .sink { [weak self, weak pill] messages in
-                guard let self, let pill else { return }
+            .sink { [weak self, weak pill, weak provider] messages in
+                guard let self, let pill, let provider else { return }
+                // Identity guard: Combine can still deliver a publish that was
+                // already scheduled on the main queue when this sink replaced a
+                // displaced attempt's sink. Drop deliveries from any provider
+                // that is no longer the pill's current attempt so stale content
+                // can't repaint the transcript or mark task output on the retry.
+                guard self.providersByPill[pill.id] === provider else { return }
                 self.handle(messages: messages, since: messageCountBefore, for: pill)
             }
 
         // Stagger bridge boots: chain this pill's warmup after the previous
         // pill's. Once warmed, the actual sendMessage runs in parallel with
-        // every other warmed pill.
-        let previousBoot = bootChain
+        // every other warmed pill. A startup-fallback retry skips the stagger
+        // entirely: it must not wait behind every queued pill warmup, and it
+        // must not extend the chain other pills wait on.
+        let previousBoot = isFallbackRetry ? nil : bootChain
         let myBoot = Task { [weak provider] in
-            await previousBoot.value
+            if let previousBoot {
+                await previousBoot.value
+            }
             await provider?.warmupBridge()
         }
-        bootChain = myBoot
+        if !isFallbackRetry {
+            bootChain = myBoot
+        }
 
         let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
         let systemPromptSuffix = systemPromptSuffixByPill[pill.id] ?? Self.backgroundAgentSystemPromptSuffix
@@ -911,35 +937,29 @@ final class AgentPillsManager: ObservableObject {
             surface: .floatingPill(pillId: pill.id),
             statusText: nil
         )
-        startProviderAttempt(for: pill)
+        startProviderAttempt(for: pill, isFallbackRetry: true)
         return true
     }
 
-    /// Classify a completed attempt as a startup-failure candidate for the
-    /// fallback path. Returns nil for successful or user-cancelled runs.
-    private static func startupFailureText(provider: ChatProvider, finalText: String?, pillId: UUID) -> String? {
-        if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pillId),
-            projection.status.isTerminal {
-            switch projection.status {
-            case .failed, .timedOut, .orphaned:
-                return projection.failure?.displayMessage
-                    ?? projection.errorMessage
-                    ?? provider.errorMessage
-                    ?? "Agent failed"
-            default:
-                return nil
-            }
-        }
-        if let errorText = provider.errorMessage, !errorText.isEmpty {
-            return errorText
-        }
-        if finalText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-            // No error surfaced but the run ended without any result — for a
-            // pre-output directed attempt this means the provider never ran
-            // the task (e.g. adapter process died during activation).
-            return "Agent ended before reporting a final result"
-        }
-        return nil
+    /// Classify a completed attempt for the startup-fallback path. ALLOWLIST
+    /// gate on the structured failure the Node runtime reports: a retry on
+    /// another provider is eligible ONLY when the run terminated `.failed`
+    /// with `failure.phase == "startup"` — the runtime sets that tag
+    /// exclusively at sites strictly before adapter dispatch (activation
+    /// gate, adapter registration, session binding; see
+    /// agent/src/runtime/failures.ts), so it proves the brief never started
+    /// executing. Everything else returns nil and surfaces as a normal
+    /// terminal failure: timeouts and orphaned runs (the adapter may still be
+    /// executing remotely), execution-phase or unclassified errors, and runs
+    /// that ended with no error and no result. Retrying any of those could
+    /// re-run already-executed work and duplicate side effects.
+    nonisolated static func startupFallbackFailure(projection: AgentRunProjection?) -> AgentRuntimeFailure? {
+        guard let projection,
+            projection.status == .failed,
+            let failure = projection.failure,
+            failure.isStartupPhase
+        else { return nil }
+        return failure
     }
 
     // MARK: - Voice follow-up (continue THIS agent's session)
@@ -1202,6 +1222,7 @@ final class AgentPillsManager: ObservableObject {
                     id: pill.id.uuidString,
                     title: pill.title,
                     status: pill.status.machineLabel,
+                    provider: pill.currentDirectedProvider?.rawValue ?? "omi",
                     latestActivity: pill.latestActivity,
                     query: pill.query,
                     createdAt: formatter.string(from: pill.createdAt),
@@ -1341,11 +1362,14 @@ final class AgentPillsManager: ObservableObject {
         // Startup fallback runs before any terminal state is committed so a
         // directed provider that failed to start can hand the same brief to
         // the next provider in the chain. Only initial runs are eligible —
-        // follow-up turns (continueAgent) never retry on another provider.
+        // follow-up turns (continueAgent) never retry on another provider —
+        // and only runs whose structured failure proves the adapter never
+        // began executing (see startupFallbackFailure).
         if allowStartupFallback,
             trimmedFinalText?.isEmpty != false,
-            let failureText = Self.startupFailureText(provider: provider, finalText: finalText, pillId: pill.id),
-            attemptProviderStartupFallback(for: pill, errorText: failureText) {
+            let startupFailure = Self.startupFallbackFailure(
+                projection: AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id)),
+            attemptProviderStartupFallback(for: pill, errorText: startupFailure.displayMessage) {
             return
         }
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
