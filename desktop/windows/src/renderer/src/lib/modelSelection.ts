@@ -7,6 +7,24 @@ type PurposeCompletionArgs = {
   timeoutMs?: number
 }
 
+const PROVIDER_LABELS: Record<ByokChatProvider, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Gemini',
+  openrouter: 'OpenRouter'
+}
+
+export class ByokCompletionError extends Error {
+  constructor(
+    readonly provider: ByokChatProvider,
+    readonly purpose: ModelPurpose,
+    message: string
+  ) {
+    super(message)
+    this.name = 'ByokCompletionError'
+  }
+}
+
 export function byokProviderFromModelId(modelId: string | undefined): ByokChatProvider | null {
   const provider = modelId?.split(':', 1)[0]
   return provider === 'openai' ||
@@ -25,6 +43,10 @@ export function selectedModelForPurpose(purpose: ModelPurpose): string | undefin
 export function hostedModelForPurpose(purpose: ModelPurpose, fallback: string): string {
   const modelId = selectedModelForPurpose(purpose)
   return modelId?.startsWith('omi:') ? modelId.slice('omi:'.length) || fallback : fallback
+}
+
+export function byokProviderLabel(provider: ByokChatProvider): string {
+  return PROVIDER_LABELS[provider]
 }
 
 export function resolveByokChatSelection(
@@ -56,10 +78,16 @@ export async function tryByokCompletion(
   const provider = byokProviderFromModelId(modelId)
   if (!provider || !modelId) return null
 
-  const status = await window.omi.byokStatus().catch(() => null)
-  if (!resolveByokChatSelection(modelId, status).useByok) return null
-
   try {
+    const status = await window.omi.byokStatus()
+    if (!resolveByokChatSelection(modelId, status).useByok) {
+      throw new ByokCompletionError(
+        provider,
+        purpose,
+        `${byokProviderLabel(provider)} BYOK is selected for ${purpose}, but that provider is not configured.`
+      )
+    }
+
     const result = await window.omi.byokChatSend({
       messages: args.messages,
       modelId,
@@ -67,7 +95,14 @@ export async function tryByokCompletion(
       timeoutMs: args.timeoutMs
     })
     return result.text
-  } catch {
-    return null
+  } catch (error) {
+    if (error instanceof ByokCompletionError) throw error
+    throw new ByokCompletionError(
+      provider,
+      purpose,
+      `${byokProviderLabel(provider)} BYOK request failed for ${purpose}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
   }
 }
