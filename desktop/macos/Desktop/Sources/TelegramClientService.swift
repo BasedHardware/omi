@@ -32,9 +32,14 @@ final class TelegramClientService: @unchecked Sendable {
     NSString(string: "~/Library/Application Support/Telegram Desktop/tdata").expandingTildeInPath
   }
 
-  /// True when a local Telegram Desktop install with tdata is present to bootstrap from.
+  /// True when driving the fake `--selftest` helper (integration testing without
+  /// Telegram/network).
+  static var isSelftest: Bool { ProcessInfo.processInfo.environment["OMI_TELEGRAM_SELFTEST"] == "1" }
+
+  /// True when a local Telegram Desktop install with tdata is present to bootstrap
+  /// from (always true under selftest so the connect flow is reachable).
   static func telegramDesktopPresent() -> Bool {
-    FileManager.default.fileExists(atPath: defaultTdataPath)
+    isSelftest || FileManager.default.fileExists(atPath: defaultTdataPath)
   }
 
   /// Persisted Telethon session string (stays on-device, never uploaded).

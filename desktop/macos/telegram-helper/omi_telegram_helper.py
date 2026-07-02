@@ -293,10 +293,43 @@ async def _run(helper: Helper) -> None:
             pass
 
 
+def _emit_fake_thread(cmd: dict) -> None:
+    """Emit one synthetic incoming `new_message` (selftest only)."""
+    emit(
+        {
+            "event": "new_message",
+            "thread": {
+                "chat_id": cmd.get("chat_id", "999"),
+                "display_name": cmd.get("display_name", "Selftest Contact"),
+                "is_group": False,
+                "latest_message_id": "2",
+                "awaiting_reply": True,
+                "messages": [
+                    {
+                        "message_id": "1",
+                        "text": "hey are you around?",
+                        "is_from_me": False,
+                        "timestamp": "2026-01-01T00:00:00+00:00",
+                        "handle": "tg:12345",
+                    },
+                    {
+                        "message_id": "2",
+                        "text": cmd.get("text", "wanna grab food later?"),
+                        "is_from_me": False,
+                        "timestamp": "2026-01-01T00:00:05+00:00",
+                        "handle": "tg:12345",
+                    },
+                ],
+            },
+        }
+    )
+
+
 async def _selftest() -> None:
     """Exercise the stdio protocol with NO Telegram/network. Lets the Swift side be
     integration-tested against a fake: bootstrap/connect/send emit deterministic
-    fake events; new_message is synthesized on demand via {"cmd":"emit_fake"}."""
+    fake events; a fake `new_message` is auto-emitted shortly after start_listening
+    (and on demand via {"cmd":"emit_fake"})."""
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     threading.Thread(target=_stdin_reader, args=(loop, queue), daemon=True).start()
@@ -319,35 +352,16 @@ async def _selftest() -> None:
             emit({"event": "connected", "me": {"id": 1, "username": "selftest"}})
         elif name == "start_listening":
             emit({"event": "listening"})
+            # Self-drive: emit one fake incoming message a moment later so the app's
+            # store/inbox path (new_message -> chat -> predraft/auto-reply -> send)
+            # can be integration-tested end to end with no Telegram/network.
+            async def _auto_emit():
+                await asyncio.sleep(1.2)
+                _emit_fake_thread({})
+
+            asyncio.create_task(_auto_emit())
         elif name == "emit_fake":
-            emit(
-                {
-                    "event": "new_message",
-                    "thread": {
-                        "chat_id": cmd.get("chat_id", "999"),
-                        "display_name": cmd.get("display_name", "Selftest Contact"),
-                        "is_group": False,
-                        "latest_message_id": "2",
-                        "awaiting_reply": True,
-                        "messages": [
-                            {
-                                "message_id": "1",
-                                "text": "hey are you around?",
-                                "is_from_me": False,
-                                "timestamp": "2026-01-01T00:00:00+00:00",
-                                "handle": "tg:12345",
-                            },
-                            {
-                                "message_id": "2",
-                                "text": cmd.get("text", "wanna grab food later?"),
-                                "is_from_me": False,
-                                "timestamp": "2026-01-01T00:00:05+00:00",
-                                "handle": "tg:12345",
-                            },
-                        ],
-                    },
-                }
-            )
+            _emit_fake_thread(cmd)
         elif name == "send":
             emit({"event": "sent", "chat_id": str(cmd.get("chat_id", "999")), "message_id": "9001"})
         elif name == "shutdown":
