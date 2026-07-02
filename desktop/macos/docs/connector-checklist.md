@@ -80,8 +80,7 @@ Work top to bottom. Don't skip the probe or the fixture test.
 
 ---
 
-**Known follow-up:** Calendar and Gmail now both classify browser-cookie
-attempts instead of using last-writer-wins diagnostics. A shared
-`BrowserGoogleSession` helper (cookie discovery + decrypt + classify) would let
-both connectors share the hardened path — worth doing once the duplicated shape
-stabilizes.
+**Current Google connector baseline:** Calendar and Gmail share
+`BrowserGoogleSession` for browser/profile discovery, Safe Storage access, and
+Chromium cookie handling, and share `PipeProcessRunner` for deadlock-safe helper
+process execution. Keep new browser-cookie Google fixes on those shared paths.
