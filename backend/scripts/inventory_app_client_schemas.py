@@ -44,9 +44,11 @@ GENERATED_MARKERS = (
     'DO NOT EDIT',
 )
 RAW_DECODE_RE = re.compile(
-    r'\bjsonDecode\s*\(|\bas\s+(?:Map|List)<[^>]+>|\b[A-Za-z_][A-Za-z0-9_]*\.fromJson\s*\(|\[[\'"][A-Za-z_][A-Za-z0-9_]*[\'"]\]'
+    r'\bjsonDecode\s*\(|\bjson\.decode\s*\(|\bas\s+(?:Map|List)<[^>]+>|\b[A-Za-z_][A-Za-z0-9_]*\.fromJson\s*\(|\[[\'"][A-Za-z_][A-Za-z0-9_]*[\'"]\]'
 )
-WIRE_DECODE_RE = re.compile(r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(')
+WIRE_DECODE_RE = re.compile(
+    r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|ServerMessage\.fromResponseJson'
+)
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,7 @@ class AppRoute:
     function_start_line: int | None
     function_end_line: int | None
     http_method: str | None
+    called_function_ranges: tuple[tuple[str, int, int], ...]
 
     def to_report(self) -> dict[str, Any]:
         return {
@@ -92,6 +95,10 @@ class AppRoute:
             'function_start_line': self.function_start_line,
             'function_end_line': self.function_end_line,
             'http_method': self.http_method,
+            'called_function_ranges': [
+                {'function_name': name, 'function_start_line': start, 'function_end_line': end}
+                for name, start, end in self.called_function_ranges
+            ],
         }
 
 
@@ -145,6 +152,7 @@ class AppOperationManifestItem:
     function_start_line: int | None
     function_end_line: int | None
     http_method: str | None
+    called_function_ranges: tuple[tuple[str, int, int], ...]
     operations: list[OpenApiOperation]
     raw_decode_sites: list[DartDecodeSite]
     raw_decode_scope: str
@@ -159,6 +167,10 @@ class AppOperationManifestItem:
             'function_start_line': self.function_start_line,
             'function_end_line': self.function_end_line,
             'http_method': self.http_method,
+            'called_function_ranges': [
+                {'function_name': name, 'function_start_line': start, 'function_end_line': end}
+                for name, start, end in self.called_function_ranges
+            ],
             'operations': [operation.to_report() for operation in self.operations],
             'raw_decode_scope': self.raw_decode_scope,
             'raw_decode_site_count': len(self.raw_decode_sites),
@@ -204,7 +216,7 @@ def scan_local_non_rest_schema_files() -> list[DartSchemaFile]:
 
 
 def decode_site_kind(line: str) -> str:
-    if 'jsonDecode' in line:
+    if 'jsonDecode' in line or 'json.decode' in line:
         return 'jsonDecode'
     if '.fromJson' in line:
         return 'fromJson'
@@ -462,6 +474,20 @@ def _infer_http_method(function: FunctionRange | None) -> str | None:
     return None
 
 
+def _called_function_ranges(
+    function: FunctionRange | None, functions: list[FunctionRange]
+) -> tuple[tuple[str, int, int], ...]:
+    if function is None:
+        return ()
+    called: list[tuple[str, int, int]] = []
+    for candidate in functions:
+        if candidate.name == function.name:
+            continue
+        if re.search(rf'\b{re.escape(candidate.name)}\s*\(', function.text):
+            called.append((candidate.name, candidate.start_line, candidate.end_line))
+    return tuple(called)
+
+
 def _mask_dart_comments(text: str) -> str:
     chars = list(text)
     cursor = 0
@@ -550,6 +576,7 @@ def scan_app_routes() -> list[AppRoute]:
                     function_start_line=function.start_line if function else None,
                     function_end_line=function.end_line if function else None,
                     http_method=_infer_http_method(function),
+                    called_function_ranges=_called_function_ranges(function, functions),
                 )
             )
         for base_route in base_routes:
@@ -566,6 +593,7 @@ def scan_app_routes() -> list[AppRoute]:
                         function_start_line=function.start_line if function else None,
                         function_end_line=function.end_line if function else None,
                         http_method=_infer_http_method(function),
+                        called_function_ranges=_called_function_ranges(function, functions),
                     )
                 )
 
@@ -697,7 +725,14 @@ def build_operation_manifest(
             raw_sites = [
                 site for site in file_raw_sites if route.function_start_line <= site.line <= route.function_end_line
             ]
-            scope = 'enclosing_function'
+            helper_raw_sites = [
+                site
+                for site in file_raw_sites
+                for _, start_line, end_line in route.called_function_ranges
+                if start_line <= site.line <= end_line
+            ]
+            raw_sites = sorted({*raw_sites, *helper_raw_sites}, key=lambda site: (site.path, site.line, site.kind))
+            scope = 'enclosing_function_and_called_helpers'
         else:
             raw_sites = file_raw_sites
             scope = 'dart_api_file'
@@ -711,6 +746,7 @@ def build_operation_manifest(
                 function_start_line=route.function_start_line,
                 function_end_line=route.function_end_line,
                 http_method=route.http_method,
+                called_function_ranges=route.called_function_ranges,
                 operations=operations,
                 raw_decode_sites=raw_sites,
                 raw_decode_scope=scope,

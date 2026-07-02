@@ -156,8 +156,13 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     )
     assert message_report_route['http_method'] == 'POST'
     assert message_report_route['function_name'] == 'reportMessageServer'
-    assert message_report_route['raw_decode_scope'] == 'enclosing_function'
+    assert message_report_route['raw_decode_scope'] == 'enclosing_function_and_called_helpers'
     assert message_report_route['raw_decode_site_count'] == 0
+    message_send_route = message_routes[('app/lib/backend/http/api/messages.dart', '/v2/messages')]
+    assert message_send_route['http_method'] == 'POST'
+    assert message_send_route['function_name'] == 'sendMessageStreamServer'
+    assert any(item['function_name'] == 'parseMessageChunk' for item in message_send_route['called_function_ranges'])
+    assert message_send_route['raw_decode_site_count'] == 0
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )

@@ -125,6 +125,21 @@ void main() {
   final responseModel = ServerMessage.fromResponseJson(responseMessageJson());
   expectValue(responseModel.askForNps == false, 'response adapter should use generated ask_for_nps default');
 
+  final legacyIntegration = ServerMessage.fromResponseJson({
+    ...responseMessageJson(),
+    'from_integration': true,
+  });
+  expectValue(legacyIntegration.fromIntegration == true, 'response adapter should preserve legacy from_integration');
+
+  final canonicalIntegration = ServerMessage.fromResponseJson({
+    ...responseMessageJson(),
+    'from_external_integration': true,
+  });
+  expectValue(
+    canonicalIntegration.fromIntegration == true,
+    'response adapter should preserve canonical from_external_integration',
+  );
+
   final responseNull = ServerMessage.fromResponseJson(explicitNull);
   expectValue(responseNull.askForNps == false, 'response adapter should coalesce explicit ask_for_nps null to false');
 

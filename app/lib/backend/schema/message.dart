@@ -255,7 +255,9 @@ class ServerMessage {
   }
 
   static ServerMessage fromResponseJson(Map<String, dynamic> json) {
-    return ServerMessage.fromGeneratedResponse(wire.GeneratedResponseMessage.fromJson(json));
+    final generated = wire.GeneratedResponseMessage.fromJson(json);
+    final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
+    return ServerMessage.fromGeneratedResponse(generated, fromIntegration: fromIntegration);
   }
 
   factory ServerMessage.fromGenerated(
