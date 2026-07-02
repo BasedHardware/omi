@@ -5792,6 +5792,103 @@
         "title": "ExternalIntegrationConversationSource",
         "type": "string"
       },
+      "FairUseLimitsResponse": {
+        "properties": {
+          "daily_hours": {
+            "title": "Daily Hours",
+            "type": "number"
+          },
+          "three_day_hours": {
+            "title": "Three Day Hours",
+            "type": "number"
+          },
+          "weekly_hours": {
+            "title": "Weekly Hours",
+            "type": "number"
+          }
+        },
+        "required": [
+          "daily_hours",
+          "three_day_hours",
+          "weekly_hours"
+        ],
+        "title": "FairUseLimitsResponse",
+        "type": "object"
+      },
+      "FairUseStatusResponse": {
+        "properties": {
+          "case_ref": {
+            "title": "Case Ref",
+            "type": "string"
+          },
+          "dg_budget": {
+            "additionalProperties": true,
+            "title": "Dg Budget",
+            "type": "object"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/FairUseLimitsResponse"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "speech_hours_3day": {
+            "title": "Speech Hours 3Day",
+            "type": "number"
+          },
+          "speech_hours_today": {
+            "title": "Speech Hours Today",
+            "type": "number"
+          },
+          "speech_hours_weekly": {
+            "title": "Speech Hours Weekly",
+            "type": "number"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "usage_pct": {
+            "$ref": "#/components/schemas/FairUseUsagePctResponse"
+          }
+        },
+        "required": [
+          "stage",
+          "case_ref",
+          "speech_hours_today",
+          "speech_hours_3day",
+          "speech_hours_weekly",
+          "limits",
+          "usage_pct",
+          "message"
+        ],
+        "title": "FairUseStatusResponse",
+        "type": "object"
+      },
+      "FairUseUsagePctResponse": {
+        "properties": {
+          "daily": {
+            "title": "Daily",
+            "type": "number"
+          },
+          "three_day": {
+            "title": "Three Day",
+            "type": "number"
+          },
+          "weekly": {
+            "title": "Weekly",
+            "type": "number"
+          }
+        },
+        "required": [
+          "daily",
+          "three_day",
+          "weekly"
+        ],
+        "title": "FairUseUsagePctResponse",
+        "type": "object"
+      },
       "FcmTokenResponse": {
         "properties": {
           "status": {
@@ -8132,6 +8229,44 @@
           "target_level"
         ],
         "title": "MigrationRequest",
+        "type": "object"
+      },
+      "MigrationRequestsResponse": {
+        "properties": {
+          "needs_migration": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Needs Migration",
+            "type": "array"
+          }
+        },
+        "title": "MigrationRequestsResponse",
+        "type": "object"
+      },
+      "MigrationStatusResponse": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "MigrationStatusResponse",
         "type": "object"
       },
       "MigrationTargetRequest": {
@@ -12373,6 +12508,36 @@
         "title": "UserProfile",
         "type": "object"
       },
+      "UserProfileResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "data_protection_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Protection Level"
+          },
+          "migration_status": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Migration Status"
+          }
+        },
+        "title": "UserProfileResponse",
+        "type": "object"
+      },
       "UserStatusResponse": {
         "properties": {
           "message": {
@@ -12568,6 +12733,34 @@
           }
         },
         "title": "UserUsageResponse",
+        "type": "object"
+      },
+      "UserWebhooksStatusResponse": {
+        "properties": {
+          "audio_bytes": {
+            "title": "Audio Bytes",
+            "type": "boolean"
+          },
+          "day_summary": {
+            "title": "Day Summary",
+            "type": "boolean"
+          },
+          "memory_created": {
+            "title": "Memory Created",
+            "type": "boolean"
+          },
+          "realtime_transcript": {
+            "title": "Realtime Transcript",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "audio_bytes",
+          "memory_created",
+          "realtime_transcript",
+          "day_summary"
+        ],
+        "title": "UserWebhooksStatusResponse",
         "type": "object"
       },
       "ValidationError": {
@@ -24679,7 +24872,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FairUseStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -33939,7 +34134,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -34359,7 +34556,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserWebhooksStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35943,7 +36142,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36028,7 +36229,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationRequestsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36120,7 +36323,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36206,7 +36411,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37166,7 +37373,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37403,7 +37612,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileResponse"
+                }
               }
             },
             "description": "Successful Response"

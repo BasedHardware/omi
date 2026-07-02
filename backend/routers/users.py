@@ -9,7 +9,7 @@ import os
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from database import (
     conversations as conversations_db,
@@ -127,9 +127,32 @@ class BatchMigrationRequest(BaseModel):
     requests: List[MigrationRequest]
 
 
+class MigrationStatusResponse(BaseModel):
+    status: str
+    message: Optional[str] = None
+
+
+class MigrationRequestsResponse(BaseModel):
+    needs_migration: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class UserStatusResponse(BaseModel):
     status: str
     message: Optional[str] = None
+
+
+class UserProfileResponse(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    data_protection_level: Optional[str] = None
+    migration_status: Optional[Dict[str, Any]] = None
+
+
+class UserWebhooksStatusResponse(BaseModel):
+    audio_bytes: bool
+    memory_created: bool
+    realtime_transcript: bool
+    day_summary: bool
 
 
 class StoreRecordingPermissionResponse(BaseModel):
@@ -169,7 +192,7 @@ class DailySummaryTestResponse(UserStatusResponse):
     conversations_count: int
 
 
-@router.get('/v1/users/profile', tags=['v1'])
+@router.get('/v1/users/profile', tags=['v1'], response_model=UserProfileResponse)
 def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Gets the full user profile, including data protection and migration status."""
     profile = get_user_profile(uid)
@@ -183,7 +206,7 @@ class DeleteAccountRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-@router.delete('/v1/users/delete-account', tags=['v1'])
+@router.delete('/v1/users/delete-account', tags=['v1'], response_model=UserStatusResponse)
 def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -256,7 +279,7 @@ def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhooks/status', tags=['v1'])
+@router.get('/v1/users/developer/webhooks/status', tags=['v1'], response_model=UserWebhooksStatusResponse)
 def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     # This only happens the first time because the user_webhook_status_db function will return None for existing users
     audio_bytes = user_webhook_status_db(uid, WebhookType.audio_bytes)
@@ -629,7 +652,7 @@ def update_transcription_preferences_endpoint(
 # **************************************
 
 
-@router.post('/v1/users/migration/requests', tags=['v1'])
+@router.post('/v1/users/migration/requests', tags=['v1'], response_model=MigrationStatusResponse)
 def handle_migration_requests(
     request: Union[MigrationRequest, MigrationTargetRequest], uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -671,7 +694,7 @@ def handle_migration_requests(
         return {'status': 'ok', 'message': 'Migration status set.'}
 
 
-@router.get('/v1/users/migration/requests', tags=['v1'])
+@router.get('/v1/users/migration/requests', tags=['v1'], response_model=MigrationRequestsResponse)
 def get_migration_requests(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
     """Checks which documents need to be migrated to the target level."""
     if target_level != 'enhanced':
@@ -684,7 +707,7 @@ def get_migration_requests(target_level: str, uid: str = Depends(auth.get_curren
     return {"needs_migration": needs_migration}
 
 
-@router.post('/v1/users/migration/batch-requests', tags=['v1'])
+@router.post('/v1/users/migration/batch-requests', tags=['v1'], response_model=MigrationStatusResponse)
 def handle_batch_migration_requests(
     batch_request: BatchMigrationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -720,7 +743,11 @@ def handle_batch_migration_requests(
     return {'status': 'ok'}
 
 
-@router.post('/v1/users/migration/requests/data-protection-level/finalize', tags=['v1'])
+@router.post(
+    '/v1/users/migration/requests/data-protection-level/finalize',
+    tags=['v1'],
+    response_model=MigrationStatusResponse,
+)
 def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Finalizes the migration by setting the user's global protection level."""
     if request.target_level != 'enhanced':
@@ -731,7 +758,7 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
     return {'status': 'ok'}
 
 
-@router.put('/v1/users/preferences/app', tags=['v1'])
+@router.put('/v1/users/preferences/app', tags=['v1'], response_model=UserStatusResponse)
 def set_preferred_app_for_user(
     app_id: str = Query(..., description="The ID of the app to set as preferred"),
     uid: str = Depends(auth.get_current_user_uid),

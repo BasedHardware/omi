@@ -86,7 +86,8 @@ Future webhooksStatus() async {
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return wire.GeneratedUserWebhooksStatusResponse.fromJson(decoded).toJson();
   }
   return null;
 }
@@ -101,7 +102,9 @@ Future<bool> deleteAccount({String? reason, String? reasonDetails}) async {
   );
   if (response == null) return false;
   Logger.debug('deleteAccount response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<bool> setRecordingPermission(bool value) async {
@@ -348,7 +351,9 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   );
   if (response == null) return false;
   Logger.debug('setPreferredSummarizationAppServer response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
 }
 
 Future<UserUsageResponse?> getUserUsage({required String period}) async {
@@ -751,7 +756,8 @@ Future<Map<String, dynamic>?> getFairUseStatus() async {
   if (response == null) return null;
   Logger.debug('getFairUseStatus response: ${response.statusCode}');
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return wire.GeneratedFairUseStatusResponse.fromJson(decoded).toJson();
   }
   return null;
 }

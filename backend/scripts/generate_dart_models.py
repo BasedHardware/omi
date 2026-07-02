@@ -159,6 +159,7 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
         'schemas': (
             'UserStatusResponse',
+            'UserWebhooksStatusResponse',
             'StoreRecordingPermissionResponse',
             'PrivateCloudSyncResponse',
             'OnboardingStateResponse',
@@ -170,6 +171,9 @@ SCHEMA_GROUPS = {
             'DailySummarySettingsResponse',
             'DailySummaryTestResponse',
             'MentorNotificationSettingsResponse',
+            'FairUseLimitsResponse',
+            'FairUseUsagePctResponse',
+            'FairUseStatusResponse',
         ),
     },
     'subscription_usage': {
@@ -192,6 +196,9 @@ SCHEMA_GROUPS = {
             'MigrationRequest',
             'BatchMigrationRequest',
             'MigrationTargetRequest',
+            'MigrationStatusResponse',
+            'MigrationRequestsResponse',
+            'UserProfileResponse',
         ),
     },
     'announcements': {

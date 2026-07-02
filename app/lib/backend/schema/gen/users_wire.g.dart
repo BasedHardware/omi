@@ -26,6 +26,38 @@ class GeneratedUserStatusResponse {
   }
 }
 
+class GeneratedUserWebhooksStatusResponse {
+  final bool audioBytes;
+  final bool daySummary;
+  final bool memoryCreated;
+  final bool realtimeTranscript;
+
+  const GeneratedUserWebhooksStatusResponse({
+    required this.audioBytes,
+    required this.daySummary,
+    required this.memoryCreated,
+    required this.realtimeTranscript,
+  });
+
+  factory GeneratedUserWebhooksStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedUserWebhooksStatusResponse(
+      audioBytes: _required(_readBool(_readAny(json, const ["audio_bytes"])), "audio_bytes"),
+      daySummary: _required(_readBool(_readAny(json, const ["day_summary"])), "day_summary"),
+      memoryCreated: _required(_readBool(_readAny(json, const ["memory_created"])), "memory_created"),
+      realtimeTranscript: _required(_readBool(_readAny(json, const ["realtime_transcript"])), "realtime_transcript"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'audio_bytes': audioBytes,
+      'day_summary': daySummary,
+      'memory_created': memoryCreated,
+      'realtime_transcript': realtimeTranscript,
+    };
+  }
+}
+
 class GeneratedStoreRecordingPermissionResponse {
   final bool storeRecordingPermission;
 
@@ -298,6 +330,114 @@ class GeneratedMentorNotificationSettingsResponse {
   Map<String, dynamic> toJson() {
     return {
       'frequency': frequency,
+    };
+  }
+}
+
+class GeneratedFairUseLimitsResponse {
+  final double dailyHours;
+  final double threeDayHours;
+  final double weeklyHours;
+
+  const GeneratedFairUseLimitsResponse({
+    required this.dailyHours,
+    required this.threeDayHours,
+    required this.weeklyHours,
+  });
+
+  factory GeneratedFairUseLimitsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedFairUseLimitsResponse(
+      dailyHours: _required(_readDouble(_readAny(json, const ["daily_hours"])), "daily_hours"),
+      threeDayHours: _required(_readDouble(_readAny(json, const ["three_day_hours"])), "three_day_hours"),
+      weeklyHours: _required(_readDouble(_readAny(json, const ["weekly_hours"])), "weekly_hours"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'daily_hours': dailyHours,
+      'three_day_hours': threeDayHours,
+      'weekly_hours': weeklyHours,
+    };
+  }
+}
+
+class GeneratedFairUseUsagePctResponse {
+  final double daily;
+  final double threeDay;
+  final double weekly;
+
+  const GeneratedFairUseUsagePctResponse({
+    required this.daily,
+    required this.threeDay,
+    required this.weekly,
+  });
+
+  factory GeneratedFairUseUsagePctResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedFairUseUsagePctResponse(
+      daily: _required(_readDouble(_readAny(json, const ["daily"])), "daily"),
+      threeDay: _required(_readDouble(_readAny(json, const ["three_day"])), "three_day"),
+      weekly: _required(_readDouble(_readAny(json, const ["weekly"])), "weekly"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'daily': daily,
+      'three_day': threeDay,
+      'weekly': weekly,
+    };
+  }
+}
+
+class GeneratedFairUseStatusResponse {
+  final String caseRef;
+  final Map<String, dynamic>? dgBudget;
+  final GeneratedFairUseLimitsResponse limits;
+  final String message;
+  final double speechHours3day;
+  final double speechHoursToday;
+  final double speechHoursWeekly;
+  final String stage;
+  final GeneratedFairUseUsagePctResponse usagePct;
+
+  const GeneratedFairUseStatusResponse({
+    required this.caseRef,
+    this.dgBudget,
+    required this.limits,
+    required this.message,
+    required this.speechHours3day,
+    required this.speechHoursToday,
+    required this.speechHoursWeekly,
+    required this.stage,
+    required this.usagePct,
+  });
+
+  factory GeneratedFairUseStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedFairUseStatusResponse(
+      caseRef: _required(_readString(_readAny(json, const ["case_ref"])), "case_ref"),
+      dgBudget: _readMap(_readAny(json, const ["dg_budget"])),
+      limits: _required(_readObject(_readAny(json, const ["limits"]), GeneratedFairUseLimitsResponse.fromJson), "limits"),
+      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+      speechHours3day: _required(_readDouble(_readAny(json, const ["speech_hours_3day"])), "speech_hours_3day"),
+      speechHoursToday: _required(_readDouble(_readAny(json, const ["speech_hours_today"])), "speech_hours_today"),
+      speechHoursWeekly: _required(_readDouble(_readAny(json, const ["speech_hours_weekly"])), "speech_hours_weekly"),
+      stage: _required(_readString(_readAny(json, const ["stage"])), "stage"),
+      usagePct: _required(_readObject(_readAny(json, const ["usage_pct"]), GeneratedFairUseUsagePctResponse.fromJson), "usage_pct"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'case_ref': caseRef,
+      'dg_budget': dgBudget,
+      'limits': limits.toJson(),
+      'message': message,
+      'speech_hours_3day': speechHours3day,
+      'speech_hours_today': speechHoursToday,
+      'speech_hours_weekly': speechHoursWeekly,
+      'stage': stage,
+      'usage_pct': usagePct.toJson(),
     };
   }
 }

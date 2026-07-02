@@ -4,9 +4,10 @@ import hashlib
 import hmac
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 import database.fair_use as fair_use_db
 from database._client import db
@@ -26,6 +27,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ADMIN_KEY = os.getenv('ADMIN_KEY', '')
+
+
+class FairUseLimitsResponse(BaseModel):
+    daily_hours: float
+    three_day_hours: float
+    weekly_hours: float
+
+
+class FairUseUsagePctResponse(BaseModel):
+    daily: float
+    three_day: float
+    weekly: float
+
+
+class FairUseStatusResponse(BaseModel):
+    stage: str
+    case_ref: str
+    speech_hours_today: float
+    speech_hours_3day: float
+    speech_hours_weekly: float
+    limits: FairUseLimitsResponse
+    usage_pct: FairUseUsagePctResponse
+    dg_budget: Dict[str, Any] = Field(default_factory=dict)
+    message: str
 
 
 def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
@@ -174,7 +199,7 @@ def get_public_case_status(case_ref: str):
 # ---------------------------------------------------------------------------
 
 
-@router.get('/v1/fair-use/status', tags=['fair_use'])
+@router.get('/v1/fair-use/status', tags=['fair_use'], response_model=FairUseStatusResponse)
 def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     """User-facing endpoint: see your own fair-use status and speech usage."""
     state = fair_use_db.get_fair_use_state(uid)

@@ -227,6 +227,7 @@ def test_users_wire_dart_is_generated_from_app_client_openapi():
 
     assert USERS_DART_PATH.read_text() == generated
     assert 'class GeneratedUserStatusResponse' in generated
+    assert 'class GeneratedUserWebhooksStatusResponse' in generated
     assert 'class GeneratedStoreRecordingPermissionResponse' in generated
     assert 'class GeneratedPrivateCloudSyncResponse' in generated
     assert 'class GeneratedOnboardingStateResponse' in generated
@@ -238,8 +239,16 @@ def test_users_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedDailySummarySettingsResponse' in generated
     assert 'class GeneratedDailySummaryTestResponse' in generated
     assert 'class GeneratedMentorNotificationSettingsResponse' in generated
+    assert 'class GeneratedFairUseStatusResponse' in generated
+    assert 'class GeneratedFairUseLimitsResponse' in generated
+    assert 'class GeneratedFairUseUsagePctResponse' in generated
     assert 'storeRecordingPermission: _required(_readBool' in generated
     assert 'summaryId: _required(_readString(_readAny(json, const ["summary_id"])), "summary_id")' in generated
+    assert 'audioBytes: _required(_readBool(_readAny(json, const ["audio_bytes"])), "audio_bytes")' in generated
+    assert (
+        'limits: _required(_readObject(_readAny(json, const ["limits"]), GeneratedFairUseLimitsResponse.fromJson), "limits")'
+        in generated
+    )
 
 
 def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
@@ -263,7 +272,12 @@ def test_privacy_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedMigrationRequest' in generated
     assert 'class GeneratedBatchMigrationRequest' in generated
     assert 'class GeneratedMigrationTargetRequest' in generated
+    assert 'class GeneratedMigrationStatusResponse' in generated
+    assert 'class GeneratedMigrationRequestsResponse' in generated
+    assert 'class GeneratedUserProfileResponse' in generated
     assert 'targetLevel: _required(_readString(_readAny(json, const ["target_level"])), "target_level")' in generated
+    assert 'needsMigration: _readAny(json, const ["needs_migration"]) == null ? null : _readMapList' in generated
+    assert 'migrationStatus: _readMap(_readAny(json, const ["migration_status"]))' in generated
 
 
 def test_announcements_wire_dart_is_generated_from_app_client_openapi():

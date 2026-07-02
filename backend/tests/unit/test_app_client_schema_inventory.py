@@ -44,6 +44,43 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
         'delete_knowledge_graph_v1_knowledge_graph_delete',
     ) not in unmodeled_operations
     assert ('POST', '/v1/users/fcm-token', 'save_token_v1_users_fcm_token_post') not in unmodeled_operations
+    assert ('GET', '/v1/fair-use/status', 'get_my_fair_use_status_v1_fair_use_status_get') not in unmodeled_operations
+    assert (
+        'DELETE',
+        '/v1/users/delete-account',
+        'delete_account_v1_users_delete_account_delete',
+    ) not in unmodeled_operations
+    assert (
+        'GET',
+        '/v1/users/developer/webhooks/status',
+        'get_user_webhooks_status_v1_users_developer_webhooks_status_get',
+    ) not in unmodeled_operations
+    assert (
+        'GET',
+        '/v1/users/migration/requests',
+        'get_migration_requests_v1_users_migration_requests_get',
+    ) not in unmodeled_operations
+    assert (
+        'POST',
+        '/v1/users/migration/batch-requests',
+        'handle_batch_migration_requests_v1_users_migration_batch_requests_post',
+    ) not in unmodeled_operations
+    assert (
+        'POST',
+        '/v1/users/migration/requests',
+        'handle_migration_requests_v1_users_migration_requests_post',
+    ) not in unmodeled_operations
+    assert (
+        'POST',
+        '/v1/users/migration/requests/data-protection-level/finalize',
+        'finalize_migration_request_v1_users_migration_requests_data_protection_level_finalize_post',
+    ) not in unmodeled_operations
+    assert (
+        'PUT',
+        '/v1/users/preferences/app',
+        'set_preferred_app_for_user_v1_users_preferences_app_put',
+    ) not in unmodeled_operations
+    assert ('GET', '/v1/users/profile', 'get_user_profile_endpoint_v1_users_profile_get') not in unmodeled_operations
     assert ('GET', '/v2/firmware/latest', 'get_latest_version_v2_firmware_latest_get') not in unmodeled_operations
     assert ('GET', '/v2/firmware/stable', 'get_stable_version_v2_firmware_stable_get') not in unmodeled_operations
     assert ('GET', '/v3/speech-profile', 'has_speech_profile_v3_speech_profile_get') not in unmodeled_operations

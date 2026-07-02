@@ -70,6 +70,74 @@ class GeneratedMigrationTargetRequest {
   }
 }
 
+class GeneratedMigrationStatusResponse {
+  final String? message;
+  final String status;
+
+  const GeneratedMigrationStatusResponse({
+    this.message,
+    required this.status,
+  });
+
+  factory GeneratedMigrationStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMigrationStatusResponse(
+      message: _readString(_readAny(json, const ["message"])),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'status': status,
+    };
+  }
+}
+
+class GeneratedMigrationRequestsResponse {
+  final List<Map<String, dynamic>>? needsMigration;
+
+  const GeneratedMigrationRequestsResponse({
+    this.needsMigration,
+  });
+
+  factory GeneratedMigrationRequestsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMigrationRequestsResponse(
+      needsMigration: _readAny(json, const ["needs_migration"]) == null ? null : _readMapList(_readAny(json, const ["needs_migration"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'needs_migration': needsMigration,
+    };
+  }
+}
+
+class GeneratedUserProfileResponse {
+  final String? dataProtectionLevel;
+  final Map<String, dynamic>? migrationStatus;
+
+  const GeneratedUserProfileResponse({
+    this.dataProtectionLevel,
+    this.migrationStatus,
+  });
+
+  factory GeneratedUserProfileResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedUserProfileResponse(
+      dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
+      migrationStatus: _readMap(_readAny(json, const ["migration_status"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'data_protection_level': dataProtectionLevel,
+      'migration_status': migrationStatus,
+    };
+  }
+}
+
 dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
     if (json.containsKey(name)) return json[name];
