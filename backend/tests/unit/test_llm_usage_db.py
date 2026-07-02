@@ -2,9 +2,44 @@
 Unit tests for LLM usage database operations.
 """
 
+import os
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-from database import llm_usage
+import pytest
+
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _llm_usage_module():
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.Increment = lambda value: value
+    firestore_stub.transactional = lambda fn: fn
+    client_stub = AutoMockModule("database._client")
+    client_stub.db = MagicMock()
+
+    with stub_modules(
+        {
+            "google": google_pkg,
+            "google.cloud": google_cloud_pkg,
+            "google.cloud.firestore": firestore_stub,
+            "database._client": client_stub,
+        }
+    ):
+        module = load_module_fresh(
+            "database.llm_usage",
+            os.path.join(str(_BACKEND), "database", "llm_usage.py"),
+        )
+        globals()["llm_usage"] = module
+        yield module
 
 
 class _FakeDocSnapshot:
