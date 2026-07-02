@@ -411,6 +411,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
             "capabilities = []",
             "marketplaceApps = []",
             "filteredAppsCache = [:]",
+            "filteredAppsCacheOrder = []",
             "appLoadingStates = [:]",
             "filteredApps = nil",
             "hasMoreFilteredApps = false",
