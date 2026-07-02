@@ -145,6 +145,8 @@ extension PromptEditorWindow: NSWindowDelegate {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     PromptEditorView()
 }
+#endif

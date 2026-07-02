@@ -419,7 +419,9 @@ struct SessionRow: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     ChatSessionsSidebar(chatProvider: ChatProvider())
         .frame(height: 500)
 }
+#endif

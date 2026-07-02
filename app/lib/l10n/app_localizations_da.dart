@@ -9354,16 +9354,23 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Denne enhed';
+
   @override
   String get memoryThisIphone => 'Denne iPhone';
+
   @override
   String get memoryThisPhone => 'Denne telefon';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Sådan bruger du Omi';
 
   @override
@@ -9465,4 +9472,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get latest => 'Nyeste';
+
+  @override
+  String get flashFirmware => 'Flash firmware';
 }

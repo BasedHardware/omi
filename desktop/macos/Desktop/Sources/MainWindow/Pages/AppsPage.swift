@@ -135,7 +135,7 @@ struct AppsPage: View {
                 // self-gated and skip when empty.
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
-                        if !searchText.isEmpty || hasActiveFilters {
+                        if hasActiveFilters {
                             // Show filtered/search results in a flat grid
                             if appProvider.isSearching {
                                 // Loading state for category filter
@@ -180,7 +180,7 @@ struct AppsPage: View {
                                 )
 
                                 // Infinite scroll: load more when reaching bottom
-                                if appProvider.hasMoreCategoryApps {
+                                if appProvider.hasMoreFilteredApps {
                                     HStack {
                                         Spacer()
                                         if appProvider.isLoadingMore {
@@ -194,7 +194,7 @@ struct AppsPage: View {
                                                 .frame(height: 1)
                                                 .onAppear {
                                                     Task {
-                                                        await appProvider.loadMoreCategoryApps()
+                                                        await appProvider.loadMoreFilteredApps()
                                                     }
                                                 }
                                         }
@@ -259,9 +259,7 @@ struct AppsPage: View {
             // Clear filters when searching
             if !newValue.isEmpty {
                 viewAllSection = nil
-                if appProvider.selectedCategory != nil {
-                    appProvider.clearCategoryFilter()
-                }
+                appProvider.clearCategoryFilter()
             }
             Task {
                 // Debounce search
@@ -371,6 +369,7 @@ struct AppsPage: View {
                 Button(action: {
                     viewAllSection = nil
                     appProvider.clearCategoryFilter()
+                    Task { await appProvider.searchApps() }
                 }) {
                     HStack {
                         Text("All Categories")
@@ -386,7 +385,7 @@ struct AppsPage: View {
                     Button(action: {
                         viewAllSection = nil
                         appProvider.selectedCategory = category.id
-                        Task { await appProvider.fetchAppsForCategory(category.id) }
+                        Task { await appProvider.searchApps() }
                     }) {
                         HStack {
                             Text(category.title)
@@ -436,7 +435,7 @@ struct AppsPage: View {
     }
 
     private var hasActiveFilters: Bool {
-        appProvider.selectedCategory != nil || viewAllSection != nil
+        appProvider.hasActiveFilters || viewAllSection != nil
     }
 
     private var selectedCategoryLabel: String {
@@ -447,7 +446,7 @@ struct AppsPage: View {
         return "Category"
     }
 
-    /// Apps for the selected category (from API) or search results or "See more" section
+    /// Apps for the selected filter/search result set or "See more" section.
     private var filteredApps: [OmiApp] {
         // "See more" section takes priority
         if let section = viewAllSection {
@@ -458,10 +457,7 @@ struct AppsPage: View {
             default: return []
             }
         }
-        if appProvider.selectedCategory != nil {
-            return appProvider.categoryFilteredApps ?? []
-        }
-        return appProvider.apps
+        return appProvider.filteredApps ?? []
     }
 
     private var filterResultsTitle: String {
@@ -657,6 +653,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     private let lastSyncedAtKeyPrefix = "appsImportConnectorLastSyncedAt."
     private let lastDeltaCountKeyPrefix = "appsImportConnectorLastDeltaCount."
     private let hasLastDeltaKeyPrefix = "appsImportConnectorHasLastDelta."
+    private let availabilityTextKeyPrefix = "appsImportConnectorAvailabilityText."
     private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
     private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
     private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
@@ -716,6 +713,7 @@ final class ImportConnectorStatusStore: ObservableObject {
         }
         if let availabilityText {
             metrics.availabilityText = availabilityText
+            defaults.set(availabilityText, forKey: availabilityTextKeyPrefix + connectorID)
         }
         metricsByID[connectorID] = metrics
     }
@@ -726,6 +724,7 @@ final class ImportConnectorStatusStore: ObservableObject {
         defaults.removeObject(forKey: lastSyncedAtKeyPrefix + connectorID)
         defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
         defaults.removeObject(forKey: hasLastDeltaKeyPrefix + connectorID)
+        defaults.removeObject(forKey: availabilityTextKeyPrefix + connectorID)
         metricsByID[connectorID] = ConnectorMetrics()
     }
 
@@ -753,6 +752,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             if defaults.bool(forKey: hasLastDeltaKeyPrefix + connector.id) {
                 metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKeyPrefix + connector.id)
             }
+            metrics.availabilityText = defaults.string(forKey: availabilityTextKeyPrefix + connector.id)
 
             metricsByID[connector.id] = metrics
         }
@@ -804,6 +804,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             metrics.sourceCount = result.count
             metrics.lastSyncedAt = result.lastIndexedAt
             metrics.availabilityText = "On-device index"
+            defaults.set("On-device index", forKey: availabilityTextKeyPrefix + "local-files")
             metricsByID["local-files"] = metrics
         } catch {
             log("ImportConnectorStatusStore: Failed to refresh local files metrics: \(error)")
@@ -817,6 +818,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
             metrics.sourceCount = noteCount
             metrics.availabilityText = "Private notes accessible"
+            defaults.set("Private notes accessible", forKey: availabilityTextKeyPrefix + "apple-notes")
             metricsByID["apple-notes"] = metrics
         case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
             log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
@@ -3383,7 +3385,9 @@ struct CreateAppCard: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     AppsPage(appProvider: AppProvider())
         .frame(width: 900, height: 700)
 }
+#endif

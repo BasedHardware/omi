@@ -8,22 +8,6 @@ clamped to the last audio byte actually received.
 
 import os
 import re
-import sys
-import types
-
-import pytest
-
-# Stub the Firestore-backed module so importing utils.analytics does not
-# instantiate a real client (pattern from test_action_item_idempotency.py).
-_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-_fake_user_usage = types.ModuleType('database.user_usage')
-_fake_user_usage.update_hourly_usage = lambda *args, **kwargs: None
-_fake_database = sys.modules.setdefault('database', types.ModuleType('database'))
-_fake_database.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
-_fake_database.user_usage = _fake_user_usage
-sys.modules['database.user_usage'] = _fake_user_usage
-
-sys.path.insert(0, _BACKEND_DIR)
 
 from utils.analytics import billable_transcription_seconds
 

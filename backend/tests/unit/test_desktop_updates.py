@@ -1,27 +1,10 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
-import sys
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
-# Stub heavy dependencies before importing the module under test
-sys.modules.setdefault('firebase_admin', MagicMock())
-sys.modules.setdefault('firebase_admin.auth', MagicMock())
-sys.modules.setdefault('firebase_admin.firestore', MagicMock())
-sys.modules.setdefault('firebase_admin.messaging', MagicMock())
-sys.modules.setdefault('google.cloud', MagicMock())
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-sys.modules.setdefault('google.auth', MagicMock())
-sys.modules.setdefault('google.auth.transport.requests', MagicMock())
-
-redis_db_stub = sys.modules.setdefault('database.redis_db', MagicMock())
-redis_db_stub.get_generic_cache = MagicMock(return_value=None)
-redis_db_stub.set_generic_cache = MagicMock()
-redis_db_stub.delete_generic_cache = MagicMock()
 
 from fastapi import FastAPI
 

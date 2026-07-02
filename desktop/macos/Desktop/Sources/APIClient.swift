@@ -684,6 +684,22 @@ extension APIClient {
     return response.count
   }
 
+  /// True when this account has any conversations captured by an Omi wearable
+  /// (paired on any platform — usually the mobile app).
+  func hasOmiDeviceConversations() async throws -> Bool {
+    struct CountResponse: Decodable {
+      let count: Int
+      // Backends without the sources filter ignore the param and return the
+      // unfiltered total without this echo — decoding then fails, so we never
+      // read a false positive from an old backend.
+      let sources: [String]
+    }
+
+    let response: CountResponse = try await get(
+      "v1/conversations/count?include_discarded=true&sources=friend,omi")
+    return response.count > 0
+  }
+
   /// Gets the count of AI chat messages from PostHog
   func getChatMessageCount() async throws -> Int {
     struct CountResponse: Decodable {
@@ -1756,6 +1772,11 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
+  struct MemoryListPage {
+    let memories: [ServerMemory]
+    let canonicalLifecycleExposed: Bool
+    let deviceScopeSupported: Bool?
+  }
 
   /// Fetches memories from the API with optional filtering
   func getMemories(
@@ -1780,6 +1801,67 @@ extension APIClient {
       endpoint += "&device_scope=\(deviceScope)"
     }
     return try await get(endpoint)
+  }
+
+  /// Fetches memories plus server-authoritative capability headers.
+  func getMemoriesPage(
+    limit: Int = 100,
+    offset: Int = 0,
+    category: String? = nil,
+    tags: [String]? = nil,
+    includeDismissed: Bool = false,
+    deviceScope: String? = nil
+  ) async throws -> MemoryListPage {
+    var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
+    if let category = category {
+      endpoint += "&category=\(category)"
+    }
+    if let tags = tags, !tags.isEmpty {
+      endpoint += "&tags=\(tags.joined(separator: ","))"
+    }
+    if includeDismissed {
+      endpoint += "&include_dismissed=true"
+    }
+    if let deviceScope = deviceScope {
+      endpoint += "&device_scope=\(deviceScope)"
+    }
+
+    let url = URL(string: baseURL + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    return try await performMemoryListRequest(request, retriedAuth: false)
+  }
+
+  private func performMemoryListRequest(_ request: URLRequest, retriedAuth: Bool) async throws -> MemoryListPage {
+    let (data, response) = try await session.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401, !retriedAuth {
+      let authService = await MainActor.run { AuthService.shared }
+      var retry = request
+      retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      return try await performMemoryListRequest(retry, retriedAuth: true)
+    }
+    if httpResponse.statusCode == 401 {
+      throw APIError.unauthorized
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let detail = Self.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
+
+    let memories = try decoder.decode([ServerMemory].self, from: data)
+    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: "X-Omi-Memory-Device-Scope-Supported")
+    let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    return MemoryListPage(
+      memories: memories,
+      canonicalLifecycleExposed: deviceScopeSupported == true,
+      deviceScopeSupported: deviceScopeSupported
+    )
   }
 
   /// Creates a new memory (manual or extracted)
@@ -3687,33 +3769,34 @@ extension APIClient {
       let data: [OmiApp]
     }
 
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
+    var queryItems: [URLQueryItem] = [
+      URLQueryItem(name: "limit", value: "\(limit)"),
+      URLQueryItem(name: "offset", value: "\(offset)"),
     ]
 
     if let query = query, !query.isEmpty {
-      queryItems.append(
-        "query=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)")
+      queryItems.append(URLQueryItem(name: "q", value: query))
     }
 
     if let category = category {
-      queryItems.append("category=\(category)")
+      queryItems.append(URLQueryItem(name: "category", value: category))
     }
 
     if let capability = capability {
-      queryItems.append("capability=\(capability)")
+      queryItems.append(URLQueryItem(name: "capability", value: capability))
     }
 
     if let minRating = minRating {
-      queryItems.append("rating=\(minRating)")
+      queryItems.append(URLQueryItem(name: "rating", value: "\(minRating)"))
     }
 
     if installedOnly {
-      queryItems.append("installed_apps=true")
+      queryItems.append(URLQueryItem(name: "installed_apps", value: "true"))
     }
 
-    let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
+    var components = URLComponents()
+    components.queryItems = queryItems
+    let endpoint = "v2/apps/search?\(components.percentEncodedQuery ?? "")"
     let response: SearchResponse = try await get(endpoint)
     return response.data
   }

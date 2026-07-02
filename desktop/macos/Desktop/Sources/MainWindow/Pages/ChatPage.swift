@@ -2057,10 +2057,12 @@ struct HistorySessionRow: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   ChatPage(appProvider: AppProvider(), chatProvider: ChatProvider())
     .frame(width: 600, height: 700)
 }
+#endif
 
 // MARK: - Markdown Themes
 

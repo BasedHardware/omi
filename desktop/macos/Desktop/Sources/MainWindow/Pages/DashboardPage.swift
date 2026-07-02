@@ -227,6 +227,10 @@ struct DashboardPage: View {
     @State private var conversationCount: Int?
     @State private var memoryCount: Int?
     @State private var taskCount: Int?
+    // Wearable used on this account (any friend/omi-sourced conversation).
+    // Seeded from UserDefaults so the badge is instant on later launches.
+    @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
+        forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
     @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
@@ -257,8 +261,11 @@ struct DashboardPage: View {
         isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
     }
 
+    private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
+            || accountHasOmiDeviceConversations
     }
 
     /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
@@ -318,6 +325,7 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
             Task { await loadMemoryExportStatuses() }
@@ -326,6 +334,7 @@ struct DashboardPage: View {
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
             Task { await loadMemoryExportStatuses() }
@@ -573,13 +582,16 @@ struct DashboardPage: View {
                     .font(.system(size: 22, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
-                Text("Bring your memories and tasks into the apps you already use")
+                Text("Bring your memories to the apps you use")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(height: 62, alignment: .bottomLeading)
 
+            HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
+                navigate(to: .chat)
+            }
             HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: isMCPDestinationConnected(.claude)) {
                 openExportDestination(.claudeCode)
             }
@@ -591,9 +603,6 @@ struct DashboardPage: View {
             }
             HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: isMCPDestinationConnected(.hermes)) {
                 openExportDestination(.hermes)
-            }
-            HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
-                navigate(to: .chat)
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
                 openAppsPage()
@@ -806,11 +815,18 @@ struct DashboardPage: View {
         // Open tasks only (matches the "Tasks" label and the old tile's intent —
         // the old value just under-counted, capping each bucket at a 7-day window).
         async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        let (c, m, t) = await (convos, mems, tasks)
+        async let deviceHistory = try? APIClient.shared.hasOmiDeviceConversations()
+        let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
         await MainActor.run {
             if let c { conversationCount = c }
             if let m { memoryCount = m }
             if let t { taskCount = t }
+            // Sticky: device history never un-happens; keep the badge across
+            // launches and network failures once observed.
+            if d == true {
+                accountHasOmiDeviceConversations = true
+                UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
+            }
         }
     }
 
@@ -3144,6 +3160,7 @@ private struct HomeAIButton: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     DashboardPage(
         viewModel: DashboardViewModel(),
@@ -3156,3 +3173,4 @@ private struct HomeAIButton: View {
     .frame(width: 800, height: 600)
     .background(OmiColors.backgroundPrimary)
 }
+#endif

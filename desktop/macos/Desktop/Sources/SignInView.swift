@@ -156,6 +156,8 @@ struct GoogleLogo: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     SignInView(authState: AuthState.shared)
 }
+#endif

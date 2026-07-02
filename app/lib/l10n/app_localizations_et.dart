@@ -1712,7 +1712,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'SEADET',
+      one: 'SEADE',
+    );
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -9361,16 +9366,23 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'See seade';
+
   @override
   String get memoryThisIphone => 'See iPhone';
+
   @override
   String get memoryThisPhone => 'See telefon';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Kuidas Omi\'t kasutada';
 
   @override
@@ -9472,4 +9484,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get latest => 'Uusim';
+
+  @override
+  String get flashFirmware => 'Installi püsivara';
 }

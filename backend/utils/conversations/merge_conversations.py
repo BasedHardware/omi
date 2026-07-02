@@ -28,7 +28,7 @@ from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.other.storage import (
     delete_conversation_audio_files,
     list_audio_chunks,
-    storage_client,
+    _get_storage_client,
     private_cloud_sync_bucket,
     _get_extension_for_path,
 )
@@ -422,7 +422,7 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
 
     for conv in conversations:

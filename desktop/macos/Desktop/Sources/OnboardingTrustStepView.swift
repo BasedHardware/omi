@@ -41,6 +41,7 @@ struct OnboardingTrustStepView: View {
             onContinue()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .keyboardShortcut(.defaultAction)
 
           Button("Read the source code") {
             guard let url = URL(string: "https://github.com/BasedHardware/omi") else { return }

@@ -96,6 +96,7 @@ struct OnboardingVoiceDemoView: View {
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
                 .padding(.bottom, 32)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }

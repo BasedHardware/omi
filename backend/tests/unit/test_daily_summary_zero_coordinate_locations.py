@@ -11,79 +11,78 @@ The module under test pulls heavy backend deps at import time, so we stub the
 leaf modules it imports (keeping the parent packages on their real paths so the
 module itself still resolves from disk) and force the LLM to return non-JSON so
 the function returns via _basic_daily_summary, which carries `locations`.
+
+utils.llm.external_integrations binds its heavy dependencies at import time
+(``from utils.llm.clients import get_llm, parser``, ``import database.users as
+users_db``, …), so the fakes must be active before the module is exec'd. This is
+the sanctioned Tier-2 "fake must precede import" case: see
+backend/docs/test_isolation.md and testing/import_isolation.load_module_fresh.
 """
 
 import os
-import sys
-import types
 from datetime import datetime, timezone
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytz  # noqa: F401  (real dependency used by the module under test)
 
-_BACKEND = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_test_secret")
+import pytest
+
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
+
+
+def _leaf(name, **attrs):
+    mod = AutoMockModule(name)
+    for key, value in attrs.items():
+        setattr(mod, key, value)
+    return mod
 
 
 def _real_pkg(name, *relpath):
-    mod = sys.modules.get(name)
-    if mod is None or not hasattr(mod, "__path__"):
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    mod.__path__ = [os.path.join(_BACKEND, *relpath)]
-    return mod
+    pkg = ModuleType(name)
+    pkg.__path__ = [os.path.join(str(_BACKEND), *relpath)]  # type: ignore[attr-defined]
+    return pkg
 
 
-def _stub_leaf(name, **attrs):
-    mod = MagicMock(name=name)
-    for key, value in attrs.items():
-        setattr(mod, key, value)
-    sys.modules[name] = mod
-    return mod
+@pytest.fixture(scope="module")
+def ext():
+    """Load utils.llm.external_integrations fresh against stubbed heavy deps.
 
-
-# Parent packages kept on their real disk paths so the real module under test resolves,
-# while __init__.py is skipped (they are already present in sys.modules).
-#
-# Snapshot sys.modules first so the stubs below do not leak into other test files during
-# bulk ``pytest tests/unit/`` collection (issue #8661); restored right after the import.
-_SYS_MODULES_SNAPSHOT = dict(sys.modules)
-
-_real_pkg("utils", "utils")
-_real_pkg("utils.llm", "utils", "llm")
-_real_pkg("utils.llms", "utils", "llms")
-_real_pkg("utils.conversations", "utils", "conversations")
-_real_pkg("models", "models")
-_real_pkg("database", "database")
-
-# Leaf modules external_integrations imports -> stubbed so their heavy internals never run.
-_stub_leaf("database.action_items")
-_stub_leaf("database.users")
-_stub_leaf("models.conversation")
-_stub_leaf("models.daily_summary_payload")
-_stub_leaf("models.structured")
-_stub_leaf("models.structured_extraction")
-_stub_leaf("models.other")
-_stub_leaf("utils.conversations.render")
-_stub_leaf("utils.llm.clients")
-_stub_leaf("utils.llm.usage_tracker")
-_stub_leaf("utils.llms.memory")
-_stub_leaf("utils.log_sanitizer")
-sys.modules["langchain_core"] = MagicMock(name="langchain_core")
-_stub_leaf("langchain_core.prompts", ChatPromptTemplate=MagicMock())
-
-import utils.llm.external_integrations as ext  # noqa: E402
-
-# Restore sys.modules so the stubs above do not leak into other test files during bulk
-# collection (issue #8661). ``ext`` is already bound to the stubbed deps, and the tests
-# patch attributes on ``ext`` directly, so the restore does not change behaviour.
-for _name in list(sys.modules):
-    if _name in _SYS_MODULES_SNAPSHOT:
-        if sys.modules[_name] is not _SYS_MODULES_SNAPSHOT[_name]:
-            sys.modules[_name] = _SYS_MODULES_SNAPSHOT[_name]
-    else:
-        del sys.modules[_name]
-del _SYS_MODULES_SNAPSHOT
+    Parent packages are given real ``__path__``s so the module under test resolves
+    from disk; leaf modules are stubbed so their heavy internals never run.
+    ``stub_modules`` snapshots and restores ``sys.modules`` so nothing leaks.
+    """
+    fakes = {
+        "utils": _real_pkg("utils", "utils"),
+        "utils.llm": _real_pkg("utils", "llm"),
+        "utils.llms": _real_pkg("utils", "llms"),
+        "utils.conversations": _real_pkg("utils", "conversations"),
+        "models": _real_pkg("models", "models"),
+        "database": _real_pkg("database", "database"),
+        "database.action_items": _leaf("database.action_items"),
+        "database.users": _leaf("database.users"),
+        "models.conversation": _leaf("models.conversation"),
+        "models.daily_summary_payload": _leaf("models.daily_summary_payload"),
+        "models.structured": _leaf("models.structured"),
+        "models.structured_extraction": _leaf("models.structured_extraction"),
+        "models.other": _leaf("models.other"),
+        "utils.conversations.render": _leaf("utils.conversations.render"),
+        "utils.llm.clients": _leaf("utils.llm.clients"),
+        "utils.llm.usage_tracker": _leaf("utils.llm.usage_tracker"),
+        "utils.llms.memory": _leaf("utils.llms.memory"),
+        "utils.log_sanitizer": _leaf("utils.log_sanitizer"),
+        "langchain_core": AutoMockModule("langchain_core"),
+        "langchain_core.prompts": _leaf("langchain_core.prompts", ChatPromptTemplate=MagicMock()),
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "utils.llm.external_integrations",
+            os.path.join(str(_BACKEND), "utils", "llm", "external_integrations.py"),
+        )
+        yield module
 
 
 class _Geo:
@@ -105,7 +104,7 @@ class _Convo:
         return []
 
 
-def _configure():
+def _configure(ext):
     ext.users_db.get_user_profile = MagicMock(return_value={"time_zone": "UTC", "language": "en"})
     ext.users_db.get_people_by_ids = MagicMock(return_value=[])
     ext.action_items_db.get_action_items = MagicMock(return_value=[])
@@ -117,8 +116,8 @@ def _configure():
     ext.get_llm = MagicMock(return_value=mock_llm)
 
 
-def test_zero_coordinate_location_is_not_dropped():
-    _configure()
+def test_zero_coordinate_location_is_not_dropped(ext):
+    _configure(ext)
     started = datetime(2026, 6, 29, 14, 0, tzinfo=timezone.utc)
     convos = [
         _Convo("c-equator", _Geo(0.0, -0.13, "Equator"), started_at=started),  # latitude 0.0
@@ -137,8 +136,8 @@ def test_zero_coordinate_location_is_not_dropped():
     assert by_id["c-meridian"]["longitude"] == 0.0
 
 
-def test_conversation_without_geolocation_is_excluded():
-    _configure()
+def test_conversation_without_geolocation_is_excluded(ext):
+    _configure(ext)
     convos = [_Convo("c-none", None, started_at=datetime(2026, 6, 29, tzinfo=timezone.utc))]
 
     result = ext.generate_comprehensive_daily_summary("uid", convos, "2026-06-29")

@@ -3104,5 +3104,6 @@
     "deviceOnboardingIntroSubtitle": "Omi にできることを、すべて手軽に体験できるクイックツアー。",
     "deviceOnboardingIntroDuration": "約1分",
     "jumpToLatestMessage": "最新のメッセージにジャンプ",
-    "latest": "最新"
+    "latest": "最新",
+    "flashFirmware": "ファームウェアを書き込む"
 }

@@ -1062,6 +1062,7 @@ struct ConversationDetailView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     ConversationDetailView(
         conversation: ServerConversation.preview,
@@ -1070,6 +1071,7 @@ struct ConversationDetailView: View {
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundPrimary)
 }
+#endif
 
 // Preview helper
 extension ServerConversation {

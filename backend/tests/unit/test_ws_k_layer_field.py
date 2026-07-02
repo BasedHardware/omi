@@ -73,21 +73,20 @@ def test_memorydb_serializes_layer_from_memory_tier(tier):
     assert serialized["memory_tier"] == tier.value
 
 
-def test_layer_always_present_for_default_long_term_legacy_row():
+def test_layer_absent_for_default_legacy_row():
     memory = MemoryDB(**_minimal_memorydb_payload())
     serialized = memory.model_dump(mode="json")
 
-    assert "layer" in serialized
-    assert serialized["layer"] == tier_to_layer(MemoryTier.long_term).value
-    assert serialized["memory_tier"] == MemoryTier.long_term.value
+    assert serialized["layer"] is None
+    assert serialized["memory_tier"] is None
 
 
-def test_legacy_firestore_dict_without_memory_tier_still_serializes_layer():
+def test_legacy_firestore_dict_without_memory_tier_stays_untiered():
     memory = MemoryDB.model_validate(_minimal_memorydb_payload())
     serialized = memory.model_dump(mode="json")
 
-    assert serialized["memory_tier"] == MemoryTier.long_term.value
-    assert serialized["layer"] == tier_to_layer(MemoryTier.long_term).value
+    assert serialized["memory_tier"] is None
+    assert serialized["layer"] is None
 
 
 def test_layer_uses_real_tier_to_layer_not_hardcoded_mapping():
