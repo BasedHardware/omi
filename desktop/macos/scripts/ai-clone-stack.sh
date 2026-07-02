@@ -49,6 +49,21 @@ PROD_DOTENV="${PROD_DOTENV:-/Applications/omi.app/Contents/Resources/.env}"
 LOGDIR="${LOGDIR:-/tmp/omi-e2e}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 PLUGIN_PORT="${PLUGIN_PORT:-18800}"
+# User-account (Telethon) plugin port. Distinct from PLUGIN_PORT
+# so the bot and user-account plugins can run side-by-side for
+# comparison. Set TELEGRAM_USER_ACCOUNT=1 to launch it.
+USER_PLUGIN_PORT="${USER_PLUGIN_PORT:-18801}"
+# Path to the Telethon session string file. The desktop reads
+# the session from Keychain and writes it to this file just
+# before launching the plugin; the stack runner then pipes it
+# into the plugin's stdin (which is read ONCE then discarded).
+# The file is chmod 600 and removed right after the plugin
+# starts so the session never sits on disk long-term.
+TELEGRAM_USER_SESSION_FILE="${TELEGRAM_USER_SESSION_FILE:-$LOGDIR/telegram-user.session}"
+# When TELEGRAM_USER_ACCOUNT=1, the stack runner launches the
+# user-account plugin in addition to the bot plugin. Set to 0
+# (default) to skip it.
+TELEGRAM_USER_ACCOUNT="${TELEGRAM_USER_ACCOUNT:-0}"
 APP_NAME="${APP_NAME:-omi-feat-ai-clone-e2e}"
 BUNDLE_ID="com.omi.${APP_NAME}"
 
@@ -65,6 +80,8 @@ TUNNEL_URL="${TUNNEL_URL:-http://127.0.0.1:${PLUGIN_PORT}}"   # loopback-only fa
 [ -f "$GCP_CREDENTIALS_JSON" ] || { echo "❌ GCP_CREDENTIALS_JSON not found: $GCP_CREDENTIALS_JSON"; exit 1; }
 [ -f "$WORKTREE/backend/.venv/bin/python" ] || { echo "❌ Python venv missing — run: cd $WORKTREE/backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"; exit 1; }
 [ -f "$WORKTREE/plugins/omi-telegram-app/.venv/bin/uvicorn" ] || { echo "❌ Plugin venv missing — run: cd $WORKTREE/plugins/omi-telegram-app && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"; exit 1; }
+[ "$TELEGRAM_USER_ACCOUNT" = "1" ] && [ ! -f "$WORKTREE/plugins/telegram-user-account/.venv/bin/uvicorn" ] && { echo "❌ User-account plugin venv missing -- run: cd $WORKTREE/plugins/telegram-user-account && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"; exit 1; }
+[ "$TELEGRAM_USER_ACCOUNT" = "1" ] && [ ! -f "$TELEGRAM_USER_SESSION_FILE" ] && { echo "❌ TELEGRAM_USER_ACCOUNT=1 but TELEGRAM_USER_SESSION_FILE=$TELEGRAM_USER_SESSION_FILE not found. The desktop writes the session here just before launching; for headless testing, write the session string to this file (chmod 600)."; exit 1; }
 
 mkdir -p "$LOGDIR"
 
@@ -150,6 +167,45 @@ curl -sS -m 5 -H "Authorization: Bearer $PLUGIN_TOKEN" "http://127.0.0.1:$PLUGIN
   | grep -q "service" \
   && echo "  ✅ plugin up" \
   || { echo "  ❌ plugin failed to start; check $LOGDIR/plugin.log"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# 2b. Telegram user-account plugin on port $USER_PLUGIN_PORT.
+#     Opt-in: only runs when TELEGRAM_USER_ACCOUNT=1. Authenticates as
+#     the user's PERSONAL Telegram account (not a bot) via Telethon.
+#     The session string is piped into stdin (read once, then the
+#     local variable is overwritten with None in telethon_client.py).
+# ---------------------------------------------------------------------------
+if [ "$TELEGRAM_USER_ACCOUNT" = "1" ]; then
+  echo "── [2b] Starting Telegram user-account plugin on :$USER_PLUGIN_PORT ──"
+  cd "$WORKTREE"
+  # The user-account plugin writes a DIFFERENT discovery file than
+  # the bot plugin: ai-clone-telegram-user.json (per-plugin filename
+  # per cubic review on PR #8682). The desktop's PluginDiscovery
+  # already reads this filename.
+  rm -f "$HOME/.config/omi/ai-clone-telegram-user.json"
+  OMI_DEV_MODE=0 \
+  nohup plugins/telegram-user-account/.venv/bin/uvicorn \
+    --app-dir plugins/telegram-user-account main:app \
+    --host 127.0.0.1 --port "$USER_PLUGIN_PORT" --log-level info \
+    < "$TELEGRAM_USER_SESSION_FILE" \
+    > "$LOGDIR/user-plugin.log" 2>&1 &
+  echo $! > "$LOGDIR/user-plugin.pid"
+  # Poll /health (no auth) until the plugin is ready.
+  READY=0
+  for i in $(seq 1 20); do
+    sleep 1
+    if curl -sS -m 2 "http://127.0.0.1:$USER_PLUGIN_PORT/health" 2>/dev/null | grep -q '"status"'; then
+      READY=1
+      echo "  ✅ user-account plugin up (took ${i}s)"
+      break
+    fi
+  done
+  [ "$READY" = "1" ] || { echo "  ❌ user-account plugin never became healthy; check $LOGDIR/user-plugin.log"; exit 1; }
+  # Verify the discovery file was written.
+  [ -f "$HOME/.config/omi/ai-clone-telegram-user.json" ] \
+    && echo "  ✅ user-account discovery file at ~/.config/omi/ai-clone-telegram-user.json" \
+    || echo "  ⚠️  user-account discovery file not written; desktop won't auto-discover"
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Build + sign + install + launch desktop app.
