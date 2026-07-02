@@ -7,7 +7,7 @@ use omi_db::schema::Screenshot;
 // ── Child component: one thumbnail card ──────────────────────────────────────
 
 #[component]
-fn RewindThumb(shot: Screenshot, on_click: EventHandler<Screenshot>) -> Element {
+fn RewindThumb(shot: Screenshot, is_selected: bool, on_click: EventHandler<Screenshot>) -> Element {
     let time_str = shot.captured_at.format("%H:%M:%S").to_string();
     let title_short = shot.window_title.clone().unwrap_or_default();
     let title_short = if title_short.len() > 30 {
@@ -16,10 +16,11 @@ fn RewindThumb(shot: Screenshot, on_click: EventHandler<Screenshot>) -> Element 
         title_short
     };
     let path = shot.thumbnail_path.clone();
+    let cls = if is_selected { "rewind-thumb rewind-thumb-selected" } else { "rewind-thumb" };
 
     rsx! {
         div {
-            class: "rewind-thumb",
+            class: "{cls}",
             onclick: move |_| on_click.call(shot.clone()),
             if let Some(ref p) = path {
                 img {
@@ -48,13 +49,19 @@ fn RewindDetail(shot: Screenshot, on_close: EventHandler<()>) -> Element {
     let path = shot.thumbnail_path.clone();
     let ocr = shot.ocr_text.clone();
     let title = shot.window_title.clone();
+    let app = shot.app_name.clone();
     let cfg: Signal<AppConfig> = use_context();
     let db: Signal<Option<crate::app::Db>> = use_context();
+
+    let has_video = cfg.read().video_chunk_encoding_enabled;
 
     rsx! {
         div { class: "rewind-detail",
             div { class: "rewind-detail-header",
                 span { class: "text-muted", "{time_str}" }
+                if let Some(ref a) = app {
+                    span { class: "badge", "{a}" }
+                }
                 if let Some(t) = title {
                     span { class: "rewind-window-title", "{t}" }
                 }
@@ -86,7 +93,6 @@ fn RewindDetail(shot: Screenshot, on_close: EventHandler<()>) -> Element {
                         let db_val = db.read().clone();
                         let shot_clone = shot.clone();
                         spawn(async move {
-                            // Summarize this single screenshot via LLM
                             let items = vec![(
                                 shot_clone.captured_at.to_rfc3339(),
                                 shot_clone.window_title.clone().unwrap_or_default(),
@@ -102,8 +108,6 @@ fn RewindDetail(shot: Screenshot, on_close: EventHandler<()>) -> Element {
                                                 tracing::info!("[REWIND] Saved screenshot summary as memory");
                                             }
                                         }
-                                    } else {
-                                        tracing::info!("[REWIND] OCR summarizer returned empty summary");
                                     }
                                 }
                                 Err(e) => tracing::error!("[REWIND] OCR summarization error: {e}"),
@@ -111,6 +115,21 @@ fn RewindDetail(shot: Screenshot, on_close: EventHandler<()>) -> Element {
                         });
                     },
                     "Summarize & Save"
+                }
+                if has_video {
+                    button {
+                        class: "btn btn-secondary",
+                        title: "Open video recording in default player",
+                        onclick: move |_| {
+                            let videos_dir = std::env::var("APPDATA")
+                                .map(|b| std::path::PathBuf::from(b).join("omi").join("videos"))
+                                .unwrap_or_default();
+                            if videos_dir.exists() {
+                                let _ = std::process::Command::new("explorer").arg(videos_dir).spawn();
+                            }
+                        },
+                        "Open Videos Folder"
+                    }
                 }
             }
         }
@@ -128,6 +147,8 @@ pub fn RewindPage() -> Element {
     let mut search_query = use_signal(String::new);
     let mut selected: Signal<Option<Screenshot>> = use_signal(|| None);
     let mut scrubber_idx = use_signal(|| 0);
+    let mut app_filter = use_signal(String::new);
+    let mut available_apps = use_signal(Vec::<String>::new);
 
     let capture_enabled = config.read().screen_capture_enabled;
 
@@ -140,13 +161,18 @@ pub fn RewindPage() -> Element {
                 if let Some(Db(ref d)) = db_snap {
                     match d.list_screenshots(200) {
                         Ok(shots) => {
-                            tracing::info!("[REWIND] Loaded {} screenshots from DB", shots.len());
+                            let mut apps: Vec<String> = shots
+                                .iter()
+                                .filter_map(|s| s.app_name.clone())
+                                .collect::<std::collections::HashSet<_>>()
+                                .into_iter()
+                                .collect();
+                            apps.sort();
+                            available_apps.set(apps);
                             screenshots.set(shots);
                         }
                         Err(e) => tracing::error!("[REWIND] load failed: {e}"),
                     }
-                } else {
-                    tracing::warn!("[REWIND] DB not available");
                 }
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
@@ -173,7 +199,22 @@ pub fn RewindPage() -> Element {
         }
     });
 
-    // Search handler — called from button click and Enter key
+    // Filter screenshots by app
+    let filtered_shots: Vec<Screenshot> = {
+        let filter = app_filter.read().clone();
+        if filter.is_empty() {
+            screenshots.read().clone()
+        } else {
+            screenshots
+                .read()
+                .iter()
+                .filter(|s| s.app_name.as_deref() == Some(filter.as_str()))
+                .cloned()
+                .collect()
+        }
+    };
+
+    // Search handler
     let mut do_search = move || {
         let q = search_query.read().trim().to_string();
         if let Some(Db(ref d)) = *db.read() {
@@ -190,7 +231,40 @@ pub fn RewindPage() -> Element {
     };
 
     rsx! {
-        div { class: "page",
+        div {
+            class: "page",
+            tabindex: "0",
+            onkeydown: move |e| {
+                let shots = screenshots.read();
+                if shots.is_empty() { return; }
+                let max_idx = shots.len().saturating_sub(1);
+                let cur = *scrubber_idx.peek();
+                match e.key() {
+                    Key::ArrowLeft | Key::ArrowUp => {
+                        if cur > 0 {
+                            let new_idx = cur - 1;
+                            scrubber_idx.set(new_idx);
+                            if let Some(shot) = shots.get(new_idx) {
+                                selected.set(Some(shot.clone()));
+                            }
+                        }
+                    }
+                    Key::ArrowRight | Key::ArrowDown => {
+                        if cur < max_idx {
+                            let new_idx = cur + 1;
+                            scrubber_idx.set(new_idx);
+                            if let Some(shot) = shots.get(new_idx) {
+                                selected.set(Some(shot.clone()));
+                            }
+                        }
+                    }
+                    Key::Escape => {
+                        selected.set(None);
+                    }
+                    _ => {}
+                }
+            },
+
             h1 { class: "page-title", "Rewind" }
 
             if !capture_enabled {
@@ -199,7 +273,7 @@ pub fn RewindPage() -> Element {
                     p { class: "text-muted", "Enable it in Settings → Screen Capture." }
                 }
             } else {
-                // Search bar
+                // Search bar + app filter
                 div { class: "search-bar",
                     input {
                         class: "search-input",
@@ -213,6 +287,16 @@ pub fn RewindPage() -> Element {
                             }
                         },
                     }
+                    select {
+                        class: "settings-input",
+                        style: "max-width: 180px;",
+                        value: "{app_filter}",
+                        onchange: move |e| app_filter.set(e.value()),
+                        option { value: "", "All Apps" }
+                        for a in available_apps.read().iter() {
+                            option { value: "{a}", "{a}" }
+                        }
+                    }
                     button {
                         class: "btn btn-secondary",
                         onclick: move |_| do_search(),
@@ -221,10 +305,9 @@ pub fn RewindPage() -> Element {
                 }
 
                 // Interactive Timeline & Filmstrip Scrubber
-                if !screenshots.read().is_empty() {
+                if !filtered_shots.is_empty() {
                     {
-                        let shots = screenshots.read();
-                        let max_idx = shots.len().saturating_sub(1);
+                        let max_idx = filtered_shots.len().saturating_sub(1);
                         let current_time = if let Some(ref s) = *selected.read() {
                             s.captured_at.format("%H:%M:%S").to_string()
                         } else {
@@ -249,17 +332,20 @@ pub fn RewindPage() -> Element {
                                         }
                                     }
                                     span { class: "timeline-time", "{current_time}" }
+                                    span { class: "text-muted", style: "font-size: 11px;",
+                                        "{filtered_shots.len()} frames · Arrow keys to navigate"
+                                    }
                                 }
 
                                 div { class: "rewind-filmstrip",
-                                    for (i, shot) in shots.iter().enumerate() {
+                                    for (i, shot) in filtered_shots.iter().enumerate() {
                                         {
-                                            let is_selected = Some(&shot.id) == selected.read().as_ref().map(|s| &s.id);
+                                            let is_sel = Some(&shot.id) == selected.read().as_ref().map(|s| &s.id);
                                             let shot_clone = shot.clone();
                                             let time_label = shot.captured_at.format("%H:%M").to_string();
                                             rsx! {
                                                 div {
-                                                    class: if is_selected { "filmstrip-thumb selected" } else { "filmstrip-thumb" },
+                                                    class: if is_sel { "filmstrip-thumb selected" } else { "filmstrip-thumb" },
                                                     onclick: move |_| {
                                                         selected.set(Some(shot_clone.clone()));
                                                         scrubber_idx.set(i);
@@ -289,20 +375,31 @@ pub fn RewindPage() -> Element {
                 }
 
                 // Timeline grid
-                if screenshots.read().is_empty() {
+                if filtered_shots.is_empty() {
                     div { class: "empty-state",
-                        p { "No screenshots yet." }
-                        p { class: "text-muted",
-                            "Screen capture is running — first frame will appear shortly."
+                        if app_filter.read().is_empty() {
+                            p { "No screenshots yet." }
+                            p { class: "text-muted",
+                                "Screen capture is running — first frame will appear shortly."
+                            }
+                        } else {
+                            p { "No screenshots for this app." }
+                            p { class: "text-muted", "Try selecting a different app or \"All Apps\"." }
                         }
                     }
                 } else {
                     div { class: "rewind-grid",
-                        for shot in screenshots.read().clone() {
-                            RewindThumb {
-                                key: "{shot.id}",
-                                shot: shot,
-                                on_click: move |s| selected.set(Some(s)),
+                        for shot in filtered_shots.iter() {
+                            {
+                                let is_sel = Some(&shot.id) == selected.read().as_ref().map(|s| &s.id);
+                                rsx! {
+                                    RewindThumb {
+                                        key: "{shot.id}",
+                                        shot: shot.clone(),
+                                        is_selected: is_sel,
+                                        on_click: move |s: Screenshot| selected.set(Some(s)),
+                                    }
+                                }
                             }
                         }
                     }
