@@ -357,6 +357,28 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "getApps")
     }
 
+    func testSearchAppsUsesBackendFilterParameters() async {
+        let client = await makeTestClient()
+        _ = try? await client.searchApps(
+            query: "R&D calendar",
+            category: "productivity",
+            capability: "external_integration",
+            installedOnly: true
+        ) as [OmiApp]
+
+        let requests = URLCapture.capturedRequests
+        assertRoutes(requests, host: "python-test", port: 9001,
+                     pathContains: "v2/apps/search", method: "GET",
+                     label: "searchApps")
+
+        let queryItems = URLComponents(url: requests.first!.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(queryItems.first(where: { $0.name == "q" })?.value, "R&D calendar")
+        XCTAssertNil(queryItems.first(where: { $0.name == "query" })?.value)
+        XCTAssertEqual(queryItems.first(where: { $0.name == "category" })?.value, "productivity")
+        XCTAssertEqual(queryItems.first(where: { $0.name == "capability" })?.value, "external_integration")
+        XCTAssertEqual(queryItems.first(where: { $0.name == "installed_apps" })?.value, "true")
+    }
+
     // -- Personas (GET → Python) --
 
     func testGetPersonaRoutesToPython() async {
