@@ -208,7 +208,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 height: size.height + Self.notchGlowOutsetBottom
             )
         }
-        guard state.isVoiceResponseActive else { return size }
+        guard state.isVoiceResponseActive || collapsedPillAgentGlowActive else { return size }
         guard size.width <= Self.minBarSize.width + 0.5,
               size.height <= Self.minBarSize.height + 0.5
         else { return size }
@@ -216,6 +216,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             width: size.width + Self.legacyPillGlowOutsetX * 2,
             height: size.height + Self.legacyPillGlowOutsetY * 2
         )
+    }
+
+    /// Whether the collapsed pill is showing the ambient subagent status
+    /// tint/glow (mirrors `NotchAgentStatusGroup.aggregate`: finished agents
+    /// the user has viewed go quiet).
+    private var collapsedPillAgentGlowActive: Bool {
+        !notchModeEnabled
+            && AgentPillsManager.shared.pills.contains {
+                !($0.status.isFinished && $0.viewedAt != nil)
+            }
     }
     private func responseGlowWindowSizeForCurrentScreen(forSurfaceSize size: NSSize) -> NSSize {
         responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: notchModeEnabled)
@@ -751,14 +761,25 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 else { return }
 
                 guard self.notchModeEnabled else {
-                    // Keep the pinned pill agent list sized to its rows; close
-                    // it when the last agent disappears.
-                    guard self.state.isNotchHoverMenuVisible else { return }
-                    if AgentPillsManager.shared.pills.isEmpty {
-                        self.setPillAgentListVisible(false)
-                    } else if !self.state.showingAIConversation {
-                        self.resizeForAgentSwitcher(visible: true)
+                    // Keep the pill agent list sized to its rows; close it
+                    // when the last agent disappears.
+                    if self.state.isNotchHoverMenuVisible {
+                        if AgentPillsManager.shared.pills.isEmpty {
+                            self.setPillAgentListVisible(false)
+                        } else if !self.state.showingAIConversation {
+                            self.resizeForAgentSwitcher(visible: true)
+                        }
+                        return
                     }
+                    // Collapsed idle pill: apply/remove the status-glow window
+                    // outset promptly when agents appear or all disappear
+                    // (same reasoning as the voice-response glow observer).
+                    guard !self.state.showingAIConversation,
+                          !self.state.isVoiceListening,
+                          !self.state.isHoveringBar,
+                          self.state.currentNotification == nil
+                    else { return }
+                    self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)
                     return
                 }
 

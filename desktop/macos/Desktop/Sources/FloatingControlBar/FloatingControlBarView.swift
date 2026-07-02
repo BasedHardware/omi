@@ -239,8 +239,12 @@ struct FloatingControlBarView: View {
                     .frame(width: surfaceWidth, height: surfaceHeight)
 
                     if state.isVoiceResponseActive {
-                        NotchResponseGlowView(bottomRadius: bottomRadius)
-                            .frame(width: surfaceWidth, height: surfaceHeight)
+                        NotchResponseGlowView(
+                            bottomRadius: bottomRadius,
+                            topRadius: state.usesNotchIsland ? 0 : 14,
+                            edgeInset: state.usesNotchIsland ? 0 : 3
+                        )
+                        .frame(width: surfaceWidth, height: surfaceHeight)
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
@@ -526,7 +530,8 @@ struct FloatingControlBarView: View {
                 .transition(.opacity)
             }
         }
-        .clipped()
+        // No .clipped() here: the pill's status/voice glow needs to render
+        // outside the chrome bounds (the window grows via glow outsets).
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground(cornerRadius: barNeedsFullWidth ? 20 : 5)
         .contextMenu {
@@ -949,14 +954,11 @@ struct FloatingControlBarView: View {
                 .transition(.opacity)
             } else {
                 PillStatusObservingView(manager: agentPills) { pills in
-                    compactCircleView
-                        .modifier(
-                            AgentStatusGlow(
-                                group: state.isVoiceResponseActive
-                                    ? nil
-                                    : NotchAgentStatusGroup.aggregate(for: pills)
-                            )
-                        )
+                    let agentGroup = state.isVoiceResponseActive
+                        ? nil
+                        : NotchAgentStatusGroup.aggregate(for: pills)
+                    compactCircleView(agentGroup: agentGroup)
+                        .modifier(AgentStatusGlow(group: agentGroup))
                 }
                 .transition(.opacity)
             }
@@ -1021,10 +1023,12 @@ struct FloatingControlBarView: View {
         }
     }
 
-    /// Minimal thin bar shown when not hovering
-    private var compactCircleView: some View {
+    /// Minimal thin bar shown when not hovering. The fill is the primary
+    /// ambient status channel at this size: voice-response gradient wins,
+    /// then the aggregate subagent color, then neutral gray.
+    private func compactCircleView(agentGroup: NotchAgentStatusGroup?) -> some View {
         RoundedRectangle(cornerRadius: 3)
-            .fill(compactPillFill)
+            .fill(compactPillFill(agentGroup: agentGroup))
             .frame(width: 28, height: 6)
             .shadow(
                 color: state.isVoiceResponseActive ? Color.white.opacity(0.85) : .clear,
@@ -1060,13 +1064,24 @@ struct FloatingControlBarView: View {
             .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseActive)
     }
 
-    private var compactPillFill: LinearGradient {
+    private func compactPillFill(agentGroup: NotchAgentStatusGroup?) -> LinearGradient {
         if state.isVoiceResponseActive {
             return LinearGradient(
                 colors: [
                     Color.white.opacity(0.9),
                     Color(red: 0.50, green: 0.75, blue: 1.0),
                     Color.white.opacity(0.7)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        if let agentGroup {
+            return LinearGradient(
+                colors: [
+                    agentGroup.color.opacity(0.85),
+                    agentGroup.color,
+                    agentGroup.color.opacity(0.85)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
@@ -1301,28 +1316,60 @@ private struct NotchDockShape: Shape {
 
 private struct NotchLowerEdgeShape: Shape {
     let bottomRadius: CGFloat
+    /// 0 = open lower-edge path (notch mode: the top blends into the bezel).
+    /// > 0 = closed full-perimeter ring with rounded top corners (pill mode:
+    /// the surface is a floating card, so the glow wraps all the way around).
+    var topRadius: CGFloat = 0
+    /// Inset from the shape bounds. Pill-mode windows have no glow outsets,
+    /// so the ring is drawn slightly inside the surface to avoid clipping.
+    var edgeInset: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
-        let radius = min(bottomRadius, rect.height / 2)
+        let rect = rect.insetBy(dx: edgeInset, dy: edgeInset)
+        let radius = min(max(0, bottomRadius - edgeInset), rect.height / 2)
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + 1))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - radius))
+        if topRadius > 0 {
+            let topR = min(max(0, topRadius - edgeInset), rect.height / 2)
+            path.move(to: CGPoint(x: rect.minX + topR, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - topR, y: rect.minY))
+            path.addQuadCurve(
+                to: CGPoint(x: rect.maxX, y: rect.minY + topR),
+                control: CGPoint(x: rect.maxX, y: rect.minY)
+            )
+        } else {
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY + 1))
+        }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
         path.addQuadCurve(
-            to: CGPoint(x: rect.minX + radius, y: rect.maxY),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: rect.maxY - radius),
+            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
             control: CGPoint(x: rect.maxX, y: rect.maxY)
         )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + 1))
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        if topRadius > 0 {
+            let topR = min(max(0, topRadius - edgeInset), rect.height / 2)
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topR))
+            path.addQuadCurve(
+                to: CGPoint(x: rect.minX + topR, y: rect.minY),
+                control: CGPoint(x: rect.minX, y: rect.minY)
+            )
+            path.closeSubpath()
+        } else {
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + 1))
+        }
         return path
     }
 }
 
 private struct NotchResponseGlowView: View {
     let bottomRadius: CGFloat
+    /// See `NotchLowerEdgeShape`: 0 = notch lower-edge glow, > 0 = pill-mode
+    /// full-perimeter ring with this top corner radius.
+    var topRadius: CGFloat = 0
+    var edgeInset: CGFloat = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1.0 / 24.0)) { timeline in
@@ -1330,7 +1377,11 @@ private struct NotchResponseGlowView: View {
             let phase = time.truncatingRemainder(dividingBy: 2.4) / 2.4
             let sweepStart = UnitPoint(x: -0.35 + phase * 1.7, y: 0.0)
             let sweepEnd = UnitPoint(x: 0.35 + phase * 1.7, y: 1.0)
-            let edge = NotchLowerEdgeShape(bottomRadius: bottomRadius)
+            let edge = NotchLowerEdgeShape(
+                bottomRadius: bottomRadius,
+                topRadius: topRadius,
+                edgeInset: edgeInset
+            )
 
             ZStack {
                 edge
@@ -2336,10 +2387,14 @@ private enum NotchAgentStatusGroup: String, Identifiable {
     }
 
     /// Highest-priority aggregate across all pills, for the collapsed-pill
-    /// glow: failure needs the user, activity is ambient, terminal is quiet.
+    /// tint/glow: failure needs the user, activity is ambient. Finished
+    /// agents the user has already viewed go quiet — done work should stop
+    /// tugging at the eye.
     @MainActor
     static func aggregate(for pills: [AgentPill]) -> NotchAgentStatusGroup? {
-        let groups = pills.map { NotchAgentStatusGroup(status: $0.status) }
+        let groups = pills
+            .filter { !($0.status.isFinished && $0.viewedAt != nil) }
+            .map { NotchAgentStatusGroup(status: $0.status) }
         for candidate: NotchAgentStatusGroup in [.failed, .running, .queued, .done, .stopped]
         where groups.contains(candidate) {
             return candidate
