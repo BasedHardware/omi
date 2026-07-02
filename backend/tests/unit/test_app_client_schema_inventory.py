@@ -147,8 +147,12 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert report['unmodeled_success_response_count'] == len(report['unmodeled_success_responses'])
     assert report['app_used_unmodeled_success_response_count'] == len(report['app_used_unmodeled_success_responses'])
     assert report['app_operation_manifest_count'] == len(report['app_operation_manifest'])
-    message_routes = {(item['path'], item['normalized_route']): item for item in report['app_operation_manifest']}
-    message_report_route = message_routes[('app/lib/backend/http/api/messages.dart', '/v2/messages/{param}/report')]
+    message_routes = {
+        (item['path'], item['http_method'], item['normalized_route']): item for item in report['app_operation_manifest']
+    }
+    message_report_route = message_routes[
+        ('app/lib/backend/http/api/messages.dart', 'POST', '/v2/messages/{param}/report')
+    ]
     assert any(
         operation['operation_id'] == 'report_message_v2_messages__message_id__report_post'
         and operation['response_schema'] == 'MessageReportResponse'
@@ -158,11 +162,13 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert message_report_route['function_name'] == 'reportMessageServer'
     assert message_report_route['raw_decode_scope'] == 'enclosing_function_and_called_helpers'
     assert message_report_route['raw_decode_site_count'] == 0
-    message_send_route = message_routes[('app/lib/backend/http/api/messages.dart', '/v2/messages')]
+    assert message_report_route['raw_response_decode_site_count'] == 0
+    message_send_route = message_routes[('app/lib/backend/http/api/messages.dart', 'POST', '/v2/messages')]
     assert message_send_route['http_method'] == 'POST'
     assert message_send_route['function_name'] == 'sendMessageStreamServer'
     assert any(item['function_name'] == 'parseMessageChunk' for item in message_send_route['called_function_ranges'])
     assert message_send_route['raw_decode_site_count'] == 0
+    assert message_send_route['generated_backed_decode_site_count'] > 0
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )
@@ -257,4 +263,41 @@ def test_inventory_route_raw_decode_gate_fails_with_operation_context():
 
     assert result.returncode == 1
     assert 'OpenAPI route functions with raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/http/api/action_items.dart POST /v1/action-items createActionItem' in result.stdout
+    assert 'raw response sites' in result.stdout
+    assert 'app/lib/backend/http/api/apps.dart' in result.stdout
+
+
+def test_inventory_route_raw_decode_gate_can_target_operation_ids():
+    clean_result = subprocess.run(
+        [
+            sys.executable,
+            'scripts/inventory_app_client_schemas.py',
+            '--fail-on-raw-json-decode-for-openapi-routes',
+            '--operation-id',
+            'send_message_v2_messages_post',
+        ],
+        cwd=ROOT_DIR / 'backend',
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    dirty_result = subprocess.run(
+        [
+            sys.executable,
+            'scripts/inventory_app_client_schemas.py',
+            '--fail-on-raw-json-decode-for-openapi-routes',
+            '--operation-id',
+            'get_apps_v2_v2_apps_get',
+        ],
+        cwd=ROOT_DIR / 'backend',
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+
+    assert clean_result.returncode == 0
+    assert dirty_result.returncode == 1
+    assert 'getApps' not in clean_result.stdout
+    assert 'app/lib/backend/http/api/apps.dart * /v2/apps' in dirty_result.stdout

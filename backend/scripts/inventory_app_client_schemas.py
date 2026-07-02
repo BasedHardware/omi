@@ -131,6 +131,7 @@ class DartDecodeSite:
     kind: str
     snippet: str
     generated_backed: bool
+    context: str
 
     def to_report(self) -> dict[str, Any]:
         return {
@@ -139,6 +140,7 @@ class DartDecodeSite:
             'kind': self.kind,
             'snippet': self.snippet,
             'generated_backed': self.generated_backed,
+            'context': self.context,
         }
 
 
@@ -154,10 +156,14 @@ class AppOperationManifestItem:
     http_method: str | None
     called_function_ranges: tuple[tuple[str, int, int], ...]
     operations: list[OpenApiOperation]
-    raw_decode_sites: list[DartDecodeSite]
+    decode_sites: list[DartDecodeSite]
     raw_decode_scope: str
 
     def to_report(self) -> dict[str, Any]:
+        raw_sites = [site for site in self.decode_sites if not site.generated_backed]
+        raw_response_sites = [site for site in raw_sites if site.context == 'response_decode']
+        raw_request_sites = [site for site in raw_sites if site.context == 'request_encode']
+        generated_backed_sites = [site for site in self.decode_sites if site.generated_backed]
         return {
             'path': str(self.path.relative_to(ROOT_DIR)),
             'route': self.route,
@@ -173,8 +179,16 @@ class AppOperationManifestItem:
             ],
             'operations': [operation.to_report() for operation in self.operations],
             'raw_decode_scope': self.raw_decode_scope,
-            'raw_decode_site_count': len(self.raw_decode_sites),
-            'raw_decode_sites': [site.to_report() for site in self.raw_decode_sites],
+            'decode_site_count': len(self.decode_sites),
+            'decode_sites': [site.to_report() for site in self.decode_sites],
+            'generated_backed_decode_site_count': len(generated_backed_sites),
+            'generated_backed_decode_sites': [site.to_report() for site in generated_backed_sites],
+            'raw_decode_site_count': len(raw_sites),
+            'raw_decode_sites': [site.to_report() for site in raw_sites],
+            'raw_response_decode_site_count': len(raw_response_sites),
+            'raw_response_decode_sites': [site.to_report() for site in raw_response_sites],
+            'raw_request_encode_site_count': len(raw_request_sites),
+            'raw_request_encode_sites': [site.to_report() for site in raw_request_sites],
         }
 
 
@@ -225,6 +239,17 @@ def decode_site_kind(line: str) -> str:
     return 'field_access'
 
 
+def decode_site_context(line: str) -> str:
+    stripped = line.strip()
+    if re.search(r'\b(?:requestBody|request|payload|body|fields)\s*\[', stripped):
+        return 'request_encode'
+    if re.search(r'\b(?:jsonDecode|json\.decode|response\.body|response\.bodyBytes|decoded|data)\b', stripped):
+        return 'response_decode'
+    if '.fromJson' in stripped or ' as Map<' in stripped or ' as List<' in stripped:
+        return 'response_decode'
+    return 'unknown'
+
+
 def scan_dart_decode_sites() -> list[DartDecodeSite]:
     paths = [*sorted(APP_SCHEMA_DIR.rglob('*.dart')), *sorted(APP_API_DIR.glob('*.dart'))]
     paths.extend(path for path in MODEL_REST_DTO_FILES if path.exists())
@@ -245,6 +270,7 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
                     kind=decode_site_kind(line),
                     snippet=stripped[:220],
                     generated_backed=bool(WIRE_DECODE_RE.search(window)),
+                    context=decode_site_context(line),
                 )
             )
     return sites
@@ -704,14 +730,14 @@ def load_openapi_operations(path: Path) -> list[OpenApiOperation]:
 def build_operation_manifest(
     app_routes: list[AppRoute],
     openapi_operations: list[OpenApiOperation],
-    raw_decode_sites: list[DartDecodeSite],
+    decode_sites: list[DartDecodeSite],
 ) -> list[AppOperationManifestItem]:
     operations_by_route: dict[str, list[OpenApiOperation]] = {}
     for operation in openapi_operations:
         operations_by_route.setdefault(operation.normalized_path, []).append(operation)
-    raw_sites_by_file: dict[Path, list[DartDecodeSite]] = {}
-    for site in raw_decode_sites:
-        raw_sites_by_file.setdefault(site.path, []).append(site)
+    decode_sites_by_file: dict[Path, list[DartDecodeSite]] = {}
+    for site in decode_sites:
+        decode_sites_by_file.setdefault(site.path, []).append(site)
 
     manifest: list[AppOperationManifestItem] = []
     for route in app_routes:
@@ -720,21 +746,23 @@ def build_operation_manifest(
             operations = [operation for operation in operations if operation.method == route.http_method]
         if not operations:
             continue
-        file_raw_sites = raw_sites_by_file.get(route.path, [])
+        file_decode_sites = decode_sites_by_file.get(route.path, [])
         if route.function_start_line is not None and route.function_end_line is not None:
-            raw_sites = [
-                site for site in file_raw_sites if route.function_start_line <= site.line <= route.function_end_line
+            route_decode_sites = [
+                site for site in file_decode_sites if route.function_start_line <= site.line <= route.function_end_line
             ]
-            helper_raw_sites = [
+            helper_decode_sites = [
                 site
-                for site in file_raw_sites
+                for site in file_decode_sites
                 for _, start_line, end_line in route.called_function_ranges
                 if start_line <= site.line <= end_line
             ]
-            raw_sites = sorted({*raw_sites, *helper_raw_sites}, key=lambda site: (site.path, site.line, site.kind))
+            route_decode_sites = sorted(
+                {*route_decode_sites, *helper_decode_sites}, key=lambda site: (site.path, site.line, site.kind)
+            )
             scope = 'enclosing_function_and_called_helpers'
         else:
-            raw_sites = file_raw_sites
+            route_decode_sites = file_decode_sites
             scope = 'dart_api_file'
         manifest.append(
             AppOperationManifestItem(
@@ -748,7 +776,7 @@ def build_operation_manifest(
                 http_method=route.http_method,
                 called_function_ranges=route.called_function_ranges,
                 operations=operations,
-                raw_decode_sites=raw_sites,
+                decode_sites=route_decode_sites,
                 raw_decode_scope=scope,
             )
         )
@@ -768,7 +796,7 @@ def build_report(spec_path: Path) -> dict[str, Any]:
     raw_decode_sites = [site for site in decode_sites if not site.generated_backed]
     openapi_paths = load_openapi_paths(spec_path)
     openapi_operations = load_openapi_operations(spec_path)
-    operation_manifest = build_operation_manifest(app_routes, openapi_operations, raw_decode_sites)
+    operation_manifest = build_operation_manifest(app_routes, openapi_operations, decode_sites)
     openapi_prefixes = sorted({route_prefix(path) for path in openapi_paths})
     app_route_prefixes = sorted({route_prefix(route.normalized_route) for route in app_routes})
     uncovered_prefixes = sorted(set(app_route_prefixes) - set(openapi_prefixes))
@@ -856,6 +884,12 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='fail when a matched OpenAPI route function still contains raw JSON decode/cast/access sites',
     )
+    parser.add_argument(
+        '--operation-id',
+        action='append',
+        default=[],
+        help='limit operation-level raw decode checks to this OpenAPI operationId; may be repeated',
+    )
     return parser.parse_args()
 
 
@@ -891,11 +925,21 @@ def main() -> int:
         print('Raw Dart decode sites: ' + ', '.join(sites), flush=True)
         return 1
     if args.fail_on_raw_json_decode_for_openapi_routes:
-        items = [item for item in report['app_operation_manifest'] if item['raw_decode_site_count']]
+        selected_operation_ids = set(args.operation_id)
+        items = [
+            item
+            for item in report['app_operation_manifest']
+            if item['raw_response_decode_site_count']
+            and (
+                not selected_operation_ids
+                or any(operation['operation_id'] in selected_operation_ids for operation in item['operations'])
+            )
+        ]
         if items:
             routes = [
                 f"{item['path']} {item['http_method'] or '*'} {item['normalized_route']} "
-                f"{item['function_name'] or '(unknown function)'} ({item['raw_decode_site_count']} raw sites)"
+                f"{item['function_name'] or '(unknown function)'} "
+                f"({item['raw_response_decode_site_count']} raw response sites)"
                 for item in items[:50]
             ]
             print('OpenAPI route functions with raw Dart decode sites: ' + ', '.join(routes), flush=True)
