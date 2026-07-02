@@ -51,6 +51,9 @@ class IMessageStatus(BaseModel):
 class IMessageDraftMessage(BaseModel):
     text: str
     is_from_me: bool = False
+    # Optional send time; when every message in a thread carries one, draft_reply
+    # sorts by it so ordering is correct regardless of client-supplied order.
+    timestamp: Optional[datetime] = None
 
 
 class IMessageDraftRequest(BaseModel):
