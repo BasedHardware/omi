@@ -1,0 +1,3 @@
+{
+  "change": "Fixes ChatGPT MCP connector setup to use the accepted public OAuth client"
+}
