@@ -45,6 +45,16 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertEqual(
       MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?
         .first(where: { $0.label == "OAuth Client Secret" })?.value, "")
+    XCTAssertEqual(
+      MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.masksValue, false)
+    // Claude secret must be masked on screen.
+    XCTAssertEqual(
+      MemoryExportDestination.claude.assistedSetupFields(key: "secret-key")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.masksValue, true)
+    // Stable ids — never label-derived (duplicate labels would crash ForEach).
+    let chatgptIDs = MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.map(\.id) ?? []
+    XCTAssertEqual(Set(chatgptIDs).count, chatgptIDs.count)
     XCTAssertNil(MemoryExportDestination.gemini.assistedSetupFields(key: "k"))
     XCTAssertEqual(MemoryExportDestination.codex.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.claudeCode.mcpExecuteKind, .localAutonomous)
@@ -199,6 +209,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
         == true)
     XCTAssertTrue(task?.body.contains("OAuth Client Secret: leave blank") == true)
     XCTAssertFalse(task?.body.contains("OAuth Client Secret: test-key") == true)
+    XCTAssertTrue(task?.body.contains("\"oauth_client_secret\":\"\"") == true)
     XCTAssertTrue(task?.body.contains(MemoryExportDestination.mcpServerURL) == true)
   }
 

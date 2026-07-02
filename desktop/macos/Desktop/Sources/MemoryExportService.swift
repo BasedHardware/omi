@@ -385,9 +385,11 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     ]
     if self == .chatgpt {
       // Public PKCE client — no client secret; the token endpoint rejects one.
+      // oauth_client_secret is required by the tool schema — pass empty string.
       nativeToolArgs.append(contentsOf: [
         ("authentication", "OAuth"),
         ("oauth_client_id", Self.chatgptOAuthClientID),
+        ("oauth_client_secret", ""),
         ("auth_url", Self.mcpAuthorizeURL),
         ("token_url", Self.mcpTokenURL),
       ])
@@ -444,27 +446,32 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   /// Field-by-field payload for assisted cloud setup — rendered as copy rows on
   /// the on-screen guidance card so the user transfers one value at a time.
-  func assistedSetupFields(key: String) -> [(label: String, value: String)]? {
+  func assistedSetupFields(key: String) -> [CloudConnectorCopyField]? {
     guard let setup = mcpSetup(key: key) else { return nil }
     switch self {
     case .claude:
       return [
-        ("Name", "Omi Memory"),
-        ("Remote MCP server URL", setup.serverURL),
-        ("OAuth Client ID", "omi"),
-        ("OAuth Client Secret", key),
+        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+        CloudConnectorCopyField(
+          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+        CloudConnectorCopyField(id: "oauth_client_id", label: "OAuth Client ID", value: "omi"),
+        CloudConnectorCopyField(
+          id: "oauth_client_secret", label: "OAuth Client Secret", value: key, masksValue: true),
       ]
     case .chatgpt:
       // Public PKCE client: the backend rejects token requests that carry a
       // client secret, so the form's Client Secret field must stay empty.
       return [
-        ("Name", "Omi Memory"),
-        ("Remote MCP server URL", setup.serverURL),
-        ("Authentication", "OAuth"),
-        ("OAuth Client ID", Self.chatgptOAuthClientID),
-        ("OAuth Client Secret", ""),
-        ("Auth URL", Self.mcpAuthorizeURL),
-        ("Token URL", Self.mcpTokenURL),
+        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+        CloudConnectorCopyField(
+          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+        CloudConnectorCopyField(id: "authentication", label: "Authentication", value: "OAuth"),
+        CloudConnectorCopyField(
+          id: "oauth_client_id", label: "OAuth Client ID", value: Self.chatgptOAuthClientID),
+        CloudConnectorCopyField(
+          id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+        CloudConnectorCopyField(id: "auth_url", label: "Auth URL", value: Self.mcpAuthorizeURL),
+        CloudConnectorCopyField(id: "token_url", label: "Token URL", value: Self.mcpTokenURL),
       ]
     default:
       return nil
