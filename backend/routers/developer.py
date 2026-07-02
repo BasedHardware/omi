@@ -85,8 +85,6 @@ logger = logging.getLogger(__name__)
 _api_key_router = APIRouter()
 _firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 router = APIRouter()
-router.include_router(_api_key_router)
-router.include_router(_firebase_router)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -2072,3 +2070,7 @@ def delete_goal(
     if not goals_db.delete_goal(uid, goal_id):
         raise HTTPException(status_code=404, detail="Goal not found")
     return {"success": True}
+
+
+router.include_router(_api_key_router)
+router.include_router(_firebase_router)
