@@ -7,5 +7,4 @@
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 # This list exists ONLY as a transitional bridge while the migration in
 # it is blocked by the pre-push hook and CI (see DECISIONS.md D4).
-# Total: 1 entries.
-backend/tests/unit/test_desktop_transcribe.py
+# Total: 0 entries.
