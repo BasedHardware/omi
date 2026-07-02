@@ -251,11 +251,11 @@ class ServerMessage {
   static ServerMessage fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedMessage.fromJson(json);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
-    return ServerMessage.fromGenerated(
-      generated,
-      fromIntegration: fromIntegration,
-      askForNps: json['ask_for_nps'] as bool? ?? true,
-    );
+    return ServerMessage.fromGenerated(generated, fromIntegration: fromIntegration);
+  }
+
+  static ServerMessage fromResponseJson(Map<String, dynamic> json) {
+    return ServerMessage.fromGeneratedResponse(wire.GeneratedResponseMessage.fromJson(json));
   }
 
   factory ServerMessage.fromGenerated(
@@ -278,6 +278,31 @@ class ServerMessage {
       generated.filesId,
       generated.memories.map(MessageConversation.fromGenerated).toList(),
       askForNps: askForNps,
+      rating: generated.rating,
+      chartData: parsedChartData,
+      rawChartData: rawChartData,
+    );
+  }
+
+  factory ServerMessage.fromGeneratedResponse(
+    wire.GeneratedResponseMessage generated, {
+    bool? fromIntegration,
+    ChartData? chartData,
+  }) {
+    final rawChartData = generated.chartData;
+    final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
+    return ServerMessage(
+      generated.id,
+      generated.createdAt,
+      generated.text,
+      MessageSender.values.firstWhere((e) => e.toString().split('.').last == generated.sender),
+      MessageType.valuesFromString(generated.type),
+      generated.pluginId ?? generated.appId,
+      fromIntegration ?? generated.fromExternalIntegration,
+      generated.files.map(MessageFile.fromGenerated).toList(),
+      generated.filesId,
+      generated.memories.map(MessageConversation.fromGenerated).toList(),
+      askForNps: generated.askForNps ?? false,
       rating: generated.rating,
       chartData: parsedChartData,
       rawChartData: rawChartData,

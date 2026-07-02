@@ -70,7 +70,7 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
       messageId,
       text,
       MessageChunkType.done,
-      message: ServerMessage.fromJson(json.decode(text)),
+      message: ServerMessage.fromResponseJson(json.decode(text)),
     );
   }
 
@@ -80,7 +80,7 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
       messageId,
       text,
       MessageChunkType.message,
-      message: ServerMessage.fromJson(json.decode(text)),
+      message: ServerMessage.fromResponseJson(json.decode(text)),
     );
   }
 

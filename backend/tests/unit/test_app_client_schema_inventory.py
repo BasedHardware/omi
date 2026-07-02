@@ -154,7 +154,10 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
         and operation['response_schema'] == 'MessageReportResponse'
         for operation in message_report_route['operations']
     )
-    assert message_report_route['raw_decode_site_count'] > 0
+    assert message_report_route['http_method'] == 'POST'
+    assert message_report_route['function_name'] == 'reportMessageServer'
+    assert message_report_route['raw_decode_scope'] == 'enclosing_function'
+    assert message_report_route['raw_decode_site_count'] == 0
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )
@@ -248,5 +251,5 @@ def test_inventory_route_raw_decode_gate_fails_with_operation_context():
     )
 
     assert result.returncode == 1
-    assert 'OpenAPI route files with raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/http/api/action_items.dart /v1/action-items' in result.stdout
+    assert 'OpenAPI route functions with raw Dart decode sites:' in result.stdout
+    assert 'app/lib/backend/http/api/action_items.dart POST /v1/action-items createActionItem' in result.stdout

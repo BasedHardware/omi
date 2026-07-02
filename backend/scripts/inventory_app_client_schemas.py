@@ -76,12 +76,22 @@ class AppRoute:
     path: Path
     route: str
     normalized_route: str
+    line: int
+    function_name: str | None
+    function_start_line: int | None
+    function_end_line: int | None
+    http_method: str | None
 
-    def to_report(self) -> dict[str, str]:
+    def to_report(self) -> dict[str, Any]:
         return {
             'path': str(self.path.relative_to(ROOT_DIR)),
             'route': self.route,
             'normalized_route': self.normalized_route,
+            'line': self.line,
+            'function_name': self.function_name,
+            'function_start_line': self.function_start_line,
+            'function_end_line': self.function_end_line,
+            'http_method': self.http_method,
         }
 
 
@@ -130,15 +140,27 @@ class AppOperationManifestItem:
     path: Path
     route: str
     normalized_route: str
+    line: int
+    function_name: str | None
+    function_start_line: int | None
+    function_end_line: int | None
+    http_method: str | None
     operations: list[OpenApiOperation]
     raw_decode_sites: list[DartDecodeSite]
+    raw_decode_scope: str
 
     def to_report(self) -> dict[str, Any]:
         return {
             'path': str(self.path.relative_to(ROOT_DIR)),
             'route': self.route,
             'normalized_route': self.normalized_route,
+            'line': self.line,
+            'function_name': self.function_name,
+            'function_start_line': self.function_start_line,
+            'function_end_line': self.function_end_line,
+            'http_method': self.http_method,
             'operations': [operation.to_report() for operation in self.operations],
+            'raw_decode_scope': self.raw_decode_scope,
             'raw_decode_site_count': len(self.raw_decode_sites),
             'raw_decode_sites': [site.to_report() for site in self.raw_decode_sites],
         }
@@ -295,16 +317,149 @@ def _dart_string_tail_after_marker(text: str, marker_start: int, marker: str) ->
     return None
 
 
-def _scan_marker_routes(text: str, marker: str, *, must_start_with: str | None = None) -> list[str]:
-    routes: list[str] = []
+@dataclass(frozen=True)
+class RouteOccurrence:
+    route: str
+    line: int
+
+
+@dataclass(frozen=True)
+class FunctionRange:
+    name: str
+    start_line: int
+    end_line: int
+    text: str
+
+
+def _scan_marker_route_occurrences(
+    text: str, marker: str, *, must_start_with: str | None = None
+) -> list[RouteOccurrence]:
+    routes: list[RouteOccurrence] = []
     for match in re.finditer(re.escape(marker), text):
         route = _dart_string_tail_after_marker(text, match.start(), marker)
         if route is None:
             continue
         if must_start_with is not None and not route.startswith(must_start_with):
             continue
-        routes.append(route)
+        routes.append(RouteOccurrence(route=route, line=text.count('\n', 0, match.start()) + 1))
     return routes
+
+
+def _scan_marker_routes(text: str, marker: str, *, must_start_with: str | None = None) -> list[str]:
+    return [
+        occurrence.route for occurrence in _scan_marker_route_occurrences(text, marker, must_start_with=must_start_with)
+    ]
+
+
+def _line_start_offsets(text: str) -> list[int]:
+    offsets = [0]
+    offsets.extend(index + 1 for index, char in enumerate(text) if char == '\n')
+    return offsets
+
+
+def _line_for_offset(line_offsets: list[int], offset: int) -> int:
+    line = 1
+    for index, start in enumerate(line_offsets, start=1):
+        if start > offset:
+            break
+        line = index
+    return line
+
+
+def _matching_brace_offset(text: str, open_brace: int) -> int | None:
+    depth = 0
+    in_string: str | None = None
+    in_line_comment = False
+    in_block_comment = False
+    cursor = open_brace
+    while cursor < len(text):
+        char = text[cursor]
+        next_char = text[cursor + 1] if cursor + 1 < len(text) else ''
+
+        if in_line_comment:
+            if char == '\n':
+                in_line_comment = False
+            cursor += 1
+            continue
+        if in_block_comment:
+            if char == '*' and next_char == '/':
+                cursor += 2
+                in_block_comment = False
+            else:
+                cursor += 1
+            continue
+        if in_string:
+            if char == '\\':
+                cursor += 2
+                continue
+            if char == in_string:
+                in_string = None
+            cursor += 1
+            continue
+        if char in ("'", '"'):
+            in_string = char
+            cursor += 1
+            continue
+        if char == '/' and next_char == '/':
+            cursor += 2
+            in_line_comment = True
+            continue
+        if char == '/' and next_char == '*':
+            cursor += 2
+            in_block_comment = True
+            continue
+
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return cursor
+        cursor += 1
+    return None
+
+
+FUNCTION_RE = re.compile(
+    r'(?ms)^(?:[A-Za-z_][A-Za-z0-9_<>,?\s]*\s+)+([A-Za-z_][A-Za-z0-9_]*)\s*\(.*?\)\s*(?:async\*?|sync\*?)?\s*\{'
+)
+HTTP_METHOD_RE = re.compile(r"""\bmethod\s*:\s*['"]([A-Z]+)['"]""")
+
+
+def _function_ranges(text: str) -> list[FunctionRange]:
+    line_offsets = _line_start_offsets(text)
+    ranges: list[FunctionRange] = []
+    for match in FUNCTION_RE.finditer(text):
+        open_brace = match.end() - 1
+        close_brace = _matching_brace_offset(text, open_brace)
+        if close_brace is None:
+            continue
+        ranges.append(
+            FunctionRange(
+                name=match.group(1),
+                start_line=_line_for_offset(line_offsets, match.start()),
+                end_line=_line_for_offset(line_offsets, close_brace),
+                text=text[match.start() : close_brace + 1],
+            )
+        )
+    return ranges
+
+
+def _enclosing_function(functions: list[FunctionRange], line: int) -> FunctionRange | None:
+    for function in functions:
+        if function.start_line <= line <= function.end_line:
+            return function
+    return None
+
+
+def _infer_http_method(function: FunctionRange | None) -> str | None:
+    if function is None:
+        return None
+    method_match = HTTP_METHOD_RE.search(function.text)
+    if method_match:
+        return method_match.group(1)
+    if 'makeStreamingApiCall' in function.text or 'makeMultipart' in function.text:
+        return 'POST'
+    return None
 
 
 def _mask_dart_comments(text: str) -> str:
@@ -374,27 +529,49 @@ def _mask_dart_comments(text: str) -> str:
 def scan_app_routes() -> list[AppRoute]:
     routes: list[AppRoute] = []
     for path in sorted(APP_API_DIR.glob('*.dart')):
-        text = _mask_dart_comments(path.read_text())
-        env_routes = _scan_marker_routes(text, 'Env.apiBaseUrl', must_start_with='v')
+        original_text = path.read_text()
+        text = _mask_dart_comments(original_text)
+        functions = _function_ranges(original_text)
+        env_routes = _scan_marker_route_occurrences(text, 'Env.apiBaseUrl', must_start_with='v')
         base_routes = [
-            route
-            for route in env_routes
-            if re.search(rf"""_baseUrl\s*=\s*['"]\$\{{Env\.apiBaseUrl\}}{re.escape(route)}['"]""", text)
+            occurrence
+            for occurrence in env_routes
+            if re.search(rf"""_baseUrl\s*=\s*['"]\$\{{Env\.apiBaseUrl\}}{re.escape(occurrence.route)}['"]""", text)
         ]
-        for route in env_routes:
+        for occurrence in env_routes:
+            function = _enclosing_function(functions, occurrence.line)
             routes.append(
-                AppRoute(path=path, route='/' + route.lstrip('/'), normalized_route=normalize_app_route(route))
+                AppRoute(
+                    path=path,
+                    route='/' + occurrence.route.lstrip('/'),
+                    normalized_route=normalize_app_route(occurrence.route),
+                    line=occurrence.line,
+                    function_name=function.name if function else None,
+                    function_start_line=function.start_line if function else None,
+                    function_end_line=function.end_line if function else None,
+                    http_method=_infer_http_method(function),
+                )
             )
         for base_route in base_routes:
-            for local_route in _scan_marker_routes(text, '_baseUrl', must_start_with='/'):
-                route = base_route.rstrip('/') + local_route
+            for local_route in _scan_marker_route_occurrences(text, '_baseUrl', must_start_with='/'):
+                route = base_route.route.rstrip('/') + local_route.route
+                function = _enclosing_function(functions, local_route.line)
                 routes.append(
-                    AppRoute(path=path, route='/' + route.lstrip('/'), normalized_route=normalize_app_route(route))
+                    AppRoute(
+                        path=path,
+                        route='/' + route.lstrip('/'),
+                        normalized_route=normalize_app_route(route),
+                        line=local_route.line,
+                        function_name=function.name if function else None,
+                        function_start_line=function.start_line if function else None,
+                        function_end_line=function.end_line if function else None,
+                        http_method=_infer_http_method(function),
+                    )
                 )
 
-    unique: dict[tuple[Path, str], AppRoute] = {}
+    unique: dict[tuple[Path, str, str], AppRoute] = {}
     for route in routes:
-        unique[(route.path, route.normalized_route)] = route
+        unique[(route.path, route.normalized_route, route.http_method or '')] = route
     return sorted(unique.values(), key=lambda item: (str(item.path), item.normalized_route))
 
 
@@ -511,15 +688,32 @@ def build_operation_manifest(
     manifest: list[AppOperationManifestItem] = []
     for route in app_routes:
         operations = operations_by_route.get(route.normalized_route, [])
+        if route.http_method:
+            operations = [operation for operation in operations if operation.method == route.http_method]
         if not operations:
             continue
+        file_raw_sites = raw_sites_by_file.get(route.path, [])
+        if route.function_start_line is not None and route.function_end_line is not None:
+            raw_sites = [
+                site for site in file_raw_sites if route.function_start_line <= site.line <= route.function_end_line
+            ]
+            scope = 'enclosing_function'
+        else:
+            raw_sites = file_raw_sites
+            scope = 'dart_api_file'
         manifest.append(
             AppOperationManifestItem(
                 path=route.path,
                 route=route.route,
                 normalized_route=route.normalized_route,
+                line=route.line,
+                function_name=route.function_name,
+                function_start_line=route.function_start_line,
+                function_end_line=route.function_end_line,
+                http_method=route.http_method,
                 operations=operations,
-                raw_decode_sites=raw_sites_by_file.get(route.path, []),
+                raw_decode_sites=raw_sites,
+                raw_decode_scope=scope,
             )
         )
     return sorted(manifest, key=lambda item: (str(item.path), item.normalized_route))
@@ -624,7 +818,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--fail-on-raw-json-decode-for-openapi-routes',
         action='store_true',
-        help='fail when a Dart API file for a matched OpenAPI route still contains raw JSON decode/cast/access sites',
+        help='fail when a matched OpenAPI route function still contains raw JSON decode/cast/access sites',
     )
     return parser.parse_args()
 
@@ -664,10 +858,11 @@ def main() -> int:
         items = [item for item in report['app_operation_manifest'] if item['raw_decode_site_count']]
         if items:
             routes = [
-                f"{item['path']} {item['normalized_route']} ({item['raw_decode_site_count']} raw sites)"
+                f"{item['path']} {item['http_method'] or '*'} {item['normalized_route']} "
+                f"{item['function_name'] or '(unknown function)'} ({item['raw_decode_site_count']} raw sites)"
                 for item in items[:50]
             ]
-            print('OpenAPI route files with raw Dart decode sites: ' + ', '.join(routes), flush=True)
+            print('OpenAPI route functions with raw Dart decode sites: ' + ', '.join(routes), flush=True)
             return 1
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
