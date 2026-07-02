@@ -1,0 +1,3 @@
+{
+  "change": "Fixed connector rows showing disconnected when Notes or local MCP clients are already set up"
+}

@@ -318,6 +318,7 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
             Task { await loadMemoryExportStatuses() }
@@ -326,6 +327,7 @@ struct DashboardPage: View {
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
             Task { await loadMemoryExportStatuses() }
