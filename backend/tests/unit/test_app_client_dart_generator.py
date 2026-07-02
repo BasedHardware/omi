@@ -173,6 +173,10 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAppPromptsGenerationResponse' in generated
     assert 'class GeneratedAppGenerationResponse' in generated
     assert 'class GeneratedAppIconGenerationResponse' in generated
+    assert 'class GeneratedAppBaseModel' in generated
+    assert 'class GeneratedAppCatalogResponse' in generated
+    assert 'class GeneratedAppSearchResponse' in generated
+    assert 'class GeneratedAppApiKeyResponse' in generated
     assert 'id: _required(_readString(_readAny(json, const ["id"])), "id")' in generated
     assert (
         'app: _required(_readObject(_readAny(json, const ["app"]), GeneratedAppDraftGenerationResponse.fromJson), "app")'
@@ -181,6 +185,11 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert (
         'requiresOauth: _required(_readBool(_readAny(json, const ["requires_oauth"])), "requires_oauth")' in generated
     )
+    assert (
+        'data: _readAny(json, const ["data"]) == null ? null : _readObjectList'
+        '(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson)' in generated
+    )
+    assert 'createdAt: _readDateTime(_readAny(json, const ["created_at"]))' in generated
 
 
 def test_users_wire_dart_is_generated_from_app_client_openapi():

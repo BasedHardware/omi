@@ -40,6 +40,10 @@ AppCapability _appCapabilityFromWire(wire.GeneratedAppCapabilityResponse capabil
   );
 }
 
+Map<String, dynamic> _paginationToJson(wire.GeneratedAppPagination? pagination, int offset, int limit) {
+  return pagination?.toJson() ?? {'total': 0, 'count': 0, 'offset': offset, 'limit': limit};
+}
+
 Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   int offset = 0,
   int limit = 10,
@@ -49,18 +53,20 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 
-    // Parse grouped response from backend
-    final groups = (data['groups'] as List?) ?? [];
     final List<Map<String, dynamic>> parsed = [];
-    for (final g in groups) {
-      final capability = g['capability'] as Map<String, dynamic>?;
-      final category = g['category'] as Map<String, dynamic>?;
-      final pagination = g['pagination'] as Map<String, dynamic>? ?? {};
-      final items = (g['data'] as List?) ?? [];
-      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-      parsed.add({'capability': capability, 'category': category, 'data': apps, 'pagination': pagination});
+    for (final group in data.groups ?? const <wire.GeneratedAppCatalogGroup>[]) {
+      final apps = (group.data ?? const <wire.GeneratedAppBaseModel>[])
+          .map(App.fromGenerated)
+          .where((app) => !app.deleted)
+          .toList();
+      parsed.add({
+        'capability': group.capability?.toJson(),
+        'category': group.category?.toJson(),
+        'data': apps,
+        'pagination': _paginationToJson(group.pagination, offset, limit),
+      });
     }
     return parsed;
   } catch (e, stackTrace) {
@@ -82,11 +88,13 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     if (response == null || response.statusCode != 200 || response.body.isEmpty) {
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
     }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (data['data'] as List?) ?? [];
-    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
-    final cat = (data['category'] as Map<String, dynamic>?);
+    final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final apps = (data.data ?? const <wire.GeneratedAppBaseModel>[])
+        .map(App.fromGenerated)
+        .where((p) => !p.deleted)
+        .toList();
+    final pagination = _paginationToJson(data.pagination, offset, limit);
+    final cat = data.category?.toJson();
     return (apps: apps, pagination: pagination, category: cat);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -103,19 +111,18 @@ retrieveCapabilityAppsGroupedByCategory({required String capability, bool includ
     if (response == null || response.statusCode != 200 || response.body.isEmpty) {
       return (groups: <Map<String, dynamic>>[], capability: null, totalApps: 0);
     }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final groups = (data['groups'] as List?) ?? [];
+    final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     final List<Map<String, dynamic>> parsed = [];
-    for (final g in groups) {
-      final category = g['category'] as Map<String, dynamic>?;
-      final items = (g['data'] as List?) ?? [];
-      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-      final count = g['count'] as int? ?? apps.length;
-      parsed.add({'category': category, 'data': apps, 'count': count});
+    for (final group in data.groups ?? const <wire.GeneratedAppCatalogGroup>[]) {
+      final apps = (group.data ?? const <wire.GeneratedAppBaseModel>[])
+          .map(App.fromGenerated)
+          .where((app) => !app.deleted)
+          .toList();
+      final count = group.count ?? apps.length;
+      parsed.add({'category': group.category?.toJson(), 'data': apps, 'count': count});
     }
-    final cap = (data['capability'] as Map<String, dynamic>?);
-    final meta = (data['meta'] as Map<String, dynamic>?) ?? {};
-    final totalApps = meta['totalApps'] as int? ?? 0;
+    final cap = data.capability?.toJson();
+    final totalApps = data.meta?.totalApps ?? 0;
     return (groups: parsed, capability: cap, totalApps: totalApps);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -154,11 +161,13 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     if (response == null || response.statusCode != 200 || response.body.isEmpty) {
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, filters: null);
     }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (data['data'] as List?) ?? [];
-    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
-    final filters = (data['filters'] as Map<String, dynamic>?);
+    final data = wire.GeneratedAppSearchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final apps = (data.data ?? const <wire.GeneratedAppBaseModel>[])
+        .map(App.fromGenerated)
+        .where((p) => !p.deleted)
+        .toList();
+    final pagination = data.pagination.toJson();
+    final filters = data.filters.toJson();
     return (apps: apps, pagination: pagination, filters: filters);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -625,7 +634,10 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('listApiKeysServer: ${response.body}');
-    return AppApiKey.fromJsonList(jsonDecode(response.body));
+    return (jsonDecode(response.body) as List)
+        .map((item) => wire.GeneratedAppApiKeyResponse.fromJson(item as Map<String, dynamic>))
+        .map(AppApiKey.fromGenerated)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -640,7 +652,7 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
       throw Exception('Failed to create apps API key');
     }
     log('createApiKeyServer: ${response.body}');
-    return jsonDecode(response.body);
+    return wire.GeneratedAppApiKeyResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);

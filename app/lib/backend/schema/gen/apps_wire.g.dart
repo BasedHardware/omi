@@ -378,6 +378,638 @@ class GeneratedAppIconGenerationResponse {
   }
 }
 
+class GeneratedAuthStep {
+  final String name;
+  final String url;
+
+  const GeneratedAuthStep({
+    required this.name,
+    required this.url,
+  });
+
+  factory GeneratedAuthStep.fromJson(Map<String, dynamic> json) {
+    return GeneratedAuthStep(
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
+      url: _required(_readString(_readAny(json, const ["url"])), "url"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'url': url,
+    };
+  }
+}
+
+class GeneratedAction {
+  final String action;
+
+  const GeneratedAction({
+    required this.action,
+  });
+
+  factory GeneratedAction.fromJson(Map<String, dynamic> json) {
+    return GeneratedAction(
+      action: _required(_readString(_readAny(json, const ["action"])), "action"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action,
+    };
+  }
+}
+
+class GeneratedExternalIntegration {
+  final List<GeneratedAction>? actions;
+  final String? appHomeUrl;
+  final List<GeneratedAuthStep>? authSteps;
+  final bool chatMessagesEnabled;
+  final bool chatMessagesNotify;
+  final String chatMessagesTarget;
+  final String? chatToolsManifestUrl;
+  final bool isInstructionsUrl;
+  final Map<String, dynamic>? mcpOauthTokens;
+  final String? mcpServerUrl;
+  final String? setupCompletedUrl;
+  final String? setupInstructionsFilePath;
+  final String? triggersOn;
+  final String? webhookUrl;
+
+  const GeneratedExternalIntegration({
+    required this.actions,
+    this.appHomeUrl,
+    required this.authSteps,
+    required this.chatMessagesEnabled,
+    required this.chatMessagesNotify,
+    required this.chatMessagesTarget,
+    this.chatToolsManifestUrl,
+    required this.isInstructionsUrl,
+    this.mcpOauthTokens,
+    this.mcpServerUrl,
+    this.setupCompletedUrl,
+    this.setupInstructionsFilePath,
+    this.triggersOn,
+    this.webhookUrl,
+  });
+
+  factory GeneratedExternalIntegration.fromJson(Map<String, dynamic> json) {
+    return GeneratedExternalIntegration(
+      actions: _readAny(json, const ["actions"]) == null ? null : _readObjectList(_readAny(json, const ["actions"]), GeneratedAction.fromJson),
+      appHomeUrl: _readString(_readAny(json, const ["app_home_url"])),
+      authSteps: _readAny(json, const ["auth_steps"]) == null ? null : _readObjectList(_readAny(json, const ["auth_steps"]), GeneratedAuthStep.fromJson),
+      chatMessagesEnabled: _readBool(_readAny(json, const ["chat_messages_enabled"])) ?? false,
+      chatMessagesNotify: _readBool(_readAny(json, const ["chat_messages_notify"])) ?? false,
+      chatMessagesTarget: _readString(_readAny(json, const ["chat_messages_target"])) ?? "app",
+      chatToolsManifestUrl: _readString(_readAny(json, const ["chat_tools_manifest_url"])),
+      isInstructionsUrl: _readBool(_readAny(json, const ["is_instructions_url"])) ?? true,
+      mcpOauthTokens: _readMap(_readAny(json, const ["mcp_oauth_tokens"])),
+      mcpServerUrl: _readString(_readAny(json, const ["mcp_server_url"])),
+      setupCompletedUrl: _readString(_readAny(json, const ["setup_completed_url"])),
+      setupInstructionsFilePath: _readString(_readAny(json, const ["setup_instructions_file_path"])),
+      triggersOn: _readString(_readAny(json, const ["triggers_on"])),
+      webhookUrl: _readString(_readAny(json, const ["webhook_url"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'actions': actions?.map((value) => value.toJson()).toList(),
+      'app_home_url': appHomeUrl,
+      'auth_steps': authSteps?.map((value) => value.toJson()).toList(),
+      'chat_messages_enabled': chatMessagesEnabled,
+      'chat_messages_notify': chatMessagesNotify,
+      'chat_messages_target': chatMessagesTarget,
+      'chat_tools_manifest_url': chatToolsManifestUrl,
+      'is_instructions_url': isInstructionsUrl,
+      'mcp_oauth_tokens': mcpOauthTokens,
+      'mcp_server_url': mcpServerUrl,
+      'setup_completed_url': setupCompletedUrl,
+      'setup_instructions_file_path': setupInstructionsFilePath,
+      'triggers_on': triggersOn,
+      'webhook_url': webhookUrl,
+    };
+  }
+}
+
+class GeneratedProactiveNotification {
+  final List<String> scopes;
+
+  const GeneratedProactiveNotification({
+    required this.scopes,
+  });
+
+  factory GeneratedProactiveNotification.fromJson(Map<String, dynamic> json) {
+    return GeneratedProactiveNotification(
+      scopes: _required(_readStringList(_readAny(json, const ["scopes"])), "scopes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'scopes': scopes,
+    };
+  }
+}
+
+class GeneratedChatTool {
+  final bool authRequired;
+  final String description;
+  final String endpoint;
+  final bool isMcp;
+  final String method;
+  final String name;
+  final Map<String, dynamic>? parameters;
+  final String? statusMessage;
+  final String transport;
+
+  const GeneratedChatTool({
+    required this.authRequired,
+    required this.description,
+    required this.endpoint,
+    required this.isMcp,
+    required this.method,
+    required this.name,
+    this.parameters,
+    this.statusMessage,
+    required this.transport,
+  });
+
+  factory GeneratedChatTool.fromJson(Map<String, dynamic> json) {
+    return GeneratedChatTool(
+      authRequired: _readBool(_readAny(json, const ["auth_required"])) ?? true,
+      description: _required(_readString(_readAny(json, const ["description"])), "description"),
+      endpoint: _required(_readString(_readAny(json, const ["endpoint"])), "endpoint"),
+      isMcp: _readBool(_readAny(json, const ["is_mcp"])) ?? false,
+      method: _readString(_readAny(json, const ["method"])) ?? "POST",
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
+      parameters: _readMap(_readAny(json, const ["parameters"])),
+      statusMessage: _readString(_readAny(json, const ["status_message"])),
+      transport: _readString(_readAny(json, const ["transport"])) ?? "streamable_http",
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'auth_required': authRequired,
+      'description': description,
+      'endpoint': endpoint,
+      'is_mcp': isMcp,
+      'method': method,
+      'name': name,
+      'parameters': parameters,
+      'status_message': statusMessage,
+      'transport': transport,
+    };
+  }
+}
+
+class GeneratedAppBaseModel {
+  final bool approved;
+  final String author;
+  final List<String> capabilities;
+  final String category;
+  final List<GeneratedChatTool>? chatTools;
+  final List<String> connectedAccounts;
+  final DateTime? createdAt;
+  final String description;
+  final bool? disabled;
+  final String? disabledReason;
+  final bool enabled;
+  final GeneratedExternalIntegration? externalIntegration;
+  final String id;
+  final String image;
+  final int installs;
+  final bool? isInfluencer;
+  final bool? isPaid;
+  final bool? isPopular;
+  final bool? isUserPaid;
+  final String name;
+  final bool? official;
+  final String? paymentLink;
+  final String? paymentPlan;
+  final double? price;
+  final bool private;
+  final GeneratedProactiveNotification? proactiveNotification;
+  final double? ratingAvg;
+  final int ratingCount;
+  final double? score;
+  final String? sourceCodeUrl;
+  final String status;
+  final List<String>? thumbnailUrls;
+  final List<String>? thumbnails;
+  final bool triggerWorkflowMemories;
+  final String? uid;
+  final String? username;
+
+  const GeneratedAppBaseModel({
+    required this.approved,
+    required this.author,
+    required this.capabilities,
+    required this.category,
+    required this.chatTools,
+    required this.connectedAccounts,
+    this.createdAt,
+    required this.description,
+    required this.disabled,
+    this.disabledReason,
+    required this.enabled,
+    this.externalIntegration,
+    required this.id,
+    required this.image,
+    required this.installs,
+    required this.isInfluencer,
+    required this.isPaid,
+    required this.isPopular,
+    required this.isUserPaid,
+    required this.name,
+    required this.official,
+    this.paymentLink,
+    this.paymentPlan,
+    required this.price,
+    required this.private,
+    this.proactiveNotification,
+    required this.ratingAvg,
+    required this.ratingCount,
+    this.score,
+    this.sourceCodeUrl,
+    required this.status,
+    required this.thumbnailUrls,
+    required this.thumbnails,
+    required this.triggerWorkflowMemories,
+    this.uid,
+    this.username,
+  });
+
+  factory GeneratedAppBaseModel.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppBaseModel(
+      approved: _readBool(_readAny(json, const ["approved"])) ?? false,
+      author: _required(_readString(_readAny(json, const ["author"])), "author"),
+      capabilities: _required(_readStringList(_readAny(json, const ["capabilities"])), "capabilities"),
+      category: _required(_readString(_readAny(json, const ["category"])), "category"),
+      chatTools: _readAny(json, const ["chat_tools"]) == null ? null : _readObjectList(_readAny(json, const ["chat_tools"]), GeneratedChatTool.fromJson),
+      connectedAccounts: _readStringList(_readAny(json, const ["connected_accounts"])) ?? const [],
+      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
+      description: _required(_readString(_readAny(json, const ["description"])), "description"),
+      disabled: _readBool(_readAny(json, const ["disabled"])) ?? false,
+      disabledReason: _readString(_readAny(json, const ["disabled_reason"])),
+      enabled: _readBool(_readAny(json, const ["enabled"])) ?? false,
+      externalIntegration: _readObject(_readAny(json, const ["external_integration"]), GeneratedExternalIntegration.fromJson),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      image: _required(_readString(_readAny(json, const ["image"])), "image"),
+      installs: _readInt(_readAny(json, const ["installs"])) ?? 0,
+      isInfluencer: _readBool(_readAny(json, const ["is_influencer"])) ?? false,
+      isPaid: _readBool(_readAny(json, const ["is_paid"])) ?? false,
+      isPopular: _readBool(_readAny(json, const ["is_popular"])) ?? false,
+      isUserPaid: _readBool(_readAny(json, const ["is_user_paid"])) ?? false,
+      name: _required(_readString(_readAny(json, const ["name"])), "name"),
+      official: _readBool(_readAny(json, const ["official"])) ?? false,
+      paymentLink: _readString(_readAny(json, const ["payment_link"])),
+      paymentPlan: _readString(_readAny(json, const ["payment_plan"])),
+      price: _readDouble(_readAny(json, const ["price"])) ?? 0.0,
+      private: _readBool(_readAny(json, const ["private"])) ?? false,
+      proactiveNotification: _readObject(_readAny(json, const ["proactive_notification"]), GeneratedProactiveNotification.fromJson),
+      ratingAvg: _readDouble(_readAny(json, const ["rating_avg"])) ?? 0,
+      ratingCount: _readInt(_readAny(json, const ["rating_count"])) ?? 0,
+      score: _readDouble(_readAny(json, const ["score"])),
+      sourceCodeUrl: _readString(_readAny(json, const ["source_code_url"])),
+      status: _readString(_readAny(json, const ["status"])) ?? "approved",
+      thumbnailUrls: _readAny(json, const ["thumbnail_urls"]) == null ? null : _readStringList(_readAny(json, const ["thumbnail_urls"])),
+      thumbnails: _readAny(json, const ["thumbnails"]) == null ? null : _readStringList(_readAny(json, const ["thumbnails"])),
+      triggerWorkflowMemories: _readBool(_readAny(json, const ["trigger_workflow_memories"])) ?? true,
+      uid: _readString(_readAny(json, const ["uid"])),
+      username: _readString(_readAny(json, const ["username"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'approved': approved,
+      'author': author,
+      'capabilities': capabilities,
+      'category': category,
+      'chat_tools': chatTools?.map((value) => value.toJson()).toList(),
+      'connected_accounts': connectedAccounts,
+      'created_at': createdAt?.toUtc().toIso8601String(),
+      'description': description,
+      'disabled': disabled,
+      'disabled_reason': disabledReason,
+      'enabled': enabled,
+      'external_integration': externalIntegration?.toJson(),
+      'id': id,
+      'image': image,
+      'installs': installs,
+      'is_influencer': isInfluencer,
+      'is_paid': isPaid,
+      'is_popular': isPopular,
+      'is_user_paid': isUserPaid,
+      'name': name,
+      'official': official,
+      'payment_link': paymentLink,
+      'payment_plan': paymentPlan,
+      'price': price,
+      'private': private,
+      'proactive_notification': proactiveNotification?.toJson(),
+      'rating_avg': ratingAvg,
+      'rating_count': ratingCount,
+      'score': score,
+      'source_code_url': sourceCodeUrl,
+      'status': status,
+      'thumbnail_urls': thumbnailUrls,
+      'thumbnails': thumbnails,
+      'trigger_workflow_memories': triggerWorkflowMemories,
+      'uid': uid,
+      'username': username,
+    };
+  }
+}
+
+class GeneratedAppPaginationLinks {
+  final String? next;
+  final String? previous;
+
+  const GeneratedAppPaginationLinks({
+    this.next,
+    this.previous,
+  });
+
+  factory GeneratedAppPaginationLinks.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppPaginationLinks(
+      next: _readString(_readAny(json, const ["next"])),
+      previous: _readString(_readAny(json, const ["previous"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'next': next,
+      'previous': previous,
+    };
+  }
+}
+
+class GeneratedAppPagination {
+  final int count;
+  final bool hasNext;
+  final bool hasPrevious;
+  final int limit;
+  final GeneratedAppPaginationLinks? links;
+  final int offset;
+  final int total;
+
+  const GeneratedAppPagination({
+    required this.count,
+    required this.hasNext,
+    required this.hasPrevious,
+    required this.limit,
+    this.links,
+    required this.offset,
+    required this.total,
+  });
+
+  factory GeneratedAppPagination.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppPagination(
+      count: _required(_readInt(_readAny(json, const ["count"])), "count"),
+      hasNext: _required(_readBool(_readAny(json, const ["hasNext"])), "hasNext"),
+      hasPrevious: _required(_readBool(_readAny(json, const ["hasPrevious"])), "hasPrevious"),
+      limit: _required(_readInt(_readAny(json, const ["limit"])), "limit"),
+      links: _readObject(_readAny(json, const ["links"]), GeneratedAppPaginationLinks.fromJson),
+      offset: _required(_readInt(_readAny(json, const ["offset"])), "offset"),
+      total: _required(_readInt(_readAny(json, const ["total"])), "total"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'count': count,
+      'hasNext': hasNext,
+      'hasPrevious': hasPrevious,
+      'limit': limit,
+      'links': links?.toJson(),
+      'offset': offset,
+      'total': total,
+    };
+  }
+}
+
+class GeneratedAppCatalogGroup {
+  final GeneratedAppSelectOption? capability;
+  final GeneratedAppSelectOption? category;
+  final int? count;
+  final List<GeneratedAppBaseModel>? data;
+  final GeneratedAppPagination? pagination;
+
+  const GeneratedAppCatalogGroup({
+    this.capability,
+    this.category,
+    this.count,
+    this.data,
+    this.pagination,
+  });
+
+  factory GeneratedAppCatalogGroup.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppCatalogGroup(
+      capability: _readObject(_readAny(json, const ["capability"]), GeneratedAppSelectOption.fromJson),
+      category: _readObject(_readAny(json, const ["category"]), GeneratedAppSelectOption.fromJson),
+      count: _readInt(_readAny(json, const ["count"])),
+      data: _readAny(json, const ["data"]) == null ? null : _readObjectList(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson),
+      pagination: _readObject(_readAny(json, const ["pagination"]), GeneratedAppPagination.fromJson),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'capability': capability?.toJson(),
+      'category': category?.toJson(),
+      'count': count,
+      'data': data?.map((value) => value.toJson()).toList(),
+      'pagination': pagination?.toJson(),
+    };
+  }
+}
+
+class GeneratedAppCatalogMeta {
+  final List<GeneratedAppSelectOption>? capabilities;
+  final int groupCount;
+  final int? limit;
+  final int? offset;
+  final int? totalApps;
+
+  const GeneratedAppCatalogMeta({
+    this.capabilities,
+    required this.groupCount,
+    this.limit,
+    this.offset,
+    this.totalApps,
+  });
+
+  factory GeneratedAppCatalogMeta.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppCatalogMeta(
+      capabilities: _readAny(json, const ["capabilities"]) == null ? null : _readObjectList(_readAny(json, const ["capabilities"]), GeneratedAppSelectOption.fromJson),
+      groupCount: _readInt(_readAny(json, const ["groupCount"])) ?? 0,
+      limit: _readInt(_readAny(json, const ["limit"])),
+      offset: _readInt(_readAny(json, const ["offset"])),
+      totalApps: _readInt(_readAny(json, const ["totalApps"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'capabilities': capabilities?.map((value) => value.toJson()).toList(),
+      'groupCount': groupCount,
+      'limit': limit,
+      'offset': offset,
+      'totalApps': totalApps,
+    };
+  }
+}
+
+class GeneratedAppCatalogResponse {
+  final GeneratedAppSelectOption? capability;
+  final GeneratedAppSelectOption? category;
+  final List<GeneratedAppBaseModel>? data;
+  final List<GeneratedAppCatalogGroup>? groups;
+  final GeneratedAppCatalogMeta? meta;
+  final GeneratedAppPagination? pagination;
+
+  const GeneratedAppCatalogResponse({
+    this.capability,
+    this.category,
+    this.data,
+    this.groups,
+    this.meta,
+    this.pagination,
+  });
+
+  factory GeneratedAppCatalogResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppCatalogResponse(
+      capability: _readObject(_readAny(json, const ["capability"]), GeneratedAppSelectOption.fromJson),
+      category: _readObject(_readAny(json, const ["category"]), GeneratedAppSelectOption.fromJson),
+      data: _readAny(json, const ["data"]) == null ? null : _readObjectList(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson),
+      groups: _readAny(json, const ["groups"]) == null ? null : _readObjectList(_readAny(json, const ["groups"]), GeneratedAppCatalogGroup.fromJson),
+      meta: _readObject(_readAny(json, const ["meta"]), GeneratedAppCatalogMeta.fromJson),
+      pagination: _readObject(_readAny(json, const ["pagination"]), GeneratedAppPagination.fromJson),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'capability': capability?.toJson(),
+      'category': category?.toJson(),
+      'data': data?.map((value) => value.toJson()).toList(),
+      'groups': groups?.map((value) => value.toJson()).toList(),
+      'meta': meta?.toJson(),
+      'pagination': pagination?.toJson(),
+    };
+  }
+}
+
+class GeneratedAppSearchFilters {
+  final String? capability;
+  final String? category;
+  final bool? installedApps;
+  final bool? myApps;
+  final String? query;
+  final double? rating;
+  final String sort;
+
+  const GeneratedAppSearchFilters({
+    this.capability,
+    this.category,
+    this.installedApps,
+    this.myApps,
+    this.query,
+    this.rating,
+    required this.sort,
+  });
+
+  factory GeneratedAppSearchFilters.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppSearchFilters(
+      capability: _readString(_readAny(json, const ["capability"])),
+      category: _readString(_readAny(json, const ["category"])),
+      installedApps: _readBool(_readAny(json, const ["installed_apps"])),
+      myApps: _readBool(_readAny(json, const ["my_apps"])),
+      query: _readString(_readAny(json, const ["query"])),
+      rating: _readDouble(_readAny(json, const ["rating"])),
+      sort: _required(_readString(_readAny(json, const ["sort"])), "sort"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'capability': capability,
+      'category': category,
+      'installed_apps': installedApps,
+      'my_apps': myApps,
+      'query': query,
+      'rating': rating,
+      'sort': sort,
+    };
+  }
+}
+
+class GeneratedAppSearchResponse {
+  final List<GeneratedAppBaseModel>? data;
+  final GeneratedAppSearchFilters filters;
+  final GeneratedAppPagination pagination;
+
+  const GeneratedAppSearchResponse({
+    this.data,
+    required this.filters,
+    required this.pagination,
+  });
+
+  factory GeneratedAppSearchResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppSearchResponse(
+      data: _readAny(json, const ["data"]) == null ? null : _readObjectList(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson),
+      filters: _required(_readObject(_readAny(json, const ["filters"]), GeneratedAppSearchFilters.fromJson), "filters"),
+      pagination: _required(_readObject(_readAny(json, const ["pagination"]), GeneratedAppPagination.fromJson), "pagination"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'data': data?.map((value) => value.toJson()).toList(),
+      'filters': filters.toJson(),
+      'pagination': pagination.toJson(),
+    };
+  }
+}
+
+class GeneratedAppApiKeyResponse {
+  final DateTime? createdAt;
+  final String id;
+  final String label;
+  final String? secret;
+
+  const GeneratedAppApiKeyResponse({
+    this.createdAt,
+    required this.id,
+    required this.label,
+    this.secret,
+  });
+
+  factory GeneratedAppApiKeyResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppApiKeyResponse(
+      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      label: _required(_readString(_readAny(json, const ["label"])), "label"),
+      secret: _readString(_readAny(json, const ["secret"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'created_at': createdAt?.toUtc().toIso8601String(),
+      'id': id,
+      'label': label,
+      'secret': secret,
+    };
+  }
+}
+
 dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
     if (json.containsKey(name)) return json[name];

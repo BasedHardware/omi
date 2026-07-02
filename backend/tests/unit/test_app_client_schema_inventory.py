@@ -26,6 +26,8 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert 'app/lib/backend/schema/folder.dart' not in remaining_manual_paths
     assert ('GET', '/v1/app-categories', 'get_app_categories_v1_app_categories_get') not in unmodeled_operations
     assert ('POST', '/v1/app/generate', 'generate_app_endpoint_v1_app_generate_post') not in unmodeled_operations
+    assert ('GET', '/v2/apps', 'get_apps_v2_v2_apps_get') not in unmodeled_operations
+    assert ('GET', '/v2/apps/search', 'search_apps_v2_apps_search_get') not in unmodeled_operations
     assert (
         'GET',
         '/v1/users/store-recording-permission',

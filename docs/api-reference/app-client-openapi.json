@@ -598,6 +598,47 @@
         "title": "AnnouncementType",
         "type": "string"
       },
+      "AppApiKeyResponse": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "AppApiKeyResponse",
+        "type": "object"
+      },
       "AppBaseModel": {
         "description": "Base App model for list views - contains common fields only.",
         "properties": {
@@ -1018,6 +1059,171 @@
         "title": "AppCapabilityResponse",
         "type": "object"
       },
+      "AppCatalogGroup": {
+        "properties": {
+          "capability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppSelectOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppSelectOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AppBaseModel"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppPagination"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AppCatalogGroup",
+        "type": "object"
+      },
+      "AppCatalogMeta": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/AppSelectOption"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "groupCount": {
+            "default": 0,
+            "title": "Groupcount",
+            "type": "integer"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offset"
+          },
+          "totalApps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Totalapps"
+          }
+        },
+        "title": "AppCatalogMeta",
+        "type": "object"
+      },
+      "AppCatalogResponse": {
+        "properties": {
+          "capability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppSelectOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppSelectOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AppBaseModel"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/AppCatalogGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppCatalogMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pagination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppPagination"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AppCatalogResponse",
+        "type": "object"
+      },
       "AppCreateResponse": {
         "properties": {
           "app_id": {
@@ -1191,6 +1397,82 @@
         "title": "AppMutationResponse",
         "type": "object"
       },
+      "AppPagination": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "hasNext": {
+            "title": "Hasnext",
+            "type": "boolean"
+          },
+          "hasPrevious": {
+            "title": "Hasprevious",
+            "type": "boolean"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "links": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppPaginationLinks"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "count",
+          "offset",
+          "limit",
+          "hasNext",
+          "hasPrevious"
+        ],
+        "title": "AppPagination",
+        "type": "object"
+      },
+      "AppPaginationLinks": {
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          }
+        },
+        "title": "AppPaginationLinks",
+        "type": "object"
+      },
       "AppPromptsGenerationResponse": {
         "properties": {
           "prompts": {
@@ -1230,6 +1512,108 @@
           "content"
         ],
         "title": "AppResult",
+        "type": "object"
+      },
+      "AppSearchFilters": {
+        "properties": {
+          "capability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "installed_apps": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed Apps"
+          },
+          "my_apps": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Apps"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "sort": {
+            "title": "Sort",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sort"
+        ],
+        "title": "AppSearchFilters",
+        "type": "object"
+      },
+      "AppSearchResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AppBaseModel"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/AppSearchFilters"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/AppPagination"
+          }
+        },
+        "required": [
+          "pagination",
+          "filters"
+        ],
+        "title": "AppSearchResponse",
         "type": "object"
       },
       "AppSelectOption": {
@@ -17389,7 +17773,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppApiKeyResponse"
+                  },
+                  "title": "Response List Api Keys V1 Apps  App Id  Keys Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -17474,7 +17864,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppApiKeyResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -17567,7 +17959,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37649,6 +38043,24 @@
             }
           },
           {
+            "description": "Filter by category id",
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category id",
+              "title": "Category"
+            }
+          },
+          {
             "in": "query",
             "name": "offset",
             "required": false,
@@ -37686,7 +38098,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppCatalogResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37745,7 +38159,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppCatalogResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37975,7 +38391,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppSearchResponse"
+                }
               }
             },
             "description": "Successful Response"

@@ -211,6 +211,69 @@ class AppIconGenerationResponse(PydanticBaseModel):
     mime_type: str
 
 
+class AppPaginationLinks(PydanticBaseModel):
+    next: Optional[str] = None
+    previous: Optional[str] = None
+
+
+class AppPagination(PydanticBaseModel):
+    total: int
+    count: int
+    offset: int
+    limit: int
+    hasNext: bool
+    hasPrevious: bool
+    links: Optional[AppPaginationLinks] = None
+
+
+class AppCatalogGroup(PydanticBaseModel):
+    capability: Optional[AppSelectOption] = None
+    category: Optional[AppSelectOption] = None
+    data: List[AppBaseModel] = Field(default_factory=list)
+    pagination: Optional[AppPagination] = None
+    count: Optional[int] = None
+
+
+class AppCatalogMeta(PydanticBaseModel):
+    capabilities: List[AppSelectOption] = Field(default_factory=list)
+    groupCount: int = 0
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+    totalApps: Optional[int] = None
+
+
+class AppCatalogResponse(PydanticBaseModel):
+    data: List[AppBaseModel] = Field(default_factory=list)
+    pagination: Optional[AppPagination] = None
+    capability: Optional[AppSelectOption] = None
+    category: Optional[AppSelectOption] = None
+    groups: List[AppCatalogGroup] = Field(default_factory=list)
+    meta: Optional[AppCatalogMeta] = None
+
+
+class AppSearchFilters(PydanticBaseModel):
+    query: Optional[str] = None
+    category: Optional[str] = None
+    rating: Optional[float] = None
+    capability: Optional[str] = None
+    sort: str
+    my_apps: Optional[bool] = None
+    installed_apps: Optional[bool] = None
+
+
+class AppSearchResponse(PydanticBaseModel):
+    data: List[AppBaseModel] = Field(default_factory=list)
+    pagination: AppPagination
+    filters: AppSearchFilters
+
+
+class AppApiKeyResponse(PydanticBaseModel):
+    id: str
+    label: str
+    created_at: Optional[datetime] = None
+    secret: Optional[str] = None
+
+
 def _write_file(path: str, data: bytes):
     """Write bytes to file — offloaded to storage_executor."""
     with open(path, 'wb') as f:
@@ -305,9 +368,10 @@ def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
     return get_enabled_apps(uid)
 
 
-@router.get('/v2/apps', tags=['v2'])
+@router.get('/v2/apps', tags=['v2'], response_model=AppCatalogResponse)
 def get_apps_v2(
     capability: str | None = Query(default=None, description='Filter by capability id'),
+    category: str | None = Query(default=None, description='Filter by category id'),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     include_reviews: bool = Query(default=False),
@@ -325,6 +389,8 @@ def get_apps_v2(
 
     if capability:
         cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+    elif category:
+        cache_key = f"apps:category:v2:{category}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
     else:
         cache_key = f"apps:capability_groups:v2:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
 
@@ -357,6 +423,25 @@ def get_apps_v2(
         set_generic_cache(cache_key, res, ttl=60 * 10)
         return res
 
+    if category:
+        filtered_apps = [app for app in approved_apps if app.category == category]
+        sorted_apps = sort_apps_by_installs(filtered_apps)
+        page = paginate_apps(sorted_apps, offset, limit)
+        categories = _get_categories()
+
+        res = {
+            'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
+            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, category),
+            'category': {
+                'id': category,
+                'title': next(
+                    (c['title'] for c in categories if c['id'] == category), category.title().replace('-', ' ')
+                ),
+            },
+        }
+        set_generic_cache(cache_key, res, ttl=60 * 10)
+        return res
+
     # Grouped response by capability
     grouped_apps = group_apps_by_capability(approved_apps, capabilities)
     groups = build_capability_groups_response(grouped_apps, capabilities, offset, limit)
@@ -374,7 +459,7 @@ def get_apps_v2(
     return res
 
 
-@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
+@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'], response_model=AppCatalogResponse)
 def get_capability_apps_grouped_by_category(
     capability_id: str,
     include_reviews: bool = Query(default=True),
@@ -425,7 +510,7 @@ def get_capability_apps_grouped_by_category(
     return res
 
 
-@router.get('/v2/apps/search', tags=['v2'])
+@router.get('/v2/apps/search', tags=['v2'], response_model=AppSearchResponse)
 def search_apps(
     q: str | None = Query(default=None, description='Search query for app name or description'),
     category: str | None = Query(default=None, description='Filter by category id'),
@@ -2015,7 +2100,7 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
     return persona
 
 
-@router.post('/v1/apps/{app_id}/keys', tags=['v1'])
+@router.post('/v1/apps/{app_id}/keys', tags=['v1'], response_model=AppApiKeyResponse)
 def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     if not app:
@@ -2033,7 +2118,7 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
     return {'id': data['id'], 'secret': key, 'label': label, 'created_at': data['created_at']}  # with sk_
 
 
-@router.get('/v1/apps/{app_id}/keys', tags=['v1'])
+@router.get('/v1/apps/{app_id}/keys', tags=['v1'], response_model=List[AppApiKeyResponse])
 def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     if not app:
@@ -2046,7 +2131,7 @@ def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return keys
 
 
-@router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'])
+@router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     if not app:
