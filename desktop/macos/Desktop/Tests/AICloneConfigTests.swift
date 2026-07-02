@@ -434,11 +434,28 @@ final class AICloneConfigTests: XCTestCase {
     }
 
     func testRateLimitDisplayIsNearCapAt80Percent() {
-        // 80% of 30 is 24. So 24 in-window should be near cap.
-        let near = RateLimitDisplay(maxPerHour: 30, inWindowCount: 24)
-        XCTAssertTrue(near.isNearCap)
-        let ok = RateLimitDisplay(maxPerHour: 30, inWindowCount: 23)
-        XCTAssertFalse(ok.isNearCap)
+        // cubic review 4618627789 P2: the previous
+        // `Int(Double(maxPerHour) * 0.8)` truncated toward
+        // zero and produced wrong thresholds for small
+        // maxPerHour values. Verify the integer math works
+        // at the boundary for maxPerHour=30, AND for the
+        // problematic small values.
+        // maxPerHour=30, 80% = 24
+        XCTAssertTrue(RateLimitDisplay(maxPerHour: 30, inWindowCount: 24).isNearCap)
+        XCTAssertFalse(RateLimitDisplay(maxPerHour: 30, inWindowCount: 23).isNearCap)
+        // maxPerHour=1, 80% = 0.8 -> ceil(0.8) = 1 (was 0 with
+        // the buggy truncating math, which made the warning
+        // permanently active at zero usage).
+        XCTAssertFalse(RateLimitDisplay(maxPerHour: 1, inWindowCount: 0).isNearCap)
+        XCTAssertTrue(RateLimitDisplay(maxPerHour: 1, inWindowCount: 1).isNearCap)
+        // maxPerHour=2, 80% = 1.6 -> ceil(1.6) = 2 (was 1 with
+        // the buggy truncating math, which fired the warning
+        // at 50% rather than 80%).
+        XCTAssertFalse(RateLimitDisplay(maxPerHour: 2, inWindowCount: 1).isNearCap)
+        XCTAssertTrue(RateLimitDisplay(maxPerHour: 2, inWindowCount: 2).isNearCap)
+        // maxPerHour=5, 80% = 4
+        XCTAssertFalse(RateLimitDisplay(maxPerHour: 5, inWindowCount: 3).isNearCap)
+        XCTAssertTrue(RateLimitDisplay(maxPerHour: 5, inWindowCount: 4).isNearCap)
     }
 
     func testRateLimitDisplayBlockedIsAlwaysNearCap() {
@@ -461,6 +478,54 @@ final class AICloneConfigTests: XCTestCase {
 
     func testAICloneConfigRateLimitStartsEmpty() {
         let config = AICloneConfig(defaults: customDefaults)
+        XCTAssertEqual(config.telegramRateLimit, .empty)
+        XCTAssertEqual(config.telegramMessagesSentToday, 0)
+    }
+
+
+    // MARK: - Sign-out clears rate-limit state (cubic 4618627789 P2)
+
+    func testSignOutClearsRateLimitState() {
+        // cubic review 4618627789 P2: sign-out must reset
+        // telegramRateLimit and telegramMessagesSentToday
+        // alongside telegramAccountMeta. Otherwise the UI
+        // shows stale metrics from the previous account.
+        let config = AICloneConfig(defaults: customDefaults)
+        // Set up a "logged in" state with non-empty metrics.
+        try? config.setTelegramUserSession(
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        config.telegramRateLimit = RateLimitDisplay(
+            maxPerHour: 30, inWindowCount: 5, isBlocked: false
+        )
+        config.telegramMessagesSentToday = 42
+        XCTAssertTrue(config.telegramAccountEnabled)
+        XCTAssertEqual(config.telegramRateLimit.inWindowCount, 5)
+        XCTAssertEqual(config.telegramMessagesSentToday, 42)
+        // Sign out via clearTelegramUserSession().
+        try? config.clearTelegramUserSession()
+        XCTAssertFalse(config.telegramAccountEnabled)
+        XCTAssertEqual(config.telegramRateLimit, .empty)
+        XCTAssertEqual(config.telegramMessagesSentToday, 0)
+    }
+
+    func testSetTelegramUserSessionEmptyClearsRateLimitState() {
+        // The empty-string sign-out path (setTelegramUserSession(""))
+        // must ALSO clear the rate-limit state, not just the
+        // sign-out-via-clearTelegramUserSession path. They share
+        // the same UI surface; the user shouldn't see stale
+        // metrics after EITHER path.
+        let config = AICloneConfig(defaults: customDefaults)
+        try? config.setTelegramUserSession(
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        config.telegramRateLimit = RateLimitDisplay(
+            maxPerHour: 30, inWindowCount: 7, isBlocked: true, secondsUntilNextSlot: 60
+        )
+        config.telegramMessagesSentToday = 99
+        // Sign out via the empty-string path.
+        try? config.setTelegramUserSession("")
+        XCTAssertFalse(config.telegramAccountEnabled)
         XCTAssertEqual(config.telegramRateLimit, .empty)
         XCTAssertEqual(config.telegramMessagesSentToday, 0)
     }

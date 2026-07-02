@@ -198,11 +198,18 @@ async def status():
     "Telegram asked us to wait Xs" message.
 
     Daily counter (plan §8: "messages sent today"): the daily
-    count is computed from simple_storage's audit log so it
-    survives plugin restarts. The in-memory
-    `default_rate_limit` only covers the rolling 60-min window
-    -- a separate daily count is needed for the "messages sent
-    today" cosmetic counter.
+    count is computed from the per-chat ring buffer in
+    simple_storage. The count is BEST-EFFORT and bounded by
+    `CHAT_HISTORY_MAX` (currently 10 entries per chat): when
+    a chat exceeds that, older entries are evicted, so the
+    daily count may undercount on very active chats. The
+    counter is cosmetic per plan §8 (a "messages sent today"
+    indicator on the plugin card) and not load-bearing. A
+    separate append-only audit log would be needed for an
+    exact count; that is a follow-up if/when the
+    `messages_sent_today` indicator becomes a billing
+    signal. The in-memory `default_rate_limit` covers the
+    rolling 60-min window precisely.
     """
     rate = flood_control.default_rate_limit
     rl_state = {
@@ -232,13 +239,21 @@ async def status():
 
 
 def _messages_sent_today() -> int:
-    """Count of outbound sends today (UTC day). plan §8: "Daily
-    'messages sent today' counter on the plugin card". The
-    count is computed from the per-chat send timestamps
-    already in simple_storage -- we don't add a separate
-    counter to avoid duplicating state. Any message where
-    role == "ai" with a timestamp >= today's UTC midnight
-    counts.
+    """Best-effort count of outbound sends today (UTC day).
+
+    plan §8: "Daily 'messages sent today' counter on the
+    plugin card". Cubic review 4618627789 P2: this is a
+    BEST-EFFORT count bounded by the per-chat ring buffer
+    (CHAT_HISTORY_MAX, currently 10). When a chat exceeds
+    that, older entries are evicted -- so the daily count
+    UNDERCOUNTS on very active chats. The counter is
+    cosmetic per plan §8; do NOT use it for billing,
+    enforcement, or any load-bearing decision. A separate
+    append-only audit log would be needed for an exact count.
+
+    Counts: any message where role == "ai" with a timestamp
+    >= today's UTC midnight. Human messages and un-timestamped
+    messages are excluded.
     """
     from datetime import datetime, timezone
 

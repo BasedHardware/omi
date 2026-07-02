@@ -47,7 +47,16 @@ struct RateLimitDisplay: Equatable {
     /// currently blocked. Drives the warning banner color.
     var isNearCap: Bool {
         if isBlocked { return true }
-        return maxPerHour > 0 && inWindowCount >= Int(Double(maxPerHour) * 0.8)
+        // cubic review 4618627789 P2: the previous
+        // `Int(Double(maxPerHour) * 0.8)` truncates toward zero
+        // and produces incorrect early warnings for small
+        // maxPerHour values. For example, maxPerHour=1 yields
+        // threshold 0 (permanently near-cap), maxPerHour=2
+        // yields threshold 1 (50%, not 80%). Use integer
+        // arithmetic: inWindowCount * 5 >= maxPerHour * 4
+        // matches the documented ">= 80%" threshold exactly
+        // for all positive maxPerHour values.
+        return maxPerHour > 0 && inWindowCount * 5 >= maxPerHour * 4
     }
 }
 
@@ -145,6 +154,12 @@ final class AICloneConfig: ObservableObject {
             }
             telegramAccountEnabled = false
             telegramAccountMeta = [:]
+            // cubic review 4618627789 P2: also clear the
+            // rate-limit + daily-sent counters so the UI
+            // doesn't show stale metrics from the previous
+            // account.
+            telegramRateLimit = .empty
+            telegramMessagesSentToday = 0
             return
         }
         try AICloneKeychain.set(.telegramUserSession, session)
@@ -180,6 +195,12 @@ final class AICloneConfig: ObservableObject {
         }
         telegramAccountEnabled = false
         telegramAccountMeta = [:]
+        // cubic review 4618627789 P2: also clear the
+        // rate-limit + daily-sent counters so the UI
+        // doesn't show stale metrics from the previous
+        // account.
+        telegramRateLimit = .empty
+        telegramMessagesSentToday = 0
     }
 
     @Published var bearerToken: String {

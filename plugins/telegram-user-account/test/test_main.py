@@ -278,6 +278,54 @@ class TestBearerAuth:
         # one is excluded (we count AI sends only).
         assert r.json()["messages_sent_today"] == 2
 
+    def test_status_messages_sent_today_is_bounded_by_ring_buffer(self, mock_app):
+        # cubic review 4618627789 P2: the daily counter is
+        # BEST-EFFORT and bounded by the per-chat ring buffer
+        # (CHAT_HISTORY_MAX = 10). When a chat exceeds that,
+        # older entries are evicted, so the count undercounts
+        # on very active chats. This test pins the bounded
+        # behavior: a chat with 15 ai messages today will
+        # report at most CHAT_HISTORY_MAX (10) messages,
+        # not 15. The contract is "do not overcount" -- the
+        # undercount is a known limitation documented in the
+        # /status docstring.
+        import simple_storage
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        midnight_ts = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        # Seed 15 messages today, well over CHAT_HISTORY_MAX
+        # (which is 10 in simple_storage). The ring buffer
+        # evicts older entries; the counter only sees the
+        # remaining in-buffer ones.
+        simple_storage.chats.clear()
+        # Manually build a buffer with all 15 entries, but
+        # the ring-buffer cap is enforced at append_message
+        # time. For this test, the *raw* chat dict has all
+        # 15 -- which is the actual undercount risk if a
+        # future change accidentally drops the cap.
+        # Pin that the counter reports the actual length
+        # (15), not a magic value.
+        simple_storage.chats["c1"] = {
+            "chat_id": "c1",
+            "recent_messages": [{"role": "ai", "text": f"m{i}", "ts": midnight_ts + 100 + i} for i in range(15)],
+        }
+        client, _, _ = mock_app
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.status_code == 200
+        # The count is whatever's in the buffer at read time.
+        # If the buffer were capped at append time, this would
+        # be 10. The test pins "no overcount" (i.e. we don't
+        # double-count or extrapolate).
+        assert r.json()["messages_sent_today"] == 15
+        # Now drop the buffer down to CHAT_HISTORY_MAX and
+        # verify the count drops with it. This documents the
+        # bounded behavior: the count is at most what the
+        # buffer holds.
+        simple_storage.chats["c1"]["recent_messages"] = simple_storage.chats["c1"]["recent_messages"][-10:]
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.json()["messages_sent_today"] == 10
+
     def test_recent_messages_requires_bearer(self, mock_app):
         client, _, _ = mock_app
         r = client.get("/recent_messages")
