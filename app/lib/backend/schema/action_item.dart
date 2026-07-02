@@ -49,13 +49,13 @@ class ActionItemWithMetadata {
       dueAt: generated.dueAt,
       completedAt: generated.completedAt,
       conversationId: generated.conversationId,
-      isLocked: generated.isLocked ?? false,
-      exported: generated.exported ?? false,
+      isLocked: generated.isLocked,
+      exported: generated.exported,
       exportDate: generated.exportDate,
       exportPlatform: generated.exportPlatform,
       appleReminderId: generated.appleReminderId,
-      sortOrder: generated.sortOrder ?? 0,
-      indentLevel: generated.indentLevel ?? 0,
+      sortOrder: generated.sortOrder,
+      indentLevel: generated.indentLevel,
     );
   }
 
@@ -133,7 +133,7 @@ class ActionItemsResponse {
   factory ActionItemsResponse.fromGenerated(wire.GeneratedActionItemsResponse generated) {
     return ActionItemsResponse(
       actionItems: generated.actionItems.map(ActionItemWithMetadata.fromGenerated).toList(),
-      hasMore: generated.hasMore ?? false,
+      hasMore: generated.hasMore,
     );
   }
 }

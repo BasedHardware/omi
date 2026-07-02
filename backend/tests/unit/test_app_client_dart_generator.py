@@ -107,10 +107,11 @@ def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
     assert 'deletedIds: _required(_readFieldValue<List<String>>' in generated
 
 
-def test_action_items_adapter_coalesces_optional_envelope_defaults():
+def test_action_items_adapter_uses_generated_envelope_defaults():
     adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'action_item.dart').read_text()
 
-    assert 'hasMore: generated.hasMore ?? false' in adapter
+    assert 'hasMore: generated.hasMore' in adapter
+    assert 'hasMore: generated.hasMore ?? false' not in adapter
 
 
 def test_api_keys_wire_dart_is_generated_from_app_client_openapi():

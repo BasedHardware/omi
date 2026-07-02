@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
@@ -92,9 +93,8 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation))
-        .toList();
+    var memories =
+        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true);
   }
@@ -278,9 +278,8 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics: (json['speechmatics'] as List<dynamic>)
-          .map((segment) => TranscriptSegment.fromJson(segment))
-          .toList(),
+      speechmatics:
+          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
     );
   }
 }
@@ -353,7 +352,6 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
 }
 
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {
-  print(jsonEncode({'items_idx': actionItemsIdx, 'values': values, 'conversation_id': conversationId}));
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
     headers: {},
@@ -589,7 +587,8 @@ Future<ActionItemsResponse> getActionItems({
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return ActionItemsResponse.fromJson(jsonDecode(body));
+    final generated = action_items_wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return ActionItemsResponse.fromGenerated(generated);
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
     return ActionItemsResponse(actionItems: [], hasMore: false);
