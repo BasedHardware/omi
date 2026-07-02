@@ -472,10 +472,7 @@ class ChatToolExecutor {
       return "Error: Missing brief. Pass a clear, self-contained task brief."
     }
     let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let providerName = ((args["provider"] as? String) ?? "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-      .lowercased()
-      .replacingOccurrences(of: " ", with: "")
+    let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(args["provider"] as? String)
     if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
       return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
     }
@@ -520,10 +517,7 @@ class ChatToolExecutor {
     if originatingClientScope == AgentLegacyClientScope.floatingPill {
       return "Error: setup_agent_provider is unavailable from an existing floating background agent."
     }
-    let providerName = ((args["provider"] as? String) ?? "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-      .lowercased()
-      .replacingOccurrences(of: " ", with: "")
+    let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(args["provider"] as? String)
     guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
       return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
     }

@@ -470,7 +470,7 @@ enum RealtimeHubTools {
           "properties": [
             "provider": [
               "type": "string",
-              "enum": AgentPillsManager.orderedDirectedProviders.map(\.rawValue),
+              "enum": directedProviders.map(\.rawValue),
               "description": "Local agent provider to install.",
             ]
           ],

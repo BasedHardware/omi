@@ -1024,10 +1024,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     case .spawnAgent:
       let brief = arg("brief")
       let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let providerName = ((arguments["provider"] as? String) ?? "")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .lowercased()
-        .replacingOccurrences(of: " ", with: "")
+      let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(arguments["provider"] as? String)
       if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
         session?.sendToolResult(
           callId: callId, name: name,
@@ -1075,10 +1072,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         source: source, callId: callId, name: name,
         output: "Agent started.")
     case .setupAgentProvider:
-      let setupProviderName = ((arguments["provider"] as? String) ?? "")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .lowercased()
-        .replacingOccurrences(of: " ", with: "")
+      let setupProviderName = AgentPillsManager.DirectedProvider.normalizedRawValue(arguments["provider"] as? String)
       guard let provider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,

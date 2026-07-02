@@ -332,6 +332,17 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
+        /// Canonical normalization for provider names arriving in model tool
+        /// arguments ("Open Claw" → "openclaw"): trim whitespace, lowercase,
+        /// drop internal spaces. Shared by every spawn_agent /
+        /// setup_agent_provider surface so parsing can never drift.
+        static func normalizedRawValue(_ raw: String?) -> String {
+            (raw ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "")
+        }
+
         /// Shared unsupported-provider tool error — identical wording across
         /// spawn_agent and setup_agent_provider on every surface.
         static func unsupportedProviderMessage(_ name: String) -> String {
