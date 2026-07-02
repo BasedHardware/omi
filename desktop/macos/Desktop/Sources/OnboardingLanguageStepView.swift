@@ -58,16 +58,13 @@ struct OnboardingLanguageStepView: View {
                   )
               )
               .foregroundColor(OmiColors.textPrimary)
+              .onSubmit(saveCustomLanguage)
 
             Button("Save language") {
-              Task {
-                await coordinator.setCustomLanguage()
-                if coordinator.lastActionError == nil {
-                  onContinue()
-                }
-              }
+              saveCustomLanguage()
             }
             .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+            .keyboardShortcut(.defaultAction)
           }
         }
 
@@ -78,6 +75,15 @@ struct OnboardingLanguageStepView: View {
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private func saveCustomLanguage() {
+    Task {
+      await coordinator.setCustomLanguage()
+      if coordinator.lastActionError == nil {
+        onContinue()
+      }
     }
   }
 }

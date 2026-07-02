@@ -59,6 +59,7 @@ struct OnboardingGoalStepView: View {
             )
             .foregroundColor(OmiColors.textPrimary)
             .frame(maxWidth: 560)
+            .onSubmit(saveGoalAndContinue)
         }
 
         if let error = coordinator.lastActionError {
@@ -69,17 +70,10 @@ struct OnboardingGoalStepView: View {
 
         if shouldShowContinue {
           Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
-            Task {
-              coordinator.goalSaved = false
-              await coordinator.saveGoalIfNeeded()
-              guard coordinator.goalSaved else { return }
-              let completed = await coordinator.completeIntro(appState: appState)
-              if completed {
-                onContinue()
-              }
-            }
+            saveGoalAndContinue()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .keyboardShortcut(.defaultAction)
           .disabled(coordinator.isSavingGoal)
         }
       }
@@ -112,6 +106,19 @@ struct OnboardingGoalStepView: View {
 
   private var shouldShowContinue: Bool {
     !trimmedGoal.isEmpty
+  }
+
+  private func saveGoalAndContinue() {
+    guard shouldShowContinue, !coordinator.isSavingGoal else { return }
+    Task {
+      coordinator.goalSaved = false
+      await coordinator.saveGoalIfNeeded()
+      guard coordinator.goalSaved else { return }
+      let completed = await coordinator.completeIntro(appState: appState)
+      if completed {
+        onContinue()
+      }
+    }
   }
 }
 
