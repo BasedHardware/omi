@@ -29,7 +29,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "Apps"
     case .settings: return "Settings"
     case .permissions: return "Permissions"
-    case .replies: return "Replies"
+    case .replies: return "Messages"
     case .help: return "Help from Founder"
     }
   }
@@ -47,7 +47,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
     case .permissions: return "exclamationmark.triangle.fill"
-    case .replies: return "arrowshape.turn.up.left.fill"
+    case .replies: return "message.fill"
     case .help: return "bubble.left.fill"
     }
   }

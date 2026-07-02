@@ -118,3 +118,39 @@ struct IMessageInboxThread: Identifiable, Sendable {
   let personRef: String  // handle or name used to resolve the person server-side
   let context: [IMessageDraftMessagePayload]
 }
+
+// MARK: - Full chat view (native iMessage-style Messages tab)
+
+/// One message bubble in a chat.
+struct IMessageChatBubble: Identifiable, Sendable {
+  let id: String  // message guid
+  let text: String
+  let isFromMe: Bool
+  let date: Date
+  let senderName: String?  // shown above bubble in group chats
+  var senderImage: Data? = nil  // group sender's contact photo
+  var attachmentPath: String? = nil  // resolved file path if this message is an attachment
+  var attachmentMime: String? = nil  // e.g. "image/jpeg", "video/quicktime"
+}
+
+/// A full conversation with its recent message history.
+struct IMessageChat: Identifiable, Sendable {
+  var id: String { chatGUID }
+  let chatGUID: String
+  let displayName: String
+  let isGroup: Bool
+  let personRef: String
+  let bubbles: [IMessageChatBubble]  // ascending by date
+  var avatarImageData: Data? = nil  // 1:1 contact photo
+
+  var lastDate: Date { bubbles.last?.date ?? .distantPast }
+  var lastPreview: String { bubbles.last?.text ?? "" }
+  var awaitingReply: Bool { !(bubbles.last?.isFromMe ?? true) }
+
+  /// Recent thread as draft-reply context (last N messages).
+  func draftContext(limit: Int = 20) -> [IMessageDraftMessagePayload] {
+    bubbles.suffix(limit).map {
+      IMessageDraftMessagePayload(text: $0.text, isFromMe: $0.isFromMe)
+    }
+  }
+}
