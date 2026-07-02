@@ -1,0 +1,3 @@
+{
+  "change": "Improved desktop app packaging so the bundled agent runtime no longer depends on developer-machine Node libraries"
+}

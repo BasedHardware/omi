@@ -1201,6 +1201,8 @@ private struct ConversationsPageHost: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   DesktopHomeView()
 }
+#endif

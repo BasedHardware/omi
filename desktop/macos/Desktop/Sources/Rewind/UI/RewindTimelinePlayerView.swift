@@ -497,7 +497,9 @@ class TimelinePlayerViewModel: ObservableObject {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     RewindTimelinePlayerView(screenshots: [], initialIndex: 0)
         .frame(width: 1200, height: 800)
 }
+#endif

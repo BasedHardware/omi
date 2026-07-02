@@ -11,12 +11,12 @@ NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"
 NODE_DARWIN_ARM64_SHA256="e9404633bc02a5162c5c573b1e2490f5fb44648345d64a958b17e325729a5e42"
 NODE_DARWIN_X64_SHA256="6698587713ab565a94a360e091df9f6d91c8fadda6d00f0cf6526e9b40bed250"
 
-MODE="local"
+MODE="universal"
 SKIP_NPM=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/prepare-agent-runtime.sh [--local-node|--universal-node] [--skip-npm]
+Usage: scripts/prepare-agent-runtime.sh [--universal-node|--unsafe-local-node] [--skip-npm]
 
 Prepares the desktop Ask Omi agent runtime:
   - installs agent npm dependencies with npm ci
@@ -25,18 +25,21 @@ Prepares the desktop Ask Omi agent runtime:
   - validates bridge, piMono, and extension files that the app launches at runtime
 
 Modes:
-  --local-node      Copy the developer's current `node` binary into resources.
   --universal-node  Download checksum-verified darwin arm64/x64 Node and lipo it.
+  --unsafe-local-node
+                    Copy the developer's current `node` binary into resources.
+                    This is for debugging only; normal app bundles should use
+                    the pinned universal runtime.
 USAGE
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --local-node)
-      MODE="local"
-      ;;
     --universal-node)
       MODE="universal"
+      ;;
+    --unsafe-local-node)
+      MODE="local"
       ;;
     --skip-npm)
       SKIP_NPM=1
@@ -106,11 +109,11 @@ install_agent_deps_and_build() {
   )
 }
 
-stage_local_node() {
+stage_unsafe_local_node() {
   local node_bin
   node_bin="$(command -v node || true)"
   if [ -z "$node_bin" ]; then
-    echo "ERROR: Node.js not found. Install Node.js 22+ or run release packaging with --universal-node." >&2
+    echo "ERROR: Node.js not found. Install Node.js 22+ or use --universal-node." >&2
     exit 1
   fi
 
@@ -131,12 +134,12 @@ stage_local_node() {
   # to the self-contained official build when the staged copy can't run alone.
   local staged_version
   if ! staged_version="$("$NODE_RESOURCE" --version 2>/dev/null)"; then
-    log "Local Node at $node_bin is not self-contained (dynamically linked, e.g. Homebrew); falling back to official Node $NODE_VERSION download"
+    log "Unsafe local Node at $node_bin is not self-contained (dynamically linked, e.g. Homebrew); falling back to official Node $NODE_VERSION download"
     rm -f "$NODE_RESOURCE"
     stage_universal_node
     return
   fi
-  log "Staged local Node $staged_version from $node_bin"
+  log "Staged unsafe local Node $staged_version from $node_bin"
 }
 
 download_node_archive() {
@@ -196,7 +199,7 @@ validate_runtime_tree() {
 install_agent_deps_and_build
 case "$MODE" in
   local)
-    stage_local_node
+    stage_unsafe_local_node
     ;;
   universal)
     stage_universal_node
