@@ -5,31 +5,6 @@ import 'package:omi/backend/schema/gen/goals_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
-String _nowIso() => DateTime.now().toUtc().toIso8601String();
-
-Map<String, dynamic> _goalJsonWithDefaults(Map<String, dynamic> json) {
-  final normalized = Map<String, dynamic>.from(json);
-  normalized['id'] ??= '';
-  normalized['title'] ??= '';
-  normalized['goal_type'] ??= 'scale';
-  normalized['target_value'] ??= 0;
-  normalized['current_value'] ??= 0;
-  normalized['min_value'] ??= 0;
-  normalized['max_value'] ??= 10;
-  normalized['is_active'] ??= true;
-  normalized['created_at'] ??= _nowIso();
-  normalized['updated_at'] ??= _nowIso();
-  return normalized;
-}
-
-Map<String, dynamic> _goalHistoryJsonWithDefaults(Map<String, dynamic> json) {
-  final normalized = Map<String, dynamic>.from(json);
-  normalized['date'] ??= '';
-  normalized['value'] ??= 0;
-  normalized['recorded_at'] ??= _nowIso();
-  return normalized;
-}
-
 Map<String, dynamic> _goalSuggestionJsonWithDefaults(Map<String, dynamic> json) {
   final normalized = Map<String, dynamic>.from(json);
   normalized['suggested_title'] ??= '';
@@ -70,8 +45,7 @@ class Goal {
   });
 
   factory Goal.fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json));
-    final parsedAt = DateTime.now();
+    final generated = wire.GeneratedGoalResponse.fromJson(json);
     return Goal(
       id: generated.id,
       title: generated.title,
@@ -82,8 +56,8 @@ class Goal {
       maxValue: generated.maxValue,
       unit: generated.unit,
       isActive: generated.isActive,
-      createdAt: generated.createdAt ?? parsedAt,
-      updatedAt: generated.updatedAt ?? parsedAt,
+      createdAt: generated.createdAt,
+      updatedAt: generated.updatedAt,
     );
   }
 
@@ -117,12 +91,8 @@ class GoalHistoryEntry {
   GoalHistoryEntry({required this.date, required this.value, required this.recordedAt});
 
   factory GoalHistoryEntry.fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedGoalHistoryEntryResponse.fromJson(_goalHistoryJsonWithDefaults(json));
-    return GoalHistoryEntry(
-      date: generated.date,
-      value: generated.value,
-      recordedAt: generated.recordedAt ?? DateTime.now(),
-    );
+    final generated = wire.GeneratedGoalHistoryEntryResponse.fromJson(json);
+    return GoalHistoryEntry(date: generated.date, value: generated.value, recordedAt: generated.recordedAt);
   }
 }
 

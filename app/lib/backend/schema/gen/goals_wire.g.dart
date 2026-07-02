@@ -4,7 +4,7 @@
 
 class GeneratedGoalResponse {
   final String? advice;
-  final DateTime? createdAt;
+  final DateTime createdAt;
   final double currentValue;
   final String goalType;
   final String id;
@@ -14,11 +14,11 @@ class GeneratedGoalResponse {
   final double targetValue;
   final String title;
   final String? unit;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
 
   const GeneratedGoalResponse({
     this.advice,
-    this.createdAt,
+    required this.createdAt,
     required this.currentValue,
     required this.goalType,
     required this.id,
@@ -28,30 +28,30 @@ class GeneratedGoalResponse {
     required this.targetValue,
     required this.title,
     this.unit,
-    this.updatedAt,
+    required this.updatedAt,
   });
 
   factory GeneratedGoalResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedGoalResponse(
       advice: _readString(_readAny(json, const ["advice"])),
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      currentValue: _readDouble(_readAny(json, const ["current_value"])) ?? 0,
-      goalType: _readString(_readAny(json, const ["goal_type"])) ?? "scale",
-      id: _readString(_readAny(json, const ["id"])) ?? "",
-      isActive: _readBool(_readAny(json, const ["is_active"])) ?? true,
-      maxValue: _readDouble(_readAny(json, const ["max_value"])) ?? 10,
-      minValue: _readDouble(_readAny(json, const ["min_value"])) ?? 0,
-      targetValue: _readDouble(_readAny(json, const ["target_value"])) ?? 0,
-      title: _readString(_readAny(json, const ["title"])) ?? "",
+      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
+      currentValue: _required(_readDouble(_readAny(json, const ["current_value"])), "current_value"),
+      goalType: _required(_readString(_readAny(json, const ["goal_type"])), "goal_type"),
+      id: _required(_readString(_readAny(json, const ["id"])), "id"),
+      isActive: _required(_readBool(_readAny(json, const ["is_active"])), "is_active"),
+      maxValue: _required(_readDouble(_readAny(json, const ["max_value"])), "max_value"),
+      minValue: _required(_readDouble(_readAny(json, const ["min_value"])), "min_value"),
+      targetValue: _required(_readDouble(_readAny(json, const ["target_value"])), "target_value"),
+      title: _required(_readString(_readAny(json, const ["title"])), "title"),
       unit: _readString(_readAny(json, const ["unit"])),
-      updatedAt: _readDateTime(_readAny(json, const ["updated_at"])),
+      updatedAt: _required(_readDateTime(_readAny(json, const ["updated_at"])), "updated_at"),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'advice': advice,
-      'created_at': createdAt?.toUtc().toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
       'current_value': currentValue,
       'goal_type': goalType,
       'id': id,
@@ -61,7 +61,7 @@ class GeneratedGoalResponse {
       'target_value': targetValue,
       'title': title,
       'unit': unit,
-      'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
     };
   }
 }
@@ -128,27 +128,27 @@ class GeneratedAdviceResponse {
 
 class GeneratedGoalHistoryEntryResponse {
   final String date;
-  final DateTime? recordedAt;
+  final DateTime recordedAt;
   final double value;
 
   const GeneratedGoalHistoryEntryResponse({
     required this.date,
-    this.recordedAt,
+    required this.recordedAt,
     required this.value,
   });
 
   factory GeneratedGoalHistoryEntryResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedGoalHistoryEntryResponse(
-      date: _readString(_readAny(json, const ["date"])) ?? "",
-      recordedAt: _readDateTime(_readAny(json, const ["recorded_at"])),
-      value: _readDouble(_readAny(json, const ["value"])) ?? 0,
+      date: _required(_readString(_readAny(json, const ["date"])), "date"),
+      recordedAt: _required(_readDateTime(_readAny(json, const ["recorded_at"])), "recorded_at"),
+      value: _required(_readDouble(_readAny(json, const ["value"])), "value"),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'date': date,
-      'recorded_at': recordedAt?.toUtc().toIso8601String(),
+      'recorded_at': recordedAt.toUtc().toIso8601String(),
       'value': value,
     };
   }

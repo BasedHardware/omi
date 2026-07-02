@@ -4,7 +4,7 @@ Handles user goals with AI-powered suggestions and advice.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
@@ -57,17 +57,17 @@ class GoalUpdate(BaseModel):
 class GoalResponse(BaseModel):
     """Response model for a goal."""
 
-    id: str = ''
-    title: str = ''
-    goal_type: str = 'scale'
-    target_value: float = 0
-    current_value: float = 0
-    min_value: float = 0
-    max_value: float = 10
+    id: str
+    title: str
+    goal_type: str
+    target_value: float
+    current_value: float
+    min_value: float
+    max_value: float
     unit: Optional[str] = None
-    is_active: bool = True
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
     advice: Optional[str] = None
 
 
@@ -91,9 +91,9 @@ class AdviceResponse(BaseModel):
 class GoalHistoryEntryResponse(BaseModel):
     """Response model for a goal progress history entry."""
 
-    date: str = ''
-    value: float = 0
-    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    date: str
+    value: float
+    recorded_at: datetime
 
 
 class GoalDeleteResponse(BaseModel):

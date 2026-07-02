@@ -243,7 +243,7 @@ def test_goals_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAdviceResponse' in generated
     assert 'class GeneratedGoalHistoryEntryResponse' in generated
     assert 'class GeneratedGoalDeleteResponse' in generated
-    assert 'goalType: _readString(_readAny(json, const ["goal_type"])) ?? "scale"' in generated
+    assert 'goalType: _required(_readString(_readAny(json, const ["goal_type"])), "goal_type")' in generated
     assert 'suggestedMax: _readDouble(_readAny(json, const ["suggested_max"])) ?? 10' in generated
 
 

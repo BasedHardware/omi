@@ -5404,7 +5404,6 @@
         "description": "Response model for a goal progress history entry.",
         "properties": {
           "date": {
-            "default": "",
             "title": "Date",
             "type": "string"
           },
@@ -5414,11 +5413,15 @@
             "type": "string"
           },
           "value": {
-            "default": 0,
             "title": "Value",
             "type": "number"
           }
         },
+        "required": [
+          "date",
+          "value",
+          "recorded_at"
+        ],
         "title": "GoalHistoryEntryResponse",
         "type": "object"
       },
@@ -5442,42 +5445,34 @@
             "type": "string"
           },
           "current_value": {
-            "default": 0,
             "title": "Current Value",
             "type": "number"
           },
           "goal_type": {
-            "default": "scale",
             "title": "Goal Type",
             "type": "string"
           },
           "id": {
-            "default": "",
             "title": "Id",
             "type": "string"
           },
           "is_active": {
-            "default": true,
             "title": "Is Active",
             "type": "boolean"
           },
           "max_value": {
-            "default": 10,
             "title": "Max Value",
             "type": "number"
           },
           "min_value": {
-            "default": 0,
             "title": "Min Value",
             "type": "number"
           },
           "target_value": {
-            "default": 0,
             "title": "Target Value",
             "type": "number"
           },
           "title": {
-            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -5498,6 +5493,18 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "title",
+          "goal_type",
+          "target_value",
+          "current_value",
+          "min_value",
+          "max_value",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
         "title": "GoalResponse",
         "type": "object"
       },

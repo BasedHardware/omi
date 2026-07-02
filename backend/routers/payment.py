@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional
 import uuid
 import time
@@ -90,6 +90,16 @@ class PaymentCheckoutSessionResponse(BaseModel):
     status: Optional[str] = None
     message: Optional[str] = None
     next_billing_date: Optional[int] = None
+
+    @model_validator(mode='after')
+    def validate_success_shape(self):
+        if self.status == 'reactivated':
+            if not self.message or self.next_billing_date is None:
+                raise ValueError('reactivated checkout responses require message and next_billing_date')
+            return self
+        if not self.url or not self.session_id:
+            raise ValueError('checkout session responses require url and session_id')
+        return self
 
 
 class PaymentSubscriptionResponse(BaseModel):
@@ -476,7 +486,11 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     )
 
 
-@router.post('/v1/payments/checkout-session', response_model=PaymentCheckoutSessionResponse)
+@router.post(
+    '/v1/payments/checkout-session',
+    response_model=PaymentCheckoutSessionResponse,
+    response_model_exclude_none=True,
+)
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)

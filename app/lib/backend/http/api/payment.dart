@@ -23,10 +23,16 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, St
 
     // Check if this is a reactivation response
     if (generated.status == 'reactivated') {
+      if (generated.message == null || generated.nextBillingDate == null) {
+        return null;
+      }
       return {'status': generated.status, 'message': generated.message, 'next_billing_date': generated.nextBillingDate};
     }
 
     // Otherwise, it's a checkout session
+    if (generated.url == null || generated.sessionId == null) {
+      return null;
+    }
     return {'url': generated.url, 'session_id': generated.sessionId};
   }
   return null;
