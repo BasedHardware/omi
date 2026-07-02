@@ -200,6 +200,7 @@ macho_load_dependencies() {
     macho_load_command_names "$1" LC_LOAD_DYLIB name
     macho_load_command_names "$1" LC_LOAD_WEAK_DYLIB name
     macho_load_command_names "$1" LC_REEXPORT_DYLIB name
+    macho_load_command_names "$1" LC_LAZY_LOAD_DYLIB name
     macho_load_command_names "$1" LC_LOAD_UPWARD_DYLIB name
   } | sort -u
 }
