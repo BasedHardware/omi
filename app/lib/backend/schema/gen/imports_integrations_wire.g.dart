@@ -141,4 +141,9 @@ List<int>? _readIntList(dynamic value) {
   return value.map(_readInt).whereType<int>().toList();
 }
 
+List<Map<String, dynamic>>? _readMapList(dynamic value) {
+  if (value is! List) return null;
+  return value.map(_readMap).whereType<Map<String, dynamic>>().toList();
+}
+
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

@@ -143,8 +143,15 @@ def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openap
     assert 'class GeneratedGenerateWrappedResponse' in generated
     assert 'class GeneratedTaskIntegrationsResponse' in generated
     assert 'class GeneratedDefaultTaskIntegrationResponse' in generated
+    assert 'class GeneratedAsanaWorkspacesResponse' in generated
+    assert 'class GeneratedAsanaProjectsResponse' in generated
+    assert 'class GeneratedClickUpTeamsResponse' in generated
+    assert 'class GeneratedClickUpSpacesResponse' in generated
+    assert 'class GeneratedClickUpListsResponse' in generated
     assert 'status: _required(_readString(_readAny(json, const ["status"])), "status")' in generated
     assert 'integrations: _required(_readMap(_readAny(json, const ["integrations"])), "integrations")' in generated
+    assert 'workspaces: _readAny(json, const ["workspaces"]) == null ? null : _readMapList' in generated
+    assert 'List<Map<String, dynamic>>? _readMapList(dynamic value)' in generated
 
 
 def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():

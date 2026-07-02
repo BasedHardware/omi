@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 import os
 import secrets
@@ -179,6 +179,26 @@ class DefaultTaskIntegrationResponse(BaseModel):
     """Response for default task integration"""
 
     default_app: Optional[str] = Field(description="Default task integration app key")
+
+
+class AsanaWorkspacesResponse(BaseModel):
+    workspaces: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class AsanaProjectsResponse(BaseModel):
+    projects: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ClickUpTeamsResponse(BaseModel):
+    teams: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ClickUpSpacesResponse(BaseModel):
+    spaces: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ClickUpListsResponse(BaseModel):
+    lists: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # *****************************
@@ -727,7 +747,9 @@ async def create_task_via_integration(
 # *****************************
 
 
-@router.get("/v1/task-integrations/asana/workspaces", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/asana/workspaces", response_model=AsanaWorkspacesResponse, tags=['task-integrations']
+)
 async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's Asana workspaces"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
@@ -767,7 +789,11 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
 
 
-@router.get("/v1/task-integrations/asana/projects/{workspace_gid}", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/asana/projects/{workspace_gid}",
+    response_model=AsanaProjectsResponse,
+    tags=['task-integrations'],
+)
 async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get projects in an Asana workspace"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
@@ -807,7 +833,7 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/teams", tags=['task-integrations'])
+@router.get("/v1/task-integrations/clickup/teams", response_model=ClickUpTeamsResponse, tags=['task-integrations'])
 async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's ClickUp teams"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
@@ -847,7 +873,9 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/spaces/{team_id}", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/clickup/spaces/{team_id}", response_model=ClickUpSpacesResponse, tags=['task-integrations']
+)
 async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get spaces in a ClickUp team"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
@@ -887,7 +915,9 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/lists/{space_id}", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/clickup/lists/{space_id}", response_model=ClickUpListsResponse, tags=['task-integrations']
+)
 async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get lists in a ClickUp space"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')

@@ -106,6 +106,106 @@ class GeneratedDefaultTaskIntegrationResponse {
   }
 }
 
+class GeneratedAsanaWorkspacesResponse {
+  final List<Map<String, dynamic>>? workspaces;
+
+  const GeneratedAsanaWorkspacesResponse({
+    this.workspaces,
+  });
+
+  factory GeneratedAsanaWorkspacesResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAsanaWorkspacesResponse(
+      workspaces: _readAny(json, const ["workspaces"]) == null ? null : _readMapList(_readAny(json, const ["workspaces"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'workspaces': workspaces,
+    };
+  }
+}
+
+class GeneratedAsanaProjectsResponse {
+  final List<Map<String, dynamic>>? projects;
+
+  const GeneratedAsanaProjectsResponse({
+    this.projects,
+  });
+
+  factory GeneratedAsanaProjectsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAsanaProjectsResponse(
+      projects: _readAny(json, const ["projects"]) == null ? null : _readMapList(_readAny(json, const ["projects"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'projects': projects,
+    };
+  }
+}
+
+class GeneratedClickUpTeamsResponse {
+  final List<Map<String, dynamic>>? teams;
+
+  const GeneratedClickUpTeamsResponse({
+    this.teams,
+  });
+
+  factory GeneratedClickUpTeamsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedClickUpTeamsResponse(
+      teams: _readAny(json, const ["teams"]) == null ? null : _readMapList(_readAny(json, const ["teams"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'teams': teams,
+    };
+  }
+}
+
+class GeneratedClickUpSpacesResponse {
+  final List<Map<String, dynamic>>? spaces;
+
+  const GeneratedClickUpSpacesResponse({
+    this.spaces,
+  });
+
+  factory GeneratedClickUpSpacesResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedClickUpSpacesResponse(
+      spaces: _readAny(json, const ["spaces"]) == null ? null : _readMapList(_readAny(json, const ["spaces"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'spaces': spaces,
+    };
+  }
+}
+
+class GeneratedClickUpListsResponse {
+  final List<Map<String, dynamic>>? lists;
+
+  const GeneratedClickUpListsResponse({
+    this.lists,
+  });
+
+  factory GeneratedClickUpListsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedClickUpListsResponse(
+      lists: _readAny(json, const ["lists"]) == null ? null : _readMapList(_readAny(json, const ["lists"])),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lists': lists,
+    };
+  }
+}
+
 dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
     if (json.containsKey(name)) return json[name];
@@ -175,6 +275,11 @@ List<double>? _readDoubleList(dynamic value) {
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
   return value.map(_readInt).whereType<int>().toList();
+}
+
+List<Map<String, dynamic>>? _readMapList(dynamic value) {
+  if (value is! List) return null;
+  return value.map(_readMap).whereType<Map<String, dynamic>>().toList();
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

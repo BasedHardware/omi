@@ -1162,6 +1162,34 @@
         "title": "AppleHealthSyncData",
         "type": "object"
       },
+      "AsanaProjectsResponse": {
+        "properties": {
+          "projects": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "title": "AsanaProjectsResponse",
+        "type": "object"
+      },
+      "AsanaWorkspacesResponse": {
+        "properties": {
+          "workspaces": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "title": "AsanaWorkspacesResponse",
+        "type": "object"
+      },
       "AudioFile": {
         "properties": {
           "chunk_timestamps": {
@@ -2482,6 +2510,48 @@
           "category"
         ],
         "title": "CleanerMemory",
+        "type": "object"
+      },
+      "ClickUpListsResponse": {
+        "properties": {
+          "lists": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Lists",
+            "type": "array"
+          }
+        },
+        "title": "ClickUpListsResponse",
+        "type": "object"
+      },
+      "ClickUpSpacesResponse": {
+        "properties": {
+          "spaces": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Spaces",
+            "type": "array"
+          }
+        },
+        "title": "ClickUpSpacesResponse",
+        "type": "object"
+      },
+      "ClickUpTeamsResponse": {
+        "properties": {
+          "teams": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Teams",
+            "type": "array"
+          }
+        },
+        "title": "ClickUpTeamsResponse",
         "type": "object"
       },
       "Conversation": {
@@ -30388,7 +30458,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AsanaProjectsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30467,7 +30539,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AsanaWorkspacesResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30552,7 +30626,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ClickUpListsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30640,7 +30716,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ClickUpSpacesResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30719,7 +30797,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ClickUpTeamsResponse"
+                }
               }
             },
             "description": "Successful Response"

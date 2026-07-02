@@ -162,8 +162,7 @@ Future<List<Map<String, dynamic>>?> getAsanaWorkspaces() async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['workspaces'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedAsanaWorkspacesResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).workspaces ?? [];
   } else {
     Logger.debug('getAsanaWorkspaces error ${response.statusCode}');
     return null;
@@ -183,8 +182,7 @@ Future<List<Map<String, dynamic>>?> getAsanaProjects(String workspaceGid) async 
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['projects'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedAsanaProjectsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).projects ?? [];
   } else {
     Logger.debug('getAsanaProjects error ${response.statusCode}');
     return null;
@@ -204,8 +202,7 @@ Future<List<Map<String, dynamic>>?> getClickUpTeams() async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['teams'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedClickUpTeamsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).teams ?? [];
   } else {
     Logger.debug('getClickUpTeams error ${response.statusCode}');
     return null;
@@ -225,8 +222,7 @@ Future<List<Map<String, dynamic>>?> getClickUpSpaces(String teamId) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['spaces'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedClickUpSpacesResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).spaces ?? [];
   } else {
     Logger.debug('getClickUpSpaces error ${response.statusCode}');
     return null;
@@ -246,8 +242,7 @@ Future<List<Map<String, dynamic>>?> getClickUpLists(String spaceId) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['lists'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedClickUpListsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).lists ?? [];
   } else {
     Logger.debug('getClickUpLists error ${response.statusCode}');
     return null;

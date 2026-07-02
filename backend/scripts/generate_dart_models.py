@@ -96,6 +96,11 @@ SCHEMA_GROUPS = {
             'GenerateWrappedResponse',
             'TaskIntegrationsResponse',
             'DefaultTaskIntegrationResponse',
+            'AsanaWorkspacesResponse',
+            'AsanaProjectsResponse',
+            'ClickUpTeamsResponse',
+            'ClickUpSpacesResponse',
+            'ClickUpListsResponse',
         ),
     },
     'subscription_usage': {
@@ -325,6 +330,8 @@ def read_expr(field: Field) -> str:
             expr = f'{nullable_prefix}_readDoubleList({value})'
         elif item.name == 'int':
             expr = f'{nullable_prefix}_readIntList({value})'
+        elif item.is_map:
+            expr = f'{nullable_prefix}_readMapList({value})'
         else:
             expr = f'{nullable_prefix}_readDynamicList({value})'
         if required:
@@ -527,6 +534,11 @@ List<double>? _readDoubleList(dynamic value) {
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
   return value.map(_readInt).whereType<int>().toList();
+}
+
+List<Map<String, dynamic>>? _readMapList(dynamic value) {
+  if (value is! List) return null;
+  return value.map(_readMap).whereType<Map<String, dynamic>>().toList();
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;
