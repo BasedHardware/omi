@@ -113,6 +113,14 @@ SCHEMA_GROUPS = {
             'MigrationTargetRequest',
         ),
     },
+    'announcements': {
+        'output': DEFAULT_OUTPUT_DIR / 'announcements_wire.g.dart',
+        'schemas': (
+            'Targeting',
+            'Display',
+            'Announcement',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},

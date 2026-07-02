@@ -26,6 +26,7 @@ SUBSCRIPTION_USAGE_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'subscription_usage_wire.g.dart'
 )
 PRIVACY_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'privacy_wire.g.dart'
+ANNOUNCEMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'announcements_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -157,6 +158,19 @@ def test_privacy_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedBatchMigrationRequest' in generated
     assert 'class GeneratedMigrationTargetRequest' in generated
     assert 'targetLevel: _required(_readString(_readAny(json, const ["target_level"])), "target_level")' in generated
+
+
+def test_announcements_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'announcements')
+
+    assert ANNOUNCEMENTS_DART_PATH.read_text() == generated
+    assert 'class GeneratedTargeting' in generated
+    assert 'class GeneratedDisplay' in generated
+    assert 'class GeneratedAnnouncement' in generated
+    assert 'createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at")' in generated
+    assert 'trigger: _readString(_readAny(json, const ["trigger"])) ?? "version_upgrade"' in generated
+    assert 'deviceModels: _readAny(json, const ["device_models"]) == null ? null : _readStringList' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():
