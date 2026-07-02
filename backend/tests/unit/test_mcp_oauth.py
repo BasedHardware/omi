@@ -215,6 +215,23 @@ def test_chatgpt_prod_client_uses_public_pkce_exchange(monkeypatch):
     assert token_pair['scope'] == ' '.join(scopes)
 
 
+def test_chatgpt_dev_client_uses_public_pkce_exchange(monkeypatch):
+    redirect_uri = 'https://chatgpt.com/connector/oauth/dev-test'
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_SECRET', 'legacy-dev-secret')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_REDIRECT_URIS', redirect_uri)
+    monkeypatch.delenv('MCP_OAUTH_PUBLIC_REDIRECT_URIS', raising=False)
+    monkeypatch.delenv('MCP_OAUTH_CHATGPT_TOKEN_AUTH_METHOD', raising=False)
+    monkeypatch.setattr(mcp_oauth, 'DEFAULT_CLIENT_ID', 'omi')
+
+    client = mcp_oauth.get_client('omi-chatgpt-dev')
+    assert client is not None
+    assert client['token_endpoint_auth_method'] == 'none'
+    assert mcp_oauth.verify_client_auth(client, None)
+    assert not mcp_oauth.verify_client_auth(client, 'unexpected-secret')
+    assert mcp_oauth.validate_redirect_uri(client, redirect_uri)
+
+
 def test_chatgpt_token_auth_method_env_can_force_confidential_client(monkeypatch):
     monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi-chatgpt-prod')
     monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_SECRET', 'client-secret')

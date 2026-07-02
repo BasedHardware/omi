@@ -35,7 +35,7 @@ AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
-PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod"}
+PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
 
 
 def hash_secret(secret: str) -> str:
@@ -151,6 +151,26 @@ def _public_redirect_uris() -> list[str]:
     return _csv_env("MCP_OAUTH_PUBLIC_REDIRECT_URIS") or _csv_env("MCP_OAUTH_CHATGPT_REDIRECT_URIS")
 
 
+def _builtin_public_chatgpt_client(client_id: str) -> Optional[dict]:
+    """Built-in public PKCE clients the desktop references by stable id."""
+    if client_id not in PUBLIC_CHATGPT_CLIENT_IDS:
+        return None
+    redirect_uris = _public_redirect_uris()
+    if not redirect_uris:
+        return None
+    return {
+        "id": client_id,
+        "name": DEFAULT_CLIENT_NAME,
+        "registration_mode": "builtin_public_chatgpt",
+        "allowed_redirect_uris": redirect_uris,
+        "allowed_resources": [MCP_RESOURCE_URL],
+        "allowed_scopes": SUPPORTED_SCOPES,
+        "token_endpoint_auth_method": "none",
+        "client_secret_hash": "",
+        "disabled_at": None,
+    }
+
+
 def _default_public_client() -> Optional[dict]:
     redirect_uris = _public_redirect_uris()
     if not redirect_uris:
@@ -184,6 +204,9 @@ def get_client(client_id: str) -> Optional[dict]:
         return _legacy_chatgpt_client()
     if client_id == DEFAULT_PUBLIC_CLIENT_ID:
         return _default_public_client()
+    builtin_public = _builtin_public_chatgpt_client(client_id)
+    if builtin_public:
+        return builtin_public
     return None
 
 

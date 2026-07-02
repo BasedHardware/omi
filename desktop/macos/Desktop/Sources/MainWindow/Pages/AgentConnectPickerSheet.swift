@@ -116,7 +116,7 @@ private struct ConnectOptionCard: View {
         ? "Grant Accessibility"
         : "Do it for me"
     case .assisted:
-      return "Open & copy key"
+      return destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
     }
   }
 
@@ -209,7 +209,12 @@ private struct ConnectOptionCard: View {
         case .autonomous:
           resultMessage = "Omi is setting this up — follow along in the floating bar."
         case .assisted:
-          resultMessage = "Opened \(destination.title) and copied your key."
+          resultMessage = outcome.taskTitle
+          // Assisted flow: the user pastes values by hand, so open the
+          // step-by-step instructions instead of leaving them collapsed.
+          if destination.assistedOverlayHint != nil {
+            showManual = true
+          }
         case .completed:
           resultMessage = outcome.taskTitle
         }

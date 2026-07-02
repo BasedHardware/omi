@@ -28,6 +28,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   static var mcpAuthorizeURL: String { "\(mcpBaseURL)authorize" }
   static var mcpTokenURL: String { "\(mcpBaseURL)token" }
 
+  /// Registered OAuth client for ChatGPT custom connectors on this backend.
+  /// Prod registers `omi-chatgpt-prod` as a PUBLIC PKCE client — the token
+  /// endpoint rejects any client secret for it, so setup must leave the
+  /// secret blank. Dev registers `omi-chatgpt-dev`.
+  static var chatgptOAuthClientID: String {
+    mcpBaseURL.contains("api.omi.me") ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
+  }
+
   var title: String {
     switch self {
     case .notion: return "Notion"
@@ -111,14 +119,16 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   /// - `.localAutonomous`: deterministic local CLI/config/file work.
   /// - `.browserAutonomous`: open the cloud connector in the user's default
   ///   signed-in browser and use native macOS automation, with assisted fallback
-  ///   on blockers.
-  /// - `.assisted`: open/copy only.
+  ///   on blockers. Currently unmapped: ChatGPT/Claude moved to `.assisted`
+  ///   because cross-browser AX automation is too brittle — see
+  ///   docs/cloud-connectors-roadmap.md before mapping anything back here.
+  /// - `.assisted`: deterministic open + copy, with an on-screen guidance card
+  ///   for cloud connectors. The user performs the final paste/click.
   enum MCPExecuteKind { case localAutonomous, browserAutonomous, assisted }
   var mcpExecuteKind: MCPExecuteKind {
     switch self {
-    case .chatgpt, .claude: return .browserAutonomous
     case .claudeCode, .codex, .openclaw, .hermes: return .localAutonomous
-    case .notion, .obsidian, .gemini, .agents: return .assisted
+    case .chatgpt, .claude, .notion, .obsidian, .gemini, .agents: return .assisted
     }
   }
 
@@ -217,11 +227,11 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         steps: [
           "Open ChatGPT → Settings → Apps → Advanced, enable Developer mode",
           "Create app → name it “Omi Memory” and paste the server URL below",
-          "Authentication: OAuth. In Advanced OAuth settings set Client ID “omi”, Client Secret to your key, token auth method “client_secret_post”",
+          "Authentication: OAuth. Client ID “\(Self.chatgptOAuthClientID)”, leave Client Secret blank (public PKCE client)",
           "Auth URL: \(Self.mcpAuthorizeURL) · Token URL: \(Self.mcpTokenURL)",
           "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
         ],
-        openURL: URL(string: "https://chatgpt.com/"),
+        openURL: URL(string: "https://chatgpt.com/#settings/Connectors"),
         openTitle: "Open ChatGPT"
       )
     case .claudeCode:
@@ -338,9 +348,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         "Name: Omi Memory",
         "Remote MCP server URL: \(setup.serverURL)",
         "Authentication: OAuth",
-        "OAuth Client ID: omi",
-        "OAuth Client Secret: \(key)",
-        "Token auth method: client_secret_post",
+        "OAuth Client ID: \(Self.chatgptOAuthClientID)",
+        "OAuth Client Secret: leave blank (public PKCE client)",
         "Auth URL: \(Self.mcpAuthorizeURL)",
         "Token URL: \(Self.mcpTokenURL)",
       ]
@@ -372,16 +381,22 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       ("provider", rawValue),
       ("name", "Omi Memory"),
       ("server_url", setup.serverURL),
-      ("oauth_client_id", "omi"),
-      ("oauth_client_secret", key),
       ("submit", "true"),
     ]
     if self == .chatgpt {
+      // Public PKCE client — no client secret; the token endpoint rejects one.
+      // oauth_client_secret is required by the tool schema — pass empty string.
       nativeToolArgs.append(contentsOf: [
         ("authentication", "OAuth"),
-        ("token_auth_method", "client_secret_post"),
+        ("oauth_client_id", Self.chatgptOAuthClientID),
+        ("oauth_client_secret", ""),
         ("auth_url", Self.mcpAuthorizeURL),
         ("token_url", Self.mcpTokenURL),
+      ])
+    } else {
+      nativeToolArgs.append(contentsOf: [
+        ("oauth_client_id", "omi"),
+        ("oauth_client_secret", key),
       ])
     }
     let nativeToolJSON =
@@ -427,6 +442,58 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     lines.append("")
     lines.append("After setup, verify that \(title) shows Omi Memory as connected or available. If a final OAuth consent/connect button appears, click it only when it is clearly for Omi Memory.")
     return (taskTitle, lines.joined(separator: "\n"))
+  }
+
+  /// Field-by-field payload for assisted cloud setup — rendered as copy rows on
+  /// the on-screen guidance card so the user transfers one value at a time.
+  func assistedSetupFields(key: String) -> [CloudConnectorCopyField]? {
+    guard let setup = mcpSetup(key: key) else { return nil }
+    switch self {
+    case .claude:
+      return [
+        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+        CloudConnectorCopyField(
+          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+        CloudConnectorCopyField(id: "oauth_client_id", label: "OAuth Client ID", value: "omi"),
+        CloudConnectorCopyField(
+          id: "oauth_client_secret", label: "OAuth Client Secret", value: key, masksValue: true),
+      ]
+    case .chatgpt:
+      // Public PKCE client: the backend rejects token requests that carry a
+      // client secret, so the form's Client Secret field must stay empty.
+      return [
+        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+        CloudConnectorCopyField(
+          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+        CloudConnectorCopyField(id: "authentication", label: "Authentication", value: "OAuth"),
+        CloudConnectorCopyField(
+          id: "oauth_client_id", label: "OAuth Client ID", value: Self.chatgptOAuthClientID),
+        CloudConnectorCopyField(
+          id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+        CloudConnectorCopyField(id: "auth_url", label: "Auth URL", value: Self.mcpAuthorizeURL),
+        CloudConnectorCopyField(id: "token_url", label: "Token URL", value: Self.mcpTokenURL),
+      ]
+    default:
+      return nil
+    }
+  }
+
+  /// Short on-screen guidance card shown right after Omi opens the provider page.
+  var assistedOverlayHint: (title: String, subtitle: String)? {
+    switch self {
+    case .claude:
+      return (
+        "Finish in Claude",
+        "Copy each value into the Add custom connector form, then click Add and Connect."
+      )
+    case .chatgpt:
+      return (
+        "Finish in ChatGPT",
+        "Turn on Developer mode in Settings → Apps, then copy each value into the connector form."
+      )
+    default:
+      return nil
+    }
   }
 
   private static func jsonEscaped(_ value: String) -> String {

@@ -32,8 +32,30 @@ final class BrowserAutomationTargetTests: XCTestCase {
   }
 
   func testDestinationModesSeparateCloudBrowserAndLocalSetup() {
-    XCTAssertEqual(MemoryExportDestination.chatgpt.mcpExecuteKind, .browserAutonomous)
-    XCTAssertEqual(MemoryExportDestination.claude.mcpExecuteKind, .browserAutonomous)
+    // ChatGPT/Claude cloud are assisted-first: deterministic open+copy plus an
+    // on-screen guidance card. See docs/cloud-connectors-roadmap.md.
+    XCTAssertEqual(MemoryExportDestination.chatgpt.mcpExecuteKind, .assisted)
+    XCTAssertEqual(MemoryExportDestination.claude.mcpExecuteKind, .assisted)
+    XCTAssertNotNil(MemoryExportDestination.chatgpt.assistedOverlayHint)
+    XCTAssertNotNil(MemoryExportDestination.claude.assistedOverlayHint)
+    XCTAssertNil(MemoryExportDestination.gemini.assistedOverlayHint)
+    XCTAssertEqual(MemoryExportDestination.claude.assistedSetupFields(key: "k")?.count, 4)
+    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 7)
+    // Prod ChatGPT client is public PKCE — the secret row must stay blank.
+    XCTAssertEqual(
+      MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.value, "")
+    XCTAssertEqual(
+      MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.masksValue, false)
+    // Claude secret must be masked on screen.
+    XCTAssertEqual(
+      MemoryExportDestination.claude.assistedSetupFields(key: "secret-key")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.masksValue, true)
+    // Stable ids — never label-derived (duplicate labels would crash ForEach).
+    let chatgptIDs = MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.map(\.id) ?? []
+    XCTAssertEqual(Set(chatgptIDs).count, chatgptIDs.count)
+    XCTAssertNil(MemoryExportDestination.gemini.assistedSetupFields(key: "k"))
     XCTAssertEqual(MemoryExportDestination.codex.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.claudeCode.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.gemini.mcpExecuteKind, .assisted)
@@ -180,8 +202,14 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertTrue(task?.body.contains("execute javascript") == true)
     XCTAssertTrue(task?.body.contains("Do not install browser extensions") == true)
     XCTAssertTrue(task?.body.contains("Brave Browser") == true)
-    XCTAssertTrue(task?.body.contains("OAuth Client ID: omi") == true)
-    XCTAssertTrue(task?.body.contains("OAuth Client Secret: test-key") == true)
+    // ChatGPT uses the registered public PKCE client — never the per-user key
+    // as a client secret (the token endpoint rejects secrets for public clients).
+    XCTAssertTrue(
+      task?.body.contains("OAuth Client ID: \(MemoryExportDestination.chatgptOAuthClientID)")
+        == true)
+    XCTAssertTrue(task?.body.contains("OAuth Client Secret: leave blank") == true)
+    XCTAssertFalse(task?.body.contains("OAuth Client Secret: test-key") == true)
+    XCTAssertTrue(task?.body.contains("\"oauth_client_secret\":\"\"") == true)
     XCTAssertTrue(task?.body.contains(MemoryExportDestination.mcpServerURL) == true)
   }
 
@@ -236,7 +264,9 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
   @MainActor
   func testClaudeNativeSetupWaitsForAccessibilityApprovalInsteadOfAgentFallback() {
-    XCTAssertTrue(MemoryExportExecutor.requiresAccessibilityPreflight(.claude))
+    // Assisted-first Claude setup needs no Accessibility preflight; the check
+    // only applies while a destination maps to .browserAutonomous.
+    XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.claude))
     XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.chatgpt))
     XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.codex))
 

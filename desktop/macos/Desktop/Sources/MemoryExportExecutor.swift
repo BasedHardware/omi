@@ -55,11 +55,10 @@ enum MemoryExportExecutor {
       return try await runBrowserAutonomous(destination, key: key)
 
     case .assisted:
-      guard let task = destination.omiExecutionTask(key: key) else {
+      guard destination.omiExecutionTask(key: key) != nil else {
         throw ExecutorError.unsupported(destination.title)
       }
-      await runAssisted(destination, key: key)
-      return Outcome(taskTitle: task.title, mode: .assisted)
+      return await runAssisted(destination, key: key)
     }
   }
 
@@ -75,6 +74,11 @@ enum MemoryExportExecutor {
     AXIsProcessTrusted()
   }
 
+  /// PARKED: no destination currently maps to `.browserAutonomous` — ChatGPT and
+  /// Claude cloud moved to the assisted flow because AX/OCR automation of other
+  /// people's web UIs proved too brittle across browsers and machines. Kept so a
+  /// future DOM-perception rebuild has the routing to slot into. Do not remap a
+  /// destination here without reading docs/cloud-connectors-roadmap.md.
   private static func runBrowserAutonomous(
     _ destination: MemoryExportDestination,
     key: String
@@ -284,15 +288,36 @@ enum MemoryExportExecutor {
     NSWorkspace.shared.open(url)
   }
 
-  private static func runAssisted(_ destination: MemoryExportDestination, key: String) async {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(key, forType: .string)
+  /// Assisted setup: everything deterministic happens in code (copy the full
+  /// field payload, open the deep link), then an on-screen card tells the user
+  /// the one thing left to do. This is the primary path for ChatGPT/Claude cloud
+  /// connectors — see docs/cloud-connectors-roadmap.md for why autonomous
+  /// browser automation is parked and what replaces it.
+  private static func runAssisted(_ destination: MemoryExportDestination, key: String) async -> Outcome {
     if let url = destination.mcpSetup(key: key)?.openURL {
       NSWorkspace.shared.open(url)
     }
+
+    if let hint = destination.assistedOverlayHint,
+      let fields = destination.assistedSetupFields(key: key)
+    {
+      CloudConnectorGuidanceOverlay.shared.presentFieldCopyCard(
+        title: hint.title, subtitle: hint.subtitle, fields: fields, near: nil)
+      return Outcome(
+        taskTitle:
+          "Opened \(destination.title) — copy each value from the on-screen card into the form.",
+        mode: .assisted)
+    }
+
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(key, forType: .string)
+
     _ = await TasksStore.shared.createTask(
       description: "Finish connecting \(destination.title) to Omi (page opened, key copied)",
       dueAt: Date(), priority: "medium", tags: ["mcp-setup"])
+    return Outcome(
+      taskTitle: "Opened \(destination.title) and copied your key — finish with the steps below.",
+      mode: .assisted)
   }
 
   private static func spawnSetupAgent(task: (title: String, body: String)) async {

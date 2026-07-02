@@ -25,6 +25,11 @@ does the work. **The harness is the product. The automation is disposable.**
 
 Every rule below follows from that sentence.
 
+> **Current state for the two hardest surfaces** (ChatGPT & Claude cloud
+> connectors): autonomous setup is parked and the assisted overlay flow is
+> primary. The phased plan to revisit them lives in
+> [cloud-connectors-roadmap.md](./cloud-connectors-roadmap.md).
+
 ---
 
 ## 1. Code owns contracts. The agent owns only what code can't reach.
@@ -77,6 +82,22 @@ If you find yourself hardcoding *which* element to click or *where* it is on
 screen, stop. That knowledge is volatile; encoding it in Swift means every
 provider redesign becomes a release cycle.
 
+## 2b. When neither code nor agent can own the surface, ship assisted-first
+
+Between "code writes a file" and "agent drives the UI" there is a third shape
+that is often the right one: **do the deterministic 90% in code, hand the human
+one clear action.** Open the exact deep link, present the setup values on a
+movable on-screen card with one copy button per field (secrets masked on
+screen, real value copied), auto-expand the step list — the user pastes and
+clicks the final button. This is the primary flow for ChatGPT/Claude cloud
+connectors today.
+
+A 100%-reliable "you click once" beats a 60%-reliable "do it for me" that
+leaves the provider UI in an unknown state. Autonomy is an upgrade you earn
+back with better perception (see the roadmap doc), not the default you ship
+while perception is bad. Design assisted flows to the same bar as autonomous
+ones: field-level affordances, not a wall of text in the clipboard.
+
 ## 3. Never trust the UI. End every flow with a functional probe.
 
 The UI saying "Connected" is not evidence the integration works. A setup is
@@ -88,6 +109,13 @@ endpoint and counts memories; `testAgentConnections()` exercises both hosted and
 local. Use them as the completion gate. The agent's screen-reading tells you
 *where to click*; the probe tells you *whether it worked*. Keep those signals
 separate or you will keep shipping false "Connected."
+
+The probe must cover the **whole chain, including our own contract endpoints**.
+The ChatGPT connector flow failed in production not on the provider's UI but on
+our own OAuth wiring — an unregistered client id and an exact-match redirect
+allowlist that can't cover per-connector callbacks. A probe that only checks
+the MCP data call would call that setup "working." Exercise the auth handshake
+the provider will actually perform.
 
 ## 4. "Connected" means "verified recently," not "once true."
 
@@ -134,6 +162,14 @@ Swift edit, a clean release build, notarization, and a user update — days, for
 
 When a provider redesigns, push a new instruction blob and installed apps
 self-correct on next run. No release cycle for volatile knowledge.
+
+**Our own backend config is provider knowledge too.** OAuth client ids,
+redirect allowlists, and authorize/token URLs live in the backend's
+environment, diverge between dev and prod, and change without a desktop
+release. Compiling them into Swift (as `chatgptOAuthClientID` does today)
+means desktop guidance can silently drift from what the backend actually
+registers — which is exactly how "Unknown OAuth client" shipped. Serve
+connector setup values from the backend the desktop is pointed at.
 
 ## 7. Build the eval flywheel — this is how the "agents get smarter" bet pays off
 
