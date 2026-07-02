@@ -1,0 +1,12 @@
+node_modules/
+out/
+dist/
+.electron-cache/
+*.log
+.env
+.env.local
+.env.*
+!.env.example
+# scratch screenshot output (tracked copies live in docs/screenshots/)
+shots/
+shots-*/

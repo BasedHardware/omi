@@ -1,0 +1,42 @@
+{
+  "name": "omi-linux",
+  "version": "0.1.0",
+  "description": "Omi desktop app for Linux: port of the macOS app (desktop/Desktop)",
+  "main": "out/main/index.js",
+  "author": "Based Hardware",
+  "desktopName": "Omi",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "dist": "electron-vite build && electron-builder --linux",
+    "dist:appimage": "electron-vite build && electron-builder --linux AppImage",
+    "dist:deb": "electron-vite build && electron-builder --linux deb",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "electron-updater": "^6.8.9",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "typescript": "^5.6.3",
+    "vite": "^7.1.9",
+    "zustand": "^5.0.2"
+  }
+}

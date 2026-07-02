@@ -1,0 +1,405 @@
+/* Omi design tokens, ported 1:1 from desktop/Desktop/Sources/Theme
+   (OmiColors.swift, OmiChrome.swift). Dark theme only, like the Mac app. */
+
+/* Bundled UI fonts so typography is consistent on any Linux desktop: Inter stands
+   in for the Mac system font (SF Pro), JetBrains Mono for SF Mono. Latin subsets. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/InterVariable.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('./assets/fonts/JetBrainsMono.woff2') format('woff2-variations');
+}
+
+:root {
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #252525;
+  --bg-quaternary: #35343b;
+  --bg-raised: #1f1f25;
+
+  --border: rgba(58, 57, 64, 0.28);
+  --border-strong: rgba(58, 57, 64, 0.55);
+
+  --text-primary: #ffffff;
+  --text-secondary: #e5e5e5;
+  --text-tertiary: #b0b0b0;
+  --text-quaternary: #888888;
+
+  --purple-primary: #8b5cf6;
+  --purple-secondary: #a855f7;
+  --purple-dark: #7c3aed;
+  --purple-light: #d946ef;
+
+  --user-bubble: #43389f;
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+
+  --radius-window: 26px;
+  --radius-card: 24px;
+  --radius-section: 20px;
+  --radius-control: 16px;
+  --radius-chip: 14px;
+  --radius-bubble: 18px;
+
+  --shadow-panel: 0 10px 18px rgba(0, 0, 0, 0.14);
+  --shadow-control: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-content: 0 14px 26px rgba(0, 0, 0, 0.22);
+
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, 'Ubuntu Mono', 'DejaVu Sans Mono', monospace;
+
+  --font-scale: 1;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: transparent;
+  color: var(--text-primary);
+  font-family: 'Inter', 'SF Pro Text', 'SF Pro Display', system-ui, 'Ubuntu', 'Cantarell', 'Segoe UI', sans-serif;
+  font-size: calc(14px * var(--font-scale));
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: calc(13px * var(--font-scale));
+  outline: none;
+}
+
+input:focus,
+textarea:focus {
+  border-color: rgba(139, 92, 246, 0.55);
+}
+
+a {
+  color: var(--purple-secondary);
+  text-decoration: none;
+}
+
+.text-selectable {
+  user-select: text;
+}
+
+/* ---- shared primitives ---- */
+
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-panel);
+}
+
+.section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: var(--radius-chip);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: calc(12px * var(--font-scale));
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip.active {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: var(--text-primary);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--purple-primary);
+  color: #fff;
+  border-radius: var(--radius-control);
+  padding: 9px 18px;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+.btn-primary:hover {
+  background: var(--purple-dark);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 8px 16px;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+.btn-secondary:hover {
+  background: var(--bg-quaternary);
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(139, 92, 246, 0.25);
+  border-top-color: var(--purple-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.toggle {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(53, 52, 59, 0.9);
+  transition: background 0.18s ease;
+  flex-shrink: 0;
+}
+.toggle.on {
+  background: var(--success);
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s ease;
+}
+.toggle.on::after {
+  transform: translateX(12px);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 20px;
+  color: var(--text-quaternary);
+  font-size: calc(13px * var(--font-scale));
+  text-align: center;
+}
+
+.page-title {
+  font-size: calc(28px * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* tabular figures for live numerals (scores, timers, counts) */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* the sidebar wordmark keeps the tight Mac display tracking */
+.brand-wordmark {
+  letter-spacing: -0.5px;
+}
+
+.markdown p {
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+.markdown ul,
+.markdown ol {
+  margin: 4px 0 8px 20px;
+}
+.markdown li {
+  margin-bottom: 3px;
+  line-height: 1.5;
+}
+.markdown code {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+.markdown pre {
+  background: #161616;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.markdown pre code {
+  background: none;
+  padding: 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 12px 0 6px;
+  font-size: 1.05em;
+}
+.markdown blockquote {
+  border-left: 3px solid var(--purple-primary);
+  padding-left: 10px;
+  color: var(--text-tertiary);
+  margin: 6px 0;
+}
+.markdown a {
+  color: var(--purple-secondary);
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border-strong);
+  padding: 5px 9px;
+  font-size: 0.95em;
+}
+
+/* chat typing indicator dots */
+@keyframes typingBounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* goal-completion confetti fall */
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* celebration title pop-in */
+@keyframes celebratePop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

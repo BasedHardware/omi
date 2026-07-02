@@ -107,9 +107,10 @@ TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
 
 # Platform identifiers that count as desktop for paywall purposes. The Swift
-# client sends X-App-Platform: macos and the listen WS uses source=desktop.
+# client sends X-App-Platform: macos, the Linux client sends linux, and the
+# listen WS uses source=desktop.
 # Anything else (ios, android, omi device, phone_call, unknown) is exempt.
-_TRIAL_PAYWALL_DESKTOP_TOKENS = {"macos", "desktop"}
+_TRIAL_PAYWALL_DESKTOP_TOKENS = {"macos", "desktop", "linux"}
 
 # Cache the (slow) Firebase Auth + Firestore lookup result for a few minutes
 # so chat-quota polling doesn't fan out to Firebase on every request.
@@ -433,7 +434,7 @@ NEW_PLANS_MIN_MOBILE_VERSION = os.getenv('NEW_PLANS_MIN_MOBILE_VERSION', '1.0.53
 def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -> bool:
     """True iff this caller's client understands the Operator + Architect plan shape.
 
-    Desktop (macOS): any build at or above NEW_PLANS_MIN_DESKTOP_VERSION qualifies.
+    Desktop (macOS/Linux): any build at or above NEW_PLANS_MIN_DESKTOP_VERSION qualifies.
     Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION qualifies.
     Unknown platform: legacy catalog.
     """
@@ -442,7 +443,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
 
     platform_lower = platform.lower()
 
-    if platform_lower == 'macos':
+    if platform_lower in ('macos', 'linux', 'desktop'):
         if not app_version:
             return True
         try:

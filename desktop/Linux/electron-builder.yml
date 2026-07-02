@@ -1,0 +1,50 @@
+appId: com.omi.computer-linux
+productName: Omi
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**
+  - package.json
+# Runtime resources the MAIN process reads from disk must be real files (not in
+# asar). extraResources copies them to process.resourcesPath; resources.ts reads
+# them from there. (Renderer assets are bundled into out/ by Vite separately.)
+extraResources:
+  - from: resources/ocr-worker.cjs
+    to: ocr-worker.cjs
+  - from: resources/tray_icon.png
+    to: tray_icon.png
+asarUnpack:
+  - "**/*.node"
+linux:
+  icon: resources/icon.png
+  category: Utility
+  synopsis: AI that sees your screen, listens, and remembers
+  description: Omi for Linux, a port of the macOS desktop app.
+  syncDesktopName: true
+  desktop:
+    entry:
+      Name: Omi
+      StartupWMClass: Omi
+      MimeType: x-scheme-handler/omi-computer;
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+appImage:
+  artifactName: Omi-${version}-x86_64.AppImage
+deb:
+  depends:
+    - tesseract-ocr
+    - libsecret-1-0
+    - libnotify4
+    - libxss1
+protocols:
+  - name: Omi Computer
+    schemes: [omi-computer]
+# Auto-update/publish is intentionally omitted until maintainers choose the
+# official Linux release channel.
+electronDownload:
+  cache: .electron-cache
+npmRebuild: true
