@@ -70,13 +70,13 @@ enum HubTool: String {
 
 enum RealtimeHubTools {
   private static func localAgentProviderInstruction() -> String {
-    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes]
+    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
     let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
     let available = availability.filter(\.isAvailable).map(\.provider)
     let unavailable = availability.filter { !$0.isAvailable }
 
     if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \"openclaw\" or \"hermes\". Treat those as available local providers, not as sessions to inspect."
+      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect."
     }
 
     var parts: [String] = []
@@ -92,7 +92,7 @@ enum RealtimeHubTools {
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
-    [AgentPillsManager.DirectedProvider.openclaw, .hermes]
+    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
       .filter { LocalAgentProviderDetector.isAvailable($0) }
       .map(\.rawValue)
   }
@@ -212,6 +212,11 @@ enum RealtimeHubTools {
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
+    - Smart agent routing: When calling spawn_agent, you must select the best local agent provider (pass it in the `provider` argument) based on availability and task fit. When the user explicitly requests an agent by name (e.g. \"use hermes\"), always select that provider. If the user doesn't specify one: \
+      - Choose \"hermes\" for coding tasks involving codebase exploration, refactoring, or multi-file edits. \
+      - Choose \"codex\" for writing new code/scripts, debugging, or code review. \
+      - Choose \"openclaw\" for general-purpose automation or structured tasks. \
+      - Omit the provider (default) to use Claude Code for general reasoning, complex analysis, and multi-step tasks.
     - \(localAgentProviderInstruction())
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
     and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \

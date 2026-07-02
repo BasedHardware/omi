@@ -1018,11 +1018,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       switch providerName {
       case "openclaw": directedProvider = .openclaw
       case "hermes": directedProvider = .hermes
+      case "codex": directedProvider = .codex
       case "": directedProvider = nil
       default:
         session?.sendToolResult(
           callId: callId, name: name,
-          output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.")
         return
       }
       if let directedProvider {

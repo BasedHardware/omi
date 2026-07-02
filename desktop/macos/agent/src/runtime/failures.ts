@@ -153,6 +153,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
       return "Hermes";
     case "pi-mono":
       return "pi-mono";
+    case "codex":
+      return "Codex";
     case "acp":
       if (provider === "openai") {
         return "OpenAI";
