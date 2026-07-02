@@ -64,10 +64,37 @@ enum IMessagePermissionPolicy {
   }
 
   static func openFullDiskAccessSettings() {
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
-    {
-      NSWorkspace.shared.open(url)
+    // macOS lists an app under Full Disk Access only after the app itself has
+    // *attempted* to read an FDA-protected file — the denied TCC access is what
+    // inserts our row into the list. Opening this pane alone never adds us, so
+    // trigger the chat.db read first (result ignored). Then the user lands on a
+    // list that already contains this app and only needs to flip the toggle,
+    // instead of an empty list where they'd have to hunt for the app with "+".
+    _ = fullDiskAccessGranted()
+
+    // The Privacy panes snapshot their app list when the window loads and do NOT
+    // refresh when a new app is registered while Settings is already open. If we
+    // just registered above but Settings is already showing a stale list, the
+    // user won't see our row. Quit the running instance so reopening rebuilds the
+    // list fresh (with our just-added app). A cold Settings needs no such reset.
+    let settingsApps = NSWorkspace.shared.runningApplications.filter {
+      $0.bundleIdentifier == "com.apple.systempreferences"
+    }
+    let wasRunning = !settingsApps.isEmpty
+    settingsApps.forEach { $0.terminate() }
+
+    let openPane = {
+      if let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+      {
+        NSWorkspace.shared.open(url)
+      }
+    }
+    if wasRunning {
+      // Give the quit a moment to complete so the relaunch loads a fresh list.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: openPane)
+    } else {
+      openPane()
     }
   }
 
