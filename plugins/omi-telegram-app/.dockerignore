@@ -1,0 +1,43 @@
+# Test artifacts and dev-only files. Without this, `COPY . .` in the Dockerfile
+# would ship these into the image (bloat) and could leak runtime data files
+# that hold user tokens.
+test/
+.pytest_cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local environment files — may contain real bot tokens / API keys and
+# must NEVER ship into the image. Without this rule a developer who
+# ran the plugin locally and committed .env would leak their real
+# Telegram bot token into the image registry / layers.
+# (Identified by cubic P2 + maintainer security review on PR #8528.)
+.env
+.env.*
+!.env.example
+
+# Runtime data files written by simple_storage.py — contain user tokens and
+# must NEVER ship into the image (would leak into image registry / layers).
+users_data.json
+pending_setups.json
+
+# Repo-level / IDE / dev files
+.git/
+.gitignore
+.dockerignore
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# AIDLC artifacts (process state, not source)
+.aidlc/
+
+# Test requirements (only useful at test time)
+requirements-dev.txt
+
+# Local E2E scripts and runbook (dev-only, not part of the runtime image)
+scripts/
+E2E_RUNBOOK.md

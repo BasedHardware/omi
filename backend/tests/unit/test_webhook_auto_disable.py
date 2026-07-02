@@ -773,11 +773,23 @@ def _load_validate_helper():
         "utils.conversations",
         "utils.conversations.factory",
         "utils.conversations.render",
+        # T-022: utils.apps now also imports utils.retrieval.rag (the
+        # memory RAG helper). The bare `MagicMock()` below doesn't have
+        # a `__spec__`, so `from X import Y` against the stubbed module
+        # raises `AttributeError: __spec__` during exec_module. Use a
+        # proper types.ModuleType so the from-import resolves cleanly.
+        "utils.retrieval",
+        "utils.retrieval.rag",
         "models.app",
     ]
     for mod_name in _mock_modules:
         _saved[mod_name] = sys.modules.get(mod_name)
-        sys.modules[mod_name] = MagicMock()
+        # types.ModuleType (not MagicMock) so __spec__ is set and
+        # `from X import Y` resolves cleanly during exec_module.
+        sys.modules[mod_name] = types.ModuleType(mod_name)
+        # __getattr__ so attribute lookups (e.g. `get_memory_cache`)
+        # return something instead of raising AttributeError.
+        sys.modules[mod_name].__getattr__ = lambda _attr: MagicMock()  # type: ignore[attr-defined]     # noqa: F841
     spec = importlib.util.spec_from_file_location(
         _utils_apps_key,
         os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'apps.py'),

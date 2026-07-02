@@ -1,5 +1,12 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added AI Clone screen in Settings \u2014 connect and configure Telegram and WhatsApp plugins (v0.1, single global auto-reply toggle; per-chat toggles ship once the plugins expose a global-toggle endpoint)",
+    "AI Clone: moved the plugin bearer token and the `omi_dev_...` API key from UserDefaults into the macOS Keychain (encrypted at rest). The plugin URL stays in UserDefaults. Existing users get a one-time migration on first launch under this build.",
+    "AI Clone: zero-config plugin auto-discovery + improved settings page UI with health-check, auto-reply toggle, and step-by-step guide",
+    "AI Clone: clipboard auto-detect for Telegram bot tokens, real-time token validation, QR code alongside the deep link, and a two-step handshake progress indicator with countdown",
+    "AI Clone (PR #8682): handshake now gates on the plugin's /status endpoint (connected chats >= 1) instead of /health so the UI can no longer falsely report Connected before the user-side setup completes; auto-discovered plugin URL now uses the local plugin_url rather than the tunnel public_url so desktop control traffic stays on loopback instead of routing through an external tunnel; clipboard auto-fill is now plugin-aware so a Telegram token on the clipboard won't auto-fill into a non-Telegram ConnectSheet",
+    "AI Clone (PR #8682): Connect flow now sends the tunnel/public URL (not the local loopback URL) as the Telegram/Meta webhook target, so setup succeeds for plugins running behind a tunnel. Previously the desktop passed the loopback plugin URL, which Telegram rejected with HTTP 400."
+  ],
   "releases": [
     {
       "version": "0.11.594",

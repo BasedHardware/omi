@@ -18,6 +18,10 @@ struct SettingsSearchItem: Identifiable {
   static let allSearchableItems: [SettingsSearchItem] = [
     // General
     SettingsSearchItem(
+      name: "AI Clone", subtitle: "Reply on your behalf via Telegram or WhatsApp",
+      keywords: ["ai clone", "telegram", "whatsapp", "bot", "auto reply", "persona", "imessage"],
+      section: .aiClone, icon: "person.2.crop.square.stack", settingId: "aiClone.overview"),
+    SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
       section: .general, icon: "gearshape", settingId: "general.rewind"),
@@ -325,6 +329,8 @@ struct SettingsSidebar: View {
     .privacy,
     .account,
     .planUsage,
+    .aiChat,
+    .aiClone,
     .floatingBar,
     .shortcuts,
     .advanced,
@@ -510,6 +516,7 @@ struct SettingsSidebarItem: View {
     case .account: return "person.circle"
     case .planUsage: return "creditcard"
     case .aiChat: return "cpu"
+    case .aiClone: return "person.2.crop.square.stack"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
