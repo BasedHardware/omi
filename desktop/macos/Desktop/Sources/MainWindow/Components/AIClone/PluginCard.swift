@@ -181,10 +181,10 @@ struct PluginCard: View {
                 baseURL: config.pluginURL,
                 bearerToken: config.bearerToken
             )
-            if status.connectedChats > 0 {
+            if (status.connectedChats ?? 0) > 0 {
                 await MainActor.run {
                     connectionState = .connected(since: Date())
-                    autoReplyEnabled = status.autoReplyEnabled
+                    autoReplyEnabled = status.autoReplyEnabled ?? false
                     connectedChatId = status.firstChatId
                     connectedBotName = status.botUsername
                 }

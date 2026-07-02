@@ -66,6 +66,19 @@ struct RateLimitDisplay: Equatable {
 final class AICloneConfig: ObservableObject {
     static let shared = AICloneConfig()
 
+    /// Task that periodically polls the user-account plugin's
+    /// /status endpoint to refresh rate-limit + daily-sent
+    /// counters. Started by applyUserAccountDiscovery() when
+    /// the user is signed in; cancelled by
+    /// stopTelegramUserAccountStatusPoll() on sign-out.
+    private var telegramStatusPollTask: Task<Void, Never>?
+    /// Poll interval for the user-account plugin's /status
+    /// endpoint. 30s is a reasonable balance between
+    /// freshness and chatter (the badge changes are not
+    /// time-critical -- the rolling 60-min cap means the
+    /// user has plenty of warning time).
+    private static let telegramStatusPollIntervalSeconds: UInt64 = 30
+
     /// Legacy UserDefaults keys. Kept here so the one-time migration
     /// can find them. New code reads/writes via AICloneKeychain.
     private enum LegacyDefaultsKeys {
@@ -158,6 +171,7 @@ final class AICloneConfig: ObservableObject {
             // rate-limit + daily-sent counters so the UI
             // doesn't show stale metrics from the previous
             // account.
+            stopTelegramUserAccountStatusPoll()
             telegramRateLimit = .empty
             telegramMessagesSentToday = 0
             return
@@ -199,6 +213,7 @@ final class AICloneConfig: ObservableObject {
         // rate-limit + daily-sent counters so the UI
         // doesn't show stale metrics from the previous
         // account.
+        stopTelegramUserAccountStatusPoll()
         telegramRateLimit = .empty
         telegramMessagesSentToday = 0
     }
@@ -417,6 +432,76 @@ final class AICloneConfig: ObservableObject {
         // the user-account discovery file exists.
         self.telegramAccountEnabled = true
         log("AICloneConfig: auto-discovered user-account plugin at \(info.pluginURL) (phone=\(info.phone ?? "?"), name=\(info.name ?? "?"))")
+        // Start the periodic /status poll so the rate-limit
+        // badge + daily-sent counter stay current. The poll
+        // does a one-shot fetch first so the UI populates
+        // immediately rather than waiting 30s for the first
+        // tick.
+        startTelegramUserAccountStatusPoll()
+    }
+
+    /// Begin polling the user-account plugin's /status
+    /// endpoint every 30s. Updates telegramRateLimit and
+    /// telegramMessagesSentToday on each successful poll.
+    /// Replaces any existing poll (idempotent).
+    func startTelegramUserAccountStatusPoll() {
+        // Idempotent: cancel any in-flight poll first.
+        stopTelegramUserAccountStatusPoll()
+        let pollInterval = Self.telegramStatusPollIntervalSeconds
+        telegramStatusPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.pollTelegramUserAccountStatus()
+                // Sleep with cancellation check.
+                do {
+                    try await Task.sleep(nanoseconds: pollInterval * 1_000_000_000)
+                } catch {
+                    return  // Task was cancelled during sleep
+                }
+            }
+        }
+    }
+
+    /// Stop polling the user-account plugin's /status
+    /// endpoint. Safe to call when no poll is active.
+    func stopTelegramUserAccountStatusPoll() {
+        telegramStatusPollTask?.cancel()
+        telegramStatusPollTask = nil
+    }
+
+    /// One poll iteration. Fetches /status, decodes the
+    /// rate-limit + daily-sent fields, and updates the
+    /// @Published state. Errors are swallowed (logged) so
+    /// the poll survives transient network blips.
+    private func pollTelegramUserAccountStatus() async {
+        guard telegramAccountEnabled,
+              !pluginURL.isEmpty,
+              !bearerToken.isEmpty
+        else {
+            return  // not configured -- nothing to poll
+        }
+        do {
+            let resp = try await AICloneClient.shared.status(
+                baseURL: pluginURL, bearerToken: bearerToken
+            )
+            // Update @Published state on the main actor.
+            // (We're already @MainActor-isolated.)
+            if let rl = resp.rateLimit {
+                telegramRateLimit = RateLimitDisplay(
+                    maxPerHour: rl.maxPerHour,
+                    inWindowCount: rl.inWindowCount,
+                    isBlocked: rl.isBlocked,
+                    secondsUntilNextSlot: rl.secondsUntilNextSlot,
+                )
+            }
+            if let count = resp.messagesSentToday {
+                telegramMessagesSentToday = count
+            }
+        } catch {
+            // Transient failures are expected (the plugin
+            // may be restarting). Log at debug level so the
+            // log isn't spammed; the next tick will retry.
+            log("AICloneConfig: /status poll failed (will retry): \(error.localizedDescription)")
+        }
     }
 
     /// Move legacy UserDefaults-stored secrets into the Keychain.

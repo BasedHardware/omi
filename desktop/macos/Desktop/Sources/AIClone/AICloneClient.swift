@@ -46,18 +46,67 @@ actor AICloneClient {
         return http.statusCode == 200
     }
 
-    /// `GET {baseURL}/status` response — used for connection detection +
-    /// auto-reply state + getting the real chat_id for toggling.
+    /// `GET {baseURL}/status` response.
+    ///
+    /// Two plugins share the same `/status` endpoint with DIFFERENT
+    /// schemas:
+    ///
+    /// - Bot plugin (omi-telegram-app, omi-whatsapp-app) returns
+    ///   `connected_chats`, `auto_reply_enabled`, `first_chat_id`,
+    ///   `bot_username`. These are the fields the desktop uses to
+    ///   drive the connect sheet's handshake polling.
+    ///
+    /// - User-account plugin (telegram-user-account) returns
+    ///   `connected`, `account_phone`, `account_name`,
+    ///   `device_label`, `rate_limit`, `messages_sent_today`.
+    ///   These drive the "logged in as Alice" badge and the
+    ///   plan §8 rate-limit + daily-sent counter surface.
+    ///
+    /// All fields are optional so a single struct can decode
+    /// either schema. Callers check which fields are present
+    /// and adapt the UI accordingly.
     struct StatusResponse: Decodable {
-        let connectedChats: Int
-        let autoReplyEnabled: Bool
+        // Bot plugin fields.
+        let connectedChats: Int?
+        let autoReplyEnabled: Bool?
         let firstChatId: String?
         let botUsername: String?
+        // User-account plugin fields.
+        let connected: Bool?
+        let accountPhone: String?
+        let accountName: String?
+        let deviceLabel: String?
+        let rateLimit: RateLimitState?
+        let messagesSentToday: Int?
         enum CodingKeys: String, CodingKey {
             case connectedChats = "connected_chats"
             case autoReplyEnabled = "auto_reply_enabled"
             case firstChatId = "first_chat_id"
             case botUsername = "bot_username"
+            case connected
+            case accountPhone = "account_phone"
+            case accountName = "account_name"
+            case deviceLabel = "device_label"
+            case rateLimit = "rate_limit"
+            case messagesSentToday = "messages_sent_today"
+        }
+    }
+
+    /// Subset of the user-account plugin's `rate_limit` field in
+    /// the /status response. Surfaced in the desktop's connect
+    /// sheet and the plugin card so the user can see how close
+    /// they are to the per-hour cap and whether Telegram has
+    /// placed a temporary cooldown on the account.
+    struct RateLimitState: Decodable {
+        let maxPerHour: Int
+        let inWindowCount: Int
+        let isBlocked: Bool
+        let secondsUntilNextSlot: Int
+        enum CodingKeys: String, CodingKey {
+            case maxPerHour = "max_per_hour"
+            case inWindowCount = "in_window_count"
+            case isBlocked = "is_blocked"
+            case secondsUntilNextSlot = "seconds_until_next_slot"
         }
     }
 

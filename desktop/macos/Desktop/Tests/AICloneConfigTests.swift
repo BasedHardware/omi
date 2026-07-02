@@ -529,3 +529,49 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertEqual(config.telegramRateLimit, .empty)
         XCTAssertEqual(config.telegramMessagesSentToday, 0)
     }
+
+
+    // MARK: - Status poll lifecycle (plan §8)
+
+    func testStartStatusPollIsIdempotent() {
+        // Calling startTelegramUserAccountStatusPoll twice in
+        // a row must not spawn two concurrent pollers.
+        let config = AICloneConfig(defaults: customDefaults)
+        config.startTelegramUserAccountStatusPoll()
+        let firstTask = config.telegramStatusPollTask
+        XCTAssertNotNil(firstTask)
+        config.startTelegramUserAccountStatusPoll()
+        let secondTask = config.telegramStatusPollTask
+        XCTAssertNotNil(secondTask)
+        XCTAssertFalse(firstTask === secondTask, (
+            "Second startTelegramUserAccountStatusPoll must "
+            "cancel the first; the underlying Task should be "
+            "a new instance."
+        ))
+        // Cleanup so the test doesn't leave a poll running.
+        config.stopTelegramUserAccountStatusPoll()
+        XCTAssertNil(config.telegramStatusPollTask)
+    }
+
+    func testStopStatusPollIsSafeWhenNoPollActive() {
+        // Calling stop without a prior start must not crash.
+        let config = AICloneConfig(defaults: customDefaults)
+        XCTAssertNil(config.telegramStatusPollTask)
+        config.stopTelegramUserAccountStatusPoll()
+        XCTAssertNil(config.telegramStatusPollTask)
+    }
+
+    func testSignOutStopsStatusPoll() {
+        // Sign-out should cancel the poll so we don't keep
+        // hammering a signed-out plugin.
+        let config = AICloneConfig(defaults: customDefaults)
+        try? config.setTelegramUserSession(
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        config.startTelegramUserAccountStatusPoll()
+        XCTAssertNotNil(config.telegramStatusPollTask)
+        try? config.clearTelegramUserSession()
+        XCTAssertNil(config.telegramStatusPollTask, (
+            "Sign-out must cancel the status poll"
+        ))
+    }
