@@ -3,6 +3,7 @@ import hashlib
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from typing import Tuple, Optional
 
 from database.redis_db import get_enabled_apps, r as redis_client
@@ -22,6 +23,10 @@ router = APIRouter()
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
 MAX_NOTIFICATIONS_PER_HOUR = 10  # Maximum notifications per hour per app per user
+
+
+class FcmTokenResponse(BaseModel):
+    status: str
 
 
 def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
@@ -56,7 +61,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     return True, remaining, reset_time, 0
 
 
-@router.post('/v1/users/fcm-token')
+@router.post('/v1/users/fcm-token', response_model=FcmTokenResponse)
 def save_token(
     data: SaveFcmTokenRequest,
     uid: str = Depends(auth.get_current_user_uid),

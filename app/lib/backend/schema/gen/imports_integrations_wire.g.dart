@@ -70,6 +70,62 @@ class GeneratedIntegrationResponse {
   }
 }
 
+class GeneratedDeleteLimitlessConversationsResponse {
+  final int deletedCount;
+  final String message;
+
+  const GeneratedDeleteLimitlessConversationsResponse({
+    required this.deletedCount,
+    required this.message,
+  });
+
+  factory GeneratedDeleteLimitlessConversationsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedDeleteLimitlessConversationsResponse(
+      deletedCount: _required(_readInt(_readAny(json, const ["deleted_count"])), "deleted_count"),
+      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'deleted_count': deletedCount,
+      'message': message,
+    };
+  }
+}
+
+class GeneratedAppleHealthSyncResponse {
+  final String appKey;
+  final List<String>? dataTypesSynced;
+  final String status;
+  final String syncedAt;
+
+  const GeneratedAppleHealthSyncResponse({
+    required this.appKey,
+    this.dataTypesSynced,
+    required this.status,
+    required this.syncedAt,
+  });
+
+  factory GeneratedAppleHealthSyncResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppleHealthSyncResponse(
+      appKey: _required(_readString(_readAny(json, const ["app_key"])), "app_key"),
+      dataTypesSynced: _readAny(json, const ["data_types_synced"]) == null ? null : _readStringList(_readAny(json, const ["data_types_synced"])),
+      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      syncedAt: _required(_readString(_readAny(json, const ["synced_at"])), "synced_at"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'app_key': appKey,
+      'data_types_synced': dataTypesSynced,
+      'status': status,
+      'synced_at': syncedAt,
+    };
+  }
+}
+
 dynamic _readAny(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
     if (json.containsKey(name)) return json[name];

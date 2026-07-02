@@ -1850,6 +1850,36 @@
         "title": "AppleHealthSyncData",
         "type": "object"
       },
+      "AppleHealthSyncResponse": {
+        "properties": {
+          "app_key": {
+            "title": "App Key",
+            "type": "string"
+          },
+          "data_types_synced": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Types Synced",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "synced_at": {
+            "title": "Synced At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "app_key",
+          "synced_at"
+        ],
+        "title": "AppleHealthSyncResponse",
+        "type": "object"
+      },
       "AsanaProjectsResponse": {
         "properties": {
           "projects": {
@@ -4532,6 +4562,37 @@
         "title": "DeleteActionItemRequest",
         "type": "object"
       },
+      "DeleteKnowledgeGraphResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DeleteKnowledgeGraphResponse",
+        "type": "object"
+      },
+      "DeleteLimitlessConversationsResponse": {
+        "properties": {
+          "deleted_count": {
+            "title": "Deleted Count",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted_count",
+          "message"
+        ],
+        "title": "DeleteLimitlessConversationsResponse",
+        "type": "object"
+      },
       "DevApiKey": {
         "properties": {
           "created_at": {
@@ -5731,6 +5792,19 @@
         "title": "ExternalIntegrationConversationSource",
         "type": "string"
       },
+      "FcmTokenResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "FcmTokenResponse",
+        "type": "object"
+      },
       "FileChat": {
         "properties": {
           "created_at": {
@@ -5787,6 +5861,89 @@
           "created_at"
         ],
         "title": "FileChat",
+        "type": "object"
+      },
+      "FirmwareVersionResponse": {
+        "properties": {
+          "changelog": {
+            "default": "",
+            "title": "Changelog",
+            "type": "string"
+          },
+          "draft": {
+            "default": false,
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "is_legacy_secure_dfu": {
+            "default": true,
+            "title": "Is Legacy Secure Dfu",
+            "type": "boolean"
+          },
+          "min_app_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min App Version"
+          },
+          "min_app_version_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min App Version Code"
+          },
+          "min_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Version"
+          },
+          "ota_update_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ota Update Steps",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "zip_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip Url"
+          }
+        },
+        "title": "FirmwareVersionResponse",
         "type": "object"
       },
       "FloatingBarSettings": {
@@ -6497,6 +6654,19 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HasSpeechProfileResponse": {
+        "properties": {
+          "has_profile": {
+            "title": "Has Profile",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "has_profile"
+        ],
+        "title": "HasSpeechProfileResponse",
         "type": "object"
       },
       "ImportJobResponse": {
@@ -9944,6 +10114,49 @@
           "end"
         ],
         "title": "SimpleTranscriptSegment",
+        "type": "object"
+      },
+      "SpeechProfileMutationResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "SpeechProfileMutationResponse",
+        "type": "object"
+      },
+      "SpeechProfileResponse": {
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "SpeechProfileResponse",
+        "type": "object"
+      },
+      "SpeechProfileUploadResponse": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "SpeechProfileUploadResponse",
         "type": "object"
       },
       "StoreMeetingRequest": {
@@ -26574,7 +26787,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteLimitlessConversationsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -26660,7 +26875,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppleHealthSyncResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -27153,7 +27370,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteKnowledgeGraphResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -34301,7 +34520,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FcmTokenResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -38559,7 +38780,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareVersionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -38605,7 +38828,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareVersionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40824,7 +41049,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HasSpeechProfileResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40933,7 +41160,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechProfileMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -41022,7 +41251,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Get Extra Speech Profile Samples V3 Speech Profile Expand Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -41107,7 +41342,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechProfileUploadResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -41182,7 +41419,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechProfileResponse"
+                }
               }
             },
             "description": "Successful Response"

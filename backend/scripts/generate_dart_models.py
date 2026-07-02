@@ -87,6 +87,25 @@ SCHEMA_GROUPS = {
         'schemas': (
             'ImportJobResponse',
             'IntegrationResponse',
+            'DeleteLimitlessConversationsResponse',
+            'AppleHealthSyncResponse',
+        ),
+    },
+    'device_speech': {
+        'output': DEFAULT_OUTPUT_DIR / 'device_speech_wire.g.dart',
+        'schemas': (
+            'FirmwareVersionResponse',
+            'HasSpeechProfileResponse',
+            'SpeechProfileResponse',
+            'SpeechProfileUploadResponse',
+            'SpeechProfileMutationResponse',
+        ),
+    },
+    'misc': {
+        'output': DEFAULT_OUTPUT_DIR / 'misc_wire.g.dart',
+        'schemas': (
+            'FcmTokenResponse',
+            'DeleteKnowledgeGraphResponse',
         ),
     },
     'wrapped_task_integrations': {

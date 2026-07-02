@@ -19,6 +19,8 @@ PEOPLE_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'pe
 IMPORTS_INTEGRATIONS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'imports_integrations_wire.g.dart'
 )
+DEVICE_SPEECH_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'device_speech_wire.g.dart'
+MISC_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'misc_wire.g.dart'
 WRAPPED_TASK_INTEGRATIONS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'wrapped_task_integrations_wire.g.dart'
 )
@@ -132,8 +134,35 @@ def test_imports_integrations_wire_dart_is_generated_from_app_client_openapi():
     assert IMPORTS_INTEGRATIONS_DART_PATH.read_text() == generated
     assert 'class GeneratedImportJobResponse' in generated
     assert 'class GeneratedIntegrationResponse' in generated
+    assert 'class GeneratedDeleteLimitlessConversationsResponse' in generated
+    assert 'class GeneratedAppleHealthSyncResponse' in generated
     assert 'jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id")' in generated
     assert 'connected: _required(_readBool(_readAny(json, const ["connected"])), "connected")' in generated
+    assert 'deletedCount: _required(_readInt(_readAny(json, const ["deleted_count"])), "deleted_count")' in generated
+
+
+def test_device_speech_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'device_speech')
+
+    assert DEVICE_SPEECH_DART_PATH.read_text() == generated
+    assert 'class GeneratedFirmwareVersionResponse' in generated
+    assert 'class GeneratedHasSpeechProfileResponse' in generated
+    assert 'class GeneratedSpeechProfileResponse' in generated
+    assert 'class GeneratedSpeechProfileUploadResponse' in generated
+    assert 'class GeneratedSpeechProfileMutationResponse' in generated
+    assert 'isLegacySecureDfu: _readBool(_readAny(json, const ["is_legacy_secure_dfu"])) ?? true' in generated
+    assert 'hasProfile: _required(_readBool(_readAny(json, const ["has_profile"])), "has_profile")' in generated
+
+
+def test_misc_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'misc')
+
+    assert MISC_DART_PATH.read_text() == generated
+    assert 'class GeneratedFcmTokenResponse' in generated
+    assert 'class GeneratedDeleteKnowledgeGraphResponse' in generated
+    assert 'status: _required(_readString(_readAny(json, const ["status"])), "status")' in generated
 
 
 def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openapi():

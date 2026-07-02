@@ -11,6 +11,7 @@ from typing import List, Optional
 from utils.executors import db_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 import database.import_jobs as import_jobs_db
 import database.conversations as conversations_db
@@ -24,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
+
+
+class DeleteLimitlessConversationsResponse(BaseModel):
+    deleted_count: int
+    message: str
 
 
 @router.post(
@@ -171,6 +177,7 @@ def get_import_job_status(
 
 @router.delete(
     '/v1/import/limitless/conversations',
+    response_model=DeleteLimitlessConversationsResponse,
     tags=['import'],
 )
 def delete_limitless_conversations(

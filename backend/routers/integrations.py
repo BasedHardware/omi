@@ -194,6 +194,13 @@ class IntegrationResponse(BaseModel):
     app_key: str = Field(description="Integration app key")
 
 
+class AppleHealthSyncResponse(BaseModel):
+    status: str
+    app_key: str
+    synced_at: str
+    data_types_synced: list[str] = Field(default_factory=list)
+
+
 # *****************************
 # ********** ROUTES ***********
 # *****************************
@@ -232,7 +239,7 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
     return None
 
 
-@router.put("/v1/integrations/apple-health/sync", tags=['integrations'])
+@router.put("/v1/integrations/apple-health/sync", response_model=AppleHealthSyncResponse, tags=['integrations'])
 def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.get_current_user_uid)):
     """
     Sync Apple Health data from the iOS device.

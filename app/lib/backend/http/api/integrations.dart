@@ -117,8 +117,9 @@ Future<bool> syncAppleHealthData(Map<String, dynamic> healthData) async {
   if (response == null) return false;
 
   if (response.statusCode == 200) {
+    final data = wire.GeneratedAppleHealthSyncResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     Logger.debug('Apple Health data synced successfully');
-    return true;
+    return data.status == 'ok';
   } else {
     Logger.debug('syncAppleHealthData error ${response.statusCode}');
     return false;

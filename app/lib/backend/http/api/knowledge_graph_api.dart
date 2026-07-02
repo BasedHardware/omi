@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 class KnowledgeGraphApi {
@@ -39,6 +40,7 @@ class KnowledgeGraphApi {
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to delete knowledge graph: ${response?.body}');
     }
+    wire.GeneratedDeleteKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   /// Polls the graph endpoint until the node count stabilizes or timeout is reached.

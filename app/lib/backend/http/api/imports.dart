@@ -146,9 +146,11 @@ Future<int?> deleteLimitlessConversations() async {
     );
 
     if (response != null && response.statusCode == 200) {
-      var data = jsonDecode(response.body);
+      final data = wire.GeneratedDeleteLimitlessConversationsResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
       Logger.debug('deleteLimitlessConversations Response: $data');
-      return data['deleted_count'] as int?;
+      return data.deletedCount;
     } else {
       Logger.debug('Failed to delete Limitless conversations. Response: ${response?.body}');
       return null;

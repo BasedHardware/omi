@@ -29,6 +29,37 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert ('GET', '/v2/apps', 'get_apps_v2_v2_apps_get') not in unmodeled_operations
     assert ('GET', '/v2/apps/search', 'search_apps_v2_apps_search_get') not in unmodeled_operations
     assert (
+        'DELETE',
+        '/v1/import/limitless/conversations',
+        'delete_limitless_conversations_v1_import_limitless_conversations_delete',
+    ) not in unmodeled_operations
+    assert (
+        'PUT',
+        '/v1/integrations/apple-health/sync',
+        'sync_apple_health_data_v1_integrations_apple_health_sync_put',
+    ) not in unmodeled_operations
+    assert (
+        'DELETE',
+        '/v1/knowledge-graph',
+        'delete_knowledge_graph_v1_knowledge_graph_delete',
+    ) not in unmodeled_operations
+    assert ('POST', '/v1/users/fcm-token', 'save_token_v1_users_fcm_token_post') not in unmodeled_operations
+    assert ('GET', '/v2/firmware/latest', 'get_latest_version_v2_firmware_latest_get') not in unmodeled_operations
+    assert ('GET', '/v2/firmware/stable', 'get_stable_version_v2_firmware_stable_get') not in unmodeled_operations
+    assert ('GET', '/v3/speech-profile', 'has_speech_profile_v3_speech_profile_get') not in unmodeled_operations
+    assert (
+        'DELETE',
+        '/v3/speech-profile/expand',
+        'delete_extra_speech_profile_sample_v3_speech_profile_expand_delete',
+    ) not in unmodeled_operations
+    assert (
+        'GET',
+        '/v3/speech-profile/expand',
+        'get_extra_speech_profile_samples_v3_speech_profile_expand_get',
+    ) not in unmodeled_operations
+    assert ('POST', '/v3/upload-audio', 'upload_profile_v3_upload_audio_post') not in unmodeled_operations
+    assert ('GET', '/v4/speech-profile', 'get_speech_profile_v4_speech_profile_get') not in unmodeled_operations
+    assert (
         'GET',
         '/v1/users/store-recording-permission',
         'get_store_recording_permission_v1_users_store_recording_permission_get',
