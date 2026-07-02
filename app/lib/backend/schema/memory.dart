@@ -82,6 +82,10 @@ class Memory {
   });
 
   factory Memory.fromJson(Map<String, dynamic> json) {
+    return Memory.fromGeneratedWireJson(json);
+  }
+
+  factory Memory.fromGeneratedWireJson(Map<String, dynamic> json) {
     final normalizedJson = Map<String, dynamic>.from(json);
     final rawLayer = normalizedJson['layer'] as String?;
     final rawTier = normalizedJson['tier'] as String?;

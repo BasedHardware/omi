@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -16,7 +15,7 @@ Future<Memory?> createMemoryServer(String content, String visibility, String cat
   if (response == null) return null;
   Logger.debug('createMemory response: ${response.body}');
   if (response.statusCode == 200) {
-    return Memory.fromJson(json.decode(response.body));
+    return Memory.fromGeneratedWireJson(json.decode(response.body) as Map<String, dynamic>);
   }
   return null;
 }
@@ -41,6 +40,18 @@ class GetMemoriesResult {
   const GetMemoriesResult(this.memories, this.deviceScopeSupported);
 }
 
+List<Memory>? _decodeMemoriesResponse(String body) {
+  try {
+    return (json.decode(body) as List<dynamic>)
+        .map((memory) => Memory.fromGeneratedWireJson(Map<String, dynamic>.from(memory as Map)))
+        .toList();
+  } on FormatException {
+    return null;
+  } on TypeError {
+    return null;
+  }
+}
+
 Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
   var url = '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset';
   if (thisDeviceOnly) {
@@ -51,13 +62,8 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
     return GetMemoriesResult([], !thisDeviceOnly);
   }
   if (response.statusCode == 200) {
-    var decoded = json.decode(response.body);
-    if (decoded is List) {
-      final memories = decoded.map((e) {
-        final item = Map<String, dynamic>.from(e as Map);
-        wire.GeneratedMemoryDB.fromJson(item);
-        return Memory.fromJson(item);
-      }).toList();
+    final memories = _decodeMemoriesResponse(response.body);
+    if (memories != null) {
       return GetMemoriesResult(memories, true);
     }
   }
