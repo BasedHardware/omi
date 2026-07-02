@@ -15,9 +15,9 @@ class GeneratedAudioPrecacheResponse {
 
   factory GeneratedAudioPrecacheResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioPrecacheResponse(
-      audioFileCount: _readInt(_readAny(json, const ["audio_file_count"])),
-      message: _readString(_readAny(json, const ["message"])),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      audioFileCount: _readFieldValue<int>(_readField(json, const ["audio_file_count"]), "audio_file_count", _readInt, requiredField: false, nullable: true),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -39,7 +39,7 @@ class GeneratedAudioFileUrlInfo {
 
   const GeneratedAudioFileUrlInfo({
     this.contentType,
-    required this.duration,
+    this.duration = 0,
     required this.id,
     this.signedUrl,
     required this.status,
@@ -47,11 +47,11 @@ class GeneratedAudioFileUrlInfo {
 
   factory GeneratedAudioFileUrlInfo.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioFileUrlInfo(
-      contentType: _readString(_readAny(json, const ["content_type"])),
-      duration: _readDouble(_readAny(json, const ["duration"])) ?? 0,
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      signedUrl: _readString(_readAny(json, const ["signed_url"])),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
+      duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "duration"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      signedUrl: _readFieldValue<String>(_readField(json, const ["signed_url"]), "signed_url", _readString, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -77,8 +77,8 @@ class GeneratedAudioUrlsResponse {
 
   factory GeneratedAudioUrlsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioUrlsResponse(
-      audioFiles: _required(_readObjectList(_readAny(json, const ["audio_files"]), GeneratedAudioFileUrlInfo.fromJson), "audio_files"),
-      pollAfterMs: _readInt(_readAny(json, const ["poll_after_ms"])),
+      audioFiles: _required(_readFieldValue<List<GeneratedAudioFileUrlInfo>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFileUrlInfo.fromJson), requiredField: true, nullable: false), "audio_files"),
+      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -90,11 +90,18 @@ class GeneratedAudioUrlsResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -119,6 +126,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

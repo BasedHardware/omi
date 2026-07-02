@@ -19,11 +19,11 @@ class GeneratedPlanLimits {
 
   factory GeneratedPlanLimits.fromJson(Map<String, dynamic> json) {
     return GeneratedPlanLimits(
-      chatCostUsdPerMonth: _readDouble(_readAny(json, const ["chat_cost_usd_per_month"])),
-      chatQuestionsPerMonth: _readInt(_readAny(json, const ["chat_questions_per_month"])),
-      insightsGained: _readInt(_readAny(json, const ["insights_gained"])),
-      transcriptionSeconds: _readInt(_readAny(json, const ["transcription_seconds"])),
-      wordsTranscribed: _readInt(_readAny(json, const ["words_transcribed"])),
+      chatCostUsdPerMonth: _readFieldValue<double>(_readField(json, const ["chat_cost_usd_per_month"]), "chat_cost_usd_per_month", _readDouble, requiredField: false, nullable: true),
+      chatQuestionsPerMonth: _readFieldValue<int>(_readField(json, const ["chat_questions_per_month"]), "chat_questions_per_month", _readInt, requiredField: false, nullable: true),
+      insightsGained: _readFieldValue<int>(_readField(json, const ["insights_gained"]), "insights_gained", _readInt, requiredField: false, nullable: true),
+      transcriptionSeconds: _readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: true),
+      wordsTranscribed: _readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -51,33 +51,34 @@ class GeneratedSubscription {
   final String status;
   final String? stripeSubscriptionId;
 
-  const GeneratedSubscription({
-    required this.cancelAtPeriodEnd,
+  GeneratedSubscription({
+    this.cancelAtPeriodEnd = false,
     this.currentPeriodEnd,
     this.currentPeriodStart,
     this.currentPriceId,
-    required this.deprecated,
+    this.deprecated = false,
     this.deprecationMessage,
-    required this.features,
-    required this.limits,
-    required this.plan,
-    required this.status,
+    this.features = const [],
+    GeneratedPlanLimits? limits,
+    this.plan = "basic",
+    this.status = "active",
     this.stripeSubscriptionId,
-  });
+  }) :
+       limits = limits ?? GeneratedPlanLimits.fromJson(const {});
 
   factory GeneratedSubscription.fromJson(Map<String, dynamic> json) {
     return GeneratedSubscription(
-      cancelAtPeriodEnd: _readBool(_readAny(json, const ["cancel_at_period_end"])) ?? false,
-      currentPeriodEnd: _readInt(_readAny(json, const ["current_period_end"])),
-      currentPeriodStart: _readInt(_readAny(json, const ["current_period_start"])),
-      currentPriceId: _readString(_readAny(json, const ["current_price_id"])),
-      deprecated: _readBool(_readAny(json, const ["deprecated"])) ?? false,
-      deprecationMessage: _readString(_readAny(json, const ["deprecation_message"])),
-      features: _readStringList(_readAny(json, const ["features"])) ?? const [],
-      limits: _readObject(_readAny(json, const ["limits"]), GeneratedPlanLimits.fromJson) ?? GeneratedPlanLimits.fromJson(const {}),
-      plan: _readString(_readAny(json, const ["plan"])) ?? "basic",
-      status: _readString(_readAny(json, const ["status"])) ?? "active",
-      stripeSubscriptionId: _readString(_readAny(json, const ["stripe_subscription_id"])),
+      cancelAtPeriodEnd: _required(_readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: false, defaultValue: false), "cancel_at_period_end"),
+      currentPeriodEnd: _readFieldValue<int>(_readField(json, const ["current_period_end"]), "current_period_end", _readInt, requiredField: false, nullable: true),
+      currentPeriodStart: _readFieldValue<int>(_readField(json, const ["current_period_start"]), "current_period_start", _readInt, requiredField: false, nullable: true),
+      currentPriceId: _readFieldValue<String>(_readField(json, const ["current_price_id"]), "current_price_id", _readString, requiredField: false, nullable: true),
+      deprecated: _required(_readFieldValue<bool>(_readField(json, const ["deprecated"]), "deprecated", _readBool, requiredField: false, nullable: false, defaultValue: false), "deprecated"),
+      deprecationMessage: _readFieldValue<String>(_readField(json, const ["deprecation_message"]), "deprecation_message", _readString, requiredField: false, nullable: true),
+      features: _required(_readFieldValue<List<String>>(_readField(json, const ["features"]), "features", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "features"),
+      limits: _required(_readFieldValue<GeneratedPlanLimits>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedPlanLimits.fromJson), requiredField: false, nullable: false, defaultValue: GeneratedPlanLimits.fromJson(const {})), "limits"),
+      plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: false, nullable: false, defaultValue: "basic"), "plan"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "status"),
+      stripeSubscriptionId: _readFieldValue<String>(_readField(json, const ["stripe_subscription_id"]), "stripe_subscription_id", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -113,10 +114,10 @@ class GeneratedPricingOption {
 
   factory GeneratedPricingOption.fromJson(Map<String, dynamic> json) {
     return GeneratedPricingOption(
-      description: _readString(_readAny(json, const ["description"])),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      priceString: _required(_readString(_readAny(json, const ["price_string"])), "price_string"),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      priceString: _required(_readFieldValue<String>(_readField(json, const ["price_string"]), "price_string", _readString, requiredField: true, nullable: false), "price_string"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
@@ -143,24 +144,24 @@ class GeneratedSubscriptionPlan {
   const GeneratedSubscriptionPlan({
     this.description,
     this.eyebrow,
-    required this.features,
+    this.features = const [],
     required this.id,
-    required this.legacy,
-    required this.prices,
+    this.legacy = false,
+    this.prices = const [],
     this.subtitle,
     required this.title,
   });
 
   factory GeneratedSubscriptionPlan.fromJson(Map<String, dynamic> json) {
     return GeneratedSubscriptionPlan(
-      description: _readString(_readAny(json, const ["description"])),
-      eyebrow: _readString(_readAny(json, const ["eyebrow"])),
-      features: _readStringList(_readAny(json, const ["features"])) ?? const [],
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      legacy: _readBool(_readAny(json, const ["legacy"])) ?? false,
-      prices: _readObjectList(_readAny(json, const ["prices"]), GeneratedPricingOption.fromJson) ?? const [],
-      subtitle: _readString(_readAny(json, const ["subtitle"])),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      eyebrow: _readFieldValue<String>(_readField(json, const ["eyebrow"]), "eyebrow", _readString, requiredField: false, nullable: true),
+      features: _required(_readFieldValue<List<String>>(_readField(json, const ["features"]), "features", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "features"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      legacy: _required(_readFieldValue<bool>(_readField(json, const ["legacy"]), "legacy", _readBool, requiredField: false, nullable: false, defaultValue: false), "legacy"),
+      prices: _required(_readFieldValue<List<GeneratedPricingOption>>(_readField(json, const ["prices"]), "prices", (value) => _readObjectList(value, GeneratedPricingOption.fromJson), requiredField: false, nullable: false, defaultValue: const []), "prices"),
+      subtitle: _readFieldValue<String>(_readField(json, const ["subtitle"]), "subtitle", _readString, requiredField: false, nullable: true),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
@@ -189,26 +190,26 @@ class GeneratedPhoneCallQuota {
   final int? resetAt;
 
   const GeneratedPhoneCallQuota({
-    required this.allowedCountries,
+    this.allowedCountries = const [],
     required this.hasAccess,
     required this.isPaid,
     this.maxDurationSeconds,
     this.monthlyLimit,
-    required this.monthlyUsed,
+    this.monthlyUsed = 0,
     this.remaining,
     this.resetAt,
   });
 
   factory GeneratedPhoneCallQuota.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneCallQuota(
-      allowedCountries: _readStringList(_readAny(json, const ["allowed_countries"])) ?? const [],
-      hasAccess: _required(_readBool(_readAny(json, const ["has_access"])), "has_access"),
-      isPaid: _required(_readBool(_readAny(json, const ["is_paid"])), "is_paid"),
-      maxDurationSeconds: _readInt(_readAny(json, const ["max_duration_seconds"])),
-      monthlyLimit: _readInt(_readAny(json, const ["monthly_limit"])),
-      monthlyUsed: _readInt(_readAny(json, const ["monthly_used"])) ?? 0,
-      remaining: _readInt(_readAny(json, const ["remaining"])),
-      resetAt: _readInt(_readAny(json, const ["reset_at"])),
+      allowedCountries: _required(_readFieldValue<List<String>>(_readField(json, const ["allowed_countries"]), "allowed_countries", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "allowed_countries"),
+      hasAccess: _required(_readFieldValue<bool>(_readField(json, const ["has_access"]), "has_access", _readBool, requiredField: true, nullable: false), "has_access"),
+      isPaid: _required(_readFieldValue<bool>(_readField(json, const ["is_paid"]), "is_paid", _readBool, requiredField: true, nullable: false), "is_paid"),
+      maxDurationSeconds: _readFieldValue<int>(_readField(json, const ["max_duration_seconds"]), "max_duration_seconds", _readInt, requiredField: false, nullable: true),
+      monthlyLimit: _readFieldValue<int>(_readField(json, const ["monthly_limit"]), "monthly_limit", _readInt, requiredField: false, nullable: true),
+      monthlyUsed: _required(_readFieldValue<int>(_readField(json, const ["monthly_used"]), "monthly_used", _readInt, requiredField: false, nullable: false, defaultValue: 0), "monthly_used"),
+      remaining: _readFieldValue<int>(_readField(json, const ["remaining"]), "remaining", _readInt, requiredField: false, nullable: true),
+      resetAt: _readFieldValue<int>(_readField(json, const ["reset_at"]), "reset_at", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -245,17 +246,17 @@ class GeneratedUserSubscriptionResponse {
   final int wordsTranscribedUsed;
 
   const GeneratedUserSubscriptionResponse({
-    required this.availablePlans,
-    required this.chatQuotaAllowed,
-    required this.chatQuotaPercent,
+    this.availablePlans = const [],
+    this.chatQuotaAllowed = true,
+    this.chatQuotaPercent = 0.0,
     this.chatQuotaResetAt,
     this.chatQuotaUnit,
-    required this.chatQuotaUsed,
+    this.chatQuotaUsed = 0.0,
     this.desktopGrandfatherUntil,
     required this.insightsGainedLimit,
     required this.insightsGainedUsed,
     this.phoneCallQuota,
-    required this.showSubscriptionUi,
+    this.showSubscriptionUi = true,
     required this.subscription,
     required this.transcriptionSecondsLimit,
     required this.transcriptionSecondsUsed,
@@ -265,22 +266,22 @@ class GeneratedUserSubscriptionResponse {
 
   factory GeneratedUserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserSubscriptionResponse(
-      availablePlans: _readObjectList(_readAny(json, const ["available_plans"]), GeneratedSubscriptionPlan.fromJson) ?? const [],
-      chatQuotaAllowed: _readBool(_readAny(json, const ["chat_quota_allowed"])) ?? true,
-      chatQuotaPercent: _readDouble(_readAny(json, const ["chat_quota_percent"])) ?? 0.0,
-      chatQuotaResetAt: _readInt(_readAny(json, const ["chat_quota_reset_at"])),
-      chatQuotaUnit: _readString(_readAny(json, const ["chat_quota_unit"])),
-      chatQuotaUsed: _readDouble(_readAny(json, const ["chat_quota_used"])) ?? 0.0,
-      desktopGrandfatherUntil: _readInt(_readAny(json, const ["desktop_grandfather_until"])),
-      insightsGainedLimit: _required(_readInt(_readAny(json, const ["insights_gained_limit"])), "insights_gained_limit"),
-      insightsGainedUsed: _required(_readInt(_readAny(json, const ["insights_gained_used"])), "insights_gained_used"),
-      phoneCallQuota: _readObject(_readAny(json, const ["phone_call_quota"]), GeneratedPhoneCallQuota.fromJson),
-      showSubscriptionUi: _readBool(_readAny(json, const ["show_subscription_ui"])) ?? true,
-      subscription: _required(_readObject(_readAny(json, const ["subscription"]), GeneratedSubscription.fromJson), "subscription"),
-      transcriptionSecondsLimit: _required(_readInt(_readAny(json, const ["transcription_seconds_limit"])), "transcription_seconds_limit"),
-      transcriptionSecondsUsed: _required(_readInt(_readAny(json, const ["transcription_seconds_used"])), "transcription_seconds_used"),
-      wordsTranscribedLimit: _required(_readInt(_readAny(json, const ["words_transcribed_limit"])), "words_transcribed_limit"),
-      wordsTranscribedUsed: _required(_readInt(_readAny(json, const ["words_transcribed_used"])), "words_transcribed_used"),
+      availablePlans: _required(_readFieldValue<List<GeneratedSubscriptionPlan>>(_readField(json, const ["available_plans"]), "available_plans", (value) => _readObjectList(value, GeneratedSubscriptionPlan.fromJson), requiredField: false, nullable: false, defaultValue: const []), "available_plans"),
+      chatQuotaAllowed: _required(_readFieldValue<bool>(_readField(json, const ["chat_quota_allowed"]), "chat_quota_allowed", _readBool, requiredField: false, nullable: false, defaultValue: true), "chat_quota_allowed"),
+      chatQuotaPercent: _required(_readFieldValue<double>(_readField(json, const ["chat_quota_percent"]), "chat_quota_percent", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "chat_quota_percent"),
+      chatQuotaResetAt: _readFieldValue<int>(_readField(json, const ["chat_quota_reset_at"]), "chat_quota_reset_at", _readInt, requiredField: false, nullable: true),
+      chatQuotaUnit: _readFieldValue<String>(_readField(json, const ["chat_quota_unit"]), "chat_quota_unit", _readString, requiredField: false, nullable: true),
+      chatQuotaUsed: _required(_readFieldValue<double>(_readField(json, const ["chat_quota_used"]), "chat_quota_used", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "chat_quota_used"),
+      desktopGrandfatherUntil: _readFieldValue<int>(_readField(json, const ["desktop_grandfather_until"]), "desktop_grandfather_until", _readInt, requiredField: false, nullable: true),
+      insightsGainedLimit: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_limit"]), "insights_gained_limit", _readInt, requiredField: true, nullable: false), "insights_gained_limit"),
+      insightsGainedUsed: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_used"]), "insights_gained_used", _readInt, requiredField: true, nullable: false), "insights_gained_used"),
+      phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
+      showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
+      subscription: _required(_readFieldValue<GeneratedSubscription>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedSubscription.fromJson), requiredField: true, nullable: false), "subscription"),
+      transcriptionSecondsLimit: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_limit"]), "transcription_seconds_limit", _readInt, requiredField: true, nullable: false), "transcription_seconds_limit"),
+      transcriptionSecondsUsed: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_used"]), "transcription_seconds_used", _readInt, requiredField: true, nullable: false), "transcription_seconds_used"),
+      wordsTranscribedLimit: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_limit"]), "words_transcribed_limit", _readInt, requiredField: true, nullable: false), "words_transcribed_limit"),
+      wordsTranscribedUsed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_used"]), "words_transcribed_used", _readInt, requiredField: true, nullable: false), "words_transcribed_used"),
     );
   }
 
@@ -314,20 +315,20 @@ class GeneratedUsageStats {
   final int wordsTranscribed;
 
   const GeneratedUsageStats({
-    required this.insightsGained,
-    required this.memoriesCreated,
-    required this.speechSeconds,
-    required this.transcriptionSeconds,
-    required this.wordsTranscribed,
+    this.insightsGained = 0,
+    this.memoriesCreated = 0,
+    this.speechSeconds = 0,
+    this.transcriptionSeconds = 0,
+    this.wordsTranscribed = 0,
   });
 
   factory GeneratedUsageStats.fromJson(Map<String, dynamic> json) {
     return GeneratedUsageStats(
-      insightsGained: _readInt(_readAny(json, const ["insights_gained"])) ?? 0,
-      memoriesCreated: _readInt(_readAny(json, const ["memories_created"])) ?? 0,
-      speechSeconds: _readInt(_readAny(json, const ["speech_seconds"])) ?? 0,
-      transcriptionSeconds: _readInt(_readAny(json, const ["transcription_seconds"])) ?? 0,
-      wordsTranscribed: _readInt(_readAny(json, const ["words_transcribed"])) ?? 0,
+      insightsGained: _required(_readFieldValue<int>(_readField(json, const ["insights_gained"]), "insights_gained", _readInt, requiredField: false, nullable: false, defaultValue: 0), "insights_gained"),
+      memoriesCreated: _required(_readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: false, defaultValue: 0), "memories_created"),
+      speechSeconds: _required(_readFieldValue<int>(_readField(json, const ["speech_seconds"]), "speech_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "speech_seconds"),
+      transcriptionSeconds: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "transcription_seconds"),
+      wordsTranscribed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: false, defaultValue: 0), "words_transcribed"),
     );
   }
 
@@ -352,21 +353,21 @@ class GeneratedUsageHistoryPoint {
 
   const GeneratedUsageHistoryPoint({
     required this.date,
-    required this.insightsGained,
-    required this.memoriesCreated,
-    required this.speechSeconds,
-    required this.transcriptionSeconds,
-    required this.wordsTranscribed,
+    this.insightsGained = 0,
+    this.memoriesCreated = 0,
+    this.speechSeconds = 0,
+    this.transcriptionSeconds = 0,
+    this.wordsTranscribed = 0,
   });
 
   factory GeneratedUsageHistoryPoint.fromJson(Map<String, dynamic> json) {
     return GeneratedUsageHistoryPoint(
-      date: _required(_readString(_readAny(json, const ["date"])), "date"),
-      insightsGained: _readInt(_readAny(json, const ["insights_gained"])) ?? 0,
-      memoriesCreated: _readInt(_readAny(json, const ["memories_created"])) ?? 0,
-      speechSeconds: _readInt(_readAny(json, const ["speech_seconds"])) ?? 0,
-      transcriptionSeconds: _readInt(_readAny(json, const ["transcription_seconds"])) ?? 0,
-      wordsTranscribed: _readInt(_readAny(json, const ["words_transcribed"])) ?? 0,
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      insightsGained: _required(_readFieldValue<int>(_readField(json, const ["insights_gained"]), "insights_gained", _readInt, requiredField: false, nullable: false, defaultValue: 0), "insights_gained"),
+      memoriesCreated: _required(_readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: false, defaultValue: 0), "memories_created"),
+      speechSeconds: _required(_readFieldValue<int>(_readField(json, const ["speech_seconds"]), "speech_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "speech_seconds"),
+      transcriptionSeconds: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "transcription_seconds"),
+      wordsTranscribed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: false, defaultValue: 0), "words_transcribed"),
     );
   }
 
@@ -399,11 +400,11 @@ class GeneratedUserUsageResponse {
 
   factory GeneratedUserUsageResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserUsageResponse(
-      allTime: _readObject(_readAny(json, const ["all_time"]), GeneratedUsageStats.fromJson),
-      history: _readAny(json, const ["history"]) == null ? null : _readObjectList(_readAny(json, const ["history"]), GeneratedUsageHistoryPoint.fromJson),
-      monthly: _readObject(_readAny(json, const ["monthly"]), GeneratedUsageStats.fromJson),
-      today: _readObject(_readAny(json, const ["today"]), GeneratedUsageStats.fromJson),
-      yearly: _readObject(_readAny(json, const ["yearly"]), GeneratedUsageStats.fromJson),
+      allTime: _readFieldValue<GeneratedUsageStats>(_readField(json, const ["all_time"]), "all_time", (value) => _readObject(value, GeneratedUsageStats.fromJson), requiredField: false, nullable: true),
+      history: _readFieldValue<List<GeneratedUsageHistoryPoint>>(_readField(json, const ["history"]), "history", (value) => _readObjectList(value, GeneratedUsageHistoryPoint.fromJson), requiredField: false, nullable: true),
+      monthly: _readFieldValue<GeneratedUsageStats>(_readField(json, const ["monthly"]), "monthly", (value) => _readObject(value, GeneratedUsageStats.fromJson), requiredField: false, nullable: true),
+      today: _readFieldValue<GeneratedUsageStats>(_readField(json, const ["today"]), "today", (value) => _readObject(value, GeneratedUsageStats.fromJson), requiredField: false, nullable: true),
+      yearly: _readFieldValue<GeneratedUsageStats>(_readField(json, const ["yearly"]), "yearly", (value) => _readObject(value, GeneratedUsageStats.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -418,11 +419,18 @@ class GeneratedUserUsageResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -447,6 +455,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

@@ -367,7 +367,11 @@ def dart_type_for(
         if len(non_null) == 1 and len(non_null) != len(any_of):
             unwrapped = non_null[0]
             nullable = True
-        elif non_null and all(item.get('$ref') or is_untyped_object_schema(item) for item in non_null):
+        elif (
+            len(non_null) == 2
+            and any(item.get('$ref') for item in non_null)
+            and any(is_untyped_object_schema(item) and not item.get('properties') for item in non_null)
+        ):
             nullable = any(item.get('type') == 'null' for item in any_of) or not required
             return DartType('Map<String, dynamic>', nullable=nullable, is_map=True)
         else:
@@ -444,85 +448,69 @@ def dart_literal(value: Any) -> str:
 def read_key_expr(field: Field) -> str:
     names = (field.wire_name,) + field.aliases
     quoted = ', '.join(json.dumps(name) for name in names)
-    return f'_readAny(json, const [{quoted}])'
+    return f'_readField(json, const [{quoted}])'
+
+
+def converter_name(typ: DartType) -> str:
+    if typ.list_item:
+        item = typ.list_item
+        if item.ref_schema:
+            return f'(value) => _readObjectList(value, {item.name}.fromJson)'
+        if item.name == 'String':
+            return '_readStringList'
+        if item.name == 'double':
+            return '_readDoubleList'
+        if item.name == 'int':
+            return '_readIntList'
+        if item.is_map:
+            return '_readMapList'
+        return '_readDynamicList'
+    if typ.ref_schema:
+        return f'(value) => _readObject(value, {typ.name}.fromJson)'
+    if typ.is_date_time:
+        return '_readDateTime'
+    if typ.is_map:
+        return '_readMap'
+    if typ.name == 'String':
+        return '_readString'
+    if typ.name == 'int':
+        return '_readInt'
+    if typ.name == 'double':
+        return '_readDouble'
+    if typ.name == 'bool':
+        return '_readBool'
+    return '(value) => value'
+
+
+def read_value_expr(field: Field) -> str:
+    default = ''
+    if field.default is not None:
+        default = f', defaultValue: {default_for(field)}'
+    return (
+        f'_readFieldValue<{field.dart_type.name}>('
+        f'{read_key_expr(field)}, '
+        f'{json.dumps(field.wire_name)}, '
+        f'{converter_name(field.dart_type)}, '
+        f'requiredField: {str(field.required).lower()}, '
+        f'nullable: {str(field.dart_type.nullable).lower()}'
+        f'{default})'
+    )
 
 
 def read_expr(field: Field) -> str:
-    value = read_key_expr(field)
     typ = field.dart_type
-    default = default_for(field)
-    has_schema_default = field.default is not None
-    if typ.list_item:
-        item = typ.list_item
-        nullable_prefix = f'{value} == null ? null : ' if typ.nullable else ''
-        required = field.required and not has_schema_default
-        if item.ref_schema:
-            expr = f'{nullable_prefix}_readObjectList({value}, {item.name}.fromJson)'
-        elif item.name == 'String':
-            expr = f'{nullable_prefix}_readStringList({value})'
-        elif item.name == 'double':
-            expr = f'{nullable_prefix}_readDoubleList({value})'
-        elif item.name == 'int':
-            expr = f'{nullable_prefix}_readIntList({value})'
-        elif item.is_map:
-            expr = f'{nullable_prefix}_readMapList({value})'
-        else:
-            expr = f'{nullable_prefix}_readDynamicList({value})'
-        if required:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        if typ.nullable:
-            return expr
-        return f'{expr} ?? {default}'
-    if typ.ref_schema:
-        if typ.nullable:
-            return f'_readObject({value}, {typ.name}.fromJson)'
-        expr = f'_readObject({value}, {typ.name}.fromJson)'
-        if field.required and not has_schema_default:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        return f'{expr} ?? {default}'
-    if typ.is_date_time:
-        if typ.nullable:
-            return f'_readDateTime({value})'
-        expr = f'_readDateTime({value})'
-        if field.required and not has_schema_default:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        return f'{expr} ?? {default}'
-    if typ.is_map:
-        if typ.nullable:
-            return f'_readMap({value})'
-        expr = f'_readMap({value})'
-        if field.required and not has_schema_default:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        return f'{expr} ?? const {{}}'
-    if typ.name == 'String':
-        if typ.nullable and field.default is None:
-            return f'_readString({value})'
-        expr = f'_readString({value})'
-        if field.required and not has_schema_default:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        return f'{expr} ?? {default}'
-    if typ.name == 'int':
-        if typ.nullable and field.default is None:
-            return f'_readInt({value})'
-        expr = f'_readInt({value})'
-        if field.required and not has_schema_default:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        return f'{expr} ?? {default}'
-    if typ.name == 'double':
-        if typ.nullable and field.default is None:
-            return f'_readDouble({value})'
-        expr = f'_readDouble({value})'
-        if field.required and not has_schema_default:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        return f'{expr} ?? {default}'
-    if typ.name == 'bool':
-        if typ.nullable and field.default is None:
-            return f'_readBool({value})'
-        expr = f'_readBool({value})'
-        if field.required and not has_schema_default:
-            return f'_required({expr}, {json.dumps(field.wire_name)})'
-        return f'{expr} ?? {default}'
-    return value
+    expr = read_value_expr(field)
+    if typ.nullable:
+        return expr
+    return f'_required({expr}, {json.dumps(field.wire_name)})'
+
+
+def constructor_default_for(field: Field) -> str | None:
+    if field.required or field.dart_type.nullable or field.default is None:
+        return None
+    if field.dart_type.ref_schema and isinstance(field.default, dict):
+        return None
+    return default_for(field)
 
 
 def to_json_expr(field: Field) -> str:
@@ -572,14 +560,37 @@ def emit_class(schema_name: str, fields: list[Field]) -> str:
     for field in fields:
         lines.append(f'  final {field.dart_type.annotation} {field.dart_name};')
     lines.append('')
-    lines.append(f'  const {class_name}({{')
+    initializers: list[str] = []
+    constructor_is_const = True
     for field in fields:
-        required = 'required ' if field.required or not field.dart_type.nullable else ''
+        if field.required or field.dart_type.nullable:
+            continue
+        if field.default is None:
+            continue
+        if constructor_default_for(field) is None:
+            initializers.append(f'{field.dart_name} = {field.dart_name} ?? {default_for(field)}')
+            constructor_is_const = False
+
+    const_prefix = 'const ' if constructor_is_const else ''
+    lines.append(f'  {const_prefix}{class_name}({{')
+    for field in fields:
+        required = 'required ' if field.required else ''
         default = ''
-        if not required and field.dart_type.list_item and not field.dart_type.nullable:
-            default = ' = const []'
-        lines.append(f'    {required}this.{field.dart_name}{default},')
-    lines.append('  });')
+        if not required:
+            constructor_default = constructor_default_for(field)
+            if constructor_default is not None:
+                default = f' = {constructor_default}'
+        if initializers and field.dart_name in {item.split(' = ', 1)[0] for item in initializers}:
+            lines.append(f'    {field.dart_type.name}? {field.dart_name},')
+        else:
+            lines.append(f'    {required}this.{field.dart_name}{default},')
+    if initializers:
+        lines.append('  }) :')
+        for index, initializer in enumerate(initializers):
+            suffix = ';' if index == len(initializers) - 1 else ','
+            lines.append(f'       {initializer}{suffix}')
+    else:
+        lines.append('  });')
     lines.append('')
     lines.append(f'  factory {class_name}.fromJson(Map<String, dynamic> json) {{')
     lines.append(f'    return {class_name}(')
@@ -600,11 +611,18 @@ def emit_class(schema_name: str, fields: list[Field]) -> str:
 
 def emit_helpers() -> str:
     return r'''
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -629,6 +647,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

@@ -13,8 +13,8 @@ class GeneratedTranslation {
 
   factory GeneratedTranslation.fromJson(Map<String, dynamic> json) {
     return GeneratedTranslation(
-      lang: _required(_readString(_readAny(json, const ["lang"])), "lang"),
-      text: _required(_readString(_readAny(json, const ["text"])), "text"),
+      lang: _required(_readFieldValue<String>(_readField(json, const ["lang"]), "lang", _readString, requiredField: true, nullable: false), "lang"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
     );
   }
 
@@ -46,7 +46,7 @@ class GeneratedTranscriptSegment {
     this.personId,
     this.speaker,
     this.speakerId,
-    required this.speechProfileProcessed,
+    this.speechProfileProcessed = true,
     required this.start,
     this.sttProvider,
     required this.text,
@@ -55,17 +55,17 @@ class GeneratedTranscriptSegment {
 
   factory GeneratedTranscriptSegment.fromJson(Map<String, dynamic> json) {
     return GeneratedTranscriptSegment(
-      end: _required(_readDouble(_readAny(json, const ["end"])), "end"),
-      id: _readString(_readAny(json, const ["id"])),
-      isUser: _required(_readBool(_readAny(json, const ["is_user"])), "is_user"),
-      personId: _readString(_readAny(json, const ["person_id"])),
-      speaker: _readString(_readAny(json, const ["speaker"])) ?? "SPEAKER_00",
-      speakerId: _readInt(_readAny(json, const ["speaker_id"])),
-      speechProfileProcessed: _readBool(_readAny(json, const ["speech_profile_processed"])) ?? true,
-      start: _required(_readDouble(_readAny(json, const ["start"])), "start"),
-      sttProvider: _readString(_readAny(json, const ["stt_provider"])),
-      text: _required(_readString(_readAny(json, const ["text"])), "text"),
-      translations: _readAny(json, const ["translations"]) == null ? null : _readObjectList(_readAny(json, const ["translations"]), GeneratedTranslation.fromJson),
+      end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
+      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
+      isUser: _required(_readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool, requiredField: true, nullable: false), "is_user"),
+      personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
+      speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString, requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
+      speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
+      speechProfileProcessed: _required(_readFieldValue<bool>(_readField(json, const ["speech_profile_processed"]), "speech_profile_processed", _readBool, requiredField: false, nullable: false, defaultValue: true), "speech_profile_processed"),
+      start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
+      sttProvider: _readFieldValue<String>(_readField(json, const ["stt_provider"]), "stt_provider", _readString, requiredField: false, nullable: true),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      translations: _readFieldValue<List<GeneratedTranslation>>(_readField(json, const ["translations"]), "translations", (value) => _readObjectList(value, GeneratedTranslation.fromJson), requiredField: false, nullable: true, defaultValue: const []),
     );
   }
 
@@ -96,7 +96,7 @@ class GeneratedActionItem {
   final DateTime? updatedAt;
 
   const GeneratedActionItem({
-    required this.completed,
+    this.completed = false,
     this.completedAt,
     this.conversationId,
     this.createdAt,
@@ -107,13 +107,13 @@ class GeneratedActionItem {
 
   factory GeneratedActionItem.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItem(
-      completed: _readBool(_readAny(json, const ["completed"])) ?? false,
-      completedAt: _readDateTime(_readAny(json, const ["completed_at"])),
-      conversationId: _readString(_readAny(json, const ["conversation_id"])),
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      description: _required(_readString(_readAny(json, const ["description"])), "description"),
-      dueAt: _readDateTime(_readAny(json, const ["due_at"])),
-      updatedAt: _readDateTime(_readAny(json, const ["updated_at"])),
+      completed: _required(_readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: false, nullable: false, defaultValue: false), "completed"),
+      completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
+      updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
@@ -141,8 +141,8 @@ class GeneratedAppResult {
 
   factory GeneratedAppResult.fromJson(Map<String, dynamic> json) {
     return GeneratedAppResult(
-      appId: _readString(_readAny(json, const ["app_id", "appId"])),
-      content: _required(_readString(_readAny(json, const ["content"])), "content"),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id", "appId"]), "app_id", _readString, requiredField: true, nullable: true),
+      content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
     );
   }
 
@@ -165,8 +165,8 @@ class GeneratedPluginResult {
 
   factory GeneratedPluginResult.fromJson(Map<String, dynamic> json) {
     return GeneratedPluginResult(
-      content: _required(_readString(_readAny(json, const ["content"])), "content"),
-      pluginId: _readString(_readAny(json, const ["plugin_id"])),
+      content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
+      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: true, nullable: true),
     );
   }
 
@@ -186,20 +186,20 @@ class GeneratedEvent {
   final String title;
 
   const GeneratedEvent({
-    required this.created,
-    required this.description,
-    required this.duration,
+    this.created = false,
+    this.description = "",
+    this.duration = 30,
     required this.start,
     required this.title,
   });
 
   factory GeneratedEvent.fromJson(Map<String, dynamic> json) {
     return GeneratedEvent(
-      created: _readBool(_readAny(json, const ["created"])) ?? false,
-      description: _readString(_readAny(json, const ["description"])) ?? "",
-      duration: _readInt(_readAny(json, const ["duration"])) ?? 30,
-      start: _required(_readDateTime(_readAny(json, const ["start", "startsAt"])), "start"),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
+      created: _required(_readFieldValue<bool>(_readField(json, const ["created"]), "created", _readBool, requiredField: false, nullable: false, defaultValue: false), "created"),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: false, defaultValue: ""), "description"),
+      duration: _required(_readFieldValue<int>(_readField(json, const ["duration"]), "duration", _readInt, requiredField: false, nullable: false, defaultValue: 30), "duration"),
+      start: _required(_readFieldValue<DateTime>(_readField(json, const ["start", "startsAt"]), "start", _readDateTime, requiredField: true, nullable: false), "start"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
@@ -224,21 +224,21 @@ class GeneratedStructured {
 
   const GeneratedStructured({
     this.actionItems,
-    required this.category,
-    required this.emoji,
+    this.category = "other",
+    this.emoji = "\ud83e\udde0",
     this.events,
-    required this.overview,
-    required this.title,
+    this.overview = "",
+    this.title = "",
   });
 
   factory GeneratedStructured.fromJson(Map<String, dynamic> json) {
     return GeneratedStructured(
-      actionItems: _readAny(json, const ["action_items", "actionItems"]) == null ? null : _readObjectList(_readAny(json, const ["action_items", "actionItems"]), GeneratedActionItem.fromJson),
-      category: _readString(_readAny(json, const ["category"])) ?? "other",
-      emoji: _readString(_readAny(json, const ["emoji"])) ?? "\ud83e\udde0",
-      events: _readAny(json, const ["events"]) == null ? null : _readObjectList(_readAny(json, const ["events"]), GeneratedEvent.fromJson),
-      overview: _readString(_readAny(json, const ["overview"])) ?? "",
-      title: _readString(_readAny(json, const ["title"])) ?? "",
+      actionItems: _readFieldValue<List<GeneratedActionItem>>(_readField(json, const ["action_items", "actionItems"]), "action_items", (value) => _readObjectList(value, GeneratedActionItem.fromJson), requiredField: false, nullable: true),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83e\udde0"), "emoji"),
+      events: _readFieldValue<List<GeneratedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedEvent.fromJson), requiredField: false, nullable: true),
+      overview: _required(_readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: false, defaultValue: ""), "overview"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
     );
   }
 
@@ -271,11 +271,11 @@ class GeneratedGeolocation {
 
   factory GeneratedGeolocation.fromJson(Map<String, dynamic> json) {
     return GeneratedGeolocation(
-      address: _readString(_readAny(json, const ["address"])),
-      googlePlaceId: _readString(_readAny(json, const ["google_place_id", "googlePlaceId"])),
-      latitude: _required(_readDouble(_readAny(json, const ["latitude"])), "latitude"),
-      locationType: _readString(_readAny(json, const ["location_type", "locationType"])),
-      longitude: _required(_readDouble(_readAny(json, const ["longitude"])), "longitude"),
+      address: _readFieldValue<String>(_readField(json, const ["address"]), "address", _readString, requiredField: false, nullable: true),
+      googlePlaceId: _readFieldValue<String>(_readField(json, const ["google_place_id", "googlePlaceId"]), "google_place_id", _readString, requiredField: false, nullable: true),
+      latitude: _required(_readFieldValue<double>(_readField(json, const ["latitude"]), "latitude", _readDouble, requiredField: true, nullable: false), "latitude"),
+      locationType: _readFieldValue<String>(_readField(json, const ["location_type", "locationType"]), "location_type", _readString, requiredField: false, nullable: true),
+      longitude: _required(_readFieldValue<double>(_readField(json, const ["longitude"]), "longitude", _readDouble, requiredField: true, nullable: false), "longitude"),
     );
   }
 
@@ -303,18 +303,18 @@ class GeneratedConversationPhoto {
     this.createdAt,
     this.dataProtectionLevel,
     this.description,
-    required this.discarded,
+    this.discarded = false,
     this.id,
   });
 
   factory GeneratedConversationPhoto.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationPhoto(
-      base64: _required(_readString(_readAny(json, const ["base64"])), "base64"),
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
-      description: _readString(_readAny(json, const ["description"])),
-      discarded: _readBool(_readAny(json, const ["discarded"])) ?? false,
-      id: _readString(_readAny(json, const ["id"])),
+      base64: _required(_readFieldValue<String>(_readField(json, const ["base64"]), "base64", _readString, requiredField: true, nullable: false), "base64"),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
+      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -344,20 +344,20 @@ class GeneratedAudioFile {
     required this.conversationId,
     required this.duration,
     required this.id,
-    required this.provider,
+    this.provider = "gcp",
     this.startedAt,
     required this.uid,
   });
 
   factory GeneratedAudioFile.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioFile(
-      chunkTimestamps: _required(_readDoubleList(_readAny(json, const ["chunk_timestamps"])), "chunk_timestamps"),
-      conversationId: _required(_readString(_readAny(json, const ["conversation_id"])), "conversation_id"),
-      duration: _required(_readDouble(_readAny(json, const ["duration"])), "duration"),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      provider: _readString(_readAny(json, const ["provider"])) ?? "gcp",
-      startedAt: _readDateTime(_readAny(json, const ["started_at"])),
-      uid: _required(_readString(_readAny(json, const ["uid"])), "uid"),
+      chunkTimestamps: _required(_readFieldValue<List<double>>(_readField(json, const ["chunk_timestamps"]), "chunk_timestamps", _readDoubleList, requiredField: true, nullable: false), "chunk_timestamps"),
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: false, defaultValue: "gcp"), "provider"),
+      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
+      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
     );
   }
 
@@ -384,8 +384,8 @@ class GeneratedCalendarEventLink {
   final String title;
 
   const GeneratedCalendarEventLink({
-    required this.attendeeEmails,
-    required this.attendees,
+    this.attendeeEmails = const [],
+    this.attendees = const [],
     required this.endTime,
     required this.eventId,
     this.htmlLink,
@@ -395,13 +395,13 @@ class GeneratedCalendarEventLink {
 
   factory GeneratedCalendarEventLink.fromJson(Map<String, dynamic> json) {
     return GeneratedCalendarEventLink(
-      attendeeEmails: _readStringList(_readAny(json, const ["attendee_emails"])) ?? const [],
-      attendees: _readStringList(_readAny(json, const ["attendees"])) ?? const [],
-      endTime: _required(_readDateTime(_readAny(json, const ["end_time"])), "end_time"),
-      eventId: _required(_readString(_readAny(json, const ["event_id"])), "event_id"),
-      htmlLink: _readString(_readAny(json, const ["html_link"])),
-      startTime: _required(_readDateTime(_readAny(json, const ["start_time"])), "start_time"),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
+      attendeeEmails: _required(_readFieldValue<List<String>>(_readField(json, const ["attendee_emails"]), "attendee_emails", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "attendee_emails"),
+      attendees: _required(_readFieldValue<List<String>>(_readField(json, const ["attendees"]), "attendees", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "attendees"),
+      endTime: _required(_readFieldValue<DateTime>(_readField(json, const ["end_time"]), "end_time", _readDateTime, requiredField: true, nullable: false), "end_time"),
+      eventId: _required(_readFieldValue<String>(_readField(json, const ["event_id"]), "event_id", _readString, requiredField: true, nullable: false), "event_id"),
+      htmlLink: _readFieldValue<String>(_readField(json, const ["html_link"]), "html_link", _readString, requiredField: false, nullable: true),
+      startTime: _required(_readFieldValue<DateTime>(_readField(json, const ["start_time"]), "start_time", _readDateTime, requiredField: true, nullable: false), "start_time"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
@@ -454,73 +454,73 @@ class GeneratedConversation {
 
   const GeneratedConversation({
     this.appId,
-    required this.appsResults,
-    required this.audioFiles,
+    this.appsResults = const [],
+    this.audioFiles = const [],
     this.calendarEvent,
     this.callId,
     this.clientDeviceId,
     this.clientPlatform,
     required this.createdAt,
     this.dataProtectionLevel,
-    required this.deferred,
-    required this.discarded,
+    this.deferred = false,
+    this.discarded = false,
     this.externalData,
     required this.finishedAt,
     this.folderId,
     this.geolocation,
     required this.id,
-    required this.isLocked,
+    this.isLocked = false,
     this.language,
-    required this.photos,
-    required this.pluginsResults,
-    required this.privateCloudSyncEnabled,
+    this.photos = const [],
+    this.pluginsResults = const [],
+    this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
     this.source,
-    required this.starred,
+    this.starred = false,
     required this.startedAt,
     this.status,
     required this.structured,
-    required this.suggestedSummarizationApps,
-    required this.transcriptSegments,
+    this.suggestedSummarizationApps = const [],
+    this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed,
-    required this.visibility,
+    this.visibility = "private",
   });
 
   factory GeneratedConversation.fromJson(Map<String, dynamic> json) {
     return GeneratedConversation(
-      appId: _readString(_readAny(json, const ["app_id"])),
-      appsResults: _readObjectList(_readAny(json, const ["apps_results"]), GeneratedAppResult.fromJson) ?? const [],
-      audioFiles: _readObjectList(_readAny(json, const ["audio_files"]), GeneratedAudioFile.fromJson) ?? const [],
-      calendarEvent: _readObject(_readAny(json, const ["calendar_event"]), GeneratedCalendarEventLink.fromJson),
-      callId: _readString(_readAny(json, const ["call_id"])),
-      clientDeviceId: _readString(_readAny(json, const ["client_device_id"])),
-      clientPlatform: _readString(_readAny(json, const ["client_platform"])),
-      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
-      dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
-      deferred: _readBool(_readAny(json, const ["deferred"])) ?? false,
-      discarded: _readBool(_readAny(json, const ["discarded"])) ?? false,
-      externalData: _readMap(_readAny(json, const ["external_data"])),
-      finishedAt: _readDateTime(_readAny(json, const ["finished_at"])),
-      folderId: _readString(_readAny(json, const ["folder_id"])),
-      geolocation: _readObject(_readAny(json, const ["geolocation"]), GeneratedGeolocation.fromJson),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      isLocked: _readBool(_readAny(json, const ["is_locked"])) ?? false,
-      language: _readString(_readAny(json, const ["language"])),
-      photos: _readObjectList(_readAny(json, const ["photos"]), GeneratedConversationPhoto.fromJson) ?? const [],
-      pluginsResults: _readObjectList(_readAny(json, const ["plugins_results"]), GeneratedPluginResult.fromJson) ?? const [],
-      privateCloudSyncEnabled: _readBool(_readAny(json, const ["private_cloud_sync_enabled"])) ?? false,
-      processingConversationId: _readString(_readAny(json, const ["processing_conversation_id"])),
-      processingMemoryId: _readString(_readAny(json, const ["processing_memory_id"])),
-      source: _readString(_readAny(json, const ["source"])) ?? "omi",
-      starred: _readBool(_readAny(json, const ["starred"])) ?? false,
-      startedAt: _readDateTime(_readAny(json, const ["started_at"])),
-      status: _readString(_readAny(json, const ["status"])) ?? "completed",
-      structured: _required(_readObject(_readAny(json, const ["structured"]), GeneratedStructured.fromJson), "structured"),
-      suggestedSummarizationApps: _readStringList(_readAny(json, const ["suggested_summarization_apps"])) ?? const [],
-      transcriptSegments: _readObjectList(_readAny(json, const ["transcript_segments"]), GeneratedTranscriptSegment.fromJson) ?? const [],
-      transcriptSegmentsCompressed: _readBool(_readAny(json, const ["transcript_segments_compressed"])) ?? false,
-      visibility: _readString(_readAny(json, const ["visibility"])) ?? "private",
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      appsResults: _required(_readFieldValue<List<GeneratedAppResult>>(_readField(json, const ["apps_results"]), "apps_results", (value) => _readObjectList(value, GeneratedAppResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "apps_results"),
+      audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
+      calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
+      callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
+      clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
+      clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
+      discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
+      externalData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["external_data"]), "external_data", _readMap, requiredField: false, nullable: true),
+      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
+      folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
+      geolocation: _readFieldValue<GeneratedGeolocation>(_readField(json, const ["geolocation"]), "geolocation", (value) => _readObject(value, GeneratedGeolocation.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
+      language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      photos: _required(_readFieldValue<List<GeneratedConversationPhoto>>(_readField(json, const ["photos"]), "photos", (value) => _readObjectList(value, GeneratedConversationPhoto.fromJson), requiredField: false, nullable: false, defaultValue: const []), "photos"),
+      pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
+      privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
+      processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
+      processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
+      source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
+      starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
+      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
+      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
+      structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
+      suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
+      transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
+      transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      visibility: _required(_readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: false, defaultValue: "private"), "visibility"),
     );
   }
 
@@ -577,10 +577,10 @@ class GeneratedSearchConversationsResponse {
 
   factory GeneratedSearchConversationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSearchConversationsResponse(
-      currentPage: _required(_readInt(_readAny(json, const ["current_page"])), "current_page"),
-      items: _required(_readMapList(_readAny(json, const ["items"])), "items"),
-      perPage: _required(_readInt(_readAny(json, const ["per_page"])), "per_page"),
-      totalPages: _required(_readInt(_readAny(json, const ["total_pages"])), "total_pages"),
+      currentPage: _required(_readFieldValue<int>(_readField(json, const ["current_page"]), "current_page", _readInt, requiredField: true, nullable: false), "current_page"),
+      items: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["items"]), "items", _readMapList, requiredField: true, nullable: false), "items"),
+      perPage: _required(_readFieldValue<int>(_readField(json, const ["per_page"]), "per_page", _readInt, requiredField: true, nullable: false), "per_page"),
+      totalPages: _required(_readFieldValue<int>(_readField(json, const ["total_pages"]), "total_pages", _readInt, requiredField: true, nullable: false), "total_pages"),
     );
   }
 
@@ -603,19 +603,19 @@ class GeneratedSyncLocalFilesResultResponse {
 
   const GeneratedSyncLocalFilesResultResponse({
     this.errors,
-    required this.failedSegments,
+    this.failedSegments = 0,
     this.newMemories,
-    required this.totalSegments,
+    this.totalSegments = 0,
     this.updatedMemories,
   });
 
   factory GeneratedSyncLocalFilesResultResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSyncLocalFilesResultResponse(
-      errors: _readAny(json, const ["errors"]) == null ? null : _readStringList(_readAny(json, const ["errors"])),
-      failedSegments: _readInt(_readAny(json, const ["failed_segments"])) ?? 0,
-      newMemories: _readAny(json, const ["new_memories"]) == null ? null : _readStringList(_readAny(json, const ["new_memories"])),
-      totalSegments: _readInt(_readAny(json, const ["total_segments"])) ?? 0,
-      updatedMemories: _readAny(json, const ["updated_memories"]) == null ? null : _readStringList(_readAny(json, const ["updated_memories"])),
+      errors: _readFieldValue<List<String>>(_readField(json, const ["errors"]), "errors", _readStringList, requiredField: false, nullable: true),
+      failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
+      newMemories: _readFieldValue<List<String>>(_readField(json, const ["new_memories"]), "new_memories", _readStringList, requiredField: false, nullable: true),
+      totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
+      updatedMemories: _readFieldValue<List<String>>(_readField(json, const ["updated_memories"]), "updated_memories", _readStringList, requiredField: false, nullable: true),
     );
   }
 
@@ -647,11 +647,11 @@ class GeneratedSyncJobStartResponse {
 
   factory GeneratedSyncJobStartResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSyncJobStartResponse(
-      jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id"),
-      pollAfterMs: _required(_readInt(_readAny(json, const ["poll_after_ms"])), "poll_after_ms"),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
-      totalFiles: _required(_readInt(_readAny(json, const ["total_files"])), "total_files"),
-      totalSegments: _required(_readInt(_readAny(json, const ["total_segments"])), "total_segments"),
+      jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
+      pollAfterMs: _required(_readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: true, nullable: false), "poll_after_ms"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      totalFiles: _required(_readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: true, nullable: false), "total_files"),
+      totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: true, nullable: false), "total_segments"),
     );
   }
 
@@ -678,25 +678,25 @@ class GeneratedSyncJobStatusResponse {
 
   const GeneratedSyncJobStatusResponse({
     this.error,
-    required this.failedSegments,
+    this.failedSegments = 0,
     required this.jobId,
-    required this.processedSegments,
+    this.processedSegments = 0,
     this.result,
     required this.status,
-    required this.successfulSegments,
-    required this.totalSegments,
+    this.successfulSegments = 0,
+    this.totalSegments = 0,
   });
 
   factory GeneratedSyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSyncJobStatusResponse(
-      error: _readString(_readAny(json, const ["error"])),
-      failedSegments: _readInt(_readAny(json, const ["failed_segments"])) ?? 0,
-      jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id"),
-      processedSegments: _readInt(_readAny(json, const ["processed_segments"])) ?? 0,
-      result: _readObject(_readAny(json, const ["result"]), GeneratedSyncLocalFilesResultResponse.fromJson),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
-      successfulSegments: _readInt(_readAny(json, const ["successful_segments"])) ?? 0,
-      totalSegments: _readInt(_readAny(json, const ["total_segments"])) ?? 0,
+      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
+      failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
+      jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
+      processedSegments: _required(_readFieldValue<int>(_readField(json, const ["processed_segments"]), "processed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "processed_segments"),
+      result: _readFieldValue<GeneratedSyncLocalFilesResultResponse>(_readField(json, const ["result"]), "result", (value) => _readObject(value, GeneratedSyncLocalFilesResultResponse.fromJson), requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      successfulSegments: _required(_readFieldValue<int>(_readField(json, const ["successful_segments"]), "successful_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "successful_segments"),
+      totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
     );
   }
 
@@ -714,11 +714,18 @@ class GeneratedSyncJobStatusResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -743,6 +750,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

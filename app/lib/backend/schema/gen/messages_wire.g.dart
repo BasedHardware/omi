@@ -13,8 +13,8 @@ class GeneratedMessageConversationStructured {
 
   factory GeneratedMessageConversationStructured.fromJson(Map<String, dynamic> json) {
     return GeneratedMessageConversationStructured(
-      emoji: _required(_readString(_readAny(json, const ["emoji"])), "emoji"),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: true, nullable: false), "emoji"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
@@ -39,9 +39,9 @@ class GeneratedMessageConversation {
 
   factory GeneratedMessageConversation.fromJson(Map<String, dynamic> json) {
     return GeneratedMessageConversation(
-      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      structured: _required(_readObject(_readAny(json, const ["structured"]), GeneratedMessageConversationStructured.fromJson), "structured"),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      structured: _required(_readFieldValue<GeneratedMessageConversationStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedMessageConversationStructured.fromJson), requiredField: true, nullable: false), "structured"),
     );
   }
 
@@ -75,13 +75,13 @@ class GeneratedFileChat {
 
   factory GeneratedFileChat.fromJson(Map<String, dynamic> json) {
     return GeneratedFileChat(
-      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      mimeType: _required(_readString(_readAny(json, const ["mime_type"])), "mime_type"),
-      name: _required(_readString(_readAny(json, const ["name"])), "name"),
-      openaiFileId: _required(_readString(_readAny(json, const ["openai_file_id"])), "openai_file_id"),
-      thumbName: _readString(_readAny(json, const ["thumb_name"])) ?? "",
-      thumbnail: _readString(_readAny(json, const ["thumbnail"])) ?? "",
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      mimeType: _required(_readFieldValue<String>(_readField(json, const ["mime_type"]), "mime_type", _readString, requiredField: true, nullable: false), "mime_type"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      openaiFileId: _required(_readFieldValue<String>(_readField(json, const ["openai_file_id"]), "openai_file_id", _readString, requiredField: true, nullable: false), "openai_file_id"),
+      thumbName: _readFieldValue<String>(_readField(json, const ["thumb_name"]), "thumb_name", _readString, requiredField: false, nullable: true, defaultValue: ""),
+      thumbnail: _readFieldValue<String>(_readField(json, const ["thumbnail"]), "thumbnail", _readString, requiredField: false, nullable: true, defaultValue: ""),
     );
   }
 
@@ -109,8 +109,8 @@ class GeneratedChartDataPoint {
 
   factory GeneratedChartDataPoint.fromJson(Map<String, dynamic> json) {
     return GeneratedChartDataPoint(
-      label: _required(_readString(_readAny(json, const ["label"])), "label"),
-      value: _required(_readDouble(_readAny(json, const ["value"])), "value"),
+      label: _required(_readFieldValue<String>(_readField(json, const ["label"]), "label", _readString, requiredField: true, nullable: false), "label"),
+      value: _required(_readFieldValue<double>(_readField(json, const ["value"]), "value", _readDouble, requiredField: true, nullable: false), "value"),
     );
   }
 
@@ -135,9 +135,9 @@ class GeneratedChartDataset {
 
   factory GeneratedChartDataset.fromJson(Map<String, dynamic> json) {
     return GeneratedChartDataset(
-      color: _readString(_readAny(json, const ["color"])),
-      dataPoints: _required(_readObjectList(_readAny(json, const ["data_points"]), GeneratedChartDataPoint.fromJson), "data_points"),
-      label: _required(_readString(_readAny(json, const ["label"])), "label"),
+      color: _readFieldValue<String>(_readField(json, const ["color"]), "color", _readString, requiredField: false, nullable: true),
+      dataPoints: _required(_readFieldValue<List<GeneratedChartDataPoint>>(_readField(json, const ["data_points"]), "data_points", (value) => _readObjectList(value, GeneratedChartDataPoint.fromJson), requiredField: true, nullable: false), "data_points"),
+      label: _required(_readFieldValue<String>(_readField(json, const ["label"]), "label", _readString, requiredField: true, nullable: false), "label"),
     );
   }
 
@@ -167,11 +167,11 @@ class GeneratedChartData {
 
   factory GeneratedChartData.fromJson(Map<String, dynamic> json) {
     return GeneratedChartData(
-      chartType: _required(_readString(_readAny(json, const ["chart_type"])), "chart_type"),
-      datasets: _required(_readObjectList(_readAny(json, const ["datasets"]), GeneratedChartDataset.fromJson), "datasets"),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
-      xLabel: _readString(_readAny(json, const ["x_label"])),
-      yLabel: _readString(_readAny(json, const ["y_label"])),
+      chartType: _required(_readFieldValue<String>(_readField(json, const ["chart_type"]), "chart_type", _readString, requiredField: true, nullable: false), "chart_type"),
+      datasets: _required(_readFieldValue<List<GeneratedChartDataset>>(_readField(json, const ["datasets"]), "datasets", (value) => _readObjectList(value, GeneratedChartDataset.fromJson), requiredField: true, nullable: false), "datasets"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      xLabel: _readFieldValue<String>(_readField(json, const ["x_label"]), "x_label", _readString, requiredField: false, nullable: true),
+      yLabel: _readFieldValue<String>(_readField(json, const ["y_label"]), "y_label", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -215,19 +215,19 @@ class GeneratedMessage {
     this.chatSessionId,
     required this.createdAt,
     this.dataProtectionLevel,
-    required this.files,
-    required this.filesId,
-    required this.fromExternalIntegration,
+    this.files = const [],
+    this.filesId = const [],
+    this.fromExternalIntegration = false,
     required this.id,
     this.langsmithRunId,
-    required this.memories,
-    required this.memoriesId,
+    this.memories = const [],
+    this.memoriesId = const [],
     this.pluginId,
     this.promptCommit,
     this.promptName,
     this.rating,
     this.reportReason,
-    required this.reported,
+    this.reported = false,
     required this.sender,
     required this.text,
     required this.type,
@@ -235,27 +235,27 @@ class GeneratedMessage {
 
   factory GeneratedMessage.fromJson(Map<String, dynamic> json) {
     return GeneratedMessage(
-      appId: _readString(_readAny(json, const ["app_id"])),
-      chartData: _readMap(_readAny(json, const ["chart_data"])),
-      chatSessionId: _readString(_readAny(json, const ["chat_session_id"])),
-      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
-      dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
-      files: _readObjectList(_readAny(json, const ["files"]), GeneratedFileChat.fromJson) ?? const [],
-      filesId: _readStringList(_readAny(json, const ["files_id"])) ?? const [],
-      fromExternalIntegration: _readBool(_readAny(json, const ["from_external_integration"])) ?? false,
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      langsmithRunId: _readString(_readAny(json, const ["langsmith_run_id"])),
-      memories: _readObjectList(_readAny(json, const ["memories"]), GeneratedMessageConversation.fromJson) ?? const [],
-      memoriesId: _readStringList(_readAny(json, const ["memories_id"])) ?? const [],
-      pluginId: _readString(_readAny(json, const ["plugin_id"])),
-      promptCommit: _readString(_readAny(json, const ["prompt_commit"])),
-      promptName: _readString(_readAny(json, const ["prompt_name"])),
-      rating: _readInt(_readAny(json, const ["rating"])),
-      reportReason: _readString(_readAny(json, const ["report_reason"])),
-      reported: _readBool(_readAny(json, const ["reported"])) ?? false,
-      sender: _required(_readString(_readAny(json, const ["sender"])), "sender"),
-      text: _required(_readString(_readAny(json, const ["text"])), "text"),
-      type: _required(_readString(_readAny(json, const ["type"])), "type"),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
+      chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
+      filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
+      fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      langsmithRunId: _readFieldValue<String>(_readField(json, const ["langsmith_run_id"]), "langsmith_run_id", _readString, requiredField: false, nullable: true),
+      memories: _required(_readFieldValue<List<GeneratedMessageConversation>>(_readField(json, const ["memories"]), "memories", (value) => _readObjectList(value, GeneratedMessageConversation.fromJson), requiredField: false, nullable: false, defaultValue: const []), "memories"),
+      memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
+      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
+      promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
+      promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
+      rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt, requiredField: false, nullable: true),
+      reportReason: _readFieldValue<String>(_readField(json, const ["report_reason"]), "report_reason", _readString, requiredField: false, nullable: true),
+      reported: _required(_readFieldValue<bool>(_readField(json, const ["reported"]), "reported", _readBool, requiredField: false, nullable: false, defaultValue: false), "reported"),
+      sender: _required(_readFieldValue<String>(_readField(json, const ["sender"]), "sender", _readString, requiredField: true, nullable: false), "sender"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
   }
 
@@ -317,19 +317,19 @@ class GeneratedResponseMessage {
     this.chatSessionId,
     required this.createdAt,
     this.dataProtectionLevel,
-    required this.files,
-    required this.filesId,
-    required this.fromExternalIntegration,
+    this.files = const [],
+    this.filesId = const [],
+    this.fromExternalIntegration = false,
     required this.id,
     this.langsmithRunId,
-    required this.memories,
-    required this.memoriesId,
+    this.memories = const [],
+    this.memoriesId = const [],
     this.pluginId,
     this.promptCommit,
     this.promptName,
     this.rating,
     this.reportReason,
-    required this.reported,
+    this.reported = false,
     required this.sender,
     required this.text,
     required this.type,
@@ -337,28 +337,28 @@ class GeneratedResponseMessage {
 
   factory GeneratedResponseMessage.fromJson(Map<String, dynamic> json) {
     return GeneratedResponseMessage(
-      appId: _readString(_readAny(json, const ["app_id"])),
-      askForNps: _readBool(_readAny(json, const ["ask_for_nps"])) ?? false,
-      chartData: _readMap(_readAny(json, const ["chart_data"])),
-      chatSessionId: _readString(_readAny(json, const ["chat_session_id"])),
-      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
-      dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
-      files: _readObjectList(_readAny(json, const ["files"]), GeneratedFileChat.fromJson) ?? const [],
-      filesId: _readStringList(_readAny(json, const ["files_id"])) ?? const [],
-      fromExternalIntegration: _readBool(_readAny(json, const ["from_external_integration"])) ?? false,
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      langsmithRunId: _readString(_readAny(json, const ["langsmith_run_id"])),
-      memories: _readObjectList(_readAny(json, const ["memories"]), GeneratedMessageConversation.fromJson) ?? const [],
-      memoriesId: _readStringList(_readAny(json, const ["memories_id"])) ?? const [],
-      pluginId: _readString(_readAny(json, const ["plugin_id"])),
-      promptCommit: _readString(_readAny(json, const ["prompt_commit"])),
-      promptName: _readString(_readAny(json, const ["prompt_name"])),
-      rating: _readInt(_readAny(json, const ["rating"])),
-      reportReason: _readString(_readAny(json, const ["report_reason"])),
-      reported: _readBool(_readAny(json, const ["reported"])) ?? false,
-      sender: _required(_readString(_readAny(json, const ["sender"])), "sender"),
-      text: _required(_readString(_readAny(json, const ["text"])), "text"),
-      type: _required(_readString(_readAny(json, const ["type"])), "type"),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      askForNps: _readFieldValue<bool>(_readField(json, const ["ask_for_nps"]), "ask_for_nps", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
+      chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
+      filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
+      fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      langsmithRunId: _readFieldValue<String>(_readField(json, const ["langsmith_run_id"]), "langsmith_run_id", _readString, requiredField: false, nullable: true),
+      memories: _required(_readFieldValue<List<GeneratedMessageConversation>>(_readField(json, const ["memories"]), "memories", (value) => _readObjectList(value, GeneratedMessageConversation.fromJson), requiredField: false, nullable: false, defaultValue: const []), "memories"),
+      memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
+      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
+      promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
+      promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
+      rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt, requiredField: false, nullable: true),
+      reportReason: _readFieldValue<String>(_readField(json, const ["report_reason"]), "report_reason", _readString, requiredField: false, nullable: true),
+      reported: _required(_readFieldValue<bool>(_readField(json, const ["reported"]), "reported", _readBool, requiredField: false, nullable: false, defaultValue: false), "reported"),
+      sender: _required(_readFieldValue<String>(_readField(json, const ["sender"]), "sender", _readString, requiredField: true, nullable: false), "sender"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
   }
 
@@ -399,7 +399,7 @@ class GeneratedMessageReportResponse {
 
   factory GeneratedMessageReportResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMessageReportResponse(
-      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
     );
   }
 
@@ -421,8 +421,8 @@ class GeneratedVoiceMessageTranscriptionResponse {
 
   factory GeneratedVoiceMessageTranscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedVoiceMessageTranscriptionResponse(
-      language: _readString(_readAny(json, const ["language"])),
-      transcript: _required(_readString(_readAny(json, const ["transcript"])), "transcript"),
+      language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      transcript: _required(_readFieldValue<String>(_readField(json, const ["transcript"]), "transcript", _readString, requiredField: true, nullable: false), "transcript"),
     );
   }
 
@@ -434,11 +434,18 @@ class GeneratedVoiceMessageTranscriptionResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -463,6 +470,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

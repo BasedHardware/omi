@@ -169,6 +169,17 @@ class ChartData {
     return ChartData.fromGenerated(wire.GeneratedChartData.fromJson(json));
   }
 
+  static ChartData? tryFromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    try {
+      return ChartData.fromJson(json);
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
+
   factory ChartData.fromGenerated(wire.GeneratedChartData generated) {
     return ChartData(
       generated.chartType,
@@ -211,6 +222,7 @@ class ServerMessage {
 
   List<String> thinkings = [];
   ChartData? chartData;
+  Map<String, dynamic>? rawChartData;
 
   ServerMessage(
     this.id,
@@ -226,6 +238,7 @@ class ServerMessage {
     this.askForNps = true,
     this.rating,
     this.chartData,
+    this.rawChartData,
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -244,6 +257,8 @@ class ServerMessage {
     bool askForNps = true,
     ChartData? chartData,
   }) {
+    final rawChartData = generated.chartData;
+    final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
     return ServerMessage(
       generated.id,
       generated.createdAt,
@@ -257,7 +272,8 @@ class ServerMessage {
       generated.memories.map(MessageConversation.fromGenerated).toList(),
       askForNps: askForNps,
       rating: generated.rating,
-      chartData: chartData ?? ChartData.fromJson(generated.chartData),
+      chartData: parsedChartData,
+      rawChartData: parsedChartData == null ? rawChartData : null,
     );
   }
 
@@ -274,7 +290,7 @@ class ServerMessage {
       'files': files.map((m) => m.toJson()).toList(),
       'ask_for_nps': askForNps,
       'rating': rating,
-      'chart_data': chartData?.toJson(),
+      'chart_data': chartData?.toJson() ?? rawChartData,
     };
   }
 

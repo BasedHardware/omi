@@ -23,13 +23,13 @@ class GeneratedImportJobResponse {
 
   factory GeneratedImportJobResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedImportJobResponse(
-      conversationsCreated: _readInt(_readAny(json, const ["conversations_created"])),
-      createdAt: _readString(_readAny(json, const ["created_at"])),
-      error: _readString(_readAny(json, const ["error"])),
-      jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id"),
-      processedFiles: _readInt(_readAny(json, const ["processed_files"])),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
-      totalFiles: _readInt(_readAny(json, const ["total_files"])),
+      conversationsCreated: _readFieldValue<int>(_readField(json, const ["conversations_created"]), "conversations_created", _readInt, requiredField: false, nullable: true),
+      createdAt: _readFieldValue<String>(_readField(json, const ["created_at"]), "created_at", _readString, requiredField: false, nullable: true),
+      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
+      jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
+      processedFiles: _readFieldValue<int>(_readField(json, const ["processed_files"]), "processed_files", _readInt, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      totalFiles: _readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -57,8 +57,8 @@ class GeneratedIntegrationResponse {
 
   factory GeneratedIntegrationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedIntegrationResponse(
-      appKey: _required(_readString(_readAny(json, const ["app_key"])), "app_key"),
-      connected: _required(_readBool(_readAny(json, const ["connected"])), "connected"),
+      appKey: _required(_readFieldValue<String>(_readField(json, const ["app_key"]), "app_key", _readString, requiredField: true, nullable: false), "app_key"),
+      connected: _required(_readFieldValue<bool>(_readField(json, const ["connected"]), "connected", _readBool, requiredField: true, nullable: false), "connected"),
     );
   }
 
@@ -81,8 +81,8 @@ class GeneratedDeleteLimitlessConversationsResponse {
 
   factory GeneratedDeleteLimitlessConversationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDeleteLimitlessConversationsResponse(
-      deletedCount: _required(_readInt(_readAny(json, const ["deleted_count"])), "deleted_count"),
-      message: _required(_readString(_readAny(json, const ["message"])), "message"),
+      deletedCount: _required(_readFieldValue<int>(_readField(json, const ["deleted_count"]), "deleted_count", _readInt, requiredField: true, nullable: false), "deleted_count"),
+      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
     );
   }
 
@@ -109,10 +109,10 @@ class GeneratedAppleHealthSyncResponse {
 
   factory GeneratedAppleHealthSyncResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppleHealthSyncResponse(
-      appKey: _required(_readString(_readAny(json, const ["app_key"])), "app_key"),
-      dataTypesSynced: _readAny(json, const ["data_types_synced"]) == null ? null : _readStringList(_readAny(json, const ["data_types_synced"])),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
-      syncedAt: _required(_readString(_readAny(json, const ["synced_at"])), "synced_at"),
+      appKey: _required(_readFieldValue<String>(_readField(json, const ["app_key"]), "app_key", _readString, requiredField: true, nullable: false), "app_key"),
+      dataTypesSynced: _readFieldValue<List<String>>(_readField(json, const ["data_types_synced"]), "data_types_synced", _readStringList, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      syncedAt: _required(_readFieldValue<String>(_readField(json, const ["synced_at"]), "synced_at", _readString, requiredField: true, nullable: false), "synced_at"),
     );
   }
 
@@ -126,11 +126,18 @@ class GeneratedAppleHealthSyncResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -155,6 +162,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

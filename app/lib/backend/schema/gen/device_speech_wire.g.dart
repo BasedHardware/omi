@@ -14,9 +14,9 @@ class GeneratedFirmwareVersionResponse {
   final String? zipUrl;
 
   const GeneratedFirmwareVersionResponse({
-    required this.changelog,
-    required this.draft,
-    required this.isLegacySecureDfu,
+    this.changelog = "",
+    this.draft = false,
+    this.isLegacySecureDfu = true,
     this.minAppVersion,
     this.minAppVersionCode,
     this.minVersion,
@@ -27,15 +27,15 @@ class GeneratedFirmwareVersionResponse {
 
   factory GeneratedFirmwareVersionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFirmwareVersionResponse(
-      changelog: _readString(_readAny(json, const ["changelog"])) ?? "",
-      draft: _readBool(_readAny(json, const ["draft"])) ?? false,
-      isLegacySecureDfu: _readBool(_readAny(json, const ["is_legacy_secure_dfu"])) ?? true,
-      minAppVersion: _readString(_readAny(json, const ["min_app_version"])),
-      minAppVersionCode: _readString(_readAny(json, const ["min_app_version_code"])),
-      minVersion: _readString(_readAny(json, const ["min_version"])),
-      otaUpdateSteps: _readAny(json, const ["ota_update_steps"]) == null ? null : _readStringList(_readAny(json, const ["ota_update_steps"])),
-      version: _readString(_readAny(json, const ["version"])),
-      zipUrl: _readString(_readAny(json, const ["zip_url"])),
+      changelog: _required(_readFieldValue<String>(_readField(json, const ["changelog"]), "changelog", _readString, requiredField: false, nullable: false, defaultValue: ""), "changelog"),
+      draft: _required(_readFieldValue<bool>(_readField(json, const ["draft"]), "draft", _readBool, requiredField: false, nullable: false, defaultValue: false), "draft"),
+      isLegacySecureDfu: _required(_readFieldValue<bool>(_readField(json, const ["is_legacy_secure_dfu"]), "is_legacy_secure_dfu", _readBool, requiredField: false, nullable: false, defaultValue: true), "is_legacy_secure_dfu"),
+      minAppVersion: _readFieldValue<String>(_readField(json, const ["min_app_version"]), "min_app_version", _readString, requiredField: false, nullable: true),
+      minAppVersionCode: _readFieldValue<String>(_readField(json, const ["min_app_version_code"]), "min_app_version_code", _readString, requiredField: false, nullable: true),
+      minVersion: _readFieldValue<String>(_readField(json, const ["min_version"]), "min_version", _readString, requiredField: false, nullable: true),
+      otaUpdateSteps: _readFieldValue<List<String>>(_readField(json, const ["ota_update_steps"]), "ota_update_steps", _readStringList, requiredField: false, nullable: true),
+      version: _readFieldValue<String>(_readField(json, const ["version"]), "version", _readString, requiredField: false, nullable: true),
+      zipUrl: _readFieldValue<String>(_readField(json, const ["zip_url"]), "zip_url", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -63,7 +63,7 @@ class GeneratedHasSpeechProfileResponse {
 
   factory GeneratedHasSpeechProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedHasSpeechProfileResponse(
-      hasProfile: _required(_readBool(_readAny(json, const ["has_profile"])), "has_profile"),
+      hasProfile: _required(_readFieldValue<bool>(_readField(json, const ["has_profile"]), "has_profile", _readBool, requiredField: true, nullable: false), "has_profile"),
     );
   }
 
@@ -83,7 +83,7 @@ class GeneratedSpeechProfileResponse {
 
   factory GeneratedSpeechProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeechProfileResponse(
-      url: _readString(_readAny(json, const ["url"])),
+      url: _readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -103,7 +103,7 @@ class GeneratedSpeechProfileUploadResponse {
 
   factory GeneratedSpeechProfileUploadResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeechProfileUploadResponse(
-      url: _required(_readString(_readAny(json, const ["url"])), "url"),
+      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
     );
   }
 
@@ -123,7 +123,7 @@ class GeneratedSpeechProfileMutationResponse {
 
   factory GeneratedSpeechProfileMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeechProfileMutationResponse(
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -134,11 +134,18 @@ class GeneratedSpeechProfileMutationResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -163,6 +170,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

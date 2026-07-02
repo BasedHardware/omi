@@ -13,8 +13,8 @@ class GeneratedAppSelectOption {
 
   factory GeneratedAppSelectOption.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSelectOption(
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
@@ -41,10 +41,10 @@ class GeneratedAppCapabilityAction {
 
   factory GeneratedAppCapabilityAction.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCapabilityAction(
-      description: _readString(_readAny(json, const ["description"])),
-      docUrl: _readString(_readAny(json, const ["doc_url"])),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      docUrl: _readFieldValue<String>(_readField(json, const ["doc_url"]), "doc_url", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
@@ -75,11 +75,11 @@ class GeneratedAppCapabilityResponse {
 
   factory GeneratedAppCapabilityResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCapabilityResponse(
-      actions: _readAny(json, const ["actions"]) == null ? null : _readObjectList(_readAny(json, const ["actions"]), GeneratedAppCapabilityAction.fromJson),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      scopes: _readAny(json, const ["scopes"]) == null ? null : _readObjectList(_readAny(json, const ["scopes"]), GeneratedAppSelectOption.fromJson),
-      title: _required(_readString(_readAny(json, const ["title"])), "title"),
-      triggers: _readAny(json, const ["triggers"]) == null ? null : _readObjectList(_readAny(json, const ["triggers"]), GeneratedAppSelectOption.fromJson),
+      actions: _readFieldValue<List<GeneratedAppCapabilityAction>>(_readField(json, const ["actions"]), "actions", (value) => _readObjectList(value, GeneratedAppCapabilityAction.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      scopes: _readFieldValue<List<GeneratedAppSelectOption>>(_readField(json, const ["scopes"]), "scopes", (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      triggers: _readFieldValue<List<GeneratedAppSelectOption>>(_readField(json, const ["triggers"]), "triggers", (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -105,8 +105,8 @@ class GeneratedAppThumbnailUploadResponse {
 
   factory GeneratedAppThumbnailUploadResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppThumbnailUploadResponse(
-      thumbnailId: _required(_readString(_readAny(json, const ["thumbnail_id"])), "thumbnail_id"),
-      thumbnailUrl: _required(_readString(_readAny(json, const ["thumbnail_url"])), "thumbnail_url"),
+      thumbnailId: _required(_readFieldValue<String>(_readField(json, const ["thumbnail_id"]), "thumbnail_id", _readString, requiredField: true, nullable: false), "thumbnail_id"),
+      thumbnailUrl: _required(_readFieldValue<String>(_readField(json, const ["thumbnail_url"]), "thumbnail_url", _readString, requiredField: true, nullable: false), "thumbnail_url"),
     );
   }
 
@@ -127,7 +127,7 @@ class GeneratedAppMutationResponse {
 
   factory GeneratedAppMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppMutationResponse(
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -149,8 +149,8 @@ class GeneratedAppCreateResponse {
 
   factory GeneratedAppCreateResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCreateResponse(
-      appId: _required(_readString(_readAny(json, const ["app_id"])), "app_id"),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      appId: _required(_readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: true, nullable: false), "app_id"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -173,8 +173,8 @@ class GeneratedAppMigrationResponse {
 
   factory GeneratedAppMigrationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppMigrationResponse(
-      message: _required(_readString(_readAny(json, const ["message"])), "message"),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -203,11 +203,11 @@ class GeneratedMcpAddServerResponse {
 
   factory GeneratedMcpAddServerResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMcpAddServerResponse(
-      appId: _required(_readString(_readAny(json, const ["app_id"])), "app_id"),
-      authUrl: _readString(_readAny(json, const ["auth_url"])),
-      requiresOauth: _required(_readBool(_readAny(json, const ["requires_oauth"])), "requires_oauth"),
-      toolNames: _readAny(json, const ["tool_names"]) == null ? null : _readStringList(_readAny(json, const ["tool_names"])),
-      toolsCount: _readInt(_readAny(json, const ["tools_count"])),
+      appId: _required(_readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: true, nullable: false), "app_id"),
+      authUrl: _readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: false, nullable: true),
+      requiresOauth: _required(_readFieldValue<bool>(_readField(json, const ["requires_oauth"]), "requires_oauth", _readBool, requiredField: true, nullable: false), "requires_oauth"),
+      toolNames: _readFieldValue<List<String>>(_readField(json, const ["tool_names"]), "tool_names", _readStringList, requiredField: false, nullable: true),
+      toolsCount: _readFieldValue<int>(_readField(json, const ["tools_count"]), "tools_count", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -231,7 +231,7 @@ class GeneratedAppDescriptionGenerationResponse {
 
   factory GeneratedAppDescriptionGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppDescriptionGenerationResponse(
-      description: _required(_readString(_readAny(json, const ["description"])), "description"),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
     );
   }
 
@@ -253,8 +253,8 @@ class GeneratedAppDescriptionEmojiGenerationResponse {
 
   factory GeneratedAppDescriptionEmojiGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppDescriptionEmojiGenerationResponse(
-      description: _required(_readString(_readAny(json, const ["description"])), "description"),
-      emoji: _required(_readString(_readAny(json, const ["emoji"])), "emoji"),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: true, nullable: false), "emoji"),
     );
   }
 
@@ -275,7 +275,7 @@ class GeneratedAppPromptsGenerationResponse {
 
   factory GeneratedAppPromptsGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppPromptsGenerationResponse(
-      prompts: _required(_readStringList(_readAny(json, const ["prompts"])), "prompts"),
+      prompts: _required(_readFieldValue<List<String>>(_readField(json, const ["prompts"]), "prompts", _readStringList, requiredField: true, nullable: false), "prompts"),
     );
   }
 
@@ -305,12 +305,12 @@ class GeneratedAppDraftGenerationResponse {
 
   factory GeneratedAppDraftGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppDraftGenerationResponse(
-      capabilities: _required(_readStringList(_readAny(json, const ["capabilities"])), "capabilities"),
-      category: _required(_readString(_readAny(json, const ["category"])), "category"),
-      chatPrompt: _readString(_readAny(json, const ["chat_prompt"])),
-      description: _required(_readString(_readAny(json, const ["description"])), "description"),
-      memoryPrompt: _readString(_readAny(json, const ["memory_prompt"])),
-      name: _required(_readString(_readAny(json, const ["name"])), "name"),
+      capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
+      chatPrompt: _readFieldValue<String>(_readField(json, const ["chat_prompt"]), "chat_prompt", _readString, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      memoryPrompt: _readFieldValue<String>(_readField(json, const ["memory_prompt"]), "memory_prompt", _readString, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
     );
   }
 
@@ -337,8 +337,8 @@ class GeneratedAppGenerationResponse {
 
   factory GeneratedAppGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppGenerationResponse(
-      app: _required(_readObject(_readAny(json, const ["app"]), GeneratedAppDraftGenerationResponse.fromJson), "app"),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      app: _required(_readFieldValue<GeneratedAppDraftGenerationResponse>(_readField(json, const ["app"]), "app", (value) => _readObject(value, GeneratedAppDraftGenerationResponse.fromJson), requiredField: true, nullable: false), "app"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -363,9 +363,9 @@ class GeneratedAppIconGenerationResponse {
 
   factory GeneratedAppIconGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppIconGenerationResponse(
-      iconBase64: _required(_readString(_readAny(json, const ["icon_base64"])), "icon_base64"),
-      mimeType: _required(_readString(_readAny(json, const ["mime_type"])), "mime_type"),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      iconBase64: _required(_readFieldValue<String>(_readField(json, const ["icon_base64"]), "icon_base64", _readString, requiredField: true, nullable: false), "icon_base64"),
+      mimeType: _required(_readFieldValue<String>(_readField(json, const ["mime_type"]), "mime_type", _readString, requiredField: true, nullable: false), "mime_type"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -389,8 +389,8 @@ class GeneratedAuthStep {
 
   factory GeneratedAuthStep.fromJson(Map<String, dynamic> json) {
     return GeneratedAuthStep(
-      name: _required(_readString(_readAny(json, const ["name"])), "name"),
-      url: _required(_readString(_readAny(json, const ["url"])), "url"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
     );
   }
 
@@ -411,7 +411,7 @@ class GeneratedAction {
 
   factory GeneratedAction.fromJson(Map<String, dynamic> json) {
     return GeneratedAction(
-      action: _required(_readString(_readAny(json, const ["action"])), "action"),
+      action: _required(_readFieldValue<String>(_readField(json, const ["action"]), "action", _readString, requiredField: true, nullable: false), "action"),
     );
   }
 
@@ -442,11 +442,11 @@ class GeneratedExternalIntegration {
     this.actions,
     this.appHomeUrl,
     this.authSteps,
-    required this.chatMessagesEnabled,
-    required this.chatMessagesNotify,
-    required this.chatMessagesTarget,
+    this.chatMessagesEnabled = false,
+    this.chatMessagesNotify = false,
+    this.chatMessagesTarget = "app",
     this.chatToolsManifestUrl,
-    required this.isInstructionsUrl,
+    this.isInstructionsUrl = true,
     this.mcpOauthTokens,
     this.mcpServerUrl,
     this.setupCompletedUrl,
@@ -457,20 +457,20 @@ class GeneratedExternalIntegration {
 
   factory GeneratedExternalIntegration.fromJson(Map<String, dynamic> json) {
     return GeneratedExternalIntegration(
-      actions: _readAny(json, const ["actions"]) == null ? null : _readObjectList(_readAny(json, const ["actions"]), GeneratedAction.fromJson),
-      appHomeUrl: _readString(_readAny(json, const ["app_home_url"])),
-      authSteps: _readAny(json, const ["auth_steps"]) == null ? null : _readObjectList(_readAny(json, const ["auth_steps"]), GeneratedAuthStep.fromJson),
-      chatMessagesEnabled: _readBool(_readAny(json, const ["chat_messages_enabled"])) ?? false,
-      chatMessagesNotify: _readBool(_readAny(json, const ["chat_messages_notify"])) ?? false,
-      chatMessagesTarget: _readString(_readAny(json, const ["chat_messages_target"])) ?? "app",
-      chatToolsManifestUrl: _readString(_readAny(json, const ["chat_tools_manifest_url"])),
-      isInstructionsUrl: _readBool(_readAny(json, const ["is_instructions_url"])) ?? true,
-      mcpOauthTokens: _readMap(_readAny(json, const ["mcp_oauth_tokens"])),
-      mcpServerUrl: _readString(_readAny(json, const ["mcp_server_url"])),
-      setupCompletedUrl: _readString(_readAny(json, const ["setup_completed_url"])),
-      setupInstructionsFilePath: _readString(_readAny(json, const ["setup_instructions_file_path"])),
-      triggersOn: _readString(_readAny(json, const ["triggers_on"])),
-      webhookUrl: _readString(_readAny(json, const ["webhook_url"])),
+      actions: _readFieldValue<List<GeneratedAction>>(_readField(json, const ["actions"]), "actions", (value) => _readObjectList(value, GeneratedAction.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      appHomeUrl: _readFieldValue<String>(_readField(json, const ["app_home_url"]), "app_home_url", _readString, requiredField: false, nullable: true),
+      authSteps: _readFieldValue<List<GeneratedAuthStep>>(_readField(json, const ["auth_steps"]), "auth_steps", (value) => _readObjectList(value, GeneratedAuthStep.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      chatMessagesEnabled: _required(_readFieldValue<bool>(_readField(json, const ["chat_messages_enabled"]), "chat_messages_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "chat_messages_enabled"),
+      chatMessagesNotify: _required(_readFieldValue<bool>(_readField(json, const ["chat_messages_notify"]), "chat_messages_notify", _readBool, requiredField: false, nullable: false, defaultValue: false), "chat_messages_notify"),
+      chatMessagesTarget: _required(_readFieldValue<String>(_readField(json, const ["chat_messages_target"]), "chat_messages_target", _readString, requiredField: false, nullable: false, defaultValue: "app"), "chat_messages_target"),
+      chatToolsManifestUrl: _readFieldValue<String>(_readField(json, const ["chat_tools_manifest_url"]), "chat_tools_manifest_url", _readString, requiredField: false, nullable: true),
+      isInstructionsUrl: _required(_readFieldValue<bool>(_readField(json, const ["is_instructions_url"]), "is_instructions_url", _readBool, requiredField: false, nullable: false, defaultValue: true), "is_instructions_url"),
+      mcpOauthTokens: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["mcp_oauth_tokens"]), "mcp_oauth_tokens", _readMap, requiredField: false, nullable: true),
+      mcpServerUrl: _readFieldValue<String>(_readField(json, const ["mcp_server_url"]), "mcp_server_url", _readString, requiredField: false, nullable: true),
+      setupCompletedUrl: _readFieldValue<String>(_readField(json, const ["setup_completed_url"]), "setup_completed_url", _readString, requiredField: false, nullable: true),
+      setupInstructionsFilePath: _readFieldValue<String>(_readField(json, const ["setup_instructions_file_path"]), "setup_instructions_file_path", _readString, requiredField: false, nullable: true),
+      triggersOn: _readFieldValue<String>(_readField(json, const ["triggers_on"]), "triggers_on", _readString, requiredField: false, nullable: true),
+      webhookUrl: _readFieldValue<String>(_readField(json, const ["webhook_url"]), "webhook_url", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -503,7 +503,7 @@ class GeneratedProactiveNotification {
 
   factory GeneratedProactiveNotification.fromJson(Map<String, dynamic> json) {
     return GeneratedProactiveNotification(
-      scopes: _required(_readStringList(_readAny(json, const ["scopes"])), "scopes"),
+      scopes: _required(_readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: true, nullable: false), "scopes"),
     );
   }
 
@@ -526,28 +526,28 @@ class GeneratedChatTool {
   final String transport;
 
   const GeneratedChatTool({
-    required this.authRequired,
+    this.authRequired = true,
     required this.description,
     required this.endpoint,
-    required this.isMcp,
-    required this.method,
+    this.isMcp = false,
+    this.method = "POST",
     required this.name,
     this.parameters,
     this.statusMessage,
-    required this.transport,
+    this.transport = "streamable_http",
   });
 
   factory GeneratedChatTool.fromJson(Map<String, dynamic> json) {
     return GeneratedChatTool(
-      authRequired: _readBool(_readAny(json, const ["auth_required"])) ?? true,
-      description: _required(_readString(_readAny(json, const ["description"])), "description"),
-      endpoint: _required(_readString(_readAny(json, const ["endpoint"])), "endpoint"),
-      isMcp: _readBool(_readAny(json, const ["is_mcp"])) ?? false,
-      method: _readString(_readAny(json, const ["method"])) ?? "POST",
-      name: _required(_readString(_readAny(json, const ["name"])), "name"),
-      parameters: _readMap(_readAny(json, const ["parameters"])),
-      statusMessage: _readString(_readAny(json, const ["status_message"])),
-      transport: _readString(_readAny(json, const ["transport"])) ?? "streamable_http",
+      authRequired: _required(_readFieldValue<bool>(_readField(json, const ["auth_required"]), "auth_required", _readBool, requiredField: false, nullable: false, defaultValue: true), "auth_required"),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      endpoint: _required(_readFieldValue<String>(_readField(json, const ["endpoint"]), "endpoint", _readString, requiredField: true, nullable: false), "endpoint"),
+      isMcp: _required(_readFieldValue<bool>(_readField(json, const ["is_mcp"]), "is_mcp", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_mcp"),
+      method: _required(_readFieldValue<String>(_readField(json, const ["method"]), "method", _readString, requiredField: false, nullable: false, defaultValue: "POST"), "method"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      parameters: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["parameters"]), "parameters", _readMap, requiredField: false, nullable: true),
+      statusMessage: _readFieldValue<String>(_readField(json, const ["status_message"]), "status_message", _readString, requiredField: false, nullable: true),
+      transport: _required(_readFieldValue<String>(_readField(json, const ["transport"]), "transport", _readString, requiredField: false, nullable: false, defaultValue: "streamable_http"), "transport"),
     );
   }
 
@@ -605,21 +605,21 @@ class GeneratedAppBaseModel {
   final String? username;
 
   const GeneratedAppBaseModel({
-    required this.approved,
+    this.approved = false,
     required this.author,
     required this.capabilities,
     required this.category,
     this.chatTools,
-    required this.connectedAccounts,
+    this.connectedAccounts = const [],
     this.createdAt,
     required this.description,
     this.disabled,
     this.disabledReason,
-    required this.enabled,
+    this.enabled = false,
     this.externalIntegration,
     required this.id,
     required this.image,
-    required this.installs,
+    this.installs = 0,
     this.isInfluencer,
     this.isPaid,
     this.isPopular,
@@ -629,58 +629,58 @@ class GeneratedAppBaseModel {
     this.paymentLink,
     this.paymentPlan,
     this.price,
-    required this.private,
+    this.private = false,
     this.proactiveNotification,
     this.ratingAvg,
-    required this.ratingCount,
+    this.ratingCount = 0,
     this.score,
     this.sourceCodeUrl,
-    required this.status,
+    this.status = "approved",
     this.thumbnailUrls,
     this.thumbnails,
-    required this.triggerWorkflowMemories,
+    this.triggerWorkflowMemories = true,
     this.uid,
     this.username,
   });
 
   factory GeneratedAppBaseModel.fromJson(Map<String, dynamic> json) {
     return GeneratedAppBaseModel(
-      approved: _readBool(_readAny(json, const ["approved"])) ?? false,
-      author: _required(_readString(_readAny(json, const ["author"])), "author"),
-      capabilities: _required(_readStringList(_readAny(json, const ["capabilities"])), "capabilities"),
-      category: _required(_readString(_readAny(json, const ["category"])), "category"),
-      chatTools: _readAny(json, const ["chat_tools"]) == null ? null : _readObjectList(_readAny(json, const ["chat_tools"]), GeneratedChatTool.fromJson),
-      connectedAccounts: _readStringList(_readAny(json, const ["connected_accounts"])) ?? const [],
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      description: _required(_readString(_readAny(json, const ["description"])), "description"),
-      disabled: _readBool(_readAny(json, const ["disabled"])) ?? false,
-      disabledReason: _readString(_readAny(json, const ["disabled_reason"])),
-      enabled: _readBool(_readAny(json, const ["enabled"])) ?? false,
-      externalIntegration: _readObject(_readAny(json, const ["external_integration"]), GeneratedExternalIntegration.fromJson),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      image: _required(_readString(_readAny(json, const ["image"])), "image"),
-      installs: _readInt(_readAny(json, const ["installs"])) ?? 0,
-      isInfluencer: _readBool(_readAny(json, const ["is_influencer"])) ?? false,
-      isPaid: _readBool(_readAny(json, const ["is_paid"])) ?? false,
-      isPopular: _readBool(_readAny(json, const ["is_popular"])) ?? false,
-      isUserPaid: _readBool(_readAny(json, const ["is_user_paid"])) ?? false,
-      name: _required(_readString(_readAny(json, const ["name"])), "name"),
-      official: _readBool(_readAny(json, const ["official"])) ?? false,
-      paymentLink: _readString(_readAny(json, const ["payment_link"])),
-      paymentPlan: _readString(_readAny(json, const ["payment_plan"])),
-      price: _readDouble(_readAny(json, const ["price"])) ?? 0.0,
-      private: _readBool(_readAny(json, const ["private"])) ?? false,
-      proactiveNotification: _readObject(_readAny(json, const ["proactive_notification"]), GeneratedProactiveNotification.fromJson),
-      ratingAvg: _readDouble(_readAny(json, const ["rating_avg"])) ?? 0,
-      ratingCount: _readInt(_readAny(json, const ["rating_count"])) ?? 0,
-      score: _readDouble(_readAny(json, const ["score"])),
-      sourceCodeUrl: _readString(_readAny(json, const ["source_code_url"])),
-      status: _readString(_readAny(json, const ["status"])) ?? "approved",
-      thumbnailUrls: _readAny(json, const ["thumbnail_urls"]) == null ? null : _readStringList(_readAny(json, const ["thumbnail_urls"])),
-      thumbnails: _readAny(json, const ["thumbnails"]) == null ? null : _readStringList(_readAny(json, const ["thumbnails"])),
-      triggerWorkflowMemories: _readBool(_readAny(json, const ["trigger_workflow_memories"])) ?? true,
-      uid: _readString(_readAny(json, const ["uid"])),
-      username: _readString(_readAny(json, const ["username"])),
+      approved: _required(_readFieldValue<bool>(_readField(json, const ["approved"]), "approved", _readBool, requiredField: false, nullable: false, defaultValue: false), "approved"),
+      author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: true, nullable: false), "author"),
+      capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
+      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      connectedAccounts: _required(_readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "connected_accounts"),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      disabledReason: _readFieldValue<String>(_readField(json, const ["disabled_reason"]), "disabled_reason", _readString, requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "enabled"),
+      externalIntegration: _readFieldValue<GeneratedExternalIntegration>(_readField(json, const ["external_integration"]), "external_integration", (value) => _readObject(value, GeneratedExternalIntegration.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      image: _required(_readFieldValue<String>(_readField(json, const ["image"]), "image", _readString, requiredField: true, nullable: false), "image"),
+      installs: _required(_readFieldValue<int>(_readField(json, const ["installs"]), "installs", _readInt, requiredField: false, nullable: false, defaultValue: 0), "installs"),
+      isInfluencer: _readFieldValue<bool>(_readField(json, const ["is_influencer"]), "is_influencer", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPaid: _readFieldValue<bool>(_readField(json, const ["is_paid"]), "is_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPopular: _readFieldValue<bool>(_readField(json, const ["is_popular"]), "is_popular", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isUserPaid: _readFieldValue<bool>(_readField(json, const ["is_user_paid"]), "is_user_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      official: _readFieldValue<bool>(_readField(json, const ["official"]), "official", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      paymentLink: _readFieldValue<String>(_readField(json, const ["payment_link"]), "payment_link", _readString, requiredField: false, nullable: true),
+      paymentPlan: _readFieldValue<String>(_readField(json, const ["payment_plan"]), "payment_plan", _readString, requiredField: false, nullable: true),
+      price: _readFieldValue<double>(_readField(json, const ["price"]), "price", _readDouble, requiredField: false, nullable: true, defaultValue: 0.0),
+      private: _required(_readFieldValue<bool>(_readField(json, const ["private"]), "private", _readBool, requiredField: false, nullable: false, defaultValue: false), "private"),
+      proactiveNotification: _readFieldValue<GeneratedProactiveNotification>(_readField(json, const ["proactive_notification"]), "proactive_notification", (value) => _readObject(value, GeneratedProactiveNotification.fromJson), requiredField: false, nullable: true),
+      ratingAvg: _readFieldValue<double>(_readField(json, const ["rating_avg"]), "rating_avg", _readDouble, requiredField: false, nullable: true, defaultValue: 0),
+      ratingCount: _required(_readFieldValue<int>(_readField(json, const ["rating_count"]), "rating_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "rating_count"),
+      score: _readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: false, nullable: true),
+      sourceCodeUrl: _readFieldValue<String>(_readField(json, const ["source_code_url"]), "source_code_url", _readString, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
+      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      triggerWorkflowMemories: _required(_readFieldValue<bool>(_readField(json, const ["trigger_workflow_memories"]), "trigger_workflow_memories", _readBool, requiredField: false, nullable: false, defaultValue: true), "trigger_workflow_memories"),
+      uid: _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: false, nullable: true),
+      username: _readFieldValue<String>(_readField(json, const ["username"]), "username", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -737,8 +737,8 @@ class GeneratedAppPaginationLinks {
 
   factory GeneratedAppPaginationLinks.fromJson(Map<String, dynamic> json) {
     return GeneratedAppPaginationLinks(
-      next: _readString(_readAny(json, const ["next"])),
-      previous: _readString(_readAny(json, const ["previous"])),
+      next: _readFieldValue<String>(_readField(json, const ["next"]), "next", _readString, requiredField: false, nullable: true),
+      previous: _readFieldValue<String>(_readField(json, const ["previous"]), "previous", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -771,13 +771,13 @@ class GeneratedAppPagination {
 
   factory GeneratedAppPagination.fromJson(Map<String, dynamic> json) {
     return GeneratedAppPagination(
-      count: _required(_readInt(_readAny(json, const ["count"])), "count"),
-      hasNext: _required(_readBool(_readAny(json, const ["hasNext"])), "hasNext"),
-      hasPrevious: _required(_readBool(_readAny(json, const ["hasPrevious"])), "hasPrevious"),
-      limit: _required(_readInt(_readAny(json, const ["limit"])), "limit"),
-      links: _readObject(_readAny(json, const ["links"]), GeneratedAppPaginationLinks.fromJson),
-      offset: _required(_readInt(_readAny(json, const ["offset"])), "offset"),
-      total: _required(_readInt(_readAny(json, const ["total"])), "total"),
+      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: true, nullable: false), "count"),
+      hasNext: _required(_readFieldValue<bool>(_readField(json, const ["hasNext"]), "hasNext", _readBool, requiredField: true, nullable: false), "hasNext"),
+      hasPrevious: _required(_readFieldValue<bool>(_readField(json, const ["hasPrevious"]), "hasPrevious", _readBool, requiredField: true, nullable: false), "hasPrevious"),
+      limit: _required(_readFieldValue<int>(_readField(json, const ["limit"]), "limit", _readInt, requiredField: true, nullable: false), "limit"),
+      links: _readFieldValue<GeneratedAppPaginationLinks>(_readField(json, const ["links"]), "links", (value) => _readObject(value, GeneratedAppPaginationLinks.fromJson), requiredField: false, nullable: true),
+      offset: _required(_readFieldValue<int>(_readField(json, const ["offset"]), "offset", _readInt, requiredField: true, nullable: false), "offset"),
+      total: _required(_readFieldValue<int>(_readField(json, const ["total"]), "total", _readInt, requiredField: true, nullable: false), "total"),
     );
   }
 
@@ -811,11 +811,11 @@ class GeneratedAppCatalogGroup {
 
   factory GeneratedAppCatalogGroup.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCatalogGroup(
-      capability: _readObject(_readAny(json, const ["capability"]), GeneratedAppSelectOption.fromJson),
-      category: _readObject(_readAny(json, const ["category"]), GeneratedAppSelectOption.fromJson),
-      count: _readInt(_readAny(json, const ["count"])),
-      data: _readAny(json, const ["data"]) == null ? null : _readObjectList(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson),
-      pagination: _readObject(_readAny(json, const ["pagination"]), GeneratedAppPagination.fromJson),
+      capability: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["capability"]), "capability", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      category: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["category"]), "category", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      count: _readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: true),
+      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      pagination: _readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -839,7 +839,7 @@ class GeneratedAppCatalogMeta {
 
   const GeneratedAppCatalogMeta({
     this.capabilities,
-    required this.groupCount,
+    this.groupCount = 0,
     this.limit,
     this.offset,
     this.totalApps,
@@ -847,11 +847,11 @@ class GeneratedAppCatalogMeta {
 
   factory GeneratedAppCatalogMeta.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCatalogMeta(
-      capabilities: _readAny(json, const ["capabilities"]) == null ? null : _readObjectList(_readAny(json, const ["capabilities"]), GeneratedAppSelectOption.fromJson),
-      groupCount: _readInt(_readAny(json, const ["groupCount"])) ?? 0,
-      limit: _readInt(_readAny(json, const ["limit"])),
-      offset: _readInt(_readAny(json, const ["offset"])),
-      totalApps: _readInt(_readAny(json, const ["totalApps"])),
+      capabilities: _readFieldValue<List<GeneratedAppSelectOption>>(_readField(json, const ["capabilities"]), "capabilities", (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      groupCount: _required(_readFieldValue<int>(_readField(json, const ["groupCount"]), "groupCount", _readInt, requiredField: false, nullable: false, defaultValue: 0), "groupCount"),
+      limit: _readFieldValue<int>(_readField(json, const ["limit"]), "limit", _readInt, requiredField: false, nullable: true),
+      offset: _readFieldValue<int>(_readField(json, const ["offset"]), "offset", _readInt, requiredField: false, nullable: true),
+      totalApps: _readFieldValue<int>(_readField(json, const ["totalApps"]), "totalApps", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -885,12 +885,12 @@ class GeneratedAppCatalogResponse {
 
   factory GeneratedAppCatalogResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCatalogResponse(
-      capability: _readObject(_readAny(json, const ["capability"]), GeneratedAppSelectOption.fromJson),
-      category: _readObject(_readAny(json, const ["category"]), GeneratedAppSelectOption.fromJson),
-      data: _readAny(json, const ["data"]) == null ? null : _readObjectList(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson),
-      groups: _readAny(json, const ["groups"]) == null ? null : _readObjectList(_readAny(json, const ["groups"]), GeneratedAppCatalogGroup.fromJson),
-      meta: _readObject(_readAny(json, const ["meta"]), GeneratedAppCatalogMeta.fromJson),
-      pagination: _readObject(_readAny(json, const ["pagination"]), GeneratedAppPagination.fromJson),
+      capability: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["capability"]), "capability", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      category: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["category"]), "category", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      groups: _readFieldValue<List<GeneratedAppCatalogGroup>>(_readField(json, const ["groups"]), "groups", (value) => _readObjectList(value, GeneratedAppCatalogGroup.fromJson), requiredField: false, nullable: true),
+      meta: _readFieldValue<GeneratedAppCatalogMeta>(_readField(json, const ["meta"]), "meta", (value) => _readObject(value, GeneratedAppCatalogMeta.fromJson), requiredField: false, nullable: true),
+      pagination: _readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -927,13 +927,13 @@ class GeneratedAppSearchFilters {
 
   factory GeneratedAppSearchFilters.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSearchFilters(
-      capability: _readString(_readAny(json, const ["capability"])),
-      category: _readString(_readAny(json, const ["category"])),
-      installedApps: _readBool(_readAny(json, const ["installed_apps"])),
-      myApps: _readBool(_readAny(json, const ["my_apps"])),
-      query: _readString(_readAny(json, const ["query"])),
-      rating: _readDouble(_readAny(json, const ["rating"])),
-      sort: _required(_readString(_readAny(json, const ["sort"])), "sort"),
+      capability: _readFieldValue<String>(_readField(json, const ["capability"]), "capability", _readString, requiredField: false, nullable: true),
+      category: _readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: true),
+      installedApps: _readFieldValue<bool>(_readField(json, const ["installed_apps"]), "installed_apps", _readBool, requiredField: false, nullable: true),
+      myApps: _readFieldValue<bool>(_readField(json, const ["my_apps"]), "my_apps", _readBool, requiredField: false, nullable: true),
+      query: _readFieldValue<String>(_readField(json, const ["query"]), "query", _readString, requiredField: false, nullable: true),
+      rating: _readFieldValue<double>(_readField(json, const ["rating"]), "rating", _readDouble, requiredField: false, nullable: true),
+      sort: _required(_readFieldValue<String>(_readField(json, const ["sort"]), "sort", _readString, requiredField: true, nullable: false), "sort"),
     );
   }
 
@@ -963,9 +963,9 @@ class GeneratedAppSearchResponse {
 
   factory GeneratedAppSearchResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSearchResponse(
-      data: _readAny(json, const ["data"]) == null ? null : _readObjectList(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson),
-      filters: _required(_readObject(_readAny(json, const ["filters"]), GeneratedAppSearchFilters.fromJson), "filters"),
-      pagination: _required(_readObject(_readAny(json, const ["pagination"]), GeneratedAppPagination.fromJson), "pagination"),
+      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      filters: _required(_readFieldValue<GeneratedAppSearchFilters>(_readField(json, const ["filters"]), "filters", (value) => _readObject(value, GeneratedAppSearchFilters.fromJson), requiredField: true, nullable: false), "filters"),
+      pagination: _required(_readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: true, nullable: false), "pagination"),
     );
   }
 
@@ -993,10 +993,10 @@ class GeneratedAppApiKeyResponse {
 
   factory GeneratedAppApiKeyResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppApiKeyResponse(
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      label: _required(_readString(_readAny(json, const ["label"])), "label"),
-      secret: _readString(_readAny(json, const ["secret"])),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      label: _required(_readFieldValue<String>(_readField(json, const ["label"]), "label", _readString, requiredField: true, nullable: false), "label"),
+      secret: _readFieldValue<String>(_readField(json, const ["secret"]), "secret", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -1010,11 +1010,18 @@ class GeneratedAppApiKeyResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -1039,6 +1046,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

@@ -15,9 +15,9 @@ class GeneratedMigrationRequest {
 
   factory GeneratedMigrationRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationRequest(
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      targetLevel: _required(_readString(_readAny(json, const ["target_level"])), "target_level"),
-      type: _required(_readString(_readAny(json, const ["type"])), "type"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      targetLevel: _required(_readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString, requiredField: true, nullable: false), "target_level"),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
   }
 
@@ -39,7 +39,7 @@ class GeneratedBatchMigrationRequest {
 
   factory GeneratedBatchMigrationRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedBatchMigrationRequest(
-      requests: _required(_readObjectList(_readAny(json, const ["requests"]), GeneratedMigrationRequest.fromJson), "requests"),
+      requests: _required(_readFieldValue<List<GeneratedMigrationRequest>>(_readField(json, const ["requests"]), "requests", (value) => _readObjectList(value, GeneratedMigrationRequest.fromJson), requiredField: true, nullable: false), "requests"),
     );
   }
 
@@ -59,7 +59,7 @@ class GeneratedMigrationTargetRequest {
 
   factory GeneratedMigrationTargetRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationTargetRequest(
-      targetLevel: _required(_readString(_readAny(json, const ["target_level"])), "target_level"),
+      targetLevel: _required(_readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString, requiredField: true, nullable: false), "target_level"),
     );
   }
 
@@ -81,8 +81,8 @@ class GeneratedMigrationStatusResponse {
 
   factory GeneratedMigrationStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationStatusResponse(
-      message: _readString(_readAny(json, const ["message"])),
-      status: _required(_readString(_readAny(json, const ["status"])), "status"),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -103,7 +103,7 @@ class GeneratedMigrationRequestsResponse {
 
   factory GeneratedMigrationRequestsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationRequestsResponse(
-      needsMigration: _readAny(json, const ["needs_migration"]) == null ? null : _readMapList(_readAny(json, const ["needs_migration"])),
+      needsMigration: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["needs_migration"]), "needs_migration", _readMapList, requiredField: false, nullable: true),
     );
   }
 
@@ -125,8 +125,8 @@ class GeneratedUserProfileResponse {
 
   factory GeneratedUserProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserProfileResponse(
-      dataProtectionLevel: _readString(_readAny(json, const ["data_protection_level"])),
-      migrationStatus: _readMap(_readAny(json, const ["migration_status"])),
+      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      migrationStatus: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["migration_status"]), "migration_status", _readMap, requiredField: false, nullable: true),
     );
   }
 
@@ -138,11 +138,18 @@ class GeneratedUserProfileResponse {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -167,6 +174,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

@@ -46,13 +46,10 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
     assert GENERATED_DART_PATH.read_text() == generated
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
-    assert 'items: _required(_readMapList(_readAny(json, const ["items"])), "items")' in generated
+    assert 'items: _required(_readFieldValue<List<Map<String, dynamic>>>' in generated
     assert 'class GeneratedSyncJobStartResponse' in generated
     assert 'class GeneratedSyncJobStatusResponse' in generated
-    assert (
-        'result: _readObject(_readAny(json, const ["result"]), GeneratedSyncLocalFilesResultResponse.fromJson)'
-        in generated
-    )
+    assert 'result: _readFieldValue<GeneratedSyncLocalFilesResultResponse>' in generated
 
 
 def test_messages_wire_dart_is_generated_from_app_client_openapi():
@@ -67,11 +64,18 @@ def test_messages_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedChartData' in generated
     assert 'class GeneratedVoiceMessageTranscriptionResponse' in generated
     assert 'final Map<String, dynamic>? chartData;' in generated
-    assert 'chartData: _readMap(_readAny(json, const ["chart_data"]))' in generated
-    assert (
-        'files: _readObjectList(_readAny(json, const ["files"]), GeneratedFileChat.fromJson) ?? const []' in generated
-    )
-    assert 'transcript: _required(_readString(_readAny(json, const ["transcript"])), "transcript")' in generated
+    assert 'chartData: _readFieldValue<Map<String, dynamic>>' in generated
+    assert 'this.files = const []' in generated
+    assert 'transcript: _required(_readFieldValue<String>' in generated
+
+
+def test_message_adapter_preserves_arbitrary_chart_data_union_payloads():
+    adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'message.dart').read_text()
+
+    assert 'Map<String, dynamic>? rawChartData;' in adapter
+    assert 'final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);' in adapter
+    assert 'rawChartData: parsedChartData == null ? rawChartData : null' in adapter
+    assert "'chart_data': chartData?.toJson() ?? rawChartData" in adapter
 
 
 def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
@@ -92,9 +96,9 @@ def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedFolder' in generated
     assert 'class GeneratedFolderMutationResponse' in generated
     assert 'class GeneratedBulkMoveConversationsResponse' in generated
-    assert 'exported: _readBool(_readAny(json, const ["exported"])) ?? false' in generated
-    assert 'color: _readString(_readAny(json, const ["color"])) ?? "#6B7280"' in generated
-    assert 'deletedIds: _required(_readStringList(_readAny(json, const ["deleted_ids"])), "deleted_ids")' in generated
+    assert 'this.exported = false' in generated
+    assert 'this.color = "#6B7280"' in generated
+    assert 'deletedIds: _required(_readFieldValue<List<String>>' in generated
 
 
 def test_action_items_adapter_coalesces_optional_envelope_defaults():
@@ -114,7 +118,7 @@ def test_api_keys_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedMcpApiKeyCreated' in generated
     assert 'final List<String>? scopes;' in generated
     assert 'final String? appId;' in generated
-    assert 'createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at")' in generated
+    assert 'createdAt: _required(_readFieldValue<DateTime>' in generated
 
 
 def test_agent_wire_dart_is_generated_from_app_client_openapi():
@@ -124,7 +128,7 @@ def test_agent_wire_dart_is_generated_from_app_client_openapi():
     assert AGENT_DART_PATH.read_text() == generated
     assert 'class GeneratedAgentVmInfo' in generated
     assert 'class GeneratedAgentKeepaliveResponse' in generated
-    assert 'hasVm: _required(_readBool(_readAny(json, const ["has_vm"])), "has_vm")' in generated
+    assert 'hasVm: _required(_readFieldValue<bool>' in generated
 
 
 def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():
@@ -135,7 +139,7 @@ def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedPhoneNumberResponse' in generated
     assert 'class GeneratedPhoneNumbersResponse' in generated
     assert 'class GeneratedTokenResponse' in generated
-    assert 'accessToken: _required(_readString(_readAny(json, const ["access_token"])), "access_token")' in generated
+    assert 'accessToken: _required(_readFieldValue<String>' in generated
 
 
 def test_people_wire_dart_is_generated_from_app_client_openapi():
@@ -144,7 +148,7 @@ def test_people_wire_dart_is_generated_from_app_client_openapi():
 
     assert PEOPLE_DART_PATH.read_text() == generated
     assert 'class GeneratedPerson' in generated
-    assert 'speechSamplesVersion: _readInt(_readAny(json, const ["speech_samples_version"])) ?? 3' in generated
+    assert 'this.speechSamplesVersion = 3' in generated
 
 
 def test_person_adapter_preserves_required_timestamp_behavior():
@@ -163,9 +167,9 @@ def test_imports_integrations_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedIntegrationResponse' in generated
     assert 'class GeneratedDeleteLimitlessConversationsResponse' in generated
     assert 'class GeneratedAppleHealthSyncResponse' in generated
-    assert 'jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id")' in generated
-    assert 'connected: _required(_readBool(_readAny(json, const ["connected"])), "connected")' in generated
-    assert 'deletedCount: _required(_readInt(_readAny(json, const ["deleted_count"])), "deleted_count")' in generated
+    assert 'jobId: _required(_readFieldValue<String>' in generated
+    assert 'connected: _required(_readFieldValue<bool>' in generated
+    assert 'deletedCount: _required(_readFieldValue<int>' in generated
 
 
 def test_device_speech_wire_dart_is_generated_from_app_client_openapi():
@@ -178,8 +182,8 @@ def test_device_speech_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedSpeechProfileResponse' in generated
     assert 'class GeneratedSpeechProfileUploadResponse' in generated
     assert 'class GeneratedSpeechProfileMutationResponse' in generated
-    assert 'isLegacySecureDfu: _readBool(_readAny(json, const ["is_legacy_secure_dfu"])) ?? true' in generated
-    assert 'hasProfile: _required(_readBool(_readAny(json, const ["has_profile"])), "has_profile")' in generated
+    assert 'this.isLegacySecureDfu = true' in generated
+    assert 'hasProfile: _required(_readFieldValue<bool>' in generated
 
 
 def test_misc_wire_dart_is_generated_from_app_client_openapi():
@@ -189,7 +193,7 @@ def test_misc_wire_dart_is_generated_from_app_client_openapi():
     assert MISC_DART_PATH.read_text() == generated
     assert 'class GeneratedFcmTokenResponse' in generated
     assert 'class GeneratedDeleteKnowledgeGraphResponse' in generated
-    assert 'status: _required(_readString(_readAny(json, const ["status"])), "status")' in generated
+    assert 'status: _required(_readFieldValue<String>' in generated
 
 
 def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openapi():
@@ -206,9 +210,9 @@ def test_wrapped_task_integrations_wire_dart_is_generated_from_app_client_openap
     assert 'class GeneratedClickUpTeamsResponse' in generated
     assert 'class GeneratedClickUpSpacesResponse' in generated
     assert 'class GeneratedClickUpListsResponse' in generated
-    assert 'status: _required(_readString(_readAny(json, const ["status"])), "status")' in generated
-    assert 'integrations: _required(_readMap(_readAny(json, const ["integrations"])), "integrations")' in generated
-    assert 'workspaces: _readAny(json, const ["workspaces"]) == null ? null : _readMapList' in generated
+    assert 'status: _required(_readFieldValue<String>' in generated
+    assert 'integrations: _required(_readFieldValue<Map<String, dynamic>>' in generated
+    assert 'workspaces: _readFieldValue<List<Map<String, dynamic>>' in generated
     assert 'List<Map<String, dynamic>>? _readMapList(dynamic value)' in generated
 
 
@@ -233,19 +237,11 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAppCatalogResponse' in generated
     assert 'class GeneratedAppSearchResponse' in generated
     assert 'class GeneratedAppApiKeyResponse' in generated
-    assert 'id: _required(_readString(_readAny(json, const ["id"])), "id")' in generated
-    assert (
-        'app: _required(_readObject(_readAny(json, const ["app"]), GeneratedAppDraftGenerationResponse.fromJson), "app")'
-        in generated
-    )
-    assert (
-        'requiresOauth: _required(_readBool(_readAny(json, const ["requires_oauth"])), "requires_oauth")' in generated
-    )
-    assert (
-        'data: _readAny(json, const ["data"]) == null ? null : _readObjectList'
-        '(_readAny(json, const ["data"]), GeneratedAppBaseModel.fromJson)' in generated
-    )
-    assert 'createdAt: _readDateTime(_readAny(json, const ["created_at"]))' in generated
+    assert 'id: _required(_readFieldValue<String>' in generated
+    assert 'app: _required(_readFieldValue<GeneratedAppDraftGenerationResponse>' in generated
+    assert 'requiresOauth: _required(_readFieldValue<bool>' in generated
+    assert 'data: _readFieldValue<List<GeneratedAppBaseModel>>' in generated
+    assert 'createdAt: _readFieldValue<DateTime>' in generated
 
 
 def test_users_wire_dart_is_generated_from_app_client_openapi():
@@ -272,15 +268,12 @@ def test_users_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedFairUseStatusResponse' in generated
     assert 'class GeneratedFairUseLimitsResponse' in generated
     assert 'class GeneratedFairUseUsagePctResponse' in generated
-    assert 'storeRecordingPermission: _required(_readBool' in generated
-    assert 'summaryId: _required(_readString(_readAny(json, const ["summary_id"])), "summary_id")' in generated
-    assert 'summaries: _readAny(json, const ["summaries"]) == null ? null : _readObjectList' in generated
-    assert 'createdAt: _readDateTime(_readAny(json, const ["created_at"]))' in generated
-    assert 'audioBytes: _required(_readBool(_readAny(json, const ["audio_bytes"])), "audio_bytes")' in generated
-    assert (
-        'limits: _required(_readObject(_readAny(json, const ["limits"]), GeneratedFairUseLimitsResponse.fromJson), "limits")'
-        in generated
-    )
+    assert 'storeRecordingPermission: _required(_readFieldValue<bool>' in generated
+    assert 'summaryId: _required(_readFieldValue<String>' in generated
+    assert 'summaries: _readFieldValue<List<GeneratedDailySummaryResponse>>' in generated
+    assert 'createdAt: _readFieldValue<DateTime>' in generated
+    assert 'audioBytes: _required(_readFieldValue<bool>' in generated
+    assert 'limits: _required(_readFieldValue<GeneratedFairUseLimitsResponse>' in generated
 
 
 def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
@@ -291,9 +284,9 @@ def test_subscription_usage_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedUserSubscriptionResponse' in generated
     assert 'class GeneratedUserUsageResponse' in generated
     assert 'final List<String> features;' in generated
-    assert 'limits: _readObject(_readAny(json, const ["limits"]), GeneratedPlanLimits.fromJson)' in generated
+    assert 'GeneratedPlanLimits? limits,' in generated
     assert 'GeneratedPlanLimits.fromJson(const {})' in generated
-    assert 'transcriptionSeconds: _readInt(_readAny(json, const ["transcription_seconds"])) ?? 0' in generated
+    assert 'this.transcriptionSeconds = 0' in generated
 
 
 def test_privacy_wire_dart_is_generated_from_app_client_openapi():
@@ -307,9 +300,9 @@ def test_privacy_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedMigrationStatusResponse' in generated
     assert 'class GeneratedMigrationRequestsResponse' in generated
     assert 'class GeneratedUserProfileResponse' in generated
-    assert 'targetLevel: _required(_readString(_readAny(json, const ["target_level"])), "target_level")' in generated
-    assert 'needsMigration: _readAny(json, const ["needs_migration"]) == null ? null : _readMapList' in generated
-    assert 'migrationStatus: _readMap(_readAny(json, const ["migration_status"]))' in generated
+    assert 'targetLevel: _required(_readFieldValue<String>' in generated
+    assert 'needsMigration: _readFieldValue<List<Map<String, dynamic>>' in generated
+    assert 'migrationStatus: _readFieldValue<Map<String, dynamic>>' in generated
 
 
 def test_announcements_wire_dart_is_generated_from_app_client_openapi():
@@ -320,9 +313,9 @@ def test_announcements_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedTargeting' in generated
     assert 'class GeneratedDisplay' in generated
     assert 'class GeneratedAnnouncement' in generated
-    assert 'createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at")' in generated
-    assert 'trigger: _readString(_readAny(json, const ["trigger"])) ?? "version_upgrade"' in generated
-    assert 'deviceModels: _readAny(json, const ["device_models"]) == null ? null : _readStringList' in generated
+    assert 'createdAt: _required(_readFieldValue<DateTime>' in generated
+    assert 'this.trigger = "version_upgrade"' in generated
+    assert 'deviceModels: _readFieldValue<List<String>>' in generated
 
 
 def test_audio_wire_dart_is_generated_from_app_client_openapi():
@@ -333,8 +326,8 @@ def test_audio_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAudioPrecacheResponse' in generated
     assert 'class GeneratedAudioFileUrlInfo' in generated
     assert 'class GeneratedAudioUrlsResponse' in generated
-    assert 'duration: _readDouble(_readAny(json, const ["duration"])) ?? 0' in generated
-    assert 'audioFiles: _required(_readObjectList(_readAny(json, const ["audio_files"])' in generated
+    assert 'this.duration = 0' in generated
+    assert 'audioFiles: _required(_readFieldValue<List<GeneratedAudioFileUrlInfo>>' in generated
     assert 'List<T>? _readObjectList<T>' in generated
     assert 'if (value is! List) return null;' in generated
 
@@ -355,9 +348,9 @@ def test_payments_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedPaymentStatusMessageResponse' in generated
     assert 'class GeneratedPaymentSubscriptionResponse' in generated
     assert 'final String? defaultValue;' in generated
-    assert 'defaultValue: _readString(_readAny(json, const ["default"]))' in generated
+    assert 'defaultValue: _readFieldValue<String>' in generated
     assert "'default': defaultValue" in generated
-    assert 'nextBillingDate: _readInt(_readAny(json, const ["next_billing_date"]))' in generated
+    assert 'nextBillingDate: _readFieldValue<int>' in generated
 
 
 def test_memories_wire_dart_is_generated_from_app_client_openapi():
@@ -367,11 +360,9 @@ def test_memories_wire_dart_is_generated_from_app_client_openapi():
     assert MEMORIES_DART_PATH.read_text() == generated
     assert 'class GeneratedEvidence' in generated
     assert 'class GeneratedMemoryDB' in generated
-    assert 'layer: _required(_readString(_readAny(json, const ["layer"])), "layer")' in generated
-    assert 'memoryTier: _readString(_readAny(json, const ["memory_tier"])) ?? "long_term"' in generated
-    assert (
-        'captureDeviceIds: _readAny(json, const ["capture_device_ids"]) == null ? null : _readStringList' in generated
-    )
+    assert 'layer: _required(_readFieldValue<String>' in generated
+    assert 'this.memoryTier = "long_term"' in generated
+    assert 'captureDeviceIds: _readFieldValue<List<String>>' in generated
 
 
 def test_goals_wire_dart_is_generated_from_app_client_openapi():
@@ -384,8 +375,8 @@ def test_goals_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAdviceResponse' in generated
     assert 'class GeneratedGoalHistoryEntryResponse' in generated
     assert 'class GeneratedGoalDeleteResponse' in generated
-    assert 'goalType: _required(_readString(_readAny(json, const ["goal_type"])), "goal_type")' in generated
-    assert 'suggestedMax: _readDouble(_readAny(json, const ["suggested_max"])) ?? 10' in generated
+    assert 'goalType: _required(_readFieldValue<String>' in generated
+    assert 'this.suggestedMax = 10' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():
@@ -397,16 +388,14 @@ def test_conversation_wire_dart_preserves_known_client_aliases():
     assert 'const ["google_place_id", "googlePlaceId"]' in generated
     assert "'apps_results': appsResults" in generated
     assert "'plugins_results': pluginsResults" in generated
-    assert (
-        'appsResults: _readObjectList(_readAny(json, const ["apps_results"]), GeneratedAppResult.fromJson) ?? const []'
-        in generated
-    )
-    assert 'category: _readString(_readAny(json, const ["category"])) ?? "other"' in generated
-    assert 'source: _readString(_readAny(json, const ["source"])) ?? "omi"' in generated
-    assert 'visibility: _readString(_readAny(json, const ["visibility"])) ?? "private"' in generated
+    assert 'appsResults: _required(_readFieldValue<List<GeneratedAppResult>>' in generated
+    assert 'this.category = "other"' in generated
+    assert 'source: _readFieldValue<String>' in generated
+    assert 'defaultValue: "omi"' in generated
+    assert 'this.visibility = "private"' in generated
     assert 'if (value is String) return DateTime.tryParse(value)?.toLocal();' in generated
     assert 'final List<GeneratedTranslation>? translations;' in generated
-    assert 'translations: _readAny(json, const ["translations"]) == null ? null : _readObjectList' in generated
+    assert 'translations: _readFieldValue<List<GeneratedTranslation>>' in generated
     assert 'List<T>? _readObjectList<T>' in generated
     assert "for (final item in value) fromJson(_required(_readMap(item), 'list item'))" in generated
 

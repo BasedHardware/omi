@@ -20,19 +20,19 @@ class GeneratedTargeting {
     this.firmwareVersionMin,
     this.platforms,
     this.testUids,
-    required this.trigger,
+    this.trigger = "version_upgrade",
   });
 
   factory GeneratedTargeting.fromJson(Map<String, dynamic> json) {
     return GeneratedTargeting(
-      appVersionMax: _readString(_readAny(json, const ["app_version_max"])),
-      appVersionMin: _readString(_readAny(json, const ["app_version_min"])),
-      deviceModels: _readAny(json, const ["device_models"]) == null ? null : _readStringList(_readAny(json, const ["device_models"])),
-      firmwareVersionMax: _readString(_readAny(json, const ["firmware_version_max"])),
-      firmwareVersionMin: _readString(_readAny(json, const ["firmware_version_min"])),
-      platforms: _readAny(json, const ["platforms"]) == null ? null : _readStringList(_readAny(json, const ["platforms"])),
-      testUids: _readAny(json, const ["test_uids"]) == null ? null : _readStringList(_readAny(json, const ["test_uids"])),
-      trigger: _readString(_readAny(json, const ["trigger"])) ?? "version_upgrade",
+      appVersionMax: _readFieldValue<String>(_readField(json, const ["app_version_max"]), "app_version_max", _readString, requiredField: false, nullable: true),
+      appVersionMin: _readFieldValue<String>(_readField(json, const ["app_version_min"]), "app_version_min", _readString, requiredField: false, nullable: true),
+      deviceModels: _readFieldValue<List<String>>(_readField(json, const ["device_models"]), "device_models", _readStringList, requiredField: false, nullable: true),
+      firmwareVersionMax: _readFieldValue<String>(_readField(json, const ["firmware_version_max"]), "firmware_version_max", _readString, requiredField: false, nullable: true),
+      firmwareVersionMin: _readFieldValue<String>(_readField(json, const ["firmware_version_min"]), "firmware_version_min", _readString, requiredField: false, nullable: true),
+      platforms: _readFieldValue<List<String>>(_readField(json, const ["platforms"]), "platforms", _readStringList, requiredField: false, nullable: true),
+      testUids: _readFieldValue<List<String>>(_readField(json, const ["test_uids"]), "test_uids", _readStringList, requiredField: false, nullable: true),
+      trigger: _required(_readFieldValue<String>(_readField(json, const ["trigger"]), "trigger", _readString, requiredField: false, nullable: false, defaultValue: "version_upgrade"), "trigger"),
     );
   }
 
@@ -58,20 +58,20 @@ class GeneratedDisplay {
   final DateTime? startAt;
 
   const GeneratedDisplay({
-    required this.dismissible,
+    this.dismissible = true,
     this.expiresAt,
-    required this.priority,
-    required this.showOnce,
+    this.priority = 0,
+    this.showOnce = true,
     this.startAt,
   });
 
   factory GeneratedDisplay.fromJson(Map<String, dynamic> json) {
     return GeneratedDisplay(
-      dismissible: _readBool(_readAny(json, const ["dismissible"])) ?? true,
-      expiresAt: _readDateTime(_readAny(json, const ["expires_at"])),
-      priority: _readInt(_readAny(json, const ["priority"])) ?? 0,
-      showOnce: _readBool(_readAny(json, const ["show_once"])) ?? true,
-      startAt: _readDateTime(_readAny(json, const ["start_at"])),
+      dismissible: _required(_readFieldValue<bool>(_readField(json, const ["dismissible"]), "dismissible", _readBool, requiredField: false, nullable: false, defaultValue: true), "dismissible"),
+      expiresAt: _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: false, nullable: true),
+      priority: _required(_readFieldValue<int>(_readField(json, const ["priority"]), "priority", _readInt, requiredField: false, nullable: false, defaultValue: 0), "priority"),
+      showOnce: _required(_readFieldValue<bool>(_readField(json, const ["show_once"]), "show_once", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_once"),
+      startAt: _readFieldValue<DateTime>(_readField(json, const ["start_at"]), "start_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
@@ -100,7 +100,7 @@ class GeneratedAnnouncement {
   final String type;
 
   const GeneratedAnnouncement({
-    required this.active,
+    this.active = true,
     this.appVersion,
     required this.content,
     required this.createdAt,
@@ -115,17 +115,17 @@ class GeneratedAnnouncement {
 
   factory GeneratedAnnouncement.fromJson(Map<String, dynamic> json) {
     return GeneratedAnnouncement(
-      active: _readBool(_readAny(json, const ["active"])) ?? true,
-      appVersion: _readString(_readAny(json, const ["app_version"])),
-      content: _required(_readMap(_readAny(json, const ["content"])), "content"),
-      createdAt: _required(_readDateTime(_readAny(json, const ["created_at"])), "created_at"),
-      deviceModels: _readAny(json, const ["device_models"]) == null ? null : _readStringList(_readAny(json, const ["device_models"])),
-      display: _readObject(_readAny(json, const ["display"]), GeneratedDisplay.fromJson),
-      expiresAt: _readDateTime(_readAny(json, const ["expires_at"])),
-      firmwareVersion: _readString(_readAny(json, const ["firmware_version"])),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      targeting: _readObject(_readAny(json, const ["targeting"]), GeneratedTargeting.fromJson),
-      type: _required(_readString(_readAny(json, const ["type"])), "type"),
+      active: _required(_readFieldValue<bool>(_readField(json, const ["active"]), "active", _readBool, requiredField: false, nullable: false, defaultValue: true), "active"),
+      appVersion: _readFieldValue<String>(_readField(json, const ["app_version"]), "app_version", _readString, requiredField: false, nullable: true),
+      content: _required(_readFieldValue<Map<String, dynamic>>(_readField(json, const ["content"]), "content", _readMap, requiredField: true, nullable: false), "content"),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      deviceModels: _readFieldValue<List<String>>(_readField(json, const ["device_models"]), "device_models", _readStringList, requiredField: false, nullable: true),
+      display: _readFieldValue<GeneratedDisplay>(_readField(json, const ["display"]), "display", (value) => _readObject(value, GeneratedDisplay.fromJson), requiredField: false, nullable: true),
+      expiresAt: _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: false, nullable: true),
+      firmwareVersion: _readFieldValue<String>(_readField(json, const ["firmware_version"]), "firmware_version", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      targeting: _readFieldValue<GeneratedTargeting>(_readField(json, const ["targeting"]), "targeting", (value) => _readObject(value, GeneratedTargeting.fromJson), requiredField: false, nullable: true),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
   }
 
@@ -146,11 +146,18 @@ class GeneratedAnnouncement {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -175,6 +182,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }

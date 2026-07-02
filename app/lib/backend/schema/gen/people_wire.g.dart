@@ -16,20 +16,20 @@ class GeneratedPerson {
     required this.id,
     required this.name,
     this.speechSampleTranscripts,
-    required this.speechSamples,
-    required this.speechSamplesVersion,
+    this.speechSamples = const [],
+    this.speechSamplesVersion = 3,
     this.updatedAt,
   });
 
   factory GeneratedPerson.fromJson(Map<String, dynamic> json) {
     return GeneratedPerson(
-      createdAt: _readDateTime(_readAny(json, const ["created_at"])),
-      id: _required(_readString(_readAny(json, const ["id"])), "id"),
-      name: _required(_readString(_readAny(json, const ["name"])), "name"),
-      speechSampleTranscripts: _readAny(json, const ["speech_sample_transcripts"]) == null ? null : _readStringList(_readAny(json, const ["speech_sample_transcripts"])),
-      speechSamples: _readStringList(_readAny(json, const ["speech_samples"])) ?? const [],
-      speechSamplesVersion: _readInt(_readAny(json, const ["speech_samples_version"])) ?? 3,
-      updatedAt: _readDateTime(_readAny(json, const ["updated_at"])),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      speechSampleTranscripts: _readFieldValue<List<String>>(_readField(json, const ["speech_sample_transcripts"]), "speech_sample_transcripts", _readStringList, requiredField: false, nullable: true),
+      speechSamples: _required(_readFieldValue<List<String>>(_readField(json, const ["speech_samples"]), "speech_samples", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "speech_samples"),
+      speechSamplesVersion: _required(_readFieldValue<int>(_readField(json, const ["speech_samples_version"]), "speech_samples_version", _readInt, requiredField: false, nullable: false, defaultValue: 3), "speech_samples_version"),
+      updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
@@ -46,11 +46,18 @@ class GeneratedPerson {
   }
 }
 
-dynamic _readAny(Map<String, dynamic> json, List<String> names) {
+class _WireField {
+  final bool present;
+  final dynamic value;
+
+  const _WireField(this.present, this.value);
+}
+
+_WireField _readField(Map<String, dynamic> json, List<String> names) {
   for (final name in names) {
-    if (json.containsKey(name)) return json[name];
+    if (json.containsKey(name)) return _WireField(true, json[name]);
   }
-  return null;
+  return const _WireField(false, null);
 }
 
 String? _readString(dynamic value) => value is String ? value : null;
@@ -75,6 +82,31 @@ bool? _readBool(dynamic value) {
 T _required<T>(T? value, String name) {
   if (value == null) {
     throw FormatException('Missing required field: $name');
+  }
+  return value;
+}
+
+T? _readFieldValue<T>(
+  _WireField field,
+  String name,
+  T? Function(dynamic) read, {
+  required bool requiredField,
+  required bool nullable,
+  T? defaultValue,
+}) {
+  if (!field.present) {
+    if (requiredField) {
+      throw FormatException('Missing required field: $name');
+    }
+    return defaultValue;
+  }
+  if (field.value == null) {
+    if (nullable) return null;
+    throw FormatException('Null field: $name');
+  }
+  final value = read(field.value);
+  if (value == null) {
+    throw FormatException('Invalid field: $name');
   }
   return value;
 }
