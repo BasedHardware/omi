@@ -141,6 +141,9 @@ struct IMessageDraftRequestPayload: Encodable {
 
 struct IMessageDraftResponsePayload: Decodable {
   let draft: String
+  /// True when the person matched more than one contact: `draft` is a
+  /// disambiguation ask, not a sendable reply. Defaults false for older backends.
+  var ambiguous: Bool = false
 }
 
 /// A thread whose latest message is inbound (awaiting a reply), shown in the Replies inbox.

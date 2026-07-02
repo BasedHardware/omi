@@ -62,4 +62,4 @@ def imessage_disconnect(uid: str = Depends(auth.get_current_user_uid)):
 async def imessage_draft_reply(req: IMessageDraftRequest, uid: str = Depends(auth.get_current_user_uid)):
     thread = [m.dict() for m in req.thread]
     result = await run_blocking(llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent)
-    return IMessageDraftResponse(draft=result['draft'])
+    return IMessageDraftResponse(draft=result['draft'], ambiguous=result.get('ambiguous', False))

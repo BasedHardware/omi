@@ -65,6 +65,27 @@ def test_draft_handles_unknown_person():
     assert out['draft'] == 'hey!'
 
 
+def test_ambiguous_person_returns_flag_and_does_not_call_llm():
+    """When the person name matches more than one contact, draft_reply returns a
+    disambiguation ask flagged ambiguous=True and never invokes the LLM."""
+    from utils.retrieval.tool_services.person_service import AmbiguousPerson
+
+    called = {'llm': False}
+
+    def fake_invoke(prompt):
+        called['llm'] = True
+        return SimpleNamespace(content='should not happen')
+
+    with patch.object(rd, 'resolve_person', return_value=AmbiguousPerson('Sam', 2)), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
+    ):
+        out = rd.draft_reply('uid', 'Sam', [{'text': 'hi', 'is_from_me': False}])
+
+    assert out['ambiguous'] is True
+    assert 'multiple people' in out['draft'].lower()
+    assert called['llm'] is False
+
+
 def test_untrusted_message_cannot_break_out_of_data_block():
     """An inbound message that tries to close the <conversation> block and inject
     instructions must be escaped so it can't forge a real delimiter."""

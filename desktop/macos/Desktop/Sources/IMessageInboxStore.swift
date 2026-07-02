@@ -170,10 +170,12 @@ final class IMessageInboxStore: ObservableObject {
 
   private func predraft(_ chat: IMessageChat) async {
     guard
-      let draft = try? await APIClient.shared.imessageDraftReply(
+      let resp = try? await APIClient.shared.imessageDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil)
     else { return }
-    preDrafts[chat.id] = draft
+    // Don't offer a disambiguation ask as a ready-to-send pre-draft.
+    guard !resp.ambiguous else { return }
+    preDrafts[chat.id] = resp.draft
   }
 
   /// Draft a reply and send it immediately, without review. Only ever called for
@@ -182,10 +184,16 @@ final class IMessageInboxStore: ObservableObject {
   /// silently retried into a duplicate send).
   private func autoReply(_ chat: IMessageChat) async {
     guard
-      let draft = try? await APIClient.shared.imessageDraftReply(
+      let resp = try? await APIClient.shared.imessageDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil)
     else { return }
-    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    // NEVER auto-send when the person is ambiguous — the "draft" is a
+    // disambiguation ask, and auto-reply sends without review.
+    guard !resp.ambiguous else {
+      NSLog("iMessage auto-reply skipped for \(chat.chatGUID): ambiguous contact needs disambiguation")
+      return
+    }
+    let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
     do {
       try IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)

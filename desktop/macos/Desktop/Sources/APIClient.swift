@@ -5594,12 +5594,13 @@ extension APIClient {
     try await get("v1/imessage/connection-status")
   }
 
+  /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
+  /// a disambiguation ask as if it were a reply.
   func imessageDraftReply(person: String, thread: [IMessageDraftMessagePayload], intent: String?) async throws
-    -> String
+    -> IMessageDraftResponsePayload
   {
     let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent)
-    let resp: IMessageDraftResponsePayload = try await post("v1/imessage/draft-reply", body: body)
-    return resp.draft
+    return try await post("v1/imessage/draft-reply", body: body)
   }
 }
 

@@ -64,3 +64,7 @@ class IMessageDraftRequest(BaseModel):
 
 class IMessageDraftResponse(BaseModel):
     draft: str
+    # True when `person` matched more than one contact: `draft` then carries a
+    # disambiguation ask, NOT a sendable reply. Clients must surface it and must
+    # never auto-send it.
+    ambiguous: bool = False

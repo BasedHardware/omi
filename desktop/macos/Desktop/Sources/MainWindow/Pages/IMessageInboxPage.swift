@@ -334,9 +334,17 @@ private struct ChatDetailView: View {
     errorText = nil
     defer { isDrafting = false }
     do {
-      let text = try await APIClient.shared.imessageDraftReply(
+      let resp = try await APIClient.shared.imessageDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil)
-      draft = text
+      if resp.ambiguous {
+        // The contact name matched more than one person — `draft` is a
+        // disambiguation ask, not a reply. Surface it and keep the composer empty
+        // so it can't be sent as-is.
+        draft = ""
+        errorText = resp.draft
+      } else {
+        draft = resp.draft
+      }
     } catch is CancellationError {
       // Switching chats / the detail view disappearing cancels `.task(id:)`.
       // Normal cancellation is not a failure — don't surface it to the user.
