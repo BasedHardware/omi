@@ -12,6 +12,7 @@ from typing import List, Optional
 from database import conversations as conversations_db
 from database import memories as memories_db
 from database.entities import person_entity_id
+from models.conversation_enums import ConversationSource
 from utils.llm.clients import get_llm
 from utils.retrieval.tool_services.person_service import resolve_person, is_ambiguous
 
@@ -78,11 +79,48 @@ def _user_life_context(uid: str) -> str:
     return "\n\n".join(bits)
 
 
+def _dedupe_recent(samples: List[str]) -> List[str]:
+    """Dedupe case-insensitively (keeping first occurrence order), then keep the
+    most recent up to MAX_STYLE_SAMPLES."""
+    seen = set()
+    unique: List[str] = []
+    for s in samples:
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(s)
+    return unique[-MAX_STYLE_SAMPLES:]
+
+
+def _general_style_samples(uid: str) -> List[str]:
+    """The user's GENERAL texting voice — their own outgoing messages across ALL
+    contacts — used only as a cold-start fallback when there's no history with the
+    specific person being replied to. Restricted to iMessage-sourced conversations
+    so we mirror how the user *texts*, never how they speak in voice-captured
+    conversations (a different register)."""
+    samples: List[str] = []
+    try:
+        convos = conversations_db.get_conversations(uid, limit=30)
+        for convo in convos:
+            if convo.get('source') != ConversationSource.imessage.value:
+                continue
+            for seg in convo.get('transcript_segments') or []:
+                if seg.get('is_user') and (seg.get('text') or '').strip():
+                    samples.append(seg['text'].strip())
+    except Exception as e:
+        logger.warning(f"reply_draft: general style sample lookup failed uid={uid}: {e}")
+    return _dedupe_recent(samples)
+
+
 def _collect_user_style_samples(uid: str, person: Optional[dict], thread: List[dict]) -> List[str]:
     """The user's OWN past messages — ground truth for their texting voice.
 
     Prefers messages to THIS person (same relationship register), pulled from the
-    current thread and from stored conversations with them.
+    current thread and from stored conversations with them. When there's no history
+    with this person yet (a brand-new/unknown contact), falls back to the user's
+    GENERAL texting voice so the draft still sounds like them, not a generic
+    neutral default.
     """
     samples: List[str] = []
     for m in thread or []:
@@ -101,16 +139,13 @@ def _collect_user_style_samples(uid: str, person: Optional[dict], thread: List[d
         except Exception as e:
             logger.warning(f"reply_draft: style sample lookup failed uid={uid}: {e}")
 
-    # Dedupe (case-insensitive), keep most recent, cap.
-    seen = set()
-    unique: List[str] = []
-    for s in samples:
-        key = s.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(s)
-    return unique[-MAX_STYLE_SAMPLES:]
+    unique = _dedupe_recent(samples)
+    if unique:
+        return unique
+
+    # Cold start: no history with THIS contact → mirror the user's general texting
+    # voice instead of falling back to a generic neutral default.
+    return _general_style_samples(uid)
 
 
 def _order_thread(thread: List[dict]) -> List[dict]:
