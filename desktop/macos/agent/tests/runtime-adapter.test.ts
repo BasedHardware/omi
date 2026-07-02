@@ -478,7 +478,7 @@ describe("adapter capability matrix", () => {
     expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual(
       [...PRODUCTION_ADAPTER_IDS, ...PLACEHOLDER_ADAPTER_IDS].sort()
     );
-    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw"]);
+    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw", "codex"]);
     expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["a2a"]);
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
@@ -512,6 +512,16 @@ describe("adapter capability matrix", () => {
       restartOrphanSemantics: { status: "required" },
     });
     expect(ADAPTER_CAPABILITY_MATRIX.openclaw.expectations).toMatchObject({
+      nativeResume: { status: "required" },
+      cancellationDispatch: { status: "required" },
+      cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
+      pinnedWorker: { status: "unsupported" },
+      modelSwitching: { status: "unsupported" },
+      artifactEmission: { status: "unsupported" },
+      toolSupport: { status: "unsupported" },
+      restartOrphanSemantics: { status: "required" },
+    });
+    expect(ADAPTER_CAPABILITY_MATRIX.codex.expectations).toMatchObject({
       nativeResume: { status: "required" },
       cancellationDispatch: { status: "required" },
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },

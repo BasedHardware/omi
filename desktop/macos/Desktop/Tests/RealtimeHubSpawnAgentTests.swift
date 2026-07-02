@@ -9,7 +9,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
     XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
-    XCTAssertTrue(source.contains("output: \"Agent started.\""))
+    XCTAssertTrue(source.contains("toolOutput = \"Agent started.\""))
+    XCTAssertTrue(source.contains("toolOutput = \"Agent started with fallback. \\(fallbackNote)\""))
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 
@@ -18,23 +19,18 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
     XCTAssertTrue(source.contains("if !audioReceivedThisTurn {"))
     XCTAssertTrue(source.contains("let existingAck = assistantText.trimmingCharacters"))
-    XCTAssertTrue(source.contains("let ack = existingAck.isEmpty ? \"Starting a background agent.\" : existingAck"))
+    XCTAssertTrue(source.contains("let ack = existingAck.isEmpty ? plan.ack : existingAck"))
     XCTAssertTrue(source.contains("speak(ack)"))
   }
 
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directedProvider)"))
-    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
+    XCTAssertTrue(source.contains("LocalAgentProviderRouting.resolveSpawn("))
+    XCTAssertTrue(source.contains("case .setupRequired(let provider, let setupPrompt, let spokenStatus):"))
     XCTAssertTrue(source.contains("assistantText = setupPrompt"))
-    XCTAssertTrue(source.contains("output: availability.toolError"))
-    XCTAssertTrue(source.contains("""
-          sendToolResultIfCurrent(
-            source: source, callId: callId, name: name,
-            output: availability.toolError)
-          return
-"""))
+    XCTAssertTrue(source.contains("speak(spokenStatus)"))
+    XCTAssertTrue(source.contains("output: \"Error: \\(setupPrompt)\""))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {
