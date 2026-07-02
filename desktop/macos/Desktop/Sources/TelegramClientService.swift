@@ -80,6 +80,18 @@ final class TelegramClientService: @unchecked Sendable {
     return nil
   }
 
+  // ⚠️ PRE-PRODUCTION REQUIREMENT — Telegram MTProto app credentials.
+  //
+  // The shipped app MUST provide Omi's OWN api_id/api_hash, registered once at
+  // https://my.telegram.org as "Omi" and injected via the Info.plist keys
+  // `OMITelegramAPIID` / `OMITelegramAPIHash` (these identify the *app*, shared by
+  // all users' sessions — they are not per-user or OAuth-style secrets).
+  //
+  // Until then, dev/live testing passes a pair via OMI_TELEGRAM_API_ID/HASH env
+  // (currently Telegram Desktop's PUBLIC 2040 pair). The public pair is a stopgap:
+  // shared public creds are the most likely to trip Telegram's anti-abuse
+  // heuristics, so this MUST be switched to an Omi-registered pair before release.
+  // See desktop/macos/telegram-helper/README.md and the feature plan.
   private func apiCredentials() -> (id: String, hash: String) {
     let env = ProcessInfo.processInfo.environment
     let id =
