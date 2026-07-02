@@ -93,7 +93,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
 
-    guard let dockRange = source.range(of: "NotchDockShape(bottomRadius:") else {
+    guard let dockRange = source.range(of: "NotchDockShape(") else {
       return XCTFail("Expected expanded notch dock surface")
     }
     guard let glowRange = source.range(of: "NotchResponseGlowView(") else {
@@ -269,7 +269,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
     XCTAssertTrue(source.contains("Color.white.opacity(0.96 * Double(1 - progress))"))
     XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
-    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
+    XCTAssertTrue(source.contains("if shouldUseOmiChatOverlayHitTarget"))
+    XCTAssertFalse(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
@@ -629,19 +630,19 @@ final class AgentPillLifecycleTests: XCTestCase {
     let windowSource = try floatingControlBarWindowSource()
 
     // Both the Omi Chat header and subagent header should enter one shared
-    // window transition. Notch surfaces go back to the row list; legacy
-    // surfaces keep their previous main-input/main-response back behavior.
+    // window transition. Back from a subagent goes to the row list on every
+    // display mode when pills exist; otherwise main-input/main-response.
     XCTAssertTrue(viewSource.contains("onBackToAgentRows: {\n                        showAgentListFromConversation()"))
     XCTAssertTrue(viewSource.contains("private func showAgentListFromConversation() {\n        (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()\n    }"))
     XCTAssertTrue(windowSource.contains("func leaveAgentConversation()"))
-    XCTAssertTrue(windowSource.contains("if state.usesNotchIsland, !AgentPillsManager.shared.pills.isEmpty"))
+    XCTAssertTrue(windowSource.contains("if !AgentPillsManager.shared.pills.isEmpty {\n            showAgentRowsFromConversation()"))
     XCTAssertTrue(windowSource.contains("private func showAgentRowsFromConversation()"))
     XCTAssertTrue(windowSource.contains("private func showMainConversationFromAgent()"))
     XCTAssertTrue(windowSource.contains("state.hideConversationSurface()"))
     XCTAssertTrue(windowSource.contains("openNotchHoverMenuUntilExit()"))
     XCTAssertTrue(windowSource.contains("resizeForMainInputAfterAgentExit()"))
     XCTAssertTrue(windowSource.contains("window.leaveAgentConversation()"))
-    XCTAssertTrue(windowSource.contains("let expectsRows = window.state.usesNotchIsland && !AgentPillsManager.shared.pills.isEmpty"))
+    XCTAssertTrue(windowSource.contains("let expectsRows = !AgentPillsManager.shared.pills.isEmpty"))
     XCTAssertTrue(windowSource.contains("\"mode\": expectsRows ? \"rows\" : \"main\""))
     XCTAssertFalse(viewSource.contains("let onBackToOmi: () -> Void"))
   }

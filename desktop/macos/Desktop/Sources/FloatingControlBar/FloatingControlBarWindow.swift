@@ -104,6 +104,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             + notchHoverMenuBottomMargin
     }
     static let expandedBarSize = NSSize(width: 210, height: 50)
+    /// Extra hover-bar height for the agents row shown when subagents exist.
+    static let pillAgentsRowHeight: CGFloat = 22
+    /// Center gap between the two chrome lobes on displays without a notch —
+    /// there is no camera housing to straddle, so keep a small deliberate gap
+    /// instead of the phantom notch dead zone.
+    static let pillSurfaceCenterGapWidth: CGFloat = 56
     private static let voiceBarSize = NSSize(width: 224, height: 42)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     static let notchExpandedWidth: CGFloat = 382
@@ -237,6 +243,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { Self.notchExpandedWidth }
+    /// Hover-expanded pill bar size; grows by one row when subagents exist.
+    private var hoverExpandedBarSize: NSSize {
+        guard !AgentPillsManager.shared.pills.isEmpty else { return Self.expandedBarSize }
+        return NSSize(
+            width: Self.expandedBarSize.width,
+            height: Self.expandedBarSize.height + Self.pillAgentsRowHeight
+        )
+    }
     private var inputPanelHeight: CGFloat {
         let base = notchModeEnabled ? notchInputPanelHeightForCurrentScreen : 120
         // When notch mode renders the "Back / Omi Chat" header (agent pills
@@ -329,6 +343,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     static func screenHasCameraHousing(_ screen: NSScreen?) -> Bool {
+        // Testing hook: force the non-notch (pill) presentation on notched
+        // hardware so the fallback surface can be exercised locally. getenv so
+        // values loaded from the bundle .env (BundleEnvironment) are seen too.
+        if let forced = getenv("OMI_FORCE_NO_NOTCH"), String(cString: forced) == "1" { return false }
         guard let screen else { return false }
         if #available(macOS 12.0, *) {
             if let leftArea = screen.auxiliaryTopLeftArea,
@@ -413,6 +431,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func handleEscapeKey() {
         if FloatingBarVoicePlaybackService.shared.isSpeaking {
             FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+            return
+        }
+
+        if !state.showingAIConversation, !notchModeEnabled, state.isNotchHoverMenuVisible {
+            setPillAgentListVisible(false)
             return
         }
 
@@ -727,9 +750,20 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self,
-                      self.notchModeEnabled,
                       self.state.currentNotification == nil
                 else { return }
+
+                guard self.notchModeEnabled else {
+                    // Keep the pinned pill agent list sized to its rows; close
+                    // it when the last agent disappears.
+                    guard self.state.isNotchHoverMenuVisible else { return }
+                    if AgentPillsManager.shared.pills.isEmpty {
+                        self.setPillAgentListVisible(false)
+                    } else if !self.state.showingAIConversation {
+                        self.resizeForAgentSwitcher(visible: true)
+                    }
+                    return
+                }
 
                 let targetSize: NSSize
                 if self.state.showingAIConversation {
@@ -1063,7 +1097,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     func leaveAgentConversation() {
-        if state.usesNotchIsland, !AgentPillsManager.shared.pills.isEmpty {
+        if !AgentPillsManager.shared.pills.isEmpty {
             showAgentRowsFromConversation()
         } else {
             showMainConversationFromAgent()
@@ -1080,7 +1114,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
             state.hideConversationSurface()
         }
-        openNotchHoverMenuUntilExit()
+        if notchModeEnabled {
+            openNotchHoverMenuUntilExit()
+        } else {
+            setPillAgentListVisible(true)
+        }
     }
 
     private func showMainConversationFromAgent() {
@@ -1359,6 +1397,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
         guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return }
+        // The pinned pill agent list owns the window size while open; hover
+        // exits must not collapse it out from under the list.
+        guard notchModeEnabled || !state.isNotchHoverMenuVisible else { return }
         guard !notchModeEnabled else {
             let targetSize = expanded
                 ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
@@ -1375,7 +1416,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
-        let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
+        let targetSize = expanded ? hoverExpandedBarSize : FloatingControlBarWindow.minBarSize
 
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
@@ -1411,20 +1452,54 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
-    /// Gives the notch-mode subagent switcher enough room to unfurl into a
-    /// centered stacked list without opening the full chat surface.
+    /// Gives the subagent switcher enough room to unfurl into a centered
+    /// stacked list without opening the full chat surface. Works in both
+    /// display modes; the non-notch (pill) window skips glow outsets.
     func resizeForAgentSwitcher(visible: Bool) {
-        guard notchModeEnabled,
-              !state.showingAIConversation,
+        guard !state.showingAIConversation,
               !state.isVoiceListening,
               !state.isShowingNotification,
               !suppressHoverResize
         else { return }
 
-        let targetSize = visible
+        let expandedSize = notchModeEnabled
             ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
-            : collapsedBarSize
+            : pillAgentListWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+        let targetSize = visible ? expandedSize : collapsedBarSize
         resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
+    }
+
+    /// Window size for the pinned agent list on displays without a notch.
+    /// No glow outsets — the pill surface fills the whole window.
+    private func pillAgentListWindowSize(agentCount: Int) -> NSSize {
+        NSSize(
+            width: Self.notchExpandedWidth,
+            height: notchChromeHeightForCurrentScreen + Self.notchHoverMenuHeight(agentCount: agentCount)
+        )
+    }
+
+    /// Click-driven agent list open/close for displays without a notch. The
+    /// pill has no free hover surface (hover already expands the control
+    /// bar), so the list opens pinned on click and closes on esc, click-away,
+    /// or selecting an agent.
+    func setPillAgentListVisible(_ visible: Bool) {
+        guard !notchModeEnabled else { return }
+        let allowed = visible
+            && state.canShowNotchHoverMenu
+            && !AgentPillsManager.shared.pills.isEmpty
+        guard state.notchHoverMenuOpen != allowed else { return }
+
+        if allowed {
+            // Resize before flipping state so the expanded list never renders
+            // in a too-small window (same ordering as the hover-expand path).
+            resizeForAgentSwitcher(visible: true)
+            state.setNotchHoverMenuOpen(true)
+            state.agentSwitcherPinned = true
+            makeKeyAndOrderFront(nil)
+        } else {
+            state.setNotchHoverMenuOpen(false)
+            resizeForAgentSwitcher(visible: false)
+        }
     }
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
@@ -1670,8 +1745,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowDidResignKey(_ notification: Notification) {
-        guard state.showingAIConversation else { return }
-
         // Only dismiss when the user physically clicks away.
         // Programmatic focus changes — e.g. the AI agent activating a browser
         // window for automation — do NOT produce a mouse-down event, so we
@@ -1680,6 +1753,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let isMouseClick = eventType == .leftMouseDown
             || eventType == .rightMouseDown
             || eventType == .otherMouseDown
+
+        guard state.showingAIConversation else {
+            // The pinned pill agent list (non-notch) has no pointer-exit
+            // tracking, so click-away is one of its close affordances.
+            if isMouseClick, !notchModeEnabled, state.isNotchHoverMenuVisible {
+                setPillAgentListVisible(false)
+            }
+            return
+        }
         guard isMouseClick else { return }
 
         // Close in-place so the bar collapses smoothly instead of blinking out and back in.
@@ -2217,7 +2299,7 @@ class FloatingControlBarManager {
             return ["error": "floating_bar_window_unavailable"]
         }
         let start = ContinuousClock.now
-        let expectsRows = window.state.usesNotchIsland && !AgentPillsManager.shared.pills.isEmpty
+        let expectsRows = !AgentPillsManager.shared.pills.isEmpty
         window.leaveAgentConversation()
         guard wait else {
             return [

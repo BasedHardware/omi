@@ -38,7 +38,11 @@ struct FloatingControlBarView: View {
     private let conversationTransition = Animation.spring(response: 0.22, dampingFraction: 0.9)
     private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
     private var notchHiddenCenterWidth: CGFloat {
-        FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
+        // Without a physical notch there is no dead zone to straddle — keep a
+        // small deliberate gap between the lobes instead of the phantom one.
+        state.usesNotchIsland
+            ? FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
+            : FloatingControlBarWindow.pillSurfaceCenterGapWidth
     }
     private var notchSideWidth: CGFloat {
         if state.showingAIConversation {
@@ -79,7 +83,7 @@ struct FloatingControlBarView: View {
     }
     var body: some View {
         Group {
-            if state.usesNotchIsland || state.showingAIConversation {
+            if state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible {
                 unifiedFloatingSurface
             } else {
                 VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
@@ -97,7 +101,8 @@ struct FloatingControlBarView: View {
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,
-            alignment: state.usesNotchIsland || state.showingAIConversation ? .top : .center
+            alignment: state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible
+                ? .top : .center
         )
         .background(Color.clear)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
@@ -134,7 +139,7 @@ struct FloatingControlBarView: View {
         VStack(spacing: 0) {
             notchChrome
 
-            if state.usesNotchIsland && shouldShowNotchHoverMenu {
+            if shouldShowNotchHoverMenu {
                 VStack(spacing: 0) {
                     notchOmiChatRow
                         .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
@@ -168,7 +173,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget {
+            if shouldUseOmiChatOverlayHitTarget {
                 ZStack(alignment: .top) {
                     if !agentPills.pills.isEmpty {
                         NotchAgentMorphField(
@@ -206,7 +211,7 @@ struct FloatingControlBarView: View {
             GeometryReader { geometry in
                 let hasExpandedSurface = state.showingAIConversation
                     || state.currentNotification != nil
-                    || (state.usesNotchIsland && shouldShowNotchHoverMenu)
+                    || shouldShowNotchHoverMenu
                 let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
                 let surfaceWidth = hasExpandedSurface
                     ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
@@ -216,9 +221,12 @@ struct FloatingControlBarView: View {
                     : notchChromeHeight
 
                 ZStack(alignment: .top) {
-                    NotchDockShape(bottomRadius: bottomRadius)
-                        .fill(Color.black)
-                        .frame(width: surfaceWidth, height: surfaceHeight)
+                    NotchDockShape(
+                        bottomRadius: bottomRadius,
+                        topRadius: state.usesNotchIsland ? 0 : 14
+                    )
+                    .fill(Color.black)
+                    .frame(width: surfaceWidth, height: surfaceHeight)
 
                     if state.isVoiceResponseActive {
                         NotchResponseGlowView(bottomRadius: bottomRadius)
@@ -254,7 +262,6 @@ struct FloatingControlBarView: View {
         .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
         .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)
         .onChange(of: shouldShowNotchHoverMenu) { _, visible in
-            guard state.usesNotchIsland else { return }
             (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
             // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
             // dots are back in the notch before the surface shrinks (no stranded dots).
@@ -277,6 +284,7 @@ struct FloatingControlBarView: View {
                 state.agentSwitcherPinned = false
                 state.agentSwitcherHovering = false
                 notchLogoHovering = false
+                (window as? FloatingControlBarWindow)?.setPillAgentListVisible(false)
             }
         }
         .onDisappear { state.setNotchHoverMenuOpen(false) }
@@ -703,8 +711,13 @@ struct FloatingControlBarView: View {
             showAgentListFromConversation()
             return
         }
-        toggleAgentSwitcherPinned()
-        (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+        if state.usesNotchIsland {
+            toggleAgentSwitcherPinned()
+            (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+        } else {
+            (window as? FloatingControlBarWindow)?
+                .setPillAgentListVisible(!state.isNotchHoverMenuVisible)
+        }
     }
 
     private func openAgentInChat(_ pill: AgentPill) {
@@ -950,16 +963,51 @@ struct FloatingControlBarView: View {
                     HStack(spacing: 6) {
                         compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
                     }
+
+                    if !agentPills.pills.isEmpty {
+                        pillAgentsRow
+                    }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .frame(height: 50)
+                .frame(height: agentPills.pills.isEmpty ? 50 : 50 + FloatingControlBarWindow.pillAgentsRowHeight)
                 .transition(.opacity)
             } else {
-                compactCircleView
-                    .transition(.opacity)
+                HStack(spacing: 4) {
+                    compactCircleView
+                    if !agentPills.pills.isEmpty {
+                        AgentStatusGemView(manager: agentPills)
+                    }
+                }
+                .transition(.opacity)
             }
         }
+    }
+
+    /// One row of per-agent status dots inside the hover-expanded pill bar.
+    /// Clicking opens the same agent list surface the notch shows on hover.
+    private var pillAgentsRow: some View {
+        Button {
+            (window as? FloatingControlBarWindow)?.setPillAgentListVisible(true)
+        } label: {
+            HStack(spacing: 4) {
+                PillAgentDotsView(manager: agentPills)
+                Text("Agents")
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+                Text("\(agentPills.pills.count)")
+                    .scaledFont(size: 9)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 4)
+                    .frame(minWidth: 15, minHeight: 15)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(3)
+            }
+            .frame(height: FloatingControlBarWindow.pillAgentsRowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Show subagents")
     }
 
     /// Minimal thin bar shown when not hovering
@@ -1203,12 +1251,20 @@ struct FloatingControlBarView: View {
 
 private struct NotchDockShape: Shape {
     let bottomRadius: CGFloat
+    var topRadius: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
         let radius = min(bottomRadius, rect.height / 2)
+        // Square top corners blend into a physical notch/bezel; a floating
+        // surface on a non-notched display rounds them instead.
+        let topR = min(topRadius, rect.height / 2)
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.move(to: CGPoint(x: rect.minX + topR, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - topR, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + topR),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
         path.addQuadCurve(
             to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
@@ -1219,7 +1275,11 @@ private struct NotchDockShape: Shape {
             to: CGPoint(x: rect.minX, y: rect.maxY - radius),
             control: CGPoint(x: rect.minX, y: rect.maxY)
         )
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topR))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + topR, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
         path.closeSubpath()
         return path
     }
@@ -1743,6 +1803,94 @@ private struct AgentMainChatView: View {
         manager.continueAgent(from: pill, text: trimmed)
     }
 
+}
+
+/// Re-renders when any individual pill's @Published status changes — the
+/// manager only publishes on pill add/remove, so per-pill observers are needed
+/// for live status color updates (same pattern as NotchAgentPillsRowView).
+private struct PillStatusObservingView<Content: View>: View {
+    @ObservedObject var manager: AgentPillsManager
+    @ViewBuilder let content: ([AgentPill]) -> Content
+    @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
+    @State private var pillStatusChangeToken = 0
+
+    var body: some View {
+        let _ = pillStatusChangeToken
+        content(NotchAgentStackMetrics.sortedPills(manager.pills))
+            .onAppear { syncPillStatusObservers() }
+            .onChange(of: manager.pills.map(\.id)) { _, _ in
+                syncPillStatusObservers()
+            }
+    }
+
+    private func syncPillStatusObservers() {
+        let currentIDs = Set(manager.pills.map(\.id))
+        pillStatusCancellables = pillStatusCancellables.filter { currentIDs.contains($0.key) }
+        for pill in manager.pills where pillStatusCancellables[pill.id] == nil {
+            pillStatusCancellables[pill.id] = pill.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { _ in
+                    pillStatusChangeToken &+= 1
+                }
+        }
+    }
+}
+
+/// Per-agent status dots inside the hover-expanded pill bar.
+private struct PillAgentDotsView: View {
+    let manager: AgentPillsManager
+
+    var body: some View {
+        PillStatusObservingView(manager: manager) { pills in
+            HStack(spacing: 3) {
+                ForEach(pills.prefix(NotchAgentStackMetrics.maxAgents), id: \.id) { pill in
+                    Circle()
+                        .fill(NotchAgentStatusGroup(status: pill.status).color)
+                        .frame(width: 6, height: 6)
+                }
+            }
+        }
+    }
+}
+
+/// Aggregate agent-status gem shown next to the collapsed pill. One dot
+/// summarizing every agent by priority (failed > running > queued > done >
+/// stopped) so the idle pill answers "is anything running / does anything
+/// need me" without spending pixels on per-agent identity.
+private struct AgentStatusGemView: View {
+    let manager: AgentPillsManager
+    @State private var breathing = false
+
+    var body: some View {
+        PillStatusObservingView(manager: manager) { pills in
+            let group = Self.aggregateGroup(for: pills)
+            if let group {
+                Circle()
+                    .fill(group.color)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: group.color.opacity(0.7), radius: 3)
+                    .opacity(group == .running ? (breathing ? 1.0 : 0.45) : 0.95)
+                    .scaleEffect(group == .running && breathing ? 1.12 : 1.0)
+                    .animation(
+                        group == .running
+                            ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
+                            : .default,
+                        value: breathing
+                    )
+                    .onAppear { breathing = true }
+                    .accessibilityLabel("Subagents: \(group.title)")
+            }
+        }
+    }
+
+    static func aggregateGroup(for pills: [AgentPill]) -> NotchAgentStatusGroup? {
+        let groups = pills.map { NotchAgentStatusGroup(status: $0.status) }
+        for candidate: NotchAgentStatusGroup in [.failed, .running, .queued, .done, .stopped]
+        where groups.contains(candidate) {
+            return candidate
+        }
+        return groups.first
+    }
 }
 
 private struct NotchAgentPillsRowView: View {
