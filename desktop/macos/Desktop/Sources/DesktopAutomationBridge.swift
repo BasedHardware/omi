@@ -468,22 +468,44 @@ final class DesktopAutomationActionRegistry {
           selectedFolderPath = nil
         }
 
-        let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+        let status = await AppleNotesReaderService.shared.connectionStatus(
           maxResults: maxResults,
           selectedFolderPath: selectedFolderPath
         )
-        return [
-          "ok": "true",
-          "classification": "readable",
-          "noteCount": "\(notes.count)",
-          "selectedFolderPath": selectedFolderPath ?? "",
-          "firstTitle": notes.first?.title ?? "",
-        ]
+        switch status {
+        case .connected(let noteCount, _):
+          let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+            maxResults: 1,
+            selectedFolderPath: selectedFolderPath
+          )
+          return [
+            "ok": "true",
+            "classification": "readable",
+            "noteCount": "\(noteCount)",
+            "selectedFolderPath": selectedFolderPath ?? "",
+            "firstTitle": notes.first?.title ?? "",
+          ]
+        case .needsAccess(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "true",
+          ]
+        case .error(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "false",
+          ]
+        }
       } catch let error as AppleNotesReaderError {
         return [
           "ok": "false",
           "classification": error.reasonCode,
           "message": error.localizedDescription,
+          "needsFolderSelection": "\(error.shouldPromptForFolderSelection)",
         ]
       } catch {
         return [

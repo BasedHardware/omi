@@ -49,6 +49,15 @@ Work top to bottom. Don't skip the probe or the fixture test.
       (philosophy §3, §4)
 - [ ] Drive UI status and any "Connected" badge off this probe, never off a
       stored one-time-success latch.
+- [ ] For file-backed local connectors such as Apple Notes, preserve legacy
+      selected parent folders by resolving them through the same canonical
+      folder logic used for new selections. Treat zero readable items as
+      connected, and keep path/access failures separate from schema/read
+      failures so the UI only reopens folder selection when a new folder can
+      actually fix the problem.
+- [ ] Expose a semantic automation probe (for example
+      `apple_notes_read_probe`) that returns the same stable classifications the
+      UI uses, including whether folder selection is an appropriate recovery.
 
 ## 6. Sanitized diagnostics for the corpus
 
