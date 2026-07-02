@@ -373,19 +373,27 @@ actor CalendarReaderService {
       let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
       let profileSummary = parsed["profile"] as? String ?? ""
 
-      let memoryItems = memoryStrings.map { memory in
-        MemoryBatchItem(
+      let artifacts = memoryStrings.map { memory in
+        ImportEvidenceBatchItem(
+            title: "Calendar Profile Insight",
+            snippet: memory,
             content: memory,
-            visibility: "private",
-            category: .system,
-            tags: ["calendar", "onboarding", "profile"],
-            headline: "Calendar Profile Insight",
-            source: "google_calendar"
+            metadata: ["import_kind": "profile"]
         )
       }
-      let saveResult = await OnboardingMemoryBatchImportService.save(
-        memoryItems,
-        logPrefix: "CalendarReaderService"
+      let legacyMemories = memoryStrings.map { memory in
+        MemoryBatchItem(
+          content: memory,
+          tags: ["calendar", "onboarding"],
+          headline: "Calendar Profile Insight",
+          source: "google_calendar"
+        )
+      }
+      let saveResult = await OnboardingImportEvidenceService.save(
+        artifacts,
+        sourceType: "google_calendar",
+        logPrefix: "CalendarReaderService",
+        legacyMemories: legacyMemories
       )
 
       // Save tasks
@@ -430,7 +438,7 @@ actor CalendarReaderService {
     let eventsToSave = limit.map { Array(events.prefix($0)) } ?? events
     guard !eventsToSave.isEmpty else { return (0, 0) }
 
-    let memoryItems = eventsToSave.map { event in
+    let artifacts = eventsToSave.map { event in
       var parts = ["Calendar event — \(event.summary)"]
       if !event.startTime.isEmpty {
         parts.append("Starts: \(event.startTime)")
@@ -442,21 +450,44 @@ actor CalendarReaderService {
         parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
       }
 
+      return ImportEvidenceBatchItem(
+        externalId: "google_calendar:\(event.id)",
+        title: event.summary,
+        snippet: parts.joined(separator: " | "),
+        content: parts.joined(separator: " | "),
+        metadata: [
+          "import_kind": "event",
+          "start_time": event.startTime,
+          "location": event.location,
+        ]
+      )
+    }
+    let legacyMemories = eventsToSave.map { event in
+      var parts = ["Calendar event — \(event.summary)"]
+      if !event.startTime.isEmpty {
+        parts.append("Starts: \(event.startTime)")
+      }
+      if !event.location.isEmpty {
+        parts.append("Location: \(event.location)")
+      }
+      if !event.attendees.isEmpty {
+        parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
+      }
       return MemoryBatchItem(
         content: parts.joined(separator: " | "),
-        visibility: "private",
-        category: .system,
         tags: ["calendar", "onboarding", "event"],
         headline: event.summary,
         source: "google_calendar"
       )
     }
 
-    let result = await OnboardingMemoryBatchImportService.save(
-      memoryItems,
-      logPrefix: "CalendarReaderService"
+    let result = await OnboardingImportEvidenceService.save(
+      artifacts,
+      sourceType: "google_calendar",
+      logPrefix: "CalendarReaderService",
+      legacyMemories: legacyMemories
     )
-    log("CalendarReaderService: Saved \(result.saved) events as memories (\(result.failed) failed)")
+    log("CalendarReaderService: Saved \(result.saved) events as import evidence (\(result.failed) failed)")
     return result
   }
 

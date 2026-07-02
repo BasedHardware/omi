@@ -5,10 +5,11 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
+from database.memory_imports import ingest_memory_import_batch
 from database import review_queue
 from database.vector_db import (
     delete_memory_vector,
@@ -17,6 +18,7 @@ from database.vector_db import (
     upsert_memory_vectors_batch,
 )
 from models.memories import MemoryDB, Memory, MemoryCategory
+from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
@@ -27,6 +29,8 @@ from utils.memory.canonical_memory_adapter import (
 )
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.required_promotion import required_promotion_payload
+from utils.memory.import_write_guard import import_write_block_mode, import_write_violation
+from utils.memory.memory_system import MemorySystem
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.log_sanitizer import sanitize_pii
@@ -110,6 +114,39 @@ class ReviewResolutionRequest(BaseModel):
     correction: Optional[Dict[str, Any]] = None
     reason: str = ''
     current_veracity: Optional[float] = None
+
+
+async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: str) -> None:
+    mode = import_write_block_mode()
+    if mode == "off":
+        return
+    try:
+        raw = await request.json()
+    except Exception:
+        return
+    payloads = raw.get("memories") if isinstance(raw, dict) and isinstance(raw.get("memories"), list) else [raw]
+    for payload in payloads:
+        if not isinstance(payload, dict):
+            continue
+        violation = import_write_violation(payload)
+        if not violation:
+            continue
+        logger.warning(
+            "memory_import.direct_memory_write_blocked endpoint=%s uid=%s mode=%s violation=%s",
+            endpoint,
+            uid,
+            mode,
+            violation,
+        )
+        if mode == "enforce":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "import_must_use_evidence_ingress",
+                    "use_endpoint": "/v3/memory-imports/batch",
+                },
+            )
+        return
 
 
 def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
@@ -227,9 +264,11 @@ def _validate_mutable_memory(uid: str, memory_id: str, *, db_client) -> dict:
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
 async def create_memory(
+    request: Request,
     memory: Memory,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:create")),
 ):
+    await _guard_import_memory_write(request, endpoint="/v3/memories", uid=uid)
     # Honor the client-supplied category (the Memory model defaults it to
     # `interesting`). Only memories the user explicitly typed in arrive as
     # `manual`; auto-extracted ones (system/interesting) keep their category so
@@ -292,9 +331,11 @@ async def create_memory(
     response_model=BatchMemoriesResponse,
 )
 async def create_memories_batch(
+    request_context: Request,
     request: BatchMemoriesRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:batch")),
 ):
+    await _guard_import_memory_write(request_context, endpoint="/v3/memories/batch", uid=uid)
     """
     Create many memories in a single request.
 
@@ -389,6 +430,42 @@ async def create_memories_batch(
         )
 
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
+
+
+@router.post(
+    '/v3/memory-imports/batch',
+    tags=['memories'],
+    response_model=MemoryImportBatchResponse,
+)
+async def create_memory_import_batch(
+    request: MemoryImportBatchRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memory_imports:batch")),
+):
+    """
+    Ingest imported source artifacts without creating product memories.
+
+    Importers produce durable evidence. Candidate extraction, acceptance,
+    promotion, vector sync, keyword sync, and KG extraction are backend-owned
+    later stages.
+    """
+    db_client = getattr(db_client_module, 'db', None)
+    if db_client is None:
+        logger.error("memory import ingest unavailable: firestore client missing uid=%s", uid)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    write_decision = await run_blocking(db_executor, canonical_write_decision, uid, db_client=db_client)
+    if write_decision.memory_system != MemorySystem.CANONICAL:
+        raise HTTPException(status_code=403, detail="memory_import_requires_canonical")
+    if not write_decision.enabled:
+        logger.warning("memory import ingest disabled uid=%s reason=%s", uid, write_decision.reason)
+        raise HTTPException(status_code=503, detail="memory_import_canonical_not_ready")
+
+    try:
+        result = await run_blocking(db_executor, ingest_memory_import_batch, uid, request, db_client=db_client)
+    except Exception:
+        logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    return result.response
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
