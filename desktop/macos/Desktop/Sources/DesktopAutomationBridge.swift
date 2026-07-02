@@ -569,6 +569,43 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "capture_floating_bar_png",
+      summary: "Write PNG of the floating control bar window (in-process capture)",
+      params: ["path"]
+    ) { params in
+      guard let path = params["path"], !path.isEmpty else {
+        return ["error": "missing 'path'"]
+      }
+      return await MainActor.run { () -> [String: String] in
+        guard
+          let window = NSApp.windows.compactMap({ $0 as? FloatingControlBarWindow }).first,
+          window.isVisible,
+          let contentView = window.contentView
+        else {
+          return ["error": "no_floating_bar_window"]
+        }
+        let bounds = contentView.bounds
+        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+          return ["error": "bitmap_rep_failed"]
+        }
+        contentView.cacheDisplay(in: bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+          return ["error": "png_encode_failed"]
+        }
+        do {
+          try data.write(to: URL(fileURLWithPath: path))
+          return [
+            "path": path,
+            "bytes": "\(data.count)",
+            "frame": NSStringFromRect(window.frame),
+          ]
+        } catch {
+          return ["error": error.localizedDescription]
+        }
+      }
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]
