@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire;
+
 class Folder {
   final String id;
   final String name;
@@ -30,37 +32,45 @@ class Folder {
   });
 
   factory Folder.fromJson(Map<String, dynamic> json) {
+    return Folder.fromGenerated(wire.GeneratedFolder.fromJson(json));
+  }
+
+  factory Folder.fromGenerated(wire.GeneratedFolder generated) {
     return Folder(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      description: json['description'],
-      color: json['color'] ?? '#6B7280',
-      icon: json['icon'] ?? '📁',
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : DateTime.now(),
-      order: json['order'] ?? 0,
-      isDefault: json['is_default'] ?? false,
-      isSystem: json['is_system'] ?? false,
-      categoryMapping: json['category_mapping'],
-      conversationCount: json['conversation_count'] ?? 0,
+      id: generated.id,
+      name: generated.name,
+      description: generated.description,
+      color: generated.color ?? '#6B7280',
+      icon: generated.icon ?? 'folder',
+      createdAt: generated.createdAt,
+      updatedAt: generated.updatedAt,
+      order: generated.order ?? 0,
+      isDefault: generated.isDefault ?? false,
+      isSystem: generated.isSystem ?? false,
+      categoryMapping: generated.categoryMapping,
+      conversationCount: generated.conversationCount ?? 0,
+    );
+  }
+
+  wire.GeneratedFolder toGenerated() {
+    return wire.GeneratedFolder(
+      id: id,
+      name: name,
+      description: description,
+      color: color,
+      icon: icon,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      order: order,
+      isDefault: isDefault,
+      isSystem: isSystem,
+      categoryMapping: categoryMapping,
+      conversationCount: conversationCount,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'description': description,
-      'color': color,
-      'icon': icon,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
-      'order': order,
-      'is_default': isDefault,
-      'is_system': isSystem,
-      'category_mapping': categoryMapping,
-      'conversation_count': conversationCount,
-    };
+    return toGenerated().toJson();
   }
 
   Color get colorValue {

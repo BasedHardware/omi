@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire;
+
 class ActionItemWithMetadata {
   final String id;
   final String description;
@@ -34,43 +36,51 @@ class ActionItemWithMetadata {
   });
 
   factory ActionItemWithMetadata.fromJson(Map<String, dynamic> json) {
+    return ActionItemWithMetadata.fromGenerated(wire.GeneratedActionItemResponse.fromJson(json));
+  }
+
+  factory ActionItemWithMetadata.fromGenerated(wire.GeneratedActionItemResponse generated) {
     return ActionItemWithMetadata(
-      id: json['id'],
-      description: json['description'],
-      completed: json['completed'] ?? false,
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
-      dueAt: json['due_at'] != null ? DateTime.parse(json['due_at']).toLocal() : null,
-      completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at']).toLocal() : null,
-      conversationId: json['conversation_id'],
-      isLocked: json['is_locked'] ?? false,
-      exported: json['exported'] ?? false,
-      exportDate: json['export_date'] != null ? DateTime.parse(json['export_date']).toLocal() : null,
-      exportPlatform: json['export_platform'],
-      appleReminderId: json['apple_reminder_id'],
-      sortOrder: json['sort_order'] as int? ?? 0,
-      indentLevel: json['indent_level'] as int? ?? 0,
+      id: generated.id,
+      description: generated.description,
+      completed: generated.completed,
+      createdAt: generated.createdAt,
+      updatedAt: generated.updatedAt,
+      dueAt: generated.dueAt,
+      completedAt: generated.completedAt,
+      conversationId: generated.conversationId,
+      isLocked: generated.isLocked ?? false,
+      exported: generated.exported ?? false,
+      exportDate: generated.exportDate,
+      exportPlatform: generated.exportPlatform,
+      appleReminderId: generated.appleReminderId,
+      sortOrder: generated.sortOrder ?? 0,
+      indentLevel: generated.indentLevel ?? 0,
+    );
+  }
+
+  wire.GeneratedActionItemResponse toGenerated() {
+    return wire.GeneratedActionItemResponse(
+      id: id,
+      description: description,
+      completed: completed,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      dueAt: dueAt,
+      completedAt: completedAt,
+      conversationId: conversationId,
+      isLocked: isLocked,
+      exported: exported,
+      exportDate: exportDate,
+      exportPlatform: exportPlatform,
+      appleReminderId: appleReminderId,
+      sortOrder: sortOrder,
+      indentLevel: indentLevel,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'description': description,
-      'completed': completed,
-      'created_at': createdAt?.toUtc().toIso8601String(),
-      'updated_at': updatedAt?.toUtc().toIso8601String(),
-      'due_at': dueAt?.toUtc().toIso8601String(),
-      'completed_at': completedAt?.toUtc().toIso8601String(),
-      'conversation_id': conversationId,
-      'is_locked': isLocked,
-      'exported': exported,
-      'export_date': exportDate?.toUtc().toIso8601String(),
-      'export_platform': exportPlatform,
-      'apple_reminder_id': appleReminderId,
-      'sort_order': sortOrder,
-      'indent_level': indentLevel,
-    };
+    return toGenerated().toJson();
   }
 
   ActionItemWithMetadata copyWith({
@@ -118,8 +128,9 @@ class ActionItemsResponse {
 
   factory ActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return ActionItemsResponse(
-      actionItems:
-          (json['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
+      actionItems: (json['action_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
       hasMore: json['has_more'],
     );
   }
@@ -133,10 +144,12 @@ class PendingSyncResponse {
 
   factory PendingSyncResponse.fromJson(Map<String, dynamic> json) {
     return PendingSyncResponse(
-      pendingExport:
-          (json['pending_export'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
-      syncedItems:
-          (json['synced_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
+      pendingExport: (json['pending_export'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
+      syncedItems: (json['synced_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
     );
   }
 }
