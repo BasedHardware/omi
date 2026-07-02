@@ -25,6 +25,11 @@ does the work. **The harness is the product. The automation is disposable.**
 
 Every rule below follows from that sentence.
 
+> **Current state for the two hardest surfaces** (ChatGPT & Claude cloud
+> connectors): autonomous setup is parked and the assisted overlay flow is
+> primary. The phased plan to revisit them lives in
+> [cloud-connectors-roadmap.md](./cloud-connectors-roadmap.md).
+
 ---
 
 ## 1. Code owns contracts. The agent owns only what code can't reach.
