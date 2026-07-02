@@ -53,6 +53,13 @@ SCHEMA_GROUPS = {
             'McpApiKeyCreated',
         ),
     },
+    'agent': {
+        'output': DEFAULT_OUTPUT_DIR / 'agent_wire.g.dart',
+        'schemas': (
+            'AgentVmInfo',
+            'AgentKeepaliveResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},

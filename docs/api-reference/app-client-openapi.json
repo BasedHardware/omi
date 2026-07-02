@@ -404,6 +404,54 @@
         "title": "AdviceAssistantSettings",
         "type": "object"
       },
+      "AgentKeepaliveResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "AgentKeepaliveResponse",
+        "type": "object"
+      },
+      "AgentVmInfo": {
+        "properties": {
+          "has_vm": {
+            "title": "Has Vm",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "has_vm"
+        ],
+        "title": "AgentVmInfo",
+        "type": "object"
+      },
       "Announcement": {
         "properties": {
           "active": {
@@ -12332,7 +12380,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKeepaliveResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -12478,7 +12528,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVmInfo"
+                }
               }
             },
             "description": "Successful Response"
@@ -12551,7 +12603,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVmInfo"
+                }
               }
             },
             "description": "Successful Response"

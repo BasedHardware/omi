@@ -34,6 +34,16 @@ router = APIRouter()
 GCE_PROJECT = "based-hardware"
 
 
+class AgentVmInfo(BaseModel):
+    has_vm: bool
+    status: str | None = None
+
+
+class AgentKeepaliveResponse(BaseModel):
+    ok: bool
+    reason: str | None = None
+
+
 # --------------- GCE helpers ---------------
 
 
@@ -144,7 +154,7 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
 # --------------- endpoints ---------------
 
 
-@router.get("/v1/agent/vm-status")
+@router.get("/v1/agent/vm-status", response_model=AgentVmInfo)
 def get_vm_status(uid: str = Depends(get_current_user_uid)):
     """Return the user's agent VM info from Firestore."""
     vm = get_agent_vm(uid)
@@ -157,7 +167,7 @@ def get_vm_status(uid: str = Depends(get_current_user_uid)):
     }
 
 
-@router.post("/v1/agent/vm-ensure")
+@router.post("/v1/agent/vm-ensure", response_model=AgentVmInfo)
 async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
     """Check VM status; if stopped/terminated, restart it in the background."""
     vm = await run_blocking(db_executor, get_agent_vm, uid)
@@ -193,7 +203,7 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
     return {"has_vm": True, "status": fs_status}
 
 
-@router.post("/v1/agent/keepalive")
+@router.post("/v1/agent/keepalive", response_model=AgentKeepaliveResponse)
 async def keepalive(uid: str = Depends(get_current_user_uid)):
     """Ping the VM's /ping endpoint to reset its idle auto-stop timer."""
     vm = await run_blocking(db_executor, get_agent_vm, uid)

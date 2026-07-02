@@ -13,6 +13,7 @@ ACTION_ITEMS_FOLDERS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'action_items_folders_wire.g.dart'
 )
 API_KEYS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'api_keys_wire.g.dart'
+AGENT_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'agent_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -52,6 +53,16 @@ def test_api_keys_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedMcpApiKeyCreated' in generated
     assert 'final List<String>? scopes;' in generated
     assert 'final String? appId;' in generated
+
+
+def test_agent_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'agent')
+
+    assert AGENT_DART_PATH.read_text() == generated
+    assert 'class GeneratedAgentVmInfo' in generated
+    assert 'class GeneratedAgentKeepaliveResponse' in generated
+    assert 'hasVm: _readBool(_readAny(json, const ["has_vm"])) ?? false' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():
