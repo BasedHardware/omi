@@ -20,6 +20,8 @@ function makeDeps(
     runOutcome?: Record<string, HandleQueryOutcome>;
     /** adapterId whose run() is treated as having streamed answer content. */
     emittedAfter?: string;
+    /** adapterIds that must not be failed over from once running (side effects). */
+    blockRunFailover?: string[];
   },
   rec: Recorder
 ): RunAgentChainDeps {
@@ -37,6 +39,7 @@ function makeDeps(
       return behavior.runOutcome?.[id] ?? { failed: false };
     },
     hasEmitted: () => emitted,
+    blockRunFailover: (id) => (behavior.blockRunFailover ?? []).includes(id),
     onFailover: (m) => rec.failovers.push(m),
     onError: (m) => rec.errors.push(m),
     log: () => {},
@@ -138,6 +141,38 @@ describe("runAgentChain failover", () => {
     // acp ran with suppress=false, so the facade already emitted; onError not called.
     expect(rec.errors).toEqual([]);
     expect(rec.failovers).toHaveLength(1);
+  });
+
+  it("does not fail over a side-effecting adapter after it started running", async () => {
+    const rec = recorder();
+    const result = await runAgentChain(
+      makeDeps(
+        ["codex", "acp"],
+        { runOutcome: { codex: fail("exited non-zero") }, blockRunFailover: ["codex"] },
+        rec
+      )
+    );
+    expect(result.failed).toBe(true);
+    expect(result.handoffs).toBe(0);
+    // codex ran and failed; we must not re-run the task on acp (files may be edited)
+    expect(rec.ran).toEqual([{ adapterId: "codex", suppress: true }]);
+    expect(rec.failovers).toEqual([]);
+    expect(rec.errors).toEqual(["exited non-zero"]);
+  });
+
+  it("still fails over a side-effecting adapter that fails to START", async () => {
+    const rec = recorder();
+    const result = await runAgentChain(
+      makeDeps(
+        ["codex", "acp"],
+        { ensureFails: { codex: "codex binary not found" }, blockRunFailover: ["codex"] },
+        rec
+      )
+    );
+    // startup precedes any side effect, so failing over is safe
+    expect(result.failed).toBe(false);
+    expect(result.handoffs).toBe(1);
+    expect(rec.ran).toEqual([{ adapterId: "acp", suppress: false }]);
   });
 
   it("surfaces the error when every agent fails to start", async () => {

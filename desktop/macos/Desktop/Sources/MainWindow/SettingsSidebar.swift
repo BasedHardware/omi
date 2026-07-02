@@ -16,6 +16,14 @@ struct SettingsSearchItem: Identifiable {
   }
 
   static let allSearchableItems: [SettingsSearchItem] = [
+    // AI Agents
+    SettingsSearchItem(
+      name: "AI Agents", subtitle: "Route a spoken task to the best coding agent",
+      keywords: [
+        "agent", "agents", "codex", "claude code", "hermes", "openclaw", "coding agent",
+        "routing", "route", "fallback", "install agent",
+      ],
+      section: .aiAgents, icon: "wand.and.stars", settingId: "aiagents.default"),
     // General
     SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",

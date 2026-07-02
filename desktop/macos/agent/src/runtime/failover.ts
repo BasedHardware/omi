@@ -25,6 +25,12 @@ export interface RunAgentChainDeps {
   run: (adapterId: string, suppressError: boolean) => Promise<HandleQueryOutcome>;
   /** Whether user-visible answer content has already streamed for this request. */
   hasEmitted: () => boolean;
+  /**
+   * True for adapters that may have performed side effects (e.g. a one-shot exec
+   * agent that edits files with buffered, non-streaming output) and so must NOT be
+   * failed over from once it has started running. Startup failover is still allowed.
+   */
+  blockRunFailover?: (adapterId: string) => boolean;
   /** Emit a transparent "trying X instead" notice to the user. */
   onFailover: (message: string) => void;
   /** Emit the terminal error when we give up (chain exhausted / not retryable). */
@@ -88,9 +94,11 @@ export async function runAgentChain(deps: RunAgentChainDeps): Promise<RunAgentCh
       // Last resort: the facade already emitted the error itself.
       return { attempted, failed: true, handoffs };
     }
-    // Suppressed: we own the emit-or-fail-over decision. Never retry once the
-    // user has seen answer content.
-    const canRetry = !deps.hasEmitted() && isRetryableAgentFailure(errText);
+    // Suppressed: we own the emit-or-fail-over decision. Never retry once the user
+    // has seen answer content, and never retry a side-effecting adapter that already
+    // started running (it may have edited files even though it emitted nothing).
+    const runFailoverBlocked = deps.blockRunFailover?.(adapterId) ?? false;
+    const canRetry = !runFailoverBlocked && !deps.hasEmitted() && isRetryableAgentFailure(errText);
     const plan = canRetry ? planFailover(chain as AgentId[], adapterId as AgentId, errText) : null;
     if (plan) {
       deps.log?.(`Agent failover (run): ${adapterId} -> ${plan.next}: ${errText}`);

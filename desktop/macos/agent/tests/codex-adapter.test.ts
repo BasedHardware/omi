@@ -1,7 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CodexRuntimeAdapter } from "../src/adapters/codex.js";
 
 describe("CodexRuntimeAdapter", () => {
+  // Save/restore the env we mutate so this test can't leak into others in the worker.
+  let savedCodexCommand: string | undefined;
+  beforeEach(() => {
+    savedCodexCommand = process.env.OMI_CODEX_ADAPTER_COMMAND;
+  });
+  afterEach(() => {
+    if (savedCodexCommand === undefined) {
+      delete process.env.OMI_CODEX_ADAPTER_COMMAND;
+    } else {
+      process.env.OMI_CODEX_ADAPTER_COMMAND = savedCodexCommand;
+    }
+  });
+
   it("registers as the codex adapter with one-shot exec capabilities", () => {
     const adapter = new CodexRuntimeAdapter({ command: "codex" });
     expect(adapter.adapterId).toBe("codex");
