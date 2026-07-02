@@ -47,6 +47,18 @@ _PLUGIN_ROOT = os.path.abspath(os.path.join(_HERE, ".."))
 if _SHARED not in sys.path:
     sys.path.insert(0, _SHARED)
 
+# Add the plugin's own directory to sys.path so `import simple_storage`
+# / `import whatsapp_client` / `import main` works at collection time
+# (before the autouse fixture has installed the conftest's loaded
+# versions into sys.modules). The conftest's sys.modules swap below
+# covers the test-run-time state; this sys.path entry covers the
+# collection-time imports. Without it, `import simple_storage` at
+# the top of test_storage_durability.py fails with ModuleNotFoundError
+# because simple_storage.py lives in plugins/omi-whatsapp-app/, not on
+# sys.path by default.
+if _PLUGIN_ROOT not in sys.path:
+    sys.path.insert(0, _PLUGIN_ROOT)
+
 
 # ---------------------------------------------------------------------------
 # sys.modules isolation — load WhatsApp's plugin modules on demand, swap

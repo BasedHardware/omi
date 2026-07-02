@@ -45,10 +45,7 @@ def _build_capped_messages(previous_messages):
             "text": str(t.get("text"))[:8192],
         }
         for t in capped
-        if isinstance(t, dict)
-        and t.get("role") in ("human", "ai")
-        and isinstance(t.get("text"), str)
-        and t.get("text")
+        if isinstance(t, dict) and t.get("role") in ("human", "ai") and isinstance(t.get("text"), str) and t.get("text")
     ]
 
 
@@ -73,12 +70,9 @@ def test_slice_keeps_most_recent_when_over_20():
     # The fix should drop messages 0-29 and keep messages 30-49.
     assert len(out) == 20, f"expected 20 messages, got {len(out)}"
     assert out[0]["text"] == "msg-30", (
-        f"expected 'msg-30' as the first kept message (newest of the kept 20), "
-        f"got {out[0]['text']!r}"
+        f"expected 'msg-30' as the first kept message (newest of the kept 20), " f"got {out[0]['text']!r}"
     )
-    assert out[-1]["text"] == "msg-49", (
-        f"expected 'msg-49' as the last message, got {out[-1]['text']!r}"
-    )
+    assert out[-1]["text"] == "msg-49", f"expected 'msg-49' as the last message, got {out[-1]['text']!r}"
 
 
 def test_slice_drops_oldest_messages():
@@ -88,9 +82,9 @@ def test_slice_drops_oldest_messages():
     out = _build_capped_messages(msgs)
     # msg-0 through msg-9 must be absent (the oldest 10).
     for m in out:
-        assert m["text"] not in {f"msg-{i}" for i in range(10)}, (
-            f"oldest message {m['text']!r} leaked into the kept set"
-        )
+        assert m["text"] not in {
+            f"msg-{i}" for i in range(10)
+        }, f"oldest message {m['text']!r} leaked into the kept set"
     # msg-10 through msg-29 must be present.
     kept = {m["text"] for m in out}
     assert kept == {f"msg-{i}" for i in range(10, 30)}
@@ -151,6 +145,7 @@ class TestPersonaChatTransportErrorEnumeration:
         be caught and return \"\"."""
         from persona_client import chat  # noqa: F401
         import inspect
+
         src = inspect.getsource(chat)
         assert "httpx.ReadError" in src, (
             "ReadError is not enumerated in the transport-error catch. "
@@ -160,6 +155,7 @@ class TestPersonaChatTransportErrorEnumeration:
     def test_catch_includes_write_error(self):
         from persona_client import chat
         import inspect
+
         src = inspect.getsource(chat)
         assert "httpx.WriteError" in src
 
@@ -167,12 +163,14 @@ class TestPersonaChatTransportErrorEnumeration:
         from persona_client import chat
         import inspect
         import inspect
+
         src = inspect.getsource(chat)
         assert "httpx.CloseError" in src
 
     def test_catch_includes_remote_protocol_error(self):
         from persona_client import chat
         import inspect
+
         src = inspect.getsource(chat)
         assert "httpx.RemoteProtocolError" in src
 
@@ -186,6 +184,7 @@ class TestPersonaChatTransportErrorEnumeration:
         import re
         from persona_client import chat
         import inspect
+
         src = inspect.getsource(chat)
         # The pattern `except httpx.TransportError` (parent class) must
         # not appear in the chat function. We allow other TransportError
@@ -212,11 +211,22 @@ class TestPersonaChatTransportErrorEnumeration:
         `test_catch_does_not_use_broad_transport_error` already pins
         this. This test documents the consequence in a comment.
         """
-        # Source-level check is sufficient — the runtime test would
-        # require constructing a full httpx client that fails with
-        # UnsupportedProtocol, which is fragile in unit tests. The
-        # source check at the call site is the contract.
-        assert True, (
-            "UnsupportedProtocol propagation is enforced by the "
-            "`test_catch_does_not_use_broad_transport_error` source check."
+        # Direct invariant check: UnsupportedProtocol is NOT a
+        # subclass of any of the four transient errors we catch.
+        # If it were, the broad-`except` regression that cubic
+        # flagged would silently swallow config errors. (We
+        # intentionally do NOT check `httpx.TransportError` because
+        # that's the regression we're guarding against — the
+        # earlier test pins that the broad parent class is absent.)
+        caught_types = (
+            httpx.ReadError,
+            httpx.WriteError,
+            httpx.CloseError,
+            httpx.RemoteProtocolError,
+        )
+        assert not issubclass(httpx.UnsupportedProtocol, caught_types), (
+            "httpx.UnsupportedProtocol must NOT be a subclass of any "
+            "caught transient error type — otherwise the broad-catch "
+            "regression would silently swallow this permanent config "
+            "error. (Cubic review 4614271733 P2.)"
         )

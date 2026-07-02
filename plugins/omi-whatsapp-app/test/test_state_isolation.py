@@ -19,8 +19,6 @@ from __future__ import annotations
 
 import sys
 
-import pytest
-
 
 class TestSimpleStorageStateIsolation:
     """Pin that the autouse fixture in conftest.py clears the
@@ -39,6 +37,7 @@ class TestSimpleStorageStateIsolation:
         collection time.
         """
         import simple_storage  # noqa: F401
+
         assert simple_storage.users == {}, (
             f"users dict has leftover entries: {simple_storage.users!r}. "
             f"conftest.py's autouse fixture should clear it at the "
@@ -50,6 +49,7 @@ class TestSimpleStorageStateIsolation:
         If a previous test left entries here, the conftest's
         .clear() call is missing."""
         import simple_storage  # noqa: F401
+
         assert simple_storage.pending_setups == {}, (
             f"pending_setups dict has leftover entries: "
             f"{simple_storage.pending_setups!r}. conftest.py's autouse "
@@ -63,6 +63,7 @@ class TestSimpleStorageStateIsolation:
         before that test started.
         """
         import simple_storage  # noqa: F401
+
         # Plant entries that any sane test would refuse to leave behind.
         simple_storage.users["sentinel"] = {"phone": "sentinel"}
         simple_storage.pending_setups["sentinel"] = {"token": "sentinel"}
