@@ -34,6 +34,7 @@ struct OnboardingWelcomeStepView: View {
           )
           .foregroundColor(OmiColors.textPrimary)
           .frame(maxWidth: 320)
+          .onSubmit(confirmName)
 
         if let error = coordinator.lastActionError {
           Text(error)
@@ -43,14 +44,10 @@ struct OnboardingWelcomeStepView: View {
         }
 
         Button("Continue") {
-          Task {
-            await coordinator.confirmPreferredName()
-            if coordinator.lastActionError == nil {
-              onContinue()
-            }
-          }
+          confirmName()
         }
         .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .keyboardShortcut(.defaultAction)
 
         // Dev-only shortcut to skip the whole onboarding flow — same as the
         // hidden logo long-press. Never shown on production builds.
@@ -67,6 +64,15 @@ struct OnboardingWelcomeStepView: View {
       .onAppear {
         coordinator.clearLastActionError()
         coordinator.draftName = coordinator.preferredName
+      }
+    }
+  }
+
+  private func confirmName() {
+    Task {
+      await coordinator.confirmPreferredName()
+      if coordinator.lastActionError == nil {
+        onContinue()
       }
     }
   }
