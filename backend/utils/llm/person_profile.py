@@ -7,6 +7,7 @@ from their conversations and attributed facts. Stored on the Person doc and surf
 by get_person_context_tool and the reply drafter.
 """
 
+import html
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -36,6 +37,13 @@ UNTRUSTED_DATA_NOTICE = (
 
 # Profile fields the LLM may populate; each must be a string when present.
 _PROFILE_STRING_FIELDS = ('relationship', 'profile_summary', 'tone_notes')
+
+
+def _fence(text: Optional[str]) -> str:
+    """Escape untrusted content (transcripts, facts, contact name) before it goes
+    inside a <...> data block, so a message containing a literal ``</conversations>``
+    cannot close the block and inject instructions."""
+    return html.escape(text or '', quote=False)
 
 
 def _needs_refresh(person: dict) -> bool:
@@ -85,7 +93,8 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
     if not force and not _needs_refresh(person):
         return False
 
-    name = person.get('name') or 'this person'
+    # name is contact-derived (untrusted): sanitize before it enters the prompt.
+    name = _fence(' '.join((person.get('name') or 'this person').split()))
     convos = conversations_db.get_conversations_by_person_id(uid, person_id, limit=15)
     facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person_id), limit=30)
 
@@ -102,8 +111,8 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
     if total_segments < MIN_SEGMENTS_FOR_PROFILE and not facts:
         return False
 
-    transcript_text = "\n\n---\n\n".join(transcript_blocks)[:8000] or "(none)"
-    facts_text = "\n".join(f"- {f.get('content')}" for f in facts if f.get('content'))[:2000] or "(none)"
+    transcript_text = _fence("\n\n---\n\n".join(transcript_blocks))[:8000] or "(none)"
+    facts_text = "\n".join(f"- {_fence(f.get('content'))}" for f in facts if f.get('content'))[:2000] or "(none)"
 
     # Guard on the actually-rendered material, not just raw counts: if neither
     # the transcript nor the facts produced usable text there is nothing to

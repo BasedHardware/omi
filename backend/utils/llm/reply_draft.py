@@ -5,6 +5,7 @@ messages (the ground truth for how they actually text), plus the per-person
 profile + facts + the recent thread. Returns a draft string only; never sends.
 """
 
+import html
 import logging
 from typing import List, Optional
 
@@ -17,6 +18,25 @@ from utils.retrieval.tool_services.person_service import resolve_person, is_ambi
 logger = logging.getLogger(__name__)
 
 MAX_STYLE_SAMPLES = 30
+
+
+def _fence(text: Optional[str]) -> str:
+    """Escape untrusted content before it goes inside a <...> data block.
+
+    An inbound message (or contact-derived context) containing a literal
+    ``</conversation>`` could otherwise close the data block and inject
+    instructions. HTML-escaping ``&<>`` makes it impossible to forge any of our
+    delimiter tags while staying readable to the model (``&lt;`` etc.)."""
+    return html.escape(text or '', quote=False)
+
+
+def _safe_name(name: Optional[str]) -> str:
+    """Neutralize a contact-derived display name before interpolating it into
+    instruction lines (a malicious name could otherwise carry newlines or tag
+    markup)."""
+    cleaned = ' '.join((name or '').split())
+    return html.escape(cleaned, quote=False)
+
 
 # Prompt-injection boundary: everything inside the <...> data blocks below is
 # untrusted content (inbound messages, contact-derived context). Instruct the
@@ -118,7 +138,8 @@ def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[
         # Multiple contacts share this name — refuse to draft to an arbitrary one.
         # Surface the disambiguation ask as the draft so the caller shows it verbatim.
         return {'draft': person.message(), 'ambiguous': True}
-    name = (person or {}).get('name') or person_ref
+    # name is contact-derived (untrusted): sanitize before it enters any prompt line.
+    name = _safe_name((person or {}).get('name') or person_ref)
     relationship = (person or {}).get('relationship')
     summary = (person or {}).get('profile_summary')
     tone = (person or {}).get('tone_notes')
@@ -129,11 +150,11 @@ def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[
             facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
         except Exception as e:
             logger.warning(f"reply_draft: facts lookup failed uid={uid}: {e}")
-    facts_text = "\n".join(f"- {f.get('content')}" for f in facts if f.get('content'))
+    facts_text = "\n".join(f"- {_fence(f.get('content'))}" for f in facts if f.get('content'))
 
     style_samples = _collect_user_style_samples(uid, person, thread)
     style_block = (
-        "\n".join(f"- {s}" for s in style_samples)
+        "\n".join(f"- {_fence(s)}" for s in style_samples)
         if style_samples
         else "(no samples available — write short, casual, and human; do not sound like an AI)"
     )
@@ -144,16 +165,18 @@ def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[
         if not text:
             continue
         who = 'You' if m.get('is_from_me') else name
-        thread_lines.append(f"{who}: {text}")
+        thread_lines.append(f"{who}: {_fence(text)}")
     thread_text = "\n".join(thread_lines) or "(no recent messages)"
 
+    # relationship / summary / tone come from the LLM-generated person profile,
+    # which is built off untrusted transcripts — escape before fencing.
     context_bits = []
     if relationship:
-        context_bits.append(f"{name} is the user's {relationship}.")
+        context_bits.append(f"{name} is the user's {_fence(relationship)}.")
     if summary:
-        context_bits.append(summary)
+        context_bits.append(_fence(summary))
     if tone:
-        context_bits.append(f"How the user usually texts {name}: {tone}")
+        context_bits.append(f"How the user usually texts {name}: {_fence(tone)}")
     if facts_text:
         context_bits.append(f"Facts about {name}:\n{facts_text}")
     context_text = "\n".join(context_bits) or "(no extra context)"
@@ -163,7 +186,7 @@ def draft_reply(uid: str, person_ref: str, thread: List[dict], intent: Optional[
         f"OMI KNOWS YOUR DAY AND YOUR LIFE — use the context below to answer truthfully if {name} asks "
         f"anything factual (where you are, what you did today, your plans, how something went). Only pull "
         f"from it when it's relevant to what {name} just said; otherwise ignore it and just reply naturally.\n"
-        f"<life_context>\n{life_context}\n</life_context>\n\n"
+        f"<life_context>\n{_fence(life_context)}\n</life_context>\n\n"
         if life_context
         else ""
     )
