@@ -105,7 +105,8 @@ struct TelegramInboxPage: View {
   private var chatList: some View {
     List(selection: $store.selectedChatID) {
       ForEach(store.chats) { chat in
-        HStack {
+        HStack(spacing: 10) {
+          TelegramAvatar(name: chat.displayName, size: 34, imageData: chat.avatarImageData)
           VStack(alignment: .leading, spacing: 2) {
             Text(chat.displayName).font(.body).lineLimit(1)
             Text(chat.lastPreview).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -127,6 +128,7 @@ struct TelegramInboxPage: View {
   private func chatDetail(_ chat: TelegramChat) -> some View {
     VStack(spacing: 0) {
       HStack {
+        TelegramAvatar(name: chat.displayName, size: 28, imageData: chat.avatarImageData)
         Text(chat.displayName).font(.headline)
         Spacer()
         Toggle(
@@ -215,6 +217,36 @@ struct TelegramInboxPage: View {
   private func sendComposed() {
     store.sendManual(composeText)
     composeText = ""
+  }
+}
+
+// MARK: - Avatar
+
+private struct TelegramAvatar: View {
+  let name: String
+  let size: CGFloat
+  var imageData: Data? = nil
+
+  var body: some View {
+    Group {
+      if let data = imageData, let img = NSImage(data: data) {
+        Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+      } else {
+        ZStack {
+          TelegramInboxPage.telegramBlue.opacity(0.25)
+          Text(initials).font(.system(size: size * 0.4, weight: .semibold))
+            .foregroundStyle(.primary)
+        }
+      }
+    }
+    .frame(width: size, height: size)
+    .clipShape(Circle())
+  }
+
+  private var initials: String {
+    let parts = name.split(separator: " ").prefix(2)
+    let s = parts.compactMap { $0.first }.map(String.init).joined()
+    return s.isEmpty ? "?" : s.uppercased()
   }
 }
 

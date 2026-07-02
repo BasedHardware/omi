@@ -30,6 +30,7 @@ struct TelegramHelperThread: Decodable, Sendable {
   let latestMessageID: String
   let awaitingReply: Bool
   let messages: [TelegramHelperMessage]
+  var avatarPath: String? = nil  // absolute path to the chat's downloaded profile photo
 
   enum CodingKeys: String, CodingKey {
     case messages
@@ -38,6 +39,7 @@ struct TelegramHelperThread: Decodable, Sendable {
     case isGroup = "is_group"
     case latestMessageID = "latest_message_id"
     case awaitingReply = "awaiting_reply"
+    case avatarPath = "avatar_path"
   }
 }
 
@@ -198,6 +200,7 @@ struct TelegramChat: Identifiable, Sendable {
   let isGroup: Bool
   let personRef: String  // "tg:<user_id>" of the 1:1 partner (or a group label)
   let bubbles: [TelegramChatBubble]  // ascending by date
+  var avatarImageData: Data? = nil  // chat/user profile photo
 
   var lastDate: Date { bubbles.last?.date ?? .distantPast }
   var lastPreview: String {
@@ -237,12 +240,19 @@ extension TelegramChat {
     }
     // The person to resolve server-side: the first non-me sender's tg handle.
     let partner = t.messages.first(where: { !$0.isFromMe && $0.handle != nil })?.handle
+    let avatar: Data? = {
+      guard let p = t.avatarPath, !p.isEmpty, FileManager.default.fileExists(atPath: p) else {
+        return nil
+      }
+      return try? Data(contentsOf: URL(fileURLWithPath: p))
+    }()
     self.init(
       chatID: t.chatID,
       displayName: t.displayName ?? (partner ?? "Telegram chat"),
       isGroup: t.isGroup,
       personRef: partner ?? (t.displayName ?? t.chatID),
-      bubbles: bubbles)
+      bubbles: bubbles,
+      avatarImageData: avatar)
   }
 
   /// Ingest payload that preserves per-message sender handles from a helper thread.

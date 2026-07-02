@@ -27,9 +27,15 @@ final class WhatsAppInboxStore: ObservableObject {
 
   func isAutoReplyEnabled(_ chatID: String) -> Bool { autoReplyChats.contains(chatID) }
 
-  /// Whether this chat supports fully automated sending (1:1 only). Group/opaque
-  /// chats can't be auto-sent, so the UI hides the auto-reply toggle for them.
-  func canAutoReply(_ chatID: String) -> Bool {
+  /// Whether the auto-reply toggle is offered for this chat. Shown for ALL chats
+  /// (1:1 and groups) so the control is consistent everywhere. 1:1 chats can be
+  /// auto-sent via the WhatsApp deep link; groups/opaque chats fall back to
+  /// drafting + prefilling WhatsApp for the user to send (see `autoReply`).
+  func canAutoReply(_ chatID: String) -> Bool { true }
+
+  /// True only when a drafted reply can be delivered fully automatically (no user
+  /// step) — i.e. 1:1 chats with a dialable number.
+  func canAutoSend(_ chatID: String) -> Bool {
     WhatsAppSenderService.phoneDigits(forChatID: chatID) != nil
   }
 

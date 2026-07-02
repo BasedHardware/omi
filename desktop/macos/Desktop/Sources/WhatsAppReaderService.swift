@@ -256,6 +256,25 @@ actor WhatsAppReaderService {
       return rows.compactMap { Self.chatRecord(from: $0) }
     }
 
+    // WhatsApp profile push-names (JID local part → self-set display name). The
+    // only readable name for `@lid` senders whose message metadata is an encoded
+    // blob (e.g. "IAA=") or an opaque id.
+    let pushNames: [String: String] = try await dbQueue.read { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: "SELECT ZJID AS jid, ZPUSHNAME AS name FROM ZWAPROFILEPUSHNAME WHERE ZPUSHNAME IS NOT NULL AND ZPUSHNAME <> ''"
+      )
+      var map: [String: String] = [:]
+      for row in rows {
+        guard let jid = row["jid"] as? String,
+          let lp = jid.split(separator: "@").first.map(String.init), !lp.isEmpty,
+          let name = row["name"] as? String
+        else { continue }
+        map[lp] = name
+      }
+      return map
+    }
+
     // Per-group member directory (chat JID → member-id-digits → display name), used
     // to turn `@<id>` mentions in group text into readable `@Name`.
     let membersByChat: [String: [String: String]] = try await dbQueue.read { db in
@@ -277,6 +296,7 @@ actor WhatsAppReaderService {
         let name =
           Self.sanitizedName(row["cname"] as? String)
           ?? Self.sanitizedName(row["fname"] as? String)
+          ?? Self.sanitizedName(pushNames[digits])
           ?? Self.prettyHandle(digits)
         map[chatJID, default: [:]][digits] = name
       }
@@ -327,15 +347,22 @@ actor WhatsAppReaderService {
       for r in recent {
         guard !r.text.isEmpty || r.imagePath != nil else { continue }
         var senderImg: Data? = nil
+        var sName: String? = (isGroup && !r.isFromMe) ? r.senderName : nil
         if isGroup, !r.isFromMe, let h = r.handle {
           senderImg = await resolver.imageData(for: h) ?? Self.profileThumb(for: h, in: thumbMap)
+          // Prefer WhatsApp's real profile push-name over an unsaved ~tag/opaque id.
+          if sName == nil || sName!.hasPrefix("~") || sName!.hasPrefix("("),
+            let real = Self.pushName(for: h, in: pushNames)
+          {
+            sName = real
+          }
         }
         let bubbleText = r.text.isEmpty ? "" : Self.resolveMentions(in: r.text, members: members)
         bubbles.append(
           WhatsAppChatBubble(
             id: r.messageId.isEmpty ? "\(chatID)-\(r.rowid)" : r.messageId,
             text: bubbleText, isFromMe: r.isFromMe, date: r.date,
-            senderName: (isGroup && !r.isFromMe) ? r.senderName : nil, senderImage: senderImg,
+            senderName: sName, senderImage: senderImg,
             imagePath: r.imagePath))
       }
 
@@ -380,6 +407,16 @@ actor WhatsAppReaderService {
     let localPart = jid.split(separator: "@").first.map(String.init) ?? jid
     guard let path = map[localPart] else { return nil }
     return try? Data(contentsOf: URL(fileURLWithPath: path))
+  }
+
+  /// A real display name for a group sender from WhatsApp's profile push-name
+  /// table (keyed by JID local part), or nil. This is the sender's own set name —
+  /// the only readable name for `@lid` senders whose message metadata is an
+  /// encoded blob.
+  private static func pushName(for handle: String, in map: [String: String]) -> String? {
+    let localPart = handle.split(separator: "@").first.map(String.init) ?? handle
+    guard let name = map[localPart] else { return nil }
+    return sanitizedName(name)
   }
 
   // MARK: - Row → record
@@ -527,6 +564,9 @@ actor WhatsAppReaderService {
   static func isLikelyEncodedName(_ s: String) -> Bool {
     let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
     if t.isEmpty || t.contains(" ") { return false }  // names with spaces are always fine
+    // Base64 padding is never part of a real name — flag any `=`-terminated token
+    // (catches short blobs like "IAA=" that the length heuristic below misses).
+    if t.count >= 3, t.hasSuffix("=") { return true }
     if t.count >= 6, t.contains("=") || t.contains("+") || t.contains("/") { return true }
     if t.count >= 12 {
       let wordChars = t.allSatisfy { $0.isLetter || $0.isNumber }

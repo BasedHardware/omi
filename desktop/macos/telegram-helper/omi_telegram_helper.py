@@ -76,6 +76,21 @@ async def _download_photo(message, chat_id) -> str:
         return ""
 
 
+async def _download_avatar(client, entity, chat_id) -> str:
+    """Download a chat/user's profile photo to the media cache; return its absolute
+    path, or "" when there's none. Cached per chat and re-fetched only if missing."""
+    try:
+        os.makedirs(MEDIA_CACHE_DIR, exist_ok=True)
+        dest = os.path.join(MEDIA_CACHE_DIR, f"avatar_{chat_id}.jpg")
+        if os.path.exists(dest) and os.path.getsize(dest) > 0:
+            return dest
+        written = await client.download_profile_photo(entity, file=dest)
+        return written or ""
+    except Exception as e:
+        log(f"avatar download failed for {chat_id}: {e}")
+        return ""
+
+
 def emit(event: dict) -> None:
     """Write one event as a single JSON line to stdout and flush immediately."""
     sys.stdout.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -240,6 +255,7 @@ class Helper:
         entity = await self.client.get_entity(chat_id)
         is_group = not _is_private(entity)
         display_name = tl_utils.get_display_name(entity) or None
+        avatar_path = await _download_avatar(self.client, entity, chat_id)
 
         messages = []
         async for m in self.client.iter_messages(chat_id, limit=THREAD_CONTEXT_LIMIT):
@@ -268,6 +284,7 @@ class Helper:
             "chat_id": str(chat_id),
             "display_name": display_name,
             "is_group": is_group,
+            "avatar_path": avatar_path or "",
             "latest_message_id": str(latest_msg.id),
             "awaiting_reply": not bool(latest_msg.out),
             "messages": messages,

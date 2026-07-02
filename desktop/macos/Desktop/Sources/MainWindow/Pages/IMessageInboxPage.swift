@@ -287,23 +287,24 @@ private struct ChatDetailView: View {
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textPrimary)
             .scrollContentBackground(.hidden)
-            .frame(minHeight: 22, maxHeight: 90)
+            .frame(minHeight: 17, maxHeight: 68)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 10)
             .opacity(isDrafting ? 0 : 1)
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 4)
         .background(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(OmiColors.backgroundSecondary)
         )
         .overlay(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
             .stroke(OmiColors.textTertiary.opacity(0.15), lineWidth: 1)
         )
 
         Button { Task { await send() } } label: {
           Image(systemName: "arrow.up.circle.fill")
-            .font(.system(size: 28))
+            .font(.system(size: 26))
             .foregroundColor(canSend ? accent : OmiColors.textTertiary.opacity(0.5))
         }
         .buttonStyle(.plain)
@@ -311,7 +312,7 @@ private struct ChatDetailView: View {
       }
     }
     .padding(.horizontal, 14)
-    .padding(.vertical, 10)
+    .padding(.vertical, 8)
     .background(OmiColors.backgroundPrimary)
     .overlay(alignment: .top) { Divider().overlay(OmiColors.textTertiary.opacity(0.15)) }
   }

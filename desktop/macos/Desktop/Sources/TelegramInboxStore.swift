@@ -255,7 +255,8 @@ final class TelegramInboxStore: ObservableObject {
       id: UUID().uuidString, text: text, isFromMe: true, date: Date(), senderName: nil)
     chats[idx] = TelegramChat(
       chatID: chat.chatID, displayName: chat.displayName, isGroup: chat.isGroup,
-      personRef: chat.personRef, bubbles: chat.bubbles + [bubble])
+      personRef: chat.personRef, bubbles: chat.bubbles + [bubble],
+      avatarImageData: chat.avatarImageData)
     lastLatestMessageID[chatID] = bubble.id
   }
 }
