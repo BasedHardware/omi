@@ -5,7 +5,7 @@ import SwiftUI
 /// automatic replies. Mirrors the iMessage Replies tab; Telegram has no local DB,
 /// so all data flows through TelegramInboxStore -> TelegramClientService (MTProto).
 struct TelegramInboxPage: View {
-  @StateObject private var store = TelegramInboxStore()
+  @ObservedObject private var store = TelegramInboxStore.shared
   @State private var composeText: String = ""
   @State private var passcode: String = ""
   @State private var phone: String = ""

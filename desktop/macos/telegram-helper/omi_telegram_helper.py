@@ -63,11 +63,14 @@ def log(msg: str) -> None:
     sys.stderr.flush()
 
 
+def _aware(dt):
+    """Return a tz-aware UTC datetime (Telethon dates are already aware; guard anyway)."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def _iso(dt) -> str:
     """ISO8601 UTC with fractional seconds, matching the backend/Swift contract."""
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat()
+    return _aware(dt).astimezone(timezone.utc).isoformat()
 
 
 def _tg_handle(user_id) -> str:
@@ -261,6 +264,44 @@ class Helper:
 
         self._listening = True
         emit({"event": "listening"})
+        # Backfill recent 1:1 chats so the inbox is populated immediately and Omi
+        # learns each person's history. Emitted as "backfill" (not "new_message")
+        # so the app shows them WITHOUT auto-drafting/replying to old threads.
+        await self._backfill(backfill_days=backfill_days)
+
+    async def _backfill(self, backfill_days: int = 90, limit: int = 20) -> None:
+        from datetime import timedelta
+        from telethon.tl.types import User
+
+        try:
+            cutoff = None
+            try:
+                from datetime import datetime as _dt
+
+                cutoff = _dt.now(timezone.utc) - timedelta(days=max(1, backfill_days))
+            except Exception:
+                cutoff = None
+            count = 0
+            async for d in self.client.iter_dialogs(limit=100):
+                ent = d.entity
+                # 1:1 human chats only (skip bots, groups, channels) for the reply feature.
+                if not isinstance(ent, User) or getattr(ent, "bot", False):
+                    continue
+                if not d.message or not (d.message.message or "").strip():
+                    continue
+                if cutoff is not None and d.message.date and _aware(d.message.date) < cutoff:
+                    continue
+                try:
+                    snap = await self._thread_snapshot(d.id, d.message)
+                except Exception as e:
+                    emit({"event": "error", "message": f"backfill snapshot: {e}", "fatal": False})
+                    continue
+                emit({"event": "backfill", "thread": snap})
+                count += 1
+                if count >= limit:
+                    break
+        except Exception as e:
+            emit({"event": "error", "message": f"backfill: {e}", "fatal": False})
 
     # --- sending -----------------------------------------------------------
 

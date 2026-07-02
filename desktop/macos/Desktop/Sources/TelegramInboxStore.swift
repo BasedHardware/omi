@@ -6,6 +6,11 @@ import SwiftUI
 /// helper (via TelegramClientService) instead of a local DB watcher.
 @MainActor
 final class TelegramInboxStore: ObservableObject {
+  /// Shared across the app so navigating away from / back to the Telegram tab keeps
+  /// the same connection, backfilled chats, and helper event subscription (the
+  /// helper is a singleton whose backfill runs once — a per-view store would miss it).
+  static let shared = TelegramInboxStore()
+
   enum ConnectionState: Equatable {
     case disconnected  // not connected — show phone entry (or Telegram Desktop option)
     case needsPasscode  // Telegram Desktop Local Passcode required (tdata path)
@@ -141,6 +146,10 @@ final class TelegramInboxStore: ObservableObject {
       connection = .connected
     case "new_message":
       if let thread = event.thread { Task { await handleThread(thread) } }
+    case "backfill":
+      // Existing chat loaded on connect: show it + learn its history, but do NOT
+      // auto-draft/reply to old threads (only genuinely new arrivals do that).
+      if let thread = event.thread { Task { await handleBackfill(thread) } }
     case "sent":
       break  // optimistic append already done at send time
     case "error":
@@ -153,6 +162,17 @@ final class TelegramInboxStore: ObservableObject {
   }
 
   // MARK: - Message handling
+
+  /// A chat loaded during connect backfill: populate the inbox and ingest its
+  /// history (so Omi learns per-person voice), but seed the high-water mark so we
+  /// never auto-draft/reply to these already-existing threads.
+  private func handleBackfill(_ t: TelegramHelperThread) async {
+    let chat = TelegramChat(helperThread: t)
+    upsert(chat)
+    lastLatestMessageID[chat.chatID] = t.latestMessageID
+    let payload = TelegramChat.ingestPayload(from: t)
+    _ = try? await APIClient.shared.telegramIngest(threads: [payload])
+  }
 
   private func handleThread(_ t: TelegramHelperThread) async {
     let chat = TelegramChat(helperThread: t)
