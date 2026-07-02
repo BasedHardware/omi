@@ -37,12 +37,17 @@ actor WhatsAppReaderService {
     static let session = "ZWACHATSESSION"
     static let groupMember = "ZWAGROUPMEMBER"
 
-    // Only text rows in 1:1 (`@s.whatsapp.net`) or group (`@g.us`) sessions —
-    // skips broadcast/status sessions and non-text message types.
+    // Only text rows in 1:1 (`@s.whatsapp.net` or the newer privacy `@lid`) or
+    // group (`@g.us`) sessions — skips broadcast/status sessions and non-text
+    // types. `@lid` sessions are how WhatsApp now represents chats with people
+    // who aren't saved contacts (e.g. a new person messaging you); excluding them
+    // hid those whole conversations from the inbox.
+    static let sessionFilter =
+      "(s.ZCONTACTJID LIKE '%@s.whatsapp.net' OR s.ZCONTACTJID LIKE '%@lid' OR s.ZCONTACTJID LIKE '%@g.us')"
     static let baseWhere = """
         m.ZMESSAGETYPE = 0
         AND m.ZTEXT IS NOT NULL AND m.ZTEXT <> ''
-        AND (s.ZCONTACTJID LIKE '%@s.whatsapp.net' OR s.ZCONTACTJID LIKE '%@g.us')
+        AND \(sessionFilter)
       """
 
     /// Column projection shared by every read, aliased to stable names.
@@ -245,7 +250,7 @@ actor WhatsAppReaderService {
             \(SQL.from)
             LEFT JOIN ZWAMEDIAITEM mi ON mi.ZMESSAGE = m.Z_PK
             WHERE m.ZMESSAGEDATE >= ?
-              AND (s.ZCONTACTJID LIKE '%@s.whatsapp.net' OR s.ZCONTACTJID LIKE '%@g.us')
+              AND \(SQL.sessionFilter)
               AND (
                 (m.ZMESSAGETYPE = 0 AND m.ZTEXT IS NOT NULL AND m.ZTEXT <> '')
                 OR (m.ZMESSAGETYPE = 1 AND mi.ZMEDIALOCALPATH IS NOT NULL AND mi.ZMEDIALOCALPATH <> '')
