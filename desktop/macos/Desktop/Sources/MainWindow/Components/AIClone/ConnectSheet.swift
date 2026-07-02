@@ -1067,15 +1067,16 @@ struct ConnectSheet: View {
         process.standardError = stderrPipe
         // cubic review 4616126827 P1 (continued): wire stdin to a
         // Pipe (NOT fd 0) so we own the lifecycle. We still don't
-        // WRITE to the pipe -- the generator wants interactive
-        // input. In the terminal-attached case (the only case we
-        // reach here after the isatty(0) check above), we dup the
-        // controlling terminal's stdin into the pipe. This is the
-        // same pattern the existing AgentRuntimeProcess uses (per
-        // the review). If we ever add programmatic credential
-        // input, we can write to this pipe from Swift.
-        let stdinPipe = Pipe()
-        process.standardInput = stdinPipe
+        // Wire stdin to the controlling terminal directly. We
+        // reached this point only when isatty(0) != 0, so fd 0
+        // is a real terminal and the generator's input() / getpass
+        // calls will read from the user's keyboard. cubic review
+        // 4616235108: the previous attempt used Pipe() and never
+        // connected it to fd 0 -- the child would block forever
+        // on stdin reads. FileHandle(fileDescriptor: 0) is the
+        // original pattern; the isatty(0) check above guarantees
+        // fd 0 is a usable terminal in the only case we get here.
+        process.standardInput = FileHandle(fileDescriptor: 0)
         // cubic review 4616126827 P1 (actor-isolation): the
         // @State mutation must happen on the main actor. We
         // initialize it AFTER the isatty check so the
