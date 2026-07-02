@@ -75,6 +75,13 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
         'schemas': ('Person',),
     },
+    'imports_integrations': {
+        'output': DEFAULT_OUTPUT_DIR / 'imports_integrations_wire.g.dart',
+        'schemas': (
+            'ImportJobResponse',
+            'IntegrationResponse',
+        ),
+    },
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},

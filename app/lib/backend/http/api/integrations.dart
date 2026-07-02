@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -12,10 +13,15 @@ class IntegrationResponse {
   IntegrationResponse({required this.connected, required this.appKey});
 
   factory IntegrationResponse.fromJson(Map<String, dynamic> json) {
-    return IntegrationResponse(
-      connected: json['connected'] as bool? ?? false,
-      appKey: json['app_key'] as String? ?? '',
-    );
+    return IntegrationResponse.fromGenerated(wire.GeneratedIntegrationResponse.fromJson(json));
+  }
+
+  factory IntegrationResponse.fromGenerated(wire.GeneratedIntegrationResponse generated) {
+    return IntegrationResponse(connected: generated.connected, appKey: generated.appKey);
+  }
+
+  wire.GeneratedIntegrationResponse toGenerated() {
+    return wire.GeneratedIntegrationResponse(connected: connected, appKey: appKey);
   }
 }
 

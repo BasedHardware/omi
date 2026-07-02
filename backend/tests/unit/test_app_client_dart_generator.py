@@ -16,6 +16,9 @@ API_KEYS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / '
 AGENT_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'agent_wire.g.dart'
 PHONE_CALLS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'phone_calls_wire.g.dart'
 PEOPLE_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'people_wire.g.dart'
+IMPORTS_INTEGRATIONS_DART_PATH = (
+    ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'imports_integrations_wire.g.dart'
+)
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
 
 
@@ -99,6 +102,17 @@ def test_person_adapter_preserves_required_timestamp_behavior():
 
     assert "FormatException('Missing required field: created_at')" in adapter
     assert "FormatException('Missing required field: updated_at')" in adapter
+
+
+def test_imports_integrations_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'imports_integrations')
+
+    assert IMPORTS_INTEGRATIONS_DART_PATH.read_text() == generated
+    assert 'class GeneratedImportJobResponse' in generated
+    assert 'class GeneratedIntegrationResponse' in generated
+    assert 'jobId: _required(_readString(_readAny(json, const ["job_id"])), "job_id")' in generated
+    assert 'connected: _required(_readBool(_readAny(json, const ["connected"])), "connected")' in generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

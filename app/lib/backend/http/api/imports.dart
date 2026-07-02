@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -49,14 +50,30 @@ class ImportJobResponse {
   });
 
   factory ImportJobResponse.fromJson(Map<String, dynamic> json) {
+    return ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json));
+  }
+
+  factory ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse generated) {
     return ImportJobResponse(
-      jobId: json['job_id'] as String,
-      status: ImportJobStatus.fromString(json['status'] as String),
-      totalFiles: json['total_files'] as int?,
-      processedFiles: json['processed_files'] as int?,
-      conversationsCreated: json['conversations_created'] as int?,
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
-      error: json['error'] as String?,
+      jobId: generated.jobId,
+      status: ImportJobStatus.fromString(generated.status),
+      totalFiles: generated.totalFiles,
+      processedFiles: generated.processedFiles,
+      conversationsCreated: generated.conversationsCreated,
+      createdAt: generated.createdAt == null ? null : DateTime.tryParse(generated.createdAt!),
+      error: generated.error,
+    );
+  }
+
+  wire.GeneratedImportJobResponse toGenerated() {
+    return wire.GeneratedImportJobResponse(
+      jobId: jobId,
+      status: status.name,
+      totalFiles: totalFiles,
+      processedFiles: processedFiles,
+      conversationsCreated: conversationsCreated,
+      createdAt: createdAt?.toUtc().toIso8601String(),
+      error: error,
     );
   }
 
