@@ -33,7 +33,9 @@ Future<TaskIntegrationsResponse?> getTaskIntegrations() async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return TaskIntegrationsResponse.fromJson(jsonDecode(body));
+    return TaskIntegrationsResponse.fromGenerated(
+      wire.GeneratedTaskIntegrationsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>),
+    );
   } else {
     Logger.debug('getTaskIntegrations error ${response.statusCode}');
     return null;

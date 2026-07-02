@@ -38,7 +38,9 @@ Future<IntegrationResponse?> getIntegration(String appKey) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return IntegrationResponse.fromJson(jsonDecode(body));
+    return IntegrationResponse.fromGenerated(
+      wire.GeneratedIntegrationResponse.fromJson(jsonDecode(body) as Map<String, dynamic>),
+    );
   } else {
     Logger.debug('getIntegration error ${response.statusCode}');
     return null;

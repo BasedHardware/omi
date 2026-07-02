@@ -483,7 +483,7 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   try {
     if (response == null || response.statusCode != 200) return null;
     log('getAppDetailsServer: ${response.body}');
-    return wire.GeneratedApp.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
+    return jsonDecode(response.body) as Map<String, dynamic>;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);

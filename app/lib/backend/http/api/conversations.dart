@@ -94,10 +94,7 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
     var memories = (jsonDecode(body) as List<dynamic>)
-        .map(
-          (conversation) => ServerConversation.fromGenerated(
-              wire.GeneratedConversation.fromJson(conversation as Map<String, dynamic>)),
-        )
+        .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
         .toList();
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true);
@@ -116,9 +113,7 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   if (response == null) return null;
   Logger.debug('reProcessConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return ServerConversation.fromGenerated(
-      wire.GeneratedConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
+    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
   return null;
 }
@@ -233,9 +228,7 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return ServerConversation.fromGenerated(
-      wire.GeneratedConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
+    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   } else if (response.statusCode == 402) {
     Logger.debug('Unlimited Plan Required for conversation: $conversationId');
     return null;

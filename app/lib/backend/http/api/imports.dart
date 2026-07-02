@@ -98,9 +98,9 @@ Future<ImportJobResponse?> startLimitlessImport(File zipFile, {String language =
     );
 
     if (response.statusCode == 200) {
-      var data = jsonDecode(response.body);
+      var data = wire.GeneratedImportJobResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
       Logger.debug('startLimitlessImport Response: $data');
-      return ImportJobResponse.fromJson(data);
+      return ImportJobResponse.fromGenerated(data);
     } else {
       Logger.debug('Failed to start import. Status: ${response.statusCode}, Body: ${response.body}');
       return null;
@@ -123,7 +123,10 @@ Future<List<ImportJobResponse>> getImportJobs({int limit = 50}) async {
 
     if (response != null && response.statusCode == 200) {
       var data = jsonDecode(response.body) as List;
-      return data.map((json) => ImportJobResponse.fromJson(json)).toList();
+      return data
+          .map((json) =>
+              ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json as Map<String, dynamic>)))
+          .toList();
     } else {
       Logger.debug('Failed to get import jobs. Response: ${response?.body}');
       return [];
