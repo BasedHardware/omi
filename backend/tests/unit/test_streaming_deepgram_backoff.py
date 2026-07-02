@@ -7,55 +7,14 @@ Verifies:
 """
 
 import asyncio
-import sys
-from types import ModuleType
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-# Mock heavy dependencies before importing streaming module
-_mock_modules = {}
-for mod_name in [
-    'database',
-    'database._client',
-    'database.users',
-    'utils.other.storage',
-    'deepgram',
-    'deepgram.clients',
-    'deepgram.clients.live',
-    'deepgram.clients.live.v1',
-    'websockets',
-    'websockets.exceptions',
-]:
-    if mod_name not in sys.modules:
-        _mock_modules[mod_name] = MagicMock()
-        sys.modules[mod_name] = _mock_modules[mod_name]
-
-# Provide expected attributes only if this file owns the deepgram mock.
-# When another test file (e.g. test_dg_start_guard.py) imported streaming.py first,
-# overwriting LiveTranscriptionEvents would break event-identity assertions (#6302).
-if 'deepgram' in _mock_modules:
-    sys.modules['deepgram'].DeepgramClient = MagicMock
-    sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-    sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-    sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
-
-_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
-_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
-_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
-_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
-sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
-
-_vad = ModuleType('utils.stt.vad')
-_vad._get_ort_session = MagicMock()
-_vad.make_fresh_state = MagicMock(return_value=(None, None))
-_vad.run_vad_window = MagicMock(return_value=0.0)
-_vad.VAD_WINDOW_SAMPLES = 512
-sys.modules.setdefault('utils.stt.vad', _vad)
-
-from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
-from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
-from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words  # noqa: E402
+from deepgram import LiveTranscriptionEvents
+from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg
+from utils.stt.streaming import deepgram_options, deepgram_cloud_options
+from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
 
 
 @pytest.mark.asyncio
@@ -956,7 +915,6 @@ async def test_process_audio_dg_registers_close_error_handlers():
     # Verify .on() was called for Close and Error events
     on_calls = mock_dg_conn.on.call_args_list
     registered_events = [call[0][0] for call in on_calls]
-    LiveTranscriptionEvents = sys.modules['deepgram'].LiveTranscriptionEvents
     assert LiveTranscriptionEvents.Close in registered_events
     assert LiveTranscriptionEvents.Error in registered_events
 
@@ -988,7 +946,6 @@ async def test_process_audio_dg_error_handler_sets_death_reason():
     assert isinstance(result, SafeDeepgramSocket)
 
     on_calls = mock_dg_conn.on.call_args_list
-    LiveTranscriptionEvents = sys.modules['deepgram'].LiveTranscriptionEvents
     for call in on_calls:
         event, handler = call[0][0], call[0][1]
         if event == LiveTranscriptionEvents.Error:
