@@ -244,3 +244,130 @@ final class ConnectSheetDeepLinkSafetyTests: XCTestCase {
                        "wa.me URL must not open in a Telegram connect sheet")
     }
 }
+
+// MARK: - User-account toggle (plan)
+
+/// Mock URLProtocol that captures the request and returns a canned
+/// response. Used to test `AICloneClient.toggleUserAccount`
+/// without making real network calls.
+private final class ToggleUserAccountMockURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var lastRequest: URLRequest?
+    nonisolated(unsafe) static var responseStatus: Int = 200
+    nonisolated(unsafe) static var responseBody: Data = Data()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lastRequest = self.request
+        let url = self.request!.url!
+        let resp = HTTPURLResponse(
+            url: url, statusCode: Self.responseStatus,
+            httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.responseBody)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+extension AICloneClientTests {
+    /// Helper: install the mock URLProtocol, run the closure, return
+    /// the captured request. Tears the protocol down on exit.
+    private func withToggleMock(
+        status: Int = 200,
+        body: String = "{\"auto_reply_enabled\": true, \"affected_users\": 1}"
+    ) async throws -> URLRequest? {
+        ToggleUserAccountMockURLProtocol.responseStatus = status
+        ToggleUserAccountMockURLProtocol.responseBody = body.data(using: .utf8) ?? Data()
+        ToggleUserAccountMockURLProtocol.lastRequest = nil
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ToggleUserAccountMockURLProtocol.self]
+            + (config.protocolClasses ?? [])
+        let session = URLSession(configuration: config)
+        let client = AICloneClient(session: session, decoder: JSONDecoder())
+        do {
+            _ = try await client.toggleUserAccount(
+                baseURL: "https://plugin.example.com",
+                bearerToken: "test-token",
+                enabled: true
+            )
+        } catch {
+            // Test may assert on the error path; that's fine.
+        }
+        return ToggleUserAccountMockURLProtocol.lastRequest
+    }
+
+    func testToggleUserAccountSendsCorrectBody() async throws {
+        let req = try await withToggleMock(
+            body: "{\"auto_reply_enabled\": true, \"affected_users\": 3}"
+        )
+        XCTAssertNotNil(req)
+        XCTAssertEqual(req?.httpMethod, "POST")
+        XCTAssertEqual(
+            req?.url?.path, "/toggle",
+            "request should hit /toggle on the plugin"
+        )
+        // Authorization header set correctly.
+        let auth = req?.value(forHTTPHeaderField: "Authorization")
+        XCTAssertEqual(auth, "Bearer test-token")
+        // Body contains the right keys.
+        let bodyData = req?.httpBody ?? Data()
+        let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+        XCTAssertEqual(body?["handle"] as? String, "all",
+                       "user-account toggle uses handle="all" for the global toggle")
+        XCTAssertEqual(body?["enabled"] as? Bool, true)
+    }
+
+    func testToggleUserAccountDecodesResponse() async throws {
+        ToggleUserAccountMockURLProtocol.responseStatus = 200
+        ToggleUserAccountMockURLProtocol.responseBody =
+            "{\"auto_reply_enabled\": false, \"affected_users\": 5}"
+                .data(using: .utf8) ?? Data()
+        ToggleUserAccountMockURLProtocol.lastRequest = nil
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ToggleUserAccountMockURLProtocol.self]
+            + (config.protocolClasses ?? [])
+        let session = URLSession(configuration: config)
+        let client = AICloneClient(session: session, decoder: JSONDecoder())
+        let response = try await client.toggleUserAccount(
+            baseURL: "https://plugin.example.com",
+            bearerToken: "test-token",
+            enabled: false
+        )
+        XCTAssertFalse(response.autoReplyEnabled)
+        XCTAssertEqual(response.affectedUsers, 5)
+    }
+
+    func testToggleUserAccountPropagatesHttpError() async throws {
+        ToggleUserAccountMockURLProtocol.responseStatus = 403
+        ToggleUserAccountMockURLProtocol.responseBody =
+            "{\"detail\": \"No users configured\"}".data(using: .utf8) ?? Data()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ToggleUserAccountMockURLProtocol.self]
+            + (config.protocolClasses ?? [])
+        let session = URLSession(configuration: config)
+        let client = AICloneClient(session: session, decoder: JSONDecoder())
+        do {
+            _ = try await client.toggleUserAccount(
+                baseURL: "https://plugin.example.com",
+                bearerToken: "test-token",
+                enabled: true
+            )
+            XCTFail("Expected AICloneError.http(403)")
+        } catch let error as AICloneClient.AICloneError {
+            // The sanitized detail must contain the server's
+            // error message (sanitized) but never the raw
+            // response body bytes.
+            if case .http(let status, let detail) = error {
+                XCTAssertEqual(status, 403)
+                XCTAssertTrue(detail.contains("No users configured"),
+                              "sanitized detail should contain the server-provided message")
+            } else {
+                XCTFail("Expected .http(403, _), got \(error)")
+            }
+        }
+    }
+}

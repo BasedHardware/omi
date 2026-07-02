@@ -84,14 +84,18 @@ All endpoints are bearer-gated via `AI_CLONE_PLUGIN_TOKEN`
 the same 401 with no enumeration signal.
 
 - `GET /health` — liveness, no auth.
-- `GET /status` — connection state + rate-limit + daily-sent
-  counter. Used by the desktop's 30s poll.
+- `GET /status` — connection state + auto-reply aggregate +
+  rate-limit + daily-sent counter. Used by the desktop's
+  30s poll.
 - `GET /recent_messages?limit=N` — list recent chats.
 - `GET /recent_messages/{chat_id}/messages` — recent
   messages in a chat (the desktop uses this to surface
   conversation context).
 - `POST /persona_chat` — call the persona API for a chat,
-  send the reply via Telethon. Bearer-gated.
+  send the reply via Telethon. Bearer-gated. Returns 403
+  if the user's `auto_reply_enabled` flag is False.
+- `POST /toggle` — flip auto-reply for one user (or all).
+  Bearer-gated.
 - `POST /chat_memory` — append a message to a chat's
   ring buffer (used by the desktop for context).
 
@@ -129,6 +133,38 @@ Responses:
 The 429 + Retry-After is the plan §8 "ban-warning panel"
 mechanism: the desktop surfaces "Telegram asked us to wait
 Xs" and backs off automatically.
+
+### `POST /toggle` — request/response
+
+Request body (JSON):
+
+```json
+{
+  "handle": "all",
+  "enabled": true
+}
+```
+
+- `handle` — `"all"` toggles every user in storage (the
+  typical case; the user-account flow is single-account so
+  `"all"` is the single-user semantic). Per-handle toggles
+  are reserved for future multi-account support.
+- `enabled` — bool, the target state.
+
+Responses:
+- `200 OK` — `{auto_reply_enabled: bool, affected_users: int}`.
+  `affected_users` is the count of user records updated.
+- `403` — the target handle is unknown OR the `"all"` call
+  has no users. Same 403 for both so a probe cannot
+  distinguish "user exists with auto-reply off" from "user
+  doesn't exist". The plugin bearer token already gates
+  this endpoint; the per-handle check is defense-in-depth.
+
+The endpoint writes through `simple_storage.update_auto_reply(handle, enabled)`
+and the `/status` response picks up the change on the next
+30s poll. The desktop's "Auto-reply" switch in
+`ConnectSheet.userAccountSection` calls this endpoint and
+rolls back the binding on error.
 
 ## Rate limit + flood control (plan §8)
 

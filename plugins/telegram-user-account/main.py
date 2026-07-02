@@ -189,27 +189,27 @@ async def health():
 
 @app.get("/status", dependencies=[Depends(require_bearer)])
 async def status():
-    """Telethon connection state + rate-limit state. Bearer-gated.
+    """Telethon connection state + rate-limit + auto-reply state.
+    Bearer-gated.
 
-    plan §8: the response carries the rate-limit state so the
-    desktop can show a "Sent X/30 this hour" indicator and
-    warn the user near the cap. Also exposes the current
-    cooldown (FLOOD_WAIT-blocked) so the UI can show a clear
-    "Telegram asked us to wait Xs" message.
-
-    Daily counter (plan §8: "messages sent today"): the daily
-    count is computed from the per-chat ring buffer in
-    simple_storage. The count is BEST-EFFORT and bounded by
-    `CHAT_HISTORY_MAX` (currently 10 entries per chat): when
-    a chat exceeds that, older entries are evicted, so the
-    daily count may undercount on very active chats. The
-    counter is cosmetic per plan §8 (a "messages sent today"
-    indicator on the plugin card) and not load-bearing. A
-    separate append-only audit log would be needed for an
-    exact count; that is a follow-up if/when the
-    `messages_sent_today` indicator becomes a billing
-    signal. The in-memory `default_rate_limit` covers the
-    rolling 60-min window precisely.
+    Fields:
+    - connected: bool          -- Telethon is_connected()
+    - account_phone/name/device_label: str|None
+    - auto_reply_enabled: bool -- aggregate across users
+                                  (any user has auto-reply on
+                                  == True). The user-account
+                                  flow is single-account so
+                                  "any" == the single user.
+                                  The desktop's /status poll
+                                  reads this to keep the
+                                  toggle in sync.
+    - rate_limit: {...}        -- plan §8: rolling 60-min
+                                  window state + FLOOD_WAIT
+                                  cooldown.
+    - messages_sent_today: int -- in-memory exact counter,
+                                  monotonic since local-time
+                                  midnight (see
+                                  flood_control.RateLimit).
     """
     rate = flood_control.default_rate_limit
     rl_state = {
@@ -218,14 +218,22 @@ async def status():
         "is_blocked": rate.is_blocked(),
         "seconds_until_next_slot": rate.seconds_until_next_slot(),
     }
+    # Aggregate auto_reply_enabled across all users. The user-
+    # account flow is single-account (one Telethon session per
+    # desktop install), so "any user enabled" is the right
+    # semantics for a global toggle. If the user collection is
+    # empty (e.g. before first connect), we report False so the
+    # desktop's UI starts in the "off" position.
+    auto_reply_aggregate = any(u.get("auto_reply_enabled", False) for u in simple_storage.users.values())
     if _client is None:
         return {
             "connected": False,
             "account_phone": None,
             "account_name": None,
             "device_label": None,
+            "auto_reply_enabled": auto_reply_aggregate,
             "rate_limit": rl_state,
-            "messages_sent_today": flood_control.default_rate_limit.daily_count(),
+            "messages_sent_today": rate.daily_count(),
         }
     connected = await _client.is_connected()
     return {
@@ -233,8 +241,9 @@ async def status():
         "account_phone": _account_meta.get("phone"),
         "account_name": _account_meta.get("name"),
         "device_label": _account_meta.get("device_label"),
+        "auto_reply_enabled": auto_reply_aggregate,
         "rate_limit": rl_state,
-        "messages_sent_today": flood_control.default_rate_limit.daily_count(),
+        "messages_sent_today": rate.daily_count(),
     }
 
 
@@ -272,6 +281,66 @@ async def recent_messages_chat(
     return {"chat_id": chat_id, "messages": msgs}
 
 
+class ToggleRequest(BaseModel):
+    """POST /toggle request body.
+
+    The user-account flow keys storage by Telegram user
+    handle (not chat id, as the bot plugin does). The
+    desktop sends ``handle="all"`` for the global toggle.
+    Per-handle toggles are reserved for future multi-account
+    support and are not used by the current desktop UI.
+    """
+
+    handle: str = "all"
+    enabled: bool
+
+
+class ToggleResponse(BaseModel):
+    """POST /toggle response body.
+
+    auto_reply_enabled: the new aggregate state across users.
+    affected_users: count of users whose record was updated
+                    (handy for symmetry with the bot plugin's
+                    per-chat_id response).
+    """
+
+    auto_reply_enabled: bool
+    affected_users: int
+
+
+@app.post(
+    "/toggle",
+    response_model=ToggleResponse,
+    dependencies=[Depends(require_bearer)],
+)
+async def toggle_endpoint(req: ToggleRequest):
+    """Enable or disable auto-reply for one user (or all users).
+
+    Special case: ``handle="all"`` toggles every user in
+    simple_storage. This is the desktop's normal call site.
+
+    Returns 403 if the target handle is unknown OR if the
+    "all" call has no users. The same 403 is returned for
+    both unknown-handle and no-users so a probe cannot
+    distinguish between "user exists with auto-reply off"
+    and "user doesn't exist". The plugin bearer token
+    already gates this endpoint; the per-handle check is
+    defense-in-depth.
+    """
+    if req.handle == "all":
+        affected = 0
+        for telegram_user_id in list(simple_storage.users.keys()):
+            simple_storage.update_auto_reply(telegram_user_id, req.enabled)
+            affected += 1
+        if affected == 0:
+            raise HTTPException(status_code=403, detail="No users configured")
+        return ToggleResponse(auto_reply_enabled=req.enabled, affected_users=affected)
+    if req.handle not in simple_storage.users:
+        raise HTTPException(status_code=403, detail="Unknown handle")
+    simple_storage.update_auto_reply(req.handle, req.enabled)
+    return ToggleResponse(auto_reply_enabled=req.enabled, affected_users=1)
+
+
 class PersonaChatRequest(BaseModel):
     chat_id: str
     text: str
@@ -300,6 +369,22 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
             status_code=400,
             detail="No Omi account linked to this Telegram handle. "
             "Run 'Reply as me' setup in the Omi desktop first.",
+        )
+
+    # Gate on auto_reply_enabled. The desktop's "Reply as me"
+    # section has a per-user toggle; if it's off, skip the
+    # persona call entirely (saves LLM tokens). Default to
+    # False so an old user record without the field behaves
+    # safely on first deploy of this code -- the user must
+    # explicitly opt in.
+    if not user.get("auto_reply_enabled", False):
+        logger.info(
+            "auto_reply disabled for handle=%s; skipping persona call",
+            body.sender_handle,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Auto-reply is disabled. Enable it in the Omi desktop.",
         )
 
     recent = simple_storage.get_recent_messages(body.chat_id)

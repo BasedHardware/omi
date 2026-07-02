@@ -132,6 +132,17 @@ final class AICloneConfig: ObservableObject {
     /// Daily count of AI replies sent. plan §8: "Daily 'messages
     /// sent today' counter on the plugin card."
     @Published var telegramMessagesSentToday: Int = 0
+    /// plan: desktop-side mirror of the user-account plugin's
+    /// auto-reply state. Updated by the 30s /status poll (any-user-
+    /// enabled flag from the plugin). Bound to the toggle in
+    /// ConnectSheet.userAccountSection. The plugin is the source
+    /// of truth (in simple_storage.users[].auto_reply_enabled);
+    /// this is just the UI cache so the toggle reflects current
+    /// state without a UI flicker on app launch.
+    @Published var telegramAutoReplyEnabled: Bool = false
+    /// True while a /toggle POST is in flight. Drives the spinner
+    /// in the connect sheet's user-account section.
+    @Published var telegramAutoReplyInFlight: Bool = false
 
     /// Set the Telethon session string (from session_string_generator.py
     /// subprocess stdout). The session lives in Keychain (encrypted
@@ -174,6 +185,8 @@ final class AICloneConfig: ObservableObject {
             stopTelegramUserAccountStatusPoll()
             telegramRateLimit = .empty
             telegramMessagesSentToday = 0
+            telegramAutoReplyEnabled = false
+            telegramAutoReplyInFlight = false
             return
         }
         try AICloneKeychain.set(.telegramUserSession, session)
@@ -216,6 +229,8 @@ final class AICloneConfig: ObservableObject {
         stopTelegramUserAccountStatusPoll()
         telegramRateLimit = .empty
         telegramMessagesSentToday = 0
+        telegramAutoReplyEnabled = false
+        telegramAutoReplyInFlight = false
     }
 
     @Published var bearerToken: String {
@@ -505,6 +520,15 @@ final class AICloneConfig: ObservableObject {
             }
             if let count = resp.messagesSentToday {
                 telegramMessagesSentToday = count
+            }
+            // plan: /status exposes auto_reply_enabled (any-user-
+            // enabled aggregate). Update the toggle's UI cache
+            // so it reflects plugin state without a flicker.
+            // If the field is missing from the response (older
+            // plugin version), we KEEP the current value rather
+            // than resetting to false.
+            if let enabled = resp.autoReplyEnabled {
+                telegramAutoReplyEnabled = enabled
             }
         } catch {
             // Transient failures are expected (the plugin

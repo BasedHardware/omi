@@ -635,6 +635,221 @@ class TestFloodControlIntegration:
 
 
 # ---------------------------------------------------------------------------
+# Section 4c: /toggle (auto-reply on/off)
+# ---------------------------------------------------------------------------
+
+
+class TestToggle:
+    """The desktop calls POST /toggle with
+    {handle: "all", enabled: bool} to flip auto-reply. Storage
+    updates via simple_storage.update_auto_reply().
+    """
+
+    def _seed_user(self, handle, **overrides):
+        # Adds a user WITHOUT clearing existing ones -- useful
+        # for tests that need multiple users. Tests that want
+        # a clean slate should call simple_storage.users.clear()
+        # themselves.
+        import simple_storage
+
+        record = {
+            "telegram_user_id": handle,
+            "omi_uid": f"uid-{handle}",
+            "persona_id": "persona-1",
+            "omi_dev_api_key": "dev-key",
+            "auto_reply_enabled": False,
+        }
+        record.update(overrides)
+        simple_storage.users[handle] = record
+
+    def test_toggle_all_enables_auto_reply_for_all_users(self, mock_app):
+        client, _, _ = mock_app
+        self._seed_user("alice")
+        self._seed_user("bob", auto_reply_enabled=True)
+        r = client.post(
+            "/toggle",
+            json={"handle": "all", "enabled": True},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["auto_reply_enabled"] is True
+        assert body["affected_users"] == 2
+        import simple_storage
+
+        assert simple_storage.users["alice"]["auto_reply_enabled"] is True
+        assert simple_storage.users["bob"]["auto_reply_enabled"] is True
+
+    def test_toggle_all_disables_auto_reply_for_all_users(self, mock_app):
+        client, _, _ = mock_app
+        self._seed_user("alice", auto_reply_enabled=True)
+        self._seed_user("bob", auto_reply_enabled=True)
+        r = client.post(
+            "/toggle",
+            json={"handle": "all", "enabled": False},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["auto_reply_enabled"] is False
+        assert body["affected_users"] == 2
+
+    def test_toggle_specific_handle_updates_one_user(self, mock_app):
+        client, _, _ = mock_app
+        self._seed_user("alice", auto_reply_enabled=True)
+        self._seed_user("bob", auto_reply_enabled=True)
+        r = client.post(
+            "/toggle",
+            json={"handle": "alice", "enabled": False},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["auto_reply_enabled"] is False
+        assert body["affected_users"] == 1
+        import simple_storage
+
+        assert simple_storage.users["alice"]["auto_reply_enabled"] is False
+        # Bob unchanged.
+        assert simple_storage.users["bob"]["auto_reply_enabled"] is True
+
+    def test_toggle_unknown_handle_returns_403(self, mock_app):
+        client, _, _ = mock_app
+        self._seed_user("alice")
+        r = client.post(
+            "/toggle",
+            json={"handle": "nonexistent", "enabled": True},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 403
+
+    def test_toggle_all_with_no_users_returns_403(self, mock_app):
+        client, _, _ = mock_app
+        import simple_storage
+
+        simple_storage.users.clear()
+        r = client.post(
+            "/toggle",
+            json={"handle": "all", "enabled": True},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 403
+
+    def test_toggle_requires_bearer(self, mock_app):
+        client, _, _ = mock_app
+        self._seed_user("alice")
+        r = client.post("/toggle", json={"handle": "all", "enabled": True})
+        assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Section 4d: extended /status (auto_reply_enabled)
+# ---------------------------------------------------------------------------
+
+
+class TestStatusAutoReplyAggregate:
+    """plan: /status exposes auto_reply_enabled as the aggregate
+    across all users (any-true == on). The empty-users case is
+    reported as False so the desktop starts in the off state.
+    """
+
+    def test_status_auto_reply_enabled_aggregate_off(self, mock_app):
+        import simple_storage
+
+        simple_storage.users.clear()
+        simple_storage.users["alice"] = {
+            "telegram_user_id": "alice",
+            "auto_reply_enabled": False,
+        }
+        client, _, _ = mock_app
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.status_code == 200
+        assert r.json()["auto_reply_enabled"] is False
+
+    def test_status_auto_reply_enabled_aggregate_on(self, mock_app):
+        import simple_storage
+
+        simple_storage.users.clear()
+        simple_storage.users["alice"] = {
+            "telegram_user_id": "alice",
+            "auto_reply_enabled": True,
+        }
+        simple_storage.users["bob"] = {
+            "telegram_user_id": "bob",
+            "auto_reply_enabled": False,
+        }
+        client, _, _ = mock_app
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.status_code == 200
+        # any(user.enabled) == True -> aggregate is on.
+        assert r.json()["auto_reply_enabled"] is True
+
+    def test_status_auto_reply_enabled_empty_users(self, mock_app):
+        import simple_storage
+
+        simple_storage.users.clear()
+        client, _, _ = mock_app
+        r = client.get("/status", headers={"Authorization": "Bearer test-bearer-token"})
+        assert r.status_code == 200
+        assert r.json()["auto_reply_enabled"] is False
+
+
+# ---------------------------------------------------------------------------
+# Section 4e: /persona_chat gated on auto_reply_enabled
+# ---------------------------------------------------------------------------
+
+
+class TestPersonaChatGatedOnAutoReply:
+    """plan: /persona_chat returns 403 when auto_reply_enabled
+    is False. Default (no field) is False -- safe default on
+    first deploy so users must opt in.
+    """
+
+    def test_returns_403_when_auto_reply_disabled(self, mock_app):
+        client, _, _ = mock_app
+        import simple_storage
+
+        simple_storage.users.clear()
+        simple_storage.users["choguun_handle"] = {
+            "telegram_user_id": "choguun_handle",
+            "omi_uid": "test-uid",
+            "persona_id": "persona-1",
+            "omi_dev_api_key": "dev-key",
+            "auto_reply_enabled": False,
+        }
+        simple_storage.chats["1"] = {"chat_id": "1", "recent_messages": []}
+        r = client.post(
+            "/persona_chat",
+            json={"chat_id": "1", "text": "hi", "sender_handle": "choguun_handle"},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 403
+        assert "Auto-reply is disabled" in r.json().get("detail", "")
+
+    def test_returns_403_when_auto_reply_field_missing(self, mock_app):
+        # Backwards compatibility: an old user record without
+        # the auto_reply_enabled field behaves as False.
+        client, _, _ = mock_app
+        import simple_storage
+
+        simple_storage.users.clear()
+        # Note: NO auto_reply_enabled field at all.
+        simple_storage.users["choguun_handle"] = {
+            "telegram_user_id": "choguun_handle",
+            "omi_uid": "test-uid",
+            "persona_id": "persona-1",
+            "omi_dev_api_key": "dev-key",
+        }
+        simple_storage.chats["1"] = {"chat_id": "1", "recent_messages": []}
+        r = client.post(
+            "/persona_chat",
+            json={"chat_id": "1", "text": "hi", "sender_handle": "choguun_handle"},
+            headers={"Authorization": "Bearer test-bearer-token"},
+        )
+        assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
 # Section 5: /chat_memory
 # ---------------------------------------------------------------------------
 

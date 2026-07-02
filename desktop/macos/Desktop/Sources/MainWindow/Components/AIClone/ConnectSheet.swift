@@ -937,8 +937,33 @@ struct ConnectSheet: View {
                         rateLimitBadge
                     }
                     Spacer()
-                    Button("Sign out") { signOutUserAccount() }
-                        .buttonStyle(.bordered)
+                    VStack(alignment: .trailing, spacing: 6) {
+                        // plan: auto-reply toggle for the
+                        // user-account flow. Sends
+                        // POST {baseURL}/toggle with
+                        // {handle: "all", enabled: bool}.
+                        // The /status poll keeps this in sync
+                        // with the plugin's authoritative
+                        // state via telegramAutoReplyEnabled
+                        // (the publish drives the binding).
+                        HStack(spacing: 6) {
+                            if config.telegramAutoReplyInFlight {
+                                ProgressView().controlSize(.mini)
+                            }
+                            Toggle(
+                                "Auto-reply",
+                                isOn: $config.telegramAutoReplyEnabled
+                            )
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .disabled(config.telegramAutoReplyInFlight)
+                            .onChange(of: config.telegramAutoReplyEnabled) { _, newValue in
+                                Task { await flipTelegramAutoReply(enabled: newValue) }
+                            }
+                        }
+                        Button("Sign out") { signOutUserAccount() }
+                            .buttonStyle(.bordered)
+                    }
                 }
             } else if generatingSession {
                 // Generating: show progress + cancel.
@@ -1090,6 +1115,45 @@ struct ConnectSheet: View {
             let msg = "Could not remove session from Keychain: " + String(describing: error) + ". " +
                 "Try again, or sign out from System Settings > Passwords."
             sessionGeneratorError = msg
+        }
+    }
+
+    /// Flip the user-account plugin's auto-reply toggle. Called
+    /// when the user toggles the "Auto-reply" switch in the
+    /// userAccountSection. Optimistically updates the binding
+    /// (which the toggle control already did) and rolls back on
+    /// error. Mirrors PluginCard.swift's flipAutoReply pattern
+    /// but for the user-account toggleUserAccount endpoint.
+    private func flipTelegramAutoReply(enabled: Bool) async {
+        // Guard: don't fire a network call while one is already
+        // in flight -- avoid double-tap race.
+        if config.telegramAutoReplyInFlight { return }
+        guard !config.pluginURL.isEmpty,
+              !config.bearerToken.isEmpty
+        else {
+            // Not configured; revert the toggle UI to its prior
+            // state. We didn't observe the prior value, so we
+            // just leave the binding as the user-set value --
+            // the next /status poll will correct it.
+            return
+        }
+        config.telegramAutoReplyInFlight = true
+        defer { config.telegramAutoReplyInFlight = false }
+        do {
+            _ = try await AICloneClient.shared.toggleUserAccount(
+                baseURL: config.pluginURL,
+                bearerToken: config.bearerToken,
+                enabled: enabled
+            )
+        } catch {
+            // Roll back the UI so the toggle doesn't show a
+            // value the plugin didn't accept.
+            await MainActor.run {
+                config.telegramAutoReplyEnabled = !enabled
+            }
+            sessionGeneratorError =
+                "Could not toggle auto-reply: "
+                + String(describing: error)
         }
     }
 

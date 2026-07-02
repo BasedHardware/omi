@@ -171,6 +171,32 @@ actor AICloneClient {
         return try decoder.decode(ToggleResponse.self, from: data)
     }
 
+    /// `POST {baseURL}/toggle` for the user-account (Telethon)
+    /// plugin. Distinct from `toggle(...)` because the request body
+    /// shape is different: the user-account plugin keys storage by
+    /// Telegram user handle, so the body is `{handle, enabled}`
+    /// (where `handle="all"` toggles every user).
+    ///
+    /// Response is `{auto_reply_enabled, affected_users}` (see
+    /// `UserAccountToggleResponse`). The desktop's
+    /// ConnectSheet.userAccountSection toggle calls this method.
+    func toggleUserAccount(
+        baseURL: String,
+        bearerToken: String,
+        enabled: Bool
+    ) async throws -> UserAccountToggleResponse {
+        let url = try endpointURL(baseURL: baseURL, path: "/toggle")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        let body: [String: Any] = ["handle": "all", "enabled": enabled]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        try ensureSuccess(response: response, data: data, plugin: nil)
+        return try decoder.decode(UserAccountToggleResponse.self, from: data)
+    }
+
     // MARK: - Errors
 
     enum AICloneError: LocalizedError {
@@ -214,7 +240,15 @@ actor AICloneClient {
         return url
     }
 
-    private func ensureSuccess(response: URLResponse, data: Data, plugin: AIPlugin) throws {
+    /// Validates the HTTP response. The `plugin` parameter is
+    /// kept for backward compatibility but unused -- error
+    /// sanitization is the same across all plugins (only the
+    /// `detail` JSON field is surfaced; raw bytes are dropped).
+    /// It's optional because the user-account plugin's toggle
+    /// path doesn't have an AIPlugin case to pass.
+    private func ensureSuccess(
+        response: URLResponse, data: Data, plugin: AIPlugin? = nil
+    ) throws {
         guard let http = response as? HTTPURLResponse else {
             throw AICloneError.network("non-HTTP response")
         }
@@ -286,5 +320,20 @@ struct ToggleResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case autoReplyEnabled = "auto_reply_enabled"
+    }
+}
+
+/// Response from the user-account plugin's `POST /toggle`.
+/// Distinct from `ToggleResponse` (which is the bot plugin's
+/// shape) because the user-account plugin also reports
+/// `affected_users` -- the number of user records updated by the
+/// handle="all" call.
+struct UserAccountToggleResponse: Decodable {
+    let autoReplyEnabled: Bool
+    let affectedUsers: Int
+
+    enum CodingKeys: String, CodingKey {
+        case autoReplyEnabled = "auto_reply_enabled"
+        case affectedUsers = "affected_users"
     }
 }

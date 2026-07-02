@@ -607,3 +607,32 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertNil(config.telegramStatusPollTask)
         XCTAssertTrue(oldTask?.isCancelled ?? false)
     }
+
+
+    // MARK: - Telegram user-account auto-reply toggle state (plan)
+
+    func testTelegramAutoReplyStartsFalse() {
+        // Fresh AICloneConfig: auto-reply toggle defaults to off
+        // until the 30s /status poll syncs it from the plugin.
+        let config = AICloneConfig(defaults: customDefaults)
+        XCTAssertFalse(config.telegramAutoReplyEnabled)
+        XCTAssertFalse(config.telegramAutoReplyInFlight)
+    }
+
+    func testSignOutClearsTelegramAutoReplyState() {
+        // Sign-out resets the auto-reply toggle alongside the
+        // rate-limit + daily-sent state. So a future
+        // sign-in for a different account doesn't show stale
+        // auto-reply=on from the previous user.
+        let config = AICloneConfig(defaults: customDefaults)
+        try? config.setTelegramUserSession(
+            "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
+        )
+        config.telegramAutoReplyEnabled = true
+        config.telegramAutoReplyInFlight = true
+        XCTAssertTrue(config.telegramAutoReplyEnabled)
+        XCTAssertTrue(config.telegramAutoReplyInFlight)
+        try? config.clearTelegramUserSession()
+        XCTAssertFalse(config.telegramAutoReplyEnabled)
+        XCTAssertFalse(config.telegramAutoReplyInFlight)
+    }
