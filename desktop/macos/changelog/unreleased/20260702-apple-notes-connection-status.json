@@ -1,3 +1,0 @@
-{
-  "change": "Improved Apple Notes connection checks so existing folder access keeps working and database read errors show the right recovery message"
-}
