@@ -41,6 +41,8 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .acp).rawValue, "acp")
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .hermes).rawValue, "hermes")
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .openclaw).rawValue, "openclaw")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .codex).rawValue, "codex")
+    XCTAssertEqual(AgentRuntimeRouting.harnessMode(from: "codex"), .codex)
     XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
   }
 
@@ -104,6 +106,37 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(
       availability.toolError,
       "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+  }
+
+  func testLocalAgentProviderDetectorFindsCodexAcpBridge() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    // Detection keys off the codex-acp bridge (the binary we spawn), not the
+    // codex CLI itself, which has no ACP mode.
+    let executable = bin.appendingPathComponent("codex-acp")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: [:],
+      homeDirectory: home.path)
+
+    XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
+  func testLocalAgentProviderDetectorCodexMissingPromptExplainsBridgeInstall() {
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertFalse(availability.isAvailable)
+    XCTAssertTrue(availability.setupPrompt.contains("npm install -g @openai/codex @agentclientprotocol/codex-acp"))
   }
 
   // MARK: - ApiKeysResponse shape assertion
@@ -266,11 +299,21 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(directive?.title, "Hermes")
   }
 
+  func testProviderDirectiveRoutesCodexToCodexHarness() {
+    let directive = AgentPillsManager.providerDirective(from: "codex: run the failing test suite")
+
+    XCTAssertEqual(directive?.provider, .codex)
+    XCTAssertEqual(directive?.provider.harnessMode, .codex)
+    XCTAssertEqual(directive?.rewrittenQuery, "run the failing test suite")
+    XCTAssertEqual(directive?.title, "Codex")
+  }
+
   func testProviderDirectiveIgnoresNonProviderQuestions() {
     XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "openclaw architecture"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "hermes scarf"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "compare hermes and openclaw"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is codex?"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
   }
 

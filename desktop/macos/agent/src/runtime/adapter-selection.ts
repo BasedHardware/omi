@@ -1,4 +1,5 @@
 import { AcpRuntimeAdapter } from "../adapters/acp.js";
+import { CodexRuntimeAdapter } from "../adapters/codex.js";
 import { HermesRuntimeAdapter } from "../adapters/hermes.js";
 import { OpenClawRuntimeAdapter } from "../adapters/openclaw.js";
 import { adapterCapabilitiesFor, type AdapterCapabilities, type ProductionAdapterId, type RuntimeAdapter } from "../adapters/interface.js";
@@ -9,6 +10,7 @@ export const ADAPTER_ACTIVATION_ENV = {
   "pi-mono": "OMI_AUTH_TOKEN",
   hermes: "OMI_HERMES_ADAPTER_COMMAND",
   openclaw: "OMI_OPENCLAW_ADAPTER_COMMAND",
+  codex: "OMI_CODEX_ADAPTER_COMMAND",
 } as const;
 
 export type SelectableAdapterId = keyof typeof ADAPTER_ACTIVATION_ENV;
@@ -52,6 +54,13 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
     capabilities: adapterCapabilitiesFor("openclaw"),
     createAdapter: ({ log }) => new OpenClawRuntimeAdapter({ log }),
   },
+  codex: {
+    adapterId: "codex",
+    activationEnv: ADAPTER_ACTIVATION_ENV.codex,
+    maxWorkers: 1,
+    capabilities: adapterCapabilitiesFor("codex"),
+    createAdapter: ({ log }) => new CodexRuntimeAdapter({ log }),
+  },
 };
 
 export function adapterIdForHarnessMode(harnessMode: string | undefined): SelectableAdapterId {
@@ -65,6 +74,8 @@ export function adapterIdForHarnessMode(harnessMode: string | undefined): Select
     case "openclaw":
     case "openClaw":
       return "openclaw";
+    case "codex":
+      return "codex";
     case "acp":
       return "acp";
     default:
@@ -91,11 +102,16 @@ export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {
   const envName = adapterActivationEnv(adapterId);
   if (!envName) return undefined;
-  const label = adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : "Hermes";
-  if (adapterId === "hermes" || adapterId === "openclaw") {
-    return `${label} is not available. Make sure ${label} is installed first, then try again.`;
+  switch (adapterId) {
+    case "hermes":
+      return "Hermes is not available. Make sure Hermes is installed first, then try again.";
+    case "openclaw":
+      return "OpenClaw is not available. Make sure OpenClaw is installed first, then try again.";
+    case "codex":
+      return "Codex is not available. Make sure Codex and the codex-acp bridge are installed first, then try again.";
+    default:
+      return `${adapterId === "pi-mono" ? "pi-mono" : adapterId} adapter is unavailable.`;
   }
-  return `${label} adapter is unavailable.`;
 }
 
 export function ensureRegisteredAdapter(

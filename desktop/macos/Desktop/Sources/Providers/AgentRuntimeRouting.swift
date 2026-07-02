@@ -5,6 +5,7 @@ enum AgentHarnessMode: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 extension Optional where Wrapped == AgentHarnessMode {
@@ -19,6 +20,7 @@ enum AgentAdapterId: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 enum AgentRuntimeRouting {
@@ -45,6 +47,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case AgentHarnessMode.openclaw.rawValue, "openClaw":
             return .openclaw
+        case AgentHarnessMode.codex.rawValue:
+            return .codex
         default:
             return nil
         }
@@ -60,6 +64,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case .openclaw:
             return .openclaw
+        case .codex:
+            return .codex
         }
     }
 }
@@ -84,6 +90,8 @@ struct LocalAgentProviderAvailability: Equatable {
             return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
         case .openclaw:
             return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+        case .codex:
+            return "I don't see the Codex ACP bridge installed. Run `npm install -g @openai/codex @agentclientprotocol/codex-acp`, then try again."
         }
     }
 
