@@ -474,11 +474,13 @@ actor WhatsAppReaderService {
   }
 
   /// A human-friendly fallback when a handle isn't in Contacts: format a US phone
-  /// number as (415) 555-1234, otherwise return the raw handle. Opaque `@lid`
-  /// handles (which contain `@`) are returned as-is.
+  /// number as (415) 555-1234. A JID domain (`@lid` / `@s.whatsapp.net`) is stripped
+  /// so it's never shown, and an opaque non-phone id (e.g. a long `@lid` number,
+  /// which carries no phone) collapses to a short stable tag like `~009509` rather
+  /// than a 15-digit string.
   static func prettyHandle(_ handle: String) -> String {
-    let h = handle.trimmingCharacters(in: .whitespacesAndNewlines)
-    if h.contains("@") { return h }
+    var h = handle.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let at = h.firstIndex(of: "@") { h = String(h[..<at]) }  // drop JID domain
     let digits = h.filter { $0.isNumber }
     let local = digits.count == 11 && digits.hasPrefix("1") ? String(digits.dropFirst()) : digits
     if local.count == 10 {
@@ -487,6 +489,7 @@ actor WhatsAppReaderService {
       let c = local.suffix(4)
       return "(\(a)) \(b)-\(c)"
     }
-    return h
+    if local.count > 10 { return "~" + String(local.suffix(6)) }  // opaque @lid id → short tag
+    return h.isEmpty ? handle : h
   }
 }
