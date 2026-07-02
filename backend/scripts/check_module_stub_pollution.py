@@ -45,6 +45,7 @@ import argparse
 import ast
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 MUTATING_ATTRS = frozenset({"pop", "update", "setdefault", "clear", "__setitem__", "popitem"})
@@ -66,33 +67,78 @@ def _is_sys_modules(node: ast.AST) -> bool:
     )
 
 
-def _module_level_offenders(tree: ast.Module) -> list[int]:
-    """Return line numbers of module-scope ``sys.modules`` mutations."""
-    lines: list[int] = []
+def _iter_module_level_stmts(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """Yield every statement that executes at module (import) scope.
 
-    for node in tree.body:
-        # sys.modules[x] = ...
+    Descends into module-level compound statements (``if``/``for``/``while``/
+    ``try``/``with``/``match``) including their ``orelse``/``handlers``/``finalbody``
+    bodies, because those branches run during import. Stops at function/class
+    definitions — their bodies are not module scope.
+    """
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        yield node
+        for field in ("body", "orelse", "finalbody"):
+            inner = getattr(node, field, None)
+            if isinstance(inner, list):
+                yield from _iter_module_level_stmts(inner)
+        handlers = getattr(node, "handlers", None)
+        if isinstance(handlers, list):
+            for handler in handlers:
+                hbody = getattr(handler, "body", None)
+                if isinstance(hbody, list):
+                    yield from _iter_module_level_stmts(hbody)
+        cases = getattr(node, "cases", None)  # ast.Match (3.10+)
+        if isinstance(cases, list):
+            for case in cases:
+                cbody = getattr(case, "body", None)
+                if isinstance(cbody, list):
+                    yield from _iter_module_level_stmts(cbody)
+
+
+def _check_sys_modules_write(node: ast.stmt) -> int | None:
+    """Return lineno if ``node`` performs a module-scope ``sys.modules`` write, else None.
+
+    Handles Assign / AnnAssign / Delete with ``sys.modules[...]`` targets, and bare
+    or assigned calls to ``sys.modules.pop/update/setdefault/clear/__setitem__/popitem``.
+    """
+    # sys.modules[x] = ...  (plain and annotated assignments)
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        for target in targets:
+            if isinstance(target, ast.Subscript) and _is_sys_modules(target.value):
+                return node.lineno
         if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Subscript) and _is_sys_modules(target.value):
-                    lines.append(node.lineno)
-                    break
-            else:
-                # x = sys.modules.setdefault(...) / .pop(...) etc.
-                if isinstance(node.value, ast.Call) and _is_call_on_sys_modules(node.value):
-                    lines.append(node.lineno)
-        # del sys.modules[x]
-        elif isinstance(node, ast.Delete):
-            for target in node.targets:
-                if isinstance(target, ast.Subscript) and _is_sys_modules(target.value):
-                    lines.append(node.lineno)
-                    break
-        # bare call statement: sys.modules.pop(...) / .update(...) etc.
-        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-            if _is_call_on_sys_modules(node.value):
-                lines.append(node.lineno)
-        # walrus / annotated assignments are not relevant for sys.modules writes.
+            # x = sys.modules.setdefault(...) / .pop(...) etc.
+            if isinstance(node.value, ast.Call) and _is_call_on_sys_modules(node.value):
+                return node.lineno
+        return None
+    # del sys.modules[x]
+    if isinstance(node, ast.Delete):
+        for target in node.targets:
+            if isinstance(target, ast.Subscript) and _is_sys_modules(target.value):
+                return node.lineno
+        return None
+    # bare call statement: sys.modules.pop(...) / .update(...) etc.
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+        if _is_call_on_sys_modules(node.value):
+            return node.lineno
+    return None
 
+
+def _module_level_offenders(tree: ast.Module) -> list[int]:
+    """Return line numbers of module-scope ``sys.modules`` mutations.
+
+    Walks all module-scope statements (including those nested inside top-level
+    ``if``/``for``/``try``/``with`` blocks, which also run at import time) while
+    skipping function/class bodies.
+    """
+    lines: list[int] = []
+    for node in _iter_module_level_stmts(tree.body):
+        lineno = _check_sys_modules_write(node)
+        if lineno is not None:
+            lines.append(lineno)
     return lines
 
 
