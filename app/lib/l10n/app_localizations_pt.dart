@@ -9492,4 +9492,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get latest => 'Mais recente';
+
+  @override
+  String get flashFirmware => 'Gravar firmware';
 }

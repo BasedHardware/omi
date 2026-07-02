@@ -9512,4 +9512,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get latest => 'Najnowsza';
+
+  @override
+  String get flashFirmware => 'Wgraj oprogramowanie układowe';
 }

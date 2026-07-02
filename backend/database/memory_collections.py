@@ -48,6 +48,18 @@ class MemoryCollections:
         return f"{self.user_root}/memory_runs"
 
     @property
+    def memory_import_runs(self) -> str:
+        return f"{self.user_root}/memory_import_runs"
+
+    @property
+    def memory_import_artifacts(self) -> str:
+        return f"{self.user_root}/memory_import_artifacts"
+
+    @property
+    def memory_import_candidates(self) -> str:
+        return f"{self.user_root}/memory_import_candidates"
+
+    @property
     def non_active_memory_routes(self) -> str:
         return f"{self.user_root}/non_active_memory_routes"
 
@@ -87,6 +99,9 @@ class MemoryCollections:
             self.memory_lineage,
             self.memory_evidence,
             self.memory_runs,
+            self.memory_import_runs,
+            self.memory_import_artifacts,
+            self.memory_import_candidates,
             self.non_active_memory_routes,
             self.short_term_lifecycle_transitions,
             self.legacy_fallback,

@@ -9517,4 +9517,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get latest => 'ಇತ್ತೀಚಿನ';
+
+  @override
+  String get flashFirmware => 'ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ';
 }

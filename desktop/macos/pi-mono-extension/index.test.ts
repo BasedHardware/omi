@@ -1078,7 +1078,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     semantic_search: ["query"],
     get_daily_recap: [],
     get_task_agent_status: [],
-    fill_cloud_connector_form: ["provider", "server_url", "oauth_client_secret"],
+    fill_cloud_connector_form: ["provider", "server_url"],
     list_agent_sessions: [],
     get_agent_run: ["runId"],
     build_desktop_awareness_snapshot: [],
@@ -1355,7 +1355,7 @@ test("OMI_TOOLS: cloud connector form filler is registered for pi-mono agents", 
 
   const props = (tool.parameters as any).properties;
   const required = (tool.parameters as any).required ?? [];
-  assert.deepEqual(required.sort(), ["provider", "server_url", "oauth_client_secret"].sort());
+  assert.deepEqual(required.sort(), ["provider", "server_url"].sort());
   assert.deepEqual(props.provider.enum, ["claude", "chatgpt"]);
   assert.equal(props.server_url.type, "string");
   assert.equal(props.oauth_client_secret.type, "string");

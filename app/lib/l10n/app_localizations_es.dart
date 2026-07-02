@@ -9508,4 +9508,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get latest => 'Más reciente';
+
+  @override
+  String get flashFirmware => 'Flashear firmware';
 }

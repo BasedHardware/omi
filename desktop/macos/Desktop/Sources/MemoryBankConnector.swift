@@ -37,7 +37,9 @@ enum MemoryBankConnector {
 
   static var homeOverrideForTesting: URL?
   static var openClawCLIPathOverrideForTesting: String?
+  static var processTimeoutSecondsForTesting: TimeInterval?
   private static var home: URL { homeOverrideForTesting ?? FileManager.default.homeDirectoryForCurrentUser }
+  private static var processTimeoutSeconds: TimeInterval { processTimeoutSecondsForTesting ?? 20 }
 
   // MARK: - OpenClaw (mcp.servers + workspace SOUL.md)
 
@@ -167,28 +169,24 @@ enum MemoryBankConnector {
     arguments: [String],
     environment: [String: String]
   ) throws -> CommandOutput {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: executable)
-    process.arguments = arguments
-    var processEnvironment = ProcessInfo.processInfo.environment
-    for (key, value) in environment {
-      processEnvironment[key] = value
+    let result: PipeProcessResult
+    do {
+      result = try PipeProcessRunner.run(
+        executableURL: URL(fileURLWithPath: executable),
+        arguments: arguments,
+        environment: environment,
+        timeoutSeconds: processTimeoutSeconds
+      )
+    } catch {
+      throw ConnectError.invalidConfig(error.localizedDescription)
     }
-    process.environment = processEnvironment
 
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-    try process.run()
-    process.waitUntilExit()
-
-    let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    let error = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    guard process.terminationStatus == 0 else {
+    let output = String(data: result.stdout, encoding: .utf8) ?? ""
+    let error = String(data: result.stderr, encoding: .utf8) ?? ""
+    guard result.terminationStatus == 0 else {
       let message = error.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         ?? output.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        ?? "exit code \(process.terminationStatus)"
+        ?? "exit code \(result.terminationStatus)"
       throw ConnectError.invalidConfig(message)
     }
     return CommandOutput(stdout: output, stderr: error)

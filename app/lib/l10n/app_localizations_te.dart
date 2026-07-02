@@ -9535,4 +9535,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get latest => 'తాజా';
+
+  @override
+  String get flashFirmware => 'ఫర్మ్‌వేర్ ఫ్లాష్ చేయండి';
 }

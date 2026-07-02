@@ -9484,4 +9484,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get latest => 'Mới nhất';
+
+  @override
+  String get flashFirmware => 'Nạp firmware';
 }

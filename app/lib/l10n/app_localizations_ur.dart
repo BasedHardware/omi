@@ -9501,4 +9501,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get latest => 'تازہ ترین';
+
+  @override
+  String get flashFirmware => 'فرم ویئر فلیش کریں';
 }

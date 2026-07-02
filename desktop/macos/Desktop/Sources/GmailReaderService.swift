@@ -149,15 +149,15 @@ actor GmailReaderService {
   {
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
-      let bootstrapEmails = try fetchGmailViaAtomFeedSingle(
+      let queryEmails = try fetchGmailViaAtomFeedSingle(
         maxResults: maxResults,
         query: query,
         feedPath: nil,
-        allowBootstrap: true
+        allowBootstrap: false
       )
-      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults)
+      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults, query: query)
       var merged: [String: GmailEmail] = [:]
-      for email in bootstrapEmails + labelEmails {
+      for email in queryEmails + labelEmails {
         let existing = merged[email.id]
         if existing == nil || existing!.date < email.date {
           merged[email.id] = email
@@ -295,19 +295,27 @@ actor GmailReaderService {
 
       log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
 
-      let memoryItems = memoryStrings.map { memory in
-        MemoryBatchItem(
+      let artifacts = memoryStrings.map { memory in
+        ImportEvidenceBatchItem(
+            title: "Email Profile Insight",
+            snippet: memory,
             content: memory,
-            visibility: "private",
-            category: .system,
-            tags: ["gmail", "onboarding", "profile"],
-            headline: "Email Profile Insight",
-            source: "gmail"
+            metadata: ["import_kind": "profile"]
         )
       }
-      let saveResult = await OnboardingMemoryBatchImportService.save(
-        memoryItems,
-        logPrefix: "GmailReaderService"
+      let legacyMemories = memoryStrings.map { memory in
+        MemoryBatchItem(
+          content: memory,
+          tags: ["gmail", "onboarding"],
+          headline: "Email Profile Insight",
+          source: "gmail"
+        )
+      }
+      let saveResult = await OnboardingImportEvidenceService.save(
+        artifacts,
+        sourceType: "gmail",
+        logPrefix: "GmailReaderService",
+        legacyMemories: legacyMemories
       )
 
       // Save tasks
@@ -346,29 +354,48 @@ actor GmailReaderService {
   func saveAsMemories(emails: [GmailEmail]) async -> (saved: Int, failed: Int) {
     guard !emails.isEmpty else { return (0, 0) }
 
-    let memoryItems = emails.map { email in
+    let artifacts = emails.map { email in
       let dateStr = email.date.formatted(date: .abbreviated, time: .shortened)
       let senderName =
         email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces)
         ?? email.from
       let content = "Email from \(senderName) — \"\(email.subject)\": \(email.snippet)"
 
+      return ImportEvidenceBatchItem(
+        externalId: "gmail:\(email.id)",
+        occurredAt: email.date,
+        title: email.subject,
+        snippet: email.snippet,
+        content: content,
+        metadata: [
+          "import_kind": "email",
+          "from": email.from,
+          "window_title": "Gmail — \(dateStr)",
+        ]
+      )
+    }
+    let legacyMemories = emails.map { email in
+      let dateStr = email.date.formatted(date: .abbreviated, time: .shortened)
+      let senderName =
+        email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces)
+        ?? email.from
+      let content = "Email from \(senderName) — \"\(email.subject)\": \(email.snippet)"
       return MemoryBatchItem(
         content: content,
-        visibility: "private",
-        category: .system,
-        tags: ["gmail", "email"],
+        tags: ["gmail", "onboarding", "email"],
         headline: email.subject,
         source: "gmail",
         windowTitle: "Gmail — \(dateStr)"
       )
     }
 
-    let result = await OnboardingMemoryBatchImportService.save(
-      memoryItems,
-      logPrefix: "GmailReaderService"
+    let result = await OnboardingImportEvidenceService.save(
+      artifacts,
+      sourceType: "gmail",
+      logPrefix: "GmailReaderService",
+      legacyMemories: legacyMemories
     )
-    log("GmailReaderService: Saved \(result.saved) emails as memories (\(result.failed) failed)")
+    log("GmailReaderService: Saved \(result.saved) emails as import evidence (\(result.failed) failed)")
     return result
   }
 
@@ -532,6 +559,9 @@ actor GmailReaderService {
           opener = build_opener(HTTPCookieProcessor(jar))
           if feed_path:
               url = f'https://mail.google.com/mail/feed/{feed_path.lstrip("/")}'
+              if query:
+                  separator = '&' if '?' in url else '?'
+                  url = f'{url}{separator}q={quote(query)}'
           else:
               url = f'https://mail.google.com/mail/feed/atom?q={quote(query)}'
           req = Request(url)
@@ -729,7 +759,7 @@ actor GmailReaderService {
     }
   }
 
-  private func fetchGmailViaLabelFeeds(maxResults: Int) throws -> [GmailEmail] {
+  private func fetchGmailViaLabelFeeds(maxResults: Int, query: String) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
     let feedPaths = [
@@ -752,7 +782,7 @@ actor GmailReaderService {
     for feedPath in feedPaths {
       let feedEmails = try fetchGmailViaAtomFeedSingle(
         maxResults: min(20, maxResults),
-        query: "newer_than:1d",
+        query: query,
         feedPath: feedPath,
         allowBootstrap: false
       )

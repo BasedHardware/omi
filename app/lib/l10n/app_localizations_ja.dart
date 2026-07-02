@@ -9332,4 +9332,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get latest => '最新';
+
+  @override
+  String get flashFirmware => 'ファームウェアを書き込む';
 }

@@ -9472,4 +9472,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get latest => 'Nyeste';
+
+  @override
+  String get flashFirmware => 'Flash firmware';
 }

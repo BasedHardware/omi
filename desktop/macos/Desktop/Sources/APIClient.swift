@@ -84,6 +84,8 @@ actor APIClient {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
+      "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
       "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
       "X-Desktop-Request-ID": UUID().uuidString,
@@ -126,13 +128,14 @@ actor APIClient {
   func get<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
     return try await performRequest(request)
   }
@@ -1836,10 +1839,9 @@ extension APIClient {
   /// Max memories per POST /v3/memories/batch call. Must match the
   /// `MEMORIES_BATCH_MAX` constant in backend/routers/memories.py.
   static let memoriesBatchMaxSize = 100
+  static let memoryImportBatchMaxSize = 100
 
-  /// Creates many memories in a single HTTP call. Used by the onboarding
-  /// local-file import flow to avoid fanning out N requests and tripping
-  /// Cloud Armor's per-Authorization 120/min throttle.
+  /// Creates many product memories in a single HTTP call.
   ///
   /// Caller is responsible for chunking input into groups of at most
   /// `memoriesBatchMaxSize`. Returns the created count from the server.
@@ -1853,6 +1855,14 @@ extension APIClient {
     }
     let body = BatchRequest(memories: memories)
     return try await post("v3/memories/batch", body: body)
+  }
+
+  func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse {
+    precondition(
+      batch.items.count <= Self.memoryImportBatchMaxSize,
+      "createMemoryImportBatch received \(batch.items.count) artifacts, max is \(Self.memoryImportBatchMaxSize)"
+    )
+    return try await post("v3/memory-imports/batch", body: batch, includeBYOK: false)
   }
 
   /// Deletes a memory by ID
@@ -2032,6 +2042,116 @@ struct BatchMemoriesResponse: Decodable {
   struct BatchMemory: Decodable {
     let id: String
     let content: String
+  }
+}
+
+struct ImportEvidenceBatch: Encodable {
+  let sourceType: String
+  let importRunId: String?
+  let sourceAccountHash: String?
+  let importerVersion: String
+  let extractorVersion: String?
+  let items: [ImportEvidenceBatchItem]
+
+  init(
+    sourceType: String,
+    importRunId: String? = nil,
+    sourceAccountHash: String? = nil,
+    importerVersion: String = "desktop-import-v1",
+    extractorVersion: String? = nil,
+    items: [ImportEvidenceBatchItem]
+  ) {
+    self.sourceType = sourceType
+    self.importRunId = importRunId
+    self.sourceAccountHash = sourceAccountHash
+    self.importerVersion = importerVersion
+    self.extractorVersion = extractorVersion
+    self.items = items
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case sourceType = "source_type"
+    case importRunId = "import_run_id"
+    case sourceAccountHash = "source_account_hash"
+    case importerVersion = "importer_version"
+    case extractorVersion = "extractor_version"
+    case items
+  }
+}
+
+struct ImportEvidenceBatchItem: Encodable, Hashable {
+  let externalId: String?
+  let occurredAt: Date?
+  let title: String?
+  let snippet: String?
+  let content: String?
+  let contentHash: String?
+  let metadata: [String: String]
+  let clientDeviceId: String?
+
+  init(
+    externalId: String? = nil,
+    occurredAt: Date? = nil,
+    title: String? = nil,
+    snippet: String? = nil,
+    content: String? = nil,
+    contentHash: String? = nil,
+    metadata: [String: String] = [:],
+    clientDeviceId: String? = nil
+  ) {
+    self.externalId = externalId
+    self.occurredAt = occurredAt
+    self.title = title
+    self.snippet = snippet
+    self.content = content
+    self.contentHash = contentHash
+    self.metadata = metadata
+    self.clientDeviceId = clientDeviceId
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case externalId = "external_id"
+    case occurredAt = "occurred_at"
+    case title
+    case snippet
+    case content
+    case contentHash = "content_hash"
+    case metadata
+    case clientDeviceId = "client_device_id"
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encodeIfPresent(externalId, forKey: .externalId)
+    if let occurredAt {
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      try container.encode(formatter.string(from: occurredAt), forKey: .occurredAt)
+    }
+    try container.encodeIfPresent(title, forKey: .title)
+    try container.encodeIfPresent(snippet, forKey: .snippet)
+    try container.encodeIfPresent(content, forKey: .content)
+    try container.encodeIfPresent(contentHash, forKey: .contentHash)
+    try container.encode(metadata, forKey: .metadata)
+    try container.encodeIfPresent(clientDeviceId, forKey: .clientDeviceId)
+  }
+}
+
+struct ImportEvidenceBatchResponse: Decodable {
+  let runId: String
+  let artifactsReceived: Int
+  let artifactsCreated: Int
+  let artifactsDeduped: Int
+  let candidatesCreated: Int
+  let status: String
+
+  enum CodingKeys: String, CodingKey {
+    case runId = "run_id"
+    case artifactsReceived = "artifacts_received"
+    case artifactsCreated = "artifacts_created"
+    case artifactsDeduped = "artifacts_deduped"
+    case candidatesCreated = "candidates_created"
+    case status
   }
 }
 
@@ -4000,6 +4120,15 @@ extension APIClient {
     return try await patch("v1/users/assistant-settings", body: settings)
   }
 
+  /// Fetches server-controlled desktop update/banner policy.
+  func getDesktopUpdatePolicy(currentBuild: Int?) async throws -> DesktopUpdatePolicyResponse {
+    var endpoint = "v2/desktop/update-policy?platform=macos"
+    if let currentBuild {
+      endpoint += "&current_build=\(currentBuild)"
+    }
+    return try await get(endpoint, requireAuth: false, includeBYOK: false)
+  }
+
   // MARK: - Knowledge Graph API
 
   /// Get the full knowledge graph (nodes and edges)
@@ -4478,6 +4607,40 @@ struct UserProfileResponse: Codable {
     useCase = try container.decodeIfPresent(String.self, forKey: .useCase)
     job = try container.decodeIfPresent(String.self, forKey: .job)
     company = try container.decodeIfPresent(String.self, forKey: .company)
+  }
+}
+
+// MARK: - Desktop Update Policy Models
+
+struct DesktopUpdatePolicyResponse: Codable, Equatable {
+  enum Severity: String, Codable {
+    case none
+    case banner
+    case required
+  }
+
+  let id: String
+  let active: Bool
+  let severity: Severity
+  let maximumBuildNumber: Int?
+  let latestBuildNumber: Int?
+  let title: String?
+  let message: String?
+  let ctaText: String
+  let downloadURL: String
+  let canDismiss: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id, active, severity, title, message
+    case maximumBuildNumber = "maximum_build_number"
+    case latestBuildNumber = "latest_build_number"
+    case ctaText = "cta_text"
+    case downloadURL = "download_url"
+    case canDismiss = "can_dismiss"
+  }
+
+  var isRequired: Bool {
+    active && severity == .required
   }
 }
 

@@ -9541,4 +9541,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get latest => 'Últim';
+
+  @override
+  String get flashFirmware => 'Grava el microprogramari';
 }

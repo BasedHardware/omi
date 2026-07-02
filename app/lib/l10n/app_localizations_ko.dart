@@ -9333,4 +9333,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get latest => '최신';
+
+  @override
+  String get flashFirmware => '펌웨어 플래시';
 }

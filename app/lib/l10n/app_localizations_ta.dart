@@ -9555,4 +9555,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get latest => 'சமீபத்தியது';
+
+  @override
+  String get flashFirmware => 'ஃபார்ம்வேரை ஃபிளாஷ் செய்யவும்';
 }

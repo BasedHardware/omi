@@ -9489,4 +9489,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get latest => 'آخرین';
+
+  @override
+  String get flashFirmware => 'فلش کردن میان‌افزار';
 }

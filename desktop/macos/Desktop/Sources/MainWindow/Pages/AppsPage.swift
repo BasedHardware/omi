@@ -720,6 +720,15 @@ final class ImportConnectorStatusStore: ObservableObject {
         metricsByID[connectorID] = metrics
     }
 
+    private func clearStoredMetrics(for connectorID: String) {
+        defaults.removeObject(forKey: sourceCountKeyPrefix + connectorID)
+        defaults.removeObject(forKey: memoryCountKeyPrefix + connectorID)
+        defaults.removeObject(forKey: lastSyncedAtKeyPrefix + connectorID)
+        defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
+        defaults.removeObject(forKey: hasLastDeltaKeyPrefix + connectorID)
+        metricsByID[connectorID] = ConnectorMetrics()
+    }
+
     func refresh() async {
         await refreshLocalFilesMetrics()
         await refreshAppleNotesMetrics()
@@ -811,6 +820,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             metricsByID["apple-notes"] = metrics
         case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
             log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
+            clearStoredMetrics(for: "apple-notes")
         }
     }
 

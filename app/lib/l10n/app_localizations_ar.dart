@@ -9430,4 +9430,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get latest => 'الأحدث';
+
+  @override
+  String get flashFirmware => 'تحديث البرنامج الثابت';
 }

@@ -9482,4 +9482,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get latest => 'Latest';
+
+  @override
+  String get flashFirmware => 'Flash Firmware';
 }

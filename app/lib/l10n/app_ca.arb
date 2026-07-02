@@ -3072,5 +3072,6 @@
     "deviceOnboardingIntroSubtitle": "Un recorregut ràpid i pràctic per tot el que pot fer el teu Omi.",
     "deviceOnboardingIntroDuration": "Aproximadament 1 minut",
     "jumpToLatestMessage": "Vés a l'últim missatge",
-    "latest": "Últim"
+    "latest": "Últim",
+    "flashFirmware": "Grava el microprogramari"
 }

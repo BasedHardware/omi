@@ -9509,4 +9509,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get latest => 'Jaunākais';
+
+  @override
+  String get flashFirmware => 'Instalēt aparātprogrammatūru';
 }

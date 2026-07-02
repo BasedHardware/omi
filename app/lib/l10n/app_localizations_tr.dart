@@ -9497,4 +9497,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get latest => 'En son';
+
+  @override
+  String get flashFirmware => 'Donanım Yazılımını Yükle';
 }

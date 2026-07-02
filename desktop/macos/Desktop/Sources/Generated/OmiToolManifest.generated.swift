@@ -120,16 +120,21 @@ enum OmiToolManifest {
           "type": "string",
           "description": "Remote MCP server URL to paste into the connector form.",
         ],
-        "oauth_client_id": ["type": "string", "description": "OAuth Client ID, usually 'omi'."],
+        "oauth_client_id": [
+          "type": "string",
+          "description":
+            "OAuth Client ID. Defaults to Omi's public ChatGPT/Claude connector client.",
+        ],
         "oauth_client_secret": [
-          "type": "string", "description": "OAuth Client Secret / Omi MCP key.",
+          "type": "string", "description": "OAuth Client Secret, only for confidential clients.",
         ],
         "authentication": [
           "type": "string", "description": "Authentication mode, usually 'OAuth'.",
         ],
         "token_auth_method": [
           "type": "string",
-          "description": "OAuth token auth method, usually 'client_secret_post'.",
+          "description":
+            "OAuth token auth method. Use 'none' for Omi's public ChatGPT connector client.",
         ],
         "auth_url": [
           "type": "string", "description": "OAuth authorization URL when the form asks for it.",
@@ -143,7 +148,7 @@ enum OmiToolManifest {
             "Whether to press the visible Add/Connect/Create button after filling required fields.",
         ],
       ],
-      required: ["provider", "server_url", "oauth_client_secret"],
+      required: ["provider", "server_url"],
       annotations: ["readOnlyHint": false, "destructiveHint": false, "openWorldHint": true]
     ),
   ]

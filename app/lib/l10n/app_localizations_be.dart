@@ -9516,4 +9516,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get latest => 'Апошні';
+
+  @override
+  String get flashFirmware => 'Усталяваць прашыўку';
 }

@@ -10,7 +10,6 @@ struct ConnectDestinationSheet: View {
   @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
   let onDismiss: () -> Void
 
-
   /// CLI+cloud pair for an anchor destination (CLI first).
   static func group(for d: MemoryExportDestination) -> [MemoryExportDestination] {
     switch d {
@@ -94,7 +93,8 @@ private struct ConnectOptionCard: View {
   @State private var showManual = false
   @State private var permissionRefreshID = 0
 
-  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common)
+    .autoconnect()
 
   private var optionLabel: String {
     switch destination {
@@ -116,7 +116,7 @@ private struct ConnectOptionCard: View {
         ? "Grant Accessibility"
         : "Do it for me"
     case .assisted:
-      return "Open & copy key"
+      return destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
     }
   }
 
@@ -154,9 +154,7 @@ private struct ConnectOptionCard: View {
                   .fixedSize(horizontal: false, vertical: true)
                   .frame(maxWidth: .infinity, alignment: .leading)
               }
-              manualBlock(
-                setup.copyText
-                  ?? "Server URL: \(setup.serverURL)\nKey: \(mcpKey ?? "YOUR_OMI_KEY")")
+              manualBlock(manualText(for: setup))
             }
             .padding(.top, 8)
           } label: {
@@ -181,16 +179,19 @@ private struct ConnectOptionCard: View {
         .fill(OmiColors.backgroundSecondary)
     )
     .task {
-      if let stored = await MemoryExportService.shared.storedMCPKey() {
-        mcpKey = stored
-      } else {
-        mcpKey = try? await MemoryExportService.shared.ensureMCPKey()
+      if destination.requiresHostedMCPKeyForSetup {
+        if let stored = await MemoryExportService.shared.storedMCPKey() {
+          mcpKey = stored
+        } else {
+          mcpKey = try? await MemoryExportService.shared.ensureMCPKey()
+        }
       }
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
+    { _ in
       refreshPermissionStateIfNeeded()
     }
   }
@@ -209,7 +210,12 @@ private struct ConnectOptionCard: View {
         case .autonomous:
           resultMessage = "Omi is setting this up — follow along in the floating bar."
         case .assisted:
-          resultMessage = "Opened \(destination.title) and copied your key."
+          resultMessage = outcome.taskTitle
+          // Assisted flow: the user pastes values by hand, so open the
+          // step-by-step instructions instead of leaving them collapsed.
+          if destination.assistedOverlayHint != nil {
+            showManual = true
+          }
         case .completed:
           resultMessage = outcome.taskTitle
         }
@@ -219,6 +225,16 @@ private struct ConnectOptionCard: View {
       }
       isRunning = false
     }
+  }
+
+  private func manualText(for setup: MCPSetup) -> String {
+    if let copyText = setup.copyText {
+      return copyText
+    }
+    if destination.requiresHostedMCPKeyForSetup {
+      return "Server URL: \(setup.serverURL)\nKey: \(mcpKey ?? "YOUR_OMI_KEY")"
+    }
+    return "Server URL: \(setup.serverURL)"
   }
 
   private func manualBlock(_ text: String) -> some View {

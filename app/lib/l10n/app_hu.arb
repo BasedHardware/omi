@@ -3199,5 +3199,6 @@
     "deviceOnboardingIntroSubtitle": "Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.",
     "deviceOnboardingIntroDuration": "Körülbelül 1 perc",
     "jumpToLatestMessage": "Ugrás a legújabb üzenethez",
-    "latest": "Legújabb"
+    "latest": "Legújabb",
+    "flashFirmware": "Firmware flashelése"
 }
