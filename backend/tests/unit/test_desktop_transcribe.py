@@ -344,6 +344,7 @@ for _ufull in [
     'utils.llm.chat',
     'utils.llm.goals',
     'utils.llm.usage_tracker',
+    'utils.llm.reply_draft',
     'utils.conversations.process_conversation',
     'utils.notifications',
     'utils.other.storage',
