@@ -62,19 +62,27 @@ def test_counts_nested_desktop_chat_plus_flat_backend_chat(mock_db):
         mock_db,
         {
             "2026-06-23": {
-                "desktop_chat": {"call_count": 5, "cost_usd": 1.5},  # nested (Rust) — counted
+                "desktop_chat": {
+                    "call_count": 5,  # internal generations — must NOT count as questions
+                    "quota_questions": 5,  # visible user turns — counted
+                    "cost_usd": 1.5,
+                },
                 "desktop_chat_omi": {"call_count": 3},  # breakdown — must NOT double-count
-                "desktop_chat_realtime": {"call_count": 2},  # PTT breakdown — must NOT double-count
+                "desktop_chat_realtime": {
+                    "call_count": 2,
+                    "quota_questions": 2,
+                },  # PTT breakdown — must NOT double-count
                 "chat.gpt-4.call_count": 4,  # flat backend chat — counted
                 "conv_apps.gpt-5.call_count": 100,  # proactive/processing — excluded
                 "memories.gpt-4.call_count": 50,  # excluded
                 "date": "2026-06-23",
             },
-            "2026-05-30": {"desktop_chat": {"call_count": 999}},  # other month — excluded
+            "2026-05-30": {"desktop_chat": {"quota_questions": 999}},  # other month — excluded
         },
     )
     r = user_usage.get_monthly_chat_usage("uid", now=NOW)
-    # 5 (grand-total desktop_chat) + 4 (flat chat.*); breakdowns + proactive excluded; other month excluded
+    # 5 (desktop quota_questions) + 4 (flat chat.*); breakdowns excluded (have quota_questions, no
+    # legacy fallback double-count); internal call_count + proactive excluded; other month excluded
     assert r["questions"] == 9, r
     assert r["cost_usd"] == 1.5, r
 
