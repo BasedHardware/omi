@@ -41,6 +41,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+import utils.mcp_search as mcp_search
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     read_default_read_rollout,
@@ -113,6 +114,8 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+# search/fetch read across memories and conversations (the ChatGPT connector contract).
+SEARCH_SECURITY = [{"type": "oauth2", "scopes": ["memories.read", "conversations.read"]}]
 
 
 @dataclass
@@ -269,6 +272,35 @@ def _require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
 
 # MCP Tool Definitions
 MCP_TOOLS = [
+    {
+        "name": "search",
+        "description": (
+            "Search the user's Omi memory bank (memories and conversations) and return a list of matching "
+            "results. Each result has an id, title, url, and a text snippet. Pass an id to `fetch` to read the "
+            "full document. This is the standard connector entry point for retrieving the user's Omi data."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": SEARCH_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "The search query"}},
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "fetch",
+        "description": (
+            "Fetch the full document for a single result id returned by `search` (a `memory:<id>` or "
+            "`conversation:<id>`). Returns the id, title, full text, url, and metadata."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": SEARCH_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "A result id from search"}},
+            "required": ["id"],
+        },
+    },
     {
         "name": "get_user_profile",
         "description": (
@@ -750,6 +782,15 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
 
+def _search_tool_error(error: mcp_search.SearchError) -> ToolExecutionError:
+    """Map a unified search/fetch error to the matching MCP/JSON-RPC error code."""
+    if isinstance(error, mcp_search.ItemNotFound):
+        return ToolExecutionError(str(error), code=-32001)
+    if isinstance(error, mcp_search.ItemLocked):
+        return ToolExecutionError(str(error), code=-32002)
+    return ToolExecutionError(str(error), code=-32602)
+
+
 def execute_tool(
     user_id: str,
     tool_name: str,
@@ -759,7 +800,19 @@ def execute_tool(
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
     memory_system = pin_memory_system(user_id, db_client=db)
 
-    if tool_name == "get_user_profile":
+    if tool_name == "search":
+        try:
+            return mcp_search.search(user_id, arguments.get("query"), arguments.get("limit"))
+        except mcp_search.SearchError as e:
+            raise _search_tool_error(e)
+
+    elif tool_name == "fetch":
+        try:
+            return mcp_search.fetch(user_id, arguments.get("id"))
+        except mcp_search.SearchError as e:
+            raise _search_tool_error(e)
+
+    elif tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
         if not profile or not profile.get("profile_text"):
             return {"profile": None, "message": "No profile has been generated for this user yet."}
@@ -1380,12 +1433,13 @@ def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Opt
                 }
             return error, None
 
-        return (
-            create_mcp_response(
-                msg_id, {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
-            ),
-            None,
-        )
+        call_result = {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
+        # The ChatGPT connector / deep-research contract wants search and fetch results
+        # echoed as structuredContent alongside the JSON text. Their results are plain
+        # JSON-safe dicts, so this is emitted only for those two tools.
+        if tool_name in ("search", "fetch"):
+            call_result["structuredContent"] = result
+        return create_mcp_response(msg_id, call_result), None
 
     elif method == "ping":
         return create_mcp_response(msg_id, {}), None
