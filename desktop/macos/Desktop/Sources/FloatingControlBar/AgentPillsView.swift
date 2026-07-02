@@ -165,7 +165,7 @@ struct AgentPillView: View {
             return false
         }
         switch pill.status {
-        case .done, .failed: return true
+        case .done, .stopped, .failed: return true
         default: return false
         }
     }
@@ -304,7 +304,7 @@ struct AgentPillPopover: View {
 
     private var isFinished: Bool {
         switch pill.status {
-        case .done, .failed: return true
+        case .done, .stopped, .failed: return true
         default: return false
         }
     }
@@ -358,6 +358,7 @@ struct AgentPillPopover: View {
         case .queued: return Color(red: 0.0, green: 0.0, blue: 0.0)
         case .starting, .running: return Color(red: 0.18, green: 0.10, blue: 0.0)
         case .done: return Color(red: 0.07, green: 0.18, blue: 0.10)
+        case .stopped: return Color(red: 0.08, green: 0.09, blue: 0.10)
         case .failed: return .white
         }
     }
@@ -367,6 +368,7 @@ struct AgentPillPopover: View {
         case .queued: return Color(red: 0.85, green: 0.85, blue: 0.85)
         case .starting, .running: return Color(red: 1.0, green: 0.78, blue: 0.30)
         case .done: return Color(red: 0.45, green: 0.92, blue: 0.55)
+        case .stopped: return Color(red: 0.64, green: 0.66, blue: 0.70)
         case .failed: return Color(red: 0.78, green: 0.32, blue: 0.32)
         }
     }

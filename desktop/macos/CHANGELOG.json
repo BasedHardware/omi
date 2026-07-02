@@ -2,6 +2,33 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.589",
+      "date": "2026-07-02",
+      "changes": [
+        "Fixed OpenClaw and Hermes memory-bank setup so local installs are detected safely and Omi MCP wiring is updated deterministically",
+        "Fixed floating subagent chats so stale completed tool calls do not duplicate around text, and added a Stop control for running subagents",
+        "Added a semantic Gmail connector probe and updated the Google connector checklist to reflect the shared browser-session path."
+      ]
+    },
+    {
+      "version": "0.11.588",
+      "date": "2026-07-02",
+      "changes": [
+        "Google Calendar imports now wait for desktop API keys to load before checking your browser session",
+        "Hardened Gmail and Google Calendar desktop integrations with shared browser session handling and clearer sign-in diagnostics."
+      ]
+    },
+    {
+      "version": "0.11.587",
+      "date": "2026-07-02",
+      "changes": [
+        "Apple Notes import now reports actionable permission and folder errors instead of a generic unavailable state",
+        "Google Calendar connection checks now preserve specific network failure details and can be verified through the same real connector path the app uses",
+        "Fixed Gmail import getting stuck while reading large email histories",
+        "Improved Apple Notes connection checks so existing folder access keeps working and database read errors show the right recovery message"
+      ]
+    },
+    {
       "version": "0.11.586",
       "date": "2026-07-01",
       "changes": [

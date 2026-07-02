@@ -468,22 +468,44 @@ final class DesktopAutomationActionRegistry {
           selectedFolderPath = nil
         }
 
-        let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+        let status = await AppleNotesReaderService.shared.connectionStatus(
           maxResults: maxResults,
           selectedFolderPath: selectedFolderPath
         )
-        return [
-          "ok": "true",
-          "classification": "readable",
-          "noteCount": "\(notes.count)",
-          "selectedFolderPath": selectedFolderPath ?? "",
-          "firstTitle": notes.first?.title ?? "",
-        ]
+        switch status {
+        case .connected(let noteCount, _):
+          let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+            maxResults: 1,
+            selectedFolderPath: selectedFolderPath
+          )
+          return [
+            "ok": "true",
+            "classification": "readable",
+            "noteCount": "\(noteCount)",
+            "selectedFolderPath": selectedFolderPath ?? "",
+            "firstTitle": notes.first?.title ?? "",
+          ]
+        case .needsAccess(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "true",
+          ]
+        case .error(let message, let reasonCode):
+          return [
+            "ok": "false",
+            "classification": reasonCode,
+            "message": message,
+            "needsFolderSelection": "false",
+          ]
+        }
       } catch let error as AppleNotesReaderError {
         return [
           "ok": "false",
           "classification": error.reasonCode,
           "message": error.localizedDescription,
+          "needsFolderSelection": "\(error.shouldPromptForFolderSelection)",
         ]
       } catch {
         return [
@@ -683,6 +705,119 @@ final class DesktopAutomationActionRegistry {
         resolution: params["resolution"] ?? "resolved"
       )
       return ["dispatch": dispatch]
+    }
+
+    register(
+      name: "calendar_read_probe",
+      summary: "Read Google Calendar through the real connector path and return classified status",
+      params: ["daysBack", "daysForward", "maxResults"]
+    ) { params in
+      let requestedDaysBack = intParam(params["daysBack"], default: 1)
+      let requestedDaysForward = intParam(params["daysForward"], default: 1)
+      let requestedMaxResults = intParam(params["maxResults"], default: 1)
+      let normalized = CalendarFetchParameters.normalized(
+        daysBack: requestedDaysBack,
+        daysForward: requestedDaysForward,
+        maxResults: requestedMaxResults
+      )
+
+      do {
+        let events = try await CalendarReaderService.shared.readEvents(
+          daysBack: normalized.daysBack,
+          daysForward: normalized.daysForward,
+          maxResults: normalized.maxResults
+        )
+        return [
+          "status": "connected",
+          "classification": "readable",
+          "eventCount": "\(events.count)",
+          "daysBack": "\(normalized.daysBack)",
+          "daysForward": "\(normalized.daysForward)",
+          "maxResults": "\(normalized.maxResults)",
+        ]
+      } catch let error as CalendarReaderError {
+        let classification: String
+        switch error {
+        case .noBrowserFound:
+          classification = "no_browser"
+        case .notSignedIn:
+          classification = "not_signed_in"
+        case .sessionExpired:
+          classification = "session_expired"
+        case .cookieDecryptionFailed:
+          classification = "decrypt_failed"
+        case .configurationError:
+          classification = "configuration"
+        case .networkError:
+          classification = "network"
+        case .pythonNotFound:
+          classification = "python_not_found"
+        }
+        return [
+          "status": "error",
+          "classification": classification,
+          "message": error.errorDescription ?? "\(error)",
+          "daysBack": "\(normalized.daysBack)",
+          "daysForward": "\(normalized.daysForward)",
+          "maxResults": "\(normalized.maxResults)",
+        ]
+      }
+    }
+
+    register(
+      name: "gmail_read_probe",
+      summary: "Read Gmail through the real connector path and return classified status",
+      params: ["maxResults", "query"]
+    ) { params in
+      let requestedMaxResults = intParam(params["maxResults"], default: 1)
+      let maxResults = min(max(requestedMaxResults, 1), 500)
+      let rawQuery = params["query"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let query = rawQuery.isEmpty ? "newer_than:1d" : rawQuery
+
+      do {
+        let emails = try await GmailReaderService.shared.readRecentEmails(
+          maxResults: maxResults,
+          query: query
+        )
+        return [
+          "status": "connected",
+          "classification": "readable",
+          "emailCount": "\(emails.count)",
+          "maxResults": "\(maxResults)",
+          "query": query,
+        ]
+      } catch let error as GmailReaderError {
+        let classification: String
+        switch error {
+        case .noBrowserFound:
+          classification = "no_browser"
+        case .noGmailCookies, .notSignedIn:
+          classification = "not_signed_in"
+        case .sessionExpired, .authFailed:
+          classification = "session_expired"
+        case .cookieDecryptionFailed:
+          classification = "decrypt_failed"
+        case .networkError:
+          classification = "network"
+        case .pythonNotFound:
+          classification = "python_not_found"
+        }
+        return [
+          "status": "error",
+          "classification": classification,
+          "message": error.errorDescription ?? "\(error)",
+          "maxResults": "\(maxResults)",
+          "query": query,
+        ]
+      } catch {
+        return [
+          "status": "error",
+          "classification": "unknown",
+          "message": error.localizedDescription,
+          "maxResults": "\(maxResults)",
+          "query": query,
+        ]
+      }
     }
 
     register(

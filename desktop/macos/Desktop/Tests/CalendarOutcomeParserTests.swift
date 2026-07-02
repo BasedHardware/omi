@@ -25,6 +25,20 @@ final class CalendarOutcomeParserTests: XCTestCase {
     XCTAssertEqual(events.count, 1)
   }
 
+  func testSuccessWithZeroEventsStillMeansConnectedSurfaceWorked() {
+    let json: [String: Any] = [
+      "ok": true,
+      "browser": "Chrome (Default)",
+      "events": [],
+      "attempts": [["browser": "Chrome (Default)", "stage": "ok", "reason": "ok", "had_auth": true]],
+    ]
+    guard case let .success(events, browser) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected success")
+    }
+    XCTAssertEqual(browser, "Chrome (Default)")
+    XCTAssertTrue(events.isEmpty)
+  }
+
   /// The exact bug from the screenshot: cookies decrypt fine but no profile is
   /// signed into Google. This must classify as `notSignedIn` (an actionable
   /// login prompt), NOT the old catch-all "Network error".
@@ -42,7 +56,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .notSignedIn)
-    XCTAssertEqual(cls.asError, .notSignedIn)
+    XCTAssertEqual(cls.asError(), .notSignedIn)
     // Every attempt is retained — not just the last one (no last-writer-wins).
     XCTAssertEqual(attempts.count, 2)
   }
@@ -60,7 +74,56 @@ final class CalendarOutcomeParserTests: XCTestCase {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .sessionExpired)
-    XCTAssertEqual(cls.asError, .sessionExpired)
+    XCTAssertEqual(cls.asError(), .sessionExpired)
+  }
+
+  func testInvalidCalendarAPIKeyMapsToConfigurationError() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "configuration",
+      "summary": "Calendar API key is invalid or unavailable.",
+      "attempts": [
+        [
+          "browser": "Chrome",
+          "stage": "fetch",
+          "reason": "HTTP 400: INVALID_ARGUMENT: API key not valid. Please pass a valid API key.: badRequest",
+          "had_auth": true,
+          "http": 400,
+        ]
+      ],
+    ]
+    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected failure")
+    }
+    XCTAssertEqual(cls, .configuration)
+    XCTAssertEqual(cls.asError(summary: summary), .configurationError("Calendar API key is invalid or unavailable."))
+  }
+
+  func testMissingCalendarAPIKeyMapsToConfigurationError() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "configuration",
+      "summary": "Calendar API key is invalid or unavailable.",
+      "attempts": [
+        [
+          "browser": "Chrome",
+          "stage": "fetch",
+          "reason": "HTTP 403: PERMISSION_DENIED: Method doesn't allow unregistered callers.",
+          "had_auth": true,
+          "http": 403,
+        ]
+      ],
+    ]
+    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected failure")
+    }
+    XCTAssertEqual(cls, .configuration)
+    XCTAssertEqual(cls.asError(summary: summary).errorDescription, "Couldn't use Google Calendar: Calendar API key is invalid or unavailable.")
+  }
+
+  func testNetworkSummaryAvoidsDoublePrefix() {
+    let error = CalendarFailureClass.network.asError(summary: "Could not reach Google Calendar (HTTP 500).")
+    XCTAssertEqual(error.errorDescription, "Couldn't reach Google Calendar: (HTTP 500).")
   }
 
   func testNoBrowserWhenNothingScanned() {
@@ -81,7 +144,63 @@ final class CalendarOutcomeParserTests: XCTestCase {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .unknown)
-    XCTAssertFalse(summary.isEmpty)
+    XCTAssertEqual(summary, cls.plainFallbackSummary)
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(error.errorDescription, "Couldn't reach Google Calendar: unexpected error")
+  }
+
+  func testUnknownErrorClassPreservesPythonSummary() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "something_new",
+      "summary": "New failure mode from Python helper.",
+      "attempts": [],
+    ]
+    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected failure")
+    }
+    XCTAssertEqual(cls, .unknown)
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(error, .networkError("New failure mode from Python helper."))
+    XCTAssertEqual(
+      error.errorDescription,
+      "Couldn't reach Google Calendar: New failure mode from Python helper."
+    )
+  }
+
+  func testNetworkSummarySurvivesFinalErrorMapping() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "network",
+      "summary": "Could not reach Google Calendar (HTTP 500).",
+      "attempts": [
+        ["browser": "Chrome (Default)", "stage": "fetch", "reason": "HTTP 500", "had_auth": true, "http": 500]
+      ],
+    ]
+    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected failure")
+    }
+    XCTAssertEqual(cls, .network)
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(error, .networkError("(HTTP 500)."))
+    XCTAssertEqual(error.errorDescription, "Couldn't reach Google Calendar: (HTTP 500).")
+  }
+
+  func testNetworkFailureWithoutSummaryAvoidsDoublePrefix() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "network",
+      "attempts": [],
+    ]
+    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+      return XCTFail("expected failure")
+    }
+    XCTAssertEqual(summary, cls.plainFallbackSummary)
+    let error = cls.asError(summary: summary)
+    XCTAssertEqual(
+      error.errorDescription,
+      "Couldn't reach Google Calendar: please check your connection and try again"
+    )
   }
 
   /// Diagnostics must be safe to log and upload: browser names, stages, and
@@ -104,5 +223,37 @@ final class CalendarOutcomeParserTests: XCTestCase {
     XCTAssertTrue(CalendarConnectionStatus.connected(verifiedAt: Date()).isConnected)
     XCTAssertFalse(CalendarConnectionStatus.needsSignIn(message: "x").isConnected)
     XCTAssertFalse(CalendarConnectionStatus.error(message: "x").isConnected)
+  }
+
+  func testFetchParameterNormalizationClampsProbeBoundaries() {
+    XCTAssertEqual(
+      CalendarFetchParameters.normalized(daysBack: -7, daysForward: -1, maxResults: 0),
+      CalendarFetchParameters(daysBack: 0, daysForward: 0, maxResults: 1)
+    )
+    XCTAssertEqual(
+      CalendarFetchParameters.normalized(daysBack: 9999, daysForward: 9999, maxResults: 9999),
+      CalendarFetchParameters(daysBack: 3650, daysForward: 3650, maxResults: 2500)
+    )
+  }
+
+  func testCalendarReadsWaitForBackendServedAPIKeys() throws {
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let sourceURL = testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/CalendarReaderService.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    guard let readRange = source.range(of: "func readEvents("),
+      let keyWaitRange = source.range(of: "await APIKeyService.shared.waitForKeys()", range: readRange.upperBound..<source.endIndex),
+      let fetchRange = source.range(of: "fetchCalendarViaCookies(", range: readRange.upperBound..<source.endIndex)
+    else {
+      return XCTFail("Calendar reads must wait for backend-served API keys before fetching")
+    }
+
+    XCTAssertLessThan(
+      keyWaitRange.lowerBound,
+      fetchRange.lowerBound,
+      "Calendar reads must not hit Google before GOOGLE_CALENDAR_API_KEY has loaded"
+    )
   }
 }

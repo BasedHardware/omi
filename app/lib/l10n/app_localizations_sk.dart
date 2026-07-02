@@ -1717,7 +1717,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZARIADENIA',
+      one: 'ZARIADENIE',
+    );
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -9356,16 +9361,23 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Toto zariadenie';
+
   @override
   String get memoryThisIphone => 'Tento iPhone';
+
   @override
   String get memoryThisPhone => 'Tento telefón';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Ako používať Omi';
 
   @override

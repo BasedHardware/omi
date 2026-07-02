@@ -1722,7 +1722,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8510,7 +8515,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9426,16 +9436,23 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'இந்த சாதனம்';
+
   @override
   String get memoryThisIphone => 'இந்த iPhone';
+
   @override
   String get memoryThisPhone => 'இந்த தொலைபேசி';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Omi ஐ எவ்வாறு பயன்படுத்துவது';
 
   @override
