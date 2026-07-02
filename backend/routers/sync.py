@@ -95,12 +95,10 @@ from utils.fair_use import (
 )
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
-from utils.stt.speaker_embedding import (
-    extract_embedding_from_bytes,
-    compare_embeddings,
-    SPEAKER_MATCH_THRESHOLD,
-)
+from utils.stt.speaker_embedding import extract_embedding_from_bytes, compare_embeddings, SPEAKER_MATCH_THRESHOLD
+from utils.byok import set_byok_keys
 from utils.subscription import has_transcription_credits
+from utils.auth_middleware import require_firebase
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +107,7 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -120,10 +118,8 @@ def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Di
 
 
 @router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
-def precache_conversation_audio_endpoint(
-    conversation_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+def precache_conversation_audio_endpoint(request: Request, conversation_id: str):
+    uid = request.state.uid
     """
     Warm the audio cache for a conversation.
     Returns immediately - caching happens in background.
@@ -138,10 +134,8 @@ def precache_conversation_audio_endpoint(
 
 
 @router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
-def get_audio_signed_urls_endpoint(
-    conversation_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+def get_audio_signed_urls_endpoint(request: Request, conversation_id: str):
+    uid = request.state.uid
     """
     Get signed URLs for all audio files in a conversation.
     Synchronously caches the first uncached file for immediate playback.
@@ -166,11 +160,7 @@ def get_audio_signed_urls_endpoint(
 
 @router.get("/v1/sync/audio/{conversation_id}/{audio_file_id}", tags=['v1'])
 def download_audio_file_endpoint(
-    conversation_id: str,
-    audio_file_id: str,
-    request: Request,
-    format: str = Query(default="wav", regex="^(wav|pcm)$"),
-    uid: str = Depends(auth.get_current_user_uid),
+    conversation_id: str, audio_file_id: str, request: Request, format: str = Query(default="wav", regex="^(wav|pcm)$")
 ):
     """
     Download audio file from private cloud sync in the specified format.
@@ -181,12 +171,12 @@ def download_audio_file_endpoint(
         audio_file_id: ID of the audio file within the conversation
         request: FastAPI Request object (for Range header)
         format: Output format - 'wav' or 'pcm' (raw) (default: wav)
-        uid: User ID (from authentication)
 
     Returns:
         StreamingResponse with the audio file in the requested format.
         Returns 206 Partial Content for Range requests, 200 OK for full file.
     """
+    uid = request.state.uid
     # Verify user owns the conversation
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
@@ -292,11 +282,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     conversation = deserialize_conversation(conversation_data)
 
     process_conversation(
-        uid=uid,
-        language_code=language or 'en',
-        conversation=conversation,
-        force_process=True,
-        is_reprocess=True,
+        uid=uid, language_code=language or 'en', conversation=conversation, force_process=True, is_reprocess=True
     )
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
@@ -429,9 +415,7 @@ def identify_speakers_for_segments(
         # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
         # If diarization fragments one person across speaker IDs, only the best match wins.
         sorted_speakers = sorted(
-            speaker_segments.items(),
-            key=lambda kv: max(s.end - s.start for s in kv[1]),
-            reverse=True,
+            speaker_segments.items(), key=lambda kv: max(s.end - s.start for s in kv[1]), reverse=True
         )
 
         for speaker_id, segments in sorted_speakers:
@@ -498,11 +482,7 @@ def identify_speakers_for_segments(
 
     # Apply all assignments to segments
     if speaker_to_person_map or segment_person_assignment_map:
-        process_speaker_assigned_segments(
-            transcript_segments,
-            segment_person_assignment_map,
-            speaker_to_person_map,
-        )
+        process_speaker_assigned_segments(transcript_segments, segment_person_assignment_map, speaker_to_person_map)
 
 
 ORDERED_ASSIGNMENT_WAIT_SECONDS = 600
@@ -814,11 +794,11 @@ async def sync_local_files(
     request: Request,
     response: Response,
     files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.get_current_user_uid),
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
 ):
+    uid = request.state.uid
     logger.warning(
         f'sync: deprecated v1 sync-local-files called uid={uid} files={len(files)} '
         f'user_agent={request.headers.get("user-agent", "")}'
@@ -1447,12 +1427,13 @@ def _download_staged_files(blob_paths: list) -> bool:
 
 @router.post("/v2/sync-local-files")
 async def sync_local_files_v2(
+    request: Request,
     files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.get_current_user_uid),
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
 ):
+    uid = request.state.uid
     """
     Async version of sync-local-files. Saves raw files and returns 202
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
@@ -1563,7 +1544,8 @@ async def sync_local_files_v2(
 
 
 @router.get("/v2/sync-local-files/{job_id}")
-def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_sync_job_status(request: Request, job_id: str):
+    uid = request.state.uid
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)
     if not job:

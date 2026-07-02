@@ -11,6 +11,7 @@ import httpx
 
 import database.users as users_db
 import database.redis_db as redis_db
+from utils.auth_middleware import require_firebase
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.executors import db_executor, run_blocking
@@ -18,7 +19,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_custom_router = APIRouter()
 
 # OAuth state management
 OAUTH_STATE_EXPIRY = 600  # 10 minutes
@@ -186,8 +188,9 @@ class DefaultTaskIntegrationResponse(BaseModel):
 # *****************************
 
 
-@router.get("/v1/task-integrations", response_model=TaskIntegrationsResponse, tags=['task-integrations'])
-def get_task_integrations(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/task-integrations", response_model=TaskIntegrationsResponse, tags=['task-integrations'])
+def get_task_integrations(request: Request):
+    uid = request.state.uid
     """Get all task integration connections for the current user."""
     integrations = users_db.get_task_integrations(uid)
     default_app = users_db.get_default_task_integration(uid)
@@ -195,22 +198,29 @@ def get_task_integrations(uid: str = Depends(auth.get_current_user_uid)):
     return TaskIntegrationsResponse(integrations=integrations, default_app=default_app)
 
 
-@router.get("/v1/task-integrations/default", response_model=DefaultTaskIntegrationResponse, tags=['task-integrations'])
-def get_default_task_integration(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get(
+    "/v1/task-integrations/default", response_model=DefaultTaskIntegrationResponse, tags=['task-integrations']
+)
+def get_default_task_integration(request: Request):
+    uid = request.state.uid
     """Get the user's default task integration app."""
     default_app = users_db.get_default_task_integration(uid)
     return DefaultTaskIntegrationResponse(default_app=default_app)
 
 
-@router.put("/v1/task-integrations/default", response_model=DefaultTaskIntegrationResponse, tags=['task-integrations'])
-def set_default_task_integration(request: DefaultTaskIntegrationRequest, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.put(
+    "/v1/task-integrations/default", response_model=DefaultTaskIntegrationResponse, tags=['task-integrations']
+)
+def set_default_task_integration(request: Request, data: DefaultTaskIntegrationRequest):
+    uid = request.state.uid
     """Set the user's default task integration app."""
-    users_db.set_default_task_integration(uid, request.app_key)
-    return DefaultTaskIntegrationResponse(default_app=request.app_key)
+    users_db.set_default_task_integration(uid, data.app_key)
+    return DefaultTaskIntegrationResponse(default_app=data.app_key)
 
 
-@router.put("/v1/task-integrations/{app_key}", tags=['task-integrations'])
-def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.put("/v1/task-integrations/{app_key}", tags=['task-integrations'])
+def save_task_integration(request: Request, app_key: str, data: TaskIntegrationData):
+    uid = request.state.uid
     """Save or update a task integration connection."""
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
@@ -220,8 +230,9 @@ def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = De
     return {"status": "ok", "app_key": app_key}
 
 
-@router.delete("/v1/task-integrations/{app_key}", status_code=204, tags=['task-integrations'])
-def delete_task_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete("/v1/task-integrations/{app_key}", status_code=204, tags=['task-integrations'])
+def delete_task_integration(request: Request, app_key: str):
+    uid = request.state.uid
     """Delete a task integration connection."""
     success = users_db.delete_task_integration(uid, app_key)
 
@@ -247,8 +258,11 @@ class OAuthUrlResponse(BaseModel):
     auth_url: str = Field(description="OAuth authorization URL to open in browser")
 
 
-@router.get("/v1/task-integrations/{app_key}/oauth-url", response_model=OAuthUrlResponse, tags=['task-integrations'])
-def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get(
+    "/v1/task-integrations/{app_key}/oauth-url", response_model=OAuthUrlResponse, tags=['task-integrations']
+)
+def get_oauth_url(request: Request, app_key: str):
+    uid = request.state.uid
     """
     Get OAuth authorization URL for a task integration.
     Frontend opens this URL in browser to start OAuth flow.
@@ -460,12 +474,7 @@ async def ensure_valid_oauth_token(
     return integration
 
 
-async def perform_request_with_token_retry(
-    uid: str,
-    app_key: str,
-    integration: dict,
-    request_fn,
-):
+async def perform_request_with_token_retry(uid: str, app_key: str, integration: dict, request_fn):
     client = get_http_client()
     access_token = integration.get('access_token') or ''
     response = await request_fn(client, access_token)
@@ -521,11 +530,7 @@ async def _create_task_internal(
     """
     if app_key in ['google_tasks', 'asana']:
         integration = await ensure_valid_oauth_token(
-            uid,
-            app_key,
-            integration,
-            refresh_if_missing_expires_at=(app_key == 'google_tasks'),
-            client=client,
+            uid, app_key, integration, refresh_if_missing_expires_at=(app_key == 'google_tasks'), client=client
         )
         if not integration.get('connected'):
             name = OAUTH_CONFIGS.get(app_key, {'name': app_key}).get('name', app_key)
@@ -676,11 +681,12 @@ class CreateTaskResponse(BaseModel):
     error: Optional[str] = None
 
 
-@router.post("/v1/task-integrations/{app_key}/tasks", response_model=CreateTaskResponse, tags=['task-integrations'])
-async def create_task_via_integration(
-    app_key: str, request: CreateTaskRequest, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.post(
+    "/v1/task-integrations/{app_key}/tasks", response_model=CreateTaskResponse, tags=['task-integrations']
+)
+async def create_task_via_integration(request: Request, app_key: str, data: CreateTaskRequest):
     """Create a task in the specified integration using stored credentials."""
+    uid = request.state.uid
 
     # Get integration details
     integration = await run_blocking(db_executor, users_db.get_task_integration, uid, app_key)
@@ -693,15 +699,15 @@ async def create_task_via_integration(
 
     # Parse due date if provided
     due_date = None
-    if request.due_date:
-        due_date = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
+    if data.due_date:
+        due_date = datetime.fromisoformat(data.due_date.replace('Z', '+00:00'))
 
     result = await _create_task_internal(
         uid=uid,
         app_key=app_key,
         integration=integration,
-        title=request.title,
-        description=request.description,
+        title=data.title,
+        description=data.description,
         due_date=due_date,
     )
 
@@ -716,9 +722,7 @@ async def create_task_via_integration(
             raise HTTPException(status_code=401, detail=error_msg)
 
     return CreateTaskResponse(
-        success=result.get("success", False),
-        external_task_id=result.get("external_task_id"),
-        error=result.get("error"),
+        success=result.get("success", False), external_task_id=result.get("external_task_id"), error=result.get("error")
     )
 
 
@@ -727,8 +731,9 @@ async def create_task_via_integration(
 # *****************************
 
 
-@router.get("/v1/task-integrations/asana/workspaces", tags=['task-integrations'])
-async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/task-integrations/asana/workspaces", tags=['task-integrations'])
+async def get_asana_workspaces(request: Request):
+    uid = request.state.uid
     """Get user's Asana workspaces"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
 
@@ -748,8 +753,7 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
 
         async def _request(client, token):
             return await client.get(
-                'https://app.asana.com/api/1.0/workspaces',
-                headers={'Authorization': f'Bearer {token}'},
+                'https://app.asana.com/api/1.0/workspaces', headers={'Authorization': f'Bearer {token}'}
             )
 
         response, data, err = await perform_request_with_token_retry(uid, 'asana', data, _request)
@@ -767,8 +771,9 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
 
 
-@router.get("/v1/task-integrations/asana/projects/{workspace_gid}", tags=['task-integrations'])
-async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/task-integrations/asana/projects/{workspace_gid}", tags=['task-integrations'])
+async def get_asana_projects(request: Request, workspace_gid: str):
+    uid = request.state.uid
     """Get projects in an Asana workspace"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
 
@@ -807,8 +812,9 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/teams", tags=['task-integrations'])
-async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/task-integrations/clickup/teams", tags=['task-integrations'])
+async def get_clickup_teams(request: Request):
+    uid = request.state.uid
     """Get user's ClickUp teams"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
 
@@ -827,10 +833,7 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     try:
 
         async def _request(client, token):
-            return await client.get(
-                'https://api.clickup.com/api/v2/team',
-                headers={'Authorization': token},
-            )
+            return await client.get('https://api.clickup.com/api/v2/team', headers={'Authorization': token})
 
         response, data, err = await perform_request_with_token_retry(uid, 'clickup', data, _request)
         if err:
@@ -847,8 +850,9 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/spaces/{team_id}", tags=['task-integrations'])
-async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/task-integrations/clickup/spaces/{team_id}", tags=['task-integrations'])
+async def get_clickup_spaces(request: Request, team_id: str):
+    uid = request.state.uid
     """Get spaces in a ClickUp team"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
 
@@ -868,8 +872,7 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
 
         async def _request(client, token):
             return await client.get(
-                f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false',
-                headers={'Authorization': token},
+                f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false', headers={'Authorization': token}
             )
 
         response, data, err = await perform_request_with_token_retry(uid, 'clickup', data, _request)
@@ -887,8 +890,9 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/lists/{space_id}", tags=['task-integrations'])
-async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/task-integrations/clickup/lists/{space_id}", tags=['task-integrations'])
+async def get_clickup_lists(request: Request, space_id: str):
+    uid = request.state.uid
     """Get lists in a ClickUp space"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
 
@@ -908,8 +912,7 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
 
         async def _request(client, token):
             return await client.get(
-                f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false',
-                headers={'Authorization': token},
+                f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false', headers={'Authorization': token}
             )
 
         response, data, err = await perform_request_with_token_retry(uid, 'clickup', data, _request)
@@ -946,11 +949,7 @@ class OAuthProviderConfig(BaseModel):
 
 
 async def handle_oauth_callback(
-    request: Request,
-    app_key: str,
-    code: Optional[str],
-    state: Optional[str],
-    provider_config: OAuthProviderConfig,
+    request: Request, app_key: str, code: Optional[str], state: Optional[str], provider_config: OAuthProviderConfig
 ) -> HTMLResponse:
     """
     Generic OAuth callback handler that works for all providers.
@@ -1048,15 +1047,11 @@ async def handle_oauth_callback(
         return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
 
-@router.get(
-    '/v2/integrations/todoist/callback',
-    response_class=HTMLResponse,
-    tags=['task-integrations', 'oauth'],
+@_custom_router.get(
+    '/v2/integrations/todoist/callback', response_class=HTMLResponse, tags=['task-integrations', 'oauth']
 )
 async def todoist_oauth_callback(
-    request: Request,
-    code: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
+    request: Request, code: Optional[str] = Query(None), state: Optional[str] = Query(None)
 ):
     """OAuth callback endpoint for Todoist integration."""
     client_id = os.getenv('TODOIST_CLIENT_ID')
@@ -1078,16 +1073,8 @@ async def todoist_oauth_callback(
     return await handle_oauth_callback(request, 'todoist', code, state, config)
 
 
-@router.get(
-    '/v2/integrations/asana/callback',
-    response_class=HTMLResponse,
-    tags=['task-integrations', 'oauth'],
-)
-async def asana_oauth_callback(
-    request: Request,
-    code: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
-):
+@_custom_router.get('/v2/integrations/asana/callback', response_class=HTMLResponse, tags=['task-integrations', 'oauth'])
+async def asana_oauth_callback(request: Request, code: Optional[str] = Query(None), state: Optional[str] = Query(None)):
     """OAuth callback endpoint for Asana integration."""
     client_id = os.getenv('ASANA_CLIENT_ID')
     client_secret = os.getenv('ASANA_CLIENT_SECRET')
@@ -1105,8 +1092,7 @@ async def asana_oauth_callback(
             """Fetch Asana user GID"""
             try:
                 user_response = await client.get(
-                    'https://app.asana.com/api/1.0/users/me',
-                    headers={'Authorization': f'Bearer {access_token}'},
+                    'https://app.asana.com/api/1.0/users/me', headers={'Authorization': f'Bearer {access_token}'}
                 )
                 if user_response.status_code == 200:
                     user_data = user_response.json()
@@ -1131,15 +1117,11 @@ async def asana_oauth_callback(
     return await handle_oauth_callback(request, 'asana', code, state, config)
 
 
-@router.get(
-    '/v2/integrations/google-tasks/callback',
-    response_class=HTMLResponse,
-    tags=['task-integrations', 'oauth'],
+@_custom_router.get(
+    '/v2/integrations/google-tasks/callback', response_class=HTMLResponse, tags=['task-integrations', 'oauth']
 )
 async def google_tasks_oauth_callback(
-    request: Request,
-    code: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
+    request: Request, code: Optional[str] = Query(None), state: Optional[str] = Query(None)
 ):
     """OAuth callback endpoint for Google Tasks integration."""
     client_id = os.getenv('GOOGLE_TASKS_CLIENT_ID')
@@ -1188,15 +1170,11 @@ async def google_tasks_oauth_callback(
     return await handle_oauth_callback(request, 'google_tasks', code, state, config)
 
 
-@router.get(
-    '/v2/integrations/clickup/callback',
-    response_class=HTMLResponse,
-    tags=['task-integrations', 'oauth'],
+@_custom_router.get(
+    '/v2/integrations/clickup/callback', response_class=HTMLResponse, tags=['task-integrations', 'oauth']
 )
 async def clickup_oauth_callback(
-    request: Request,
-    code: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
+    request: Request, code: Optional[str] = Query(None), state: Optional[str] = Query(None)
 ):
     """OAuth callback endpoint for ClickUp integration."""
     client_id = os.getenv('CLICKUP_CLIENT_ID')
@@ -1216,6 +1194,11 @@ async def clickup_oauth_callback(
     )
 
     return await handle_oauth_callback(request, 'clickup', code, state, config)
+
+
+router = APIRouter()
+router.include_router(_firebase_router)
+router.include_router(_custom_router)
 
 
 @router.on_event("shutdown")
