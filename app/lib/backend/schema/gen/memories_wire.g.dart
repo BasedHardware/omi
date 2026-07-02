@@ -144,7 +144,7 @@ class GeneratedMemoryDB {
     this.userReview,
     this.validAt,
     this.veracity,
-    this.visibility,
+    this.visibility = "public",
   });
 
   factory GeneratedMemoryDB.fromJson(Map<String, dynamic> json) {

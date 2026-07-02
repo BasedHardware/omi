@@ -44,13 +44,13 @@ class GeneratedTranscriptSegment {
     this.id,
     required this.isUser,
     this.personId,
-    this.speaker,
+    this.speaker = "SPEAKER_00",
     this.speakerId,
     this.speechProfileProcessed = true,
     required this.start,
     this.sttProvider,
     required this.text,
-    this.translations,
+    this.translations = const [],
   });
 
   factory GeneratedTranscriptSegment.fromJson(Map<String, dynamic> json) {
@@ -476,14 +476,14 @@ class GeneratedConversation {
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
-    this.source,
+    this.source = "omi",
     this.starred = false,
     required this.startedAt,
-    this.status,
+    this.status = "completed",
     required this.structured,
     this.suggestedSummarizationApps = const [],
     this.transcriptSegments = const [],
-    this.transcriptSegmentsCompressed,
+    this.transcriptSegmentsCompressed = false,
     this.visibility = "private",
   });
 

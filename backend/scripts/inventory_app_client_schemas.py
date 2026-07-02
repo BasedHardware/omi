@@ -92,6 +92,8 @@ class OpenApiOperation:
     method: str
     operation_id: str
     unmodeled_success_response: bool
+    response_schema: str
+    request_schema: str | None
 
     def to_report(self) -> dict[str, Any]:
         return {
@@ -100,6 +102,8 @@ class OpenApiOperation:
             'method': self.method,
             'operation_id': self.operation_id,
             'unmodeled_success_response': self.unmodeled_success_response,
+            'response_schema': self.response_schema,
+            'request_schema': self.request_schema,
         }
 
 
@@ -118,6 +122,25 @@ class DartDecodeSite:
             'kind': self.kind,
             'snippet': self.snippet,
             'generated_backed': self.generated_backed,
+        }
+
+
+@dataclass(frozen=True)
+class AppOperationManifestItem:
+    path: Path
+    route: str
+    normalized_route: str
+    operations: list[OpenApiOperation]
+    raw_decode_sites: list[DartDecodeSite]
+
+    def to_report(self) -> dict[str, Any]:
+        return {
+            'path': str(self.path.relative_to(ROOT_DIR)),
+            'route': self.route,
+            'normalized_route': self.normalized_route,
+            'operations': [operation.to_report() for operation in self.operations],
+            'raw_decode_site_count': len(self.raw_decode_sites),
+            'raw_decode_sites': [site.to_report() for site in self.raw_decode_sites],
         }
 
 
@@ -417,6 +440,41 @@ def operation_has_unmodeled_success_response(operation: dict[str, Any]) -> bool:
     return False
 
 
+def schema_ref_name(schema: Any) -> str:
+    if not isinstance(schema, dict):
+        return ''
+    ref = schema.get('$ref')
+    if isinstance(ref, str):
+        return ref.rsplit('/', 1)[-1]
+    if 'items' in schema:
+        item_name = schema_ref_name(schema['items'])
+        return f'array[{item_name}]' if item_name else 'array'
+    if schema.get('type'):
+        return str(schema['type'])
+    if 'anyOf' in schema:
+        names = [schema_ref_name(item) for item in schema['anyOf']]
+        return ' | '.join(name for name in names if name)
+    return ''
+
+
+def operation_response_schema_name(operation: dict[str, Any]) -> str:
+    for status_code, response in operation.get('responses', {}).items():
+        if not status_code.startswith('2'):
+            continue
+        schema = ((response.get('content') or {}).get('application/json') or {}).get('schema')
+        name = schema_ref_name(schema)
+        if name:
+            return name
+    return ''
+
+
+def operation_request_schema_name(operation: dict[str, Any]) -> str | None:
+    content = (operation.get('requestBody') or {}).get('content') or {}
+    schema = (content.get('application/json') or {}).get('schema')
+    name = schema_ref_name(schema)
+    return name or None
+
+
 def load_openapi_operations(path: Path) -> list[OpenApiOperation]:
     if not path.exists():
         return []
@@ -431,9 +489,40 @@ def load_openapi_operations(path: Path) -> list[OpenApiOperation]:
                     method=method.upper(),
                     operation_id=operation.get('operationId', ''),
                     unmodeled_success_response=operation_has_unmodeled_success_response(operation),
+                    response_schema=operation_response_schema_name(operation),
+                    request_schema=operation_request_schema_name(operation),
                 )
             )
     return sorted(operations, key=lambda item: (item.path, item.method))
+
+
+def build_operation_manifest(
+    app_routes: list[AppRoute],
+    openapi_operations: list[OpenApiOperation],
+    raw_decode_sites: list[DartDecodeSite],
+) -> list[AppOperationManifestItem]:
+    operations_by_route: dict[str, list[OpenApiOperation]] = {}
+    for operation in openapi_operations:
+        operations_by_route.setdefault(operation.normalized_path, []).append(operation)
+    raw_sites_by_file: dict[Path, list[DartDecodeSite]] = {}
+    for site in raw_decode_sites:
+        raw_sites_by_file.setdefault(site.path, []).append(site)
+
+    manifest: list[AppOperationManifestItem] = []
+    for route in app_routes:
+        operations = operations_by_route.get(route.normalized_route, [])
+        if not operations:
+            continue
+        manifest.append(
+            AppOperationManifestItem(
+                path=route.path,
+                route=route.route,
+                normalized_route=route.normalized_route,
+                operations=operations,
+                raw_decode_sites=raw_sites_by_file.get(route.path, []),
+            )
+        )
+    return sorted(manifest, key=lambda item: (str(item.path), item.normalized_route))
 
 
 def build_report(spec_path: Path) -> dict[str, Any]:
@@ -449,6 +538,7 @@ def build_report(spec_path: Path) -> dict[str, Any]:
     raw_decode_sites = [site for site in decode_sites if not site.generated_backed]
     openapi_paths = load_openapi_paths(spec_path)
     openapi_operations = load_openapi_operations(spec_path)
+    operation_manifest = build_operation_manifest(app_routes, openapi_operations, raw_decode_sites)
     openapi_prefixes = sorted({route_prefix(path) for path in openapi_paths})
     app_route_prefixes = sorted({route_prefix(route.normalized_route) for route in app_routes})
     uncovered_prefixes = sorted(set(app_route_prefixes) - set(openapi_prefixes))
@@ -471,6 +561,8 @@ def build_report(spec_path: Path) -> dict[str, Any]:
         'openapi_path_count': len(openapi_paths),
         'openapi_paths': openapi_paths,
         'openapi_operations': [operation.to_report() for operation in openapi_operations],
+        'app_operation_manifest_count': len(operation_manifest),
+        'app_operation_manifest': [item.to_report() for item in operation_manifest],
         'unmodeled_success_response_count': len(unmodeled_operations),
         'unmodeled_success_responses': [operation.to_report() for operation in unmodeled_operations],
         'app_used_unmodeled_success_response_count': len(app_used_unmodeled_operations),
@@ -529,6 +621,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='fail when Dart app-client files contain raw JSON decode/cast/access sites not backed by generated wire parsing',
     )
+    parser.add_argument(
+        '--fail-on-raw-json-decode-for-openapi-routes',
+        action='store_true',
+        help='fail when a Dart API file for a matched OpenAPI route still contains raw JSON decode/cast/access sites',
+    )
     return parser.parse_args()
 
 
@@ -563,6 +660,15 @@ def main() -> int:
         sites = [f"{item['path']}:{item['line']} ({item['kind']})" for item in report['raw_dart_decode_sites'][:50]]
         print('Raw Dart decode sites: ' + ', '.join(sites), flush=True)
         return 1
+    if args.fail_on_raw_json_decode_for_openapi_routes:
+        items = [item for item in report['app_operation_manifest'] if item['raw_decode_site_count']]
+        if items:
+            routes = [
+                f"{item['path']} {item['normalized_route']} ({item['raw_decode_site_count']} raw sites)"
+                for item in items[:50]
+            ]
+            print('OpenAPI route files with raw Dart decode sites: ' + ', '.join(routes), flush=True)
+            return 1
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
@@ -577,6 +683,7 @@ def main() -> int:
     print(f"Unmodeled OpenAPI success responses: {report['unmodeled_success_response_count']}")
     print(f"App-used unmodeled OpenAPI success responses: {report['app_used_unmodeled_success_response_count']}")
     print(f"Flutter REST routes found: {report['app_route_count']}")
+    print(f"OpenAPI route manifest entries: {report['app_operation_manifest_count']}")
     print(f"Dart decode sites found: {report['dart_decode_site_count']}")
     print(f"Raw Dart decode sites: {report['raw_dart_decode_site_count']}")
     if report['uncovered_app_route_prefixes']:
@@ -591,6 +698,15 @@ def main() -> int:
         print(f"- local {item['path']}: {classes} (fromJson={item['fromJson']}, toJson={item['toJson']})")
     for item in report['raw_dart_decode_sites'][:50]:
         print(f"- raw {item['path']}:{item['line']} {item['kind']}: {item['snippet']}")
+    for item in report['app_operation_manifest'][:50]:
+        if item['raw_decode_site_count']:
+            operations = ', '.join(
+                f"{operation['method']} {operation['operation_id']}" for operation in item['operations']
+            )
+            print(
+                f"- route {item['path']} {item['normalized_route']}: "
+                f"{item['raw_decode_site_count']} raw decode sites; {operations}"
+            )
     return 0
 
 

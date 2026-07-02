@@ -506,7 +506,7 @@ def read_expr(field: Field) -> str:
 
 
 def constructor_default_for(field: Field) -> str | None:
-    if field.required or field.dart_type.nullable or field.default is None:
+    if field.required or field.default is None:
         return None
     if field.dart_type.ref_schema and isinstance(field.default, dict):
         return None
@@ -563,7 +563,7 @@ def emit_class(schema_name: str, fields: list[Field]) -> str:
     initializers: list[str] = []
     constructor_is_const = True
     for field in fields:
-        if field.required or field.dart_type.nullable:
+        if field.required:
             continue
         if field.default is None:
             continue

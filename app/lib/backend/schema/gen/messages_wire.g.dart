@@ -69,8 +69,8 @@ class GeneratedFileChat {
     required this.mimeType,
     required this.name,
     required this.openaiFileId,
-    this.thumbName,
-    this.thumbnail,
+    this.thumbName = "",
+    this.thumbnail = "",
   });
 
   factory GeneratedFileChat.fromJson(Map<String, dynamic> json) {
@@ -312,7 +312,7 @@ class GeneratedResponseMessage {
 
   const GeneratedResponseMessage({
     this.appId,
-    this.askForNps,
+    this.askForNps = false,
     this.chartData,
     this.chatSessionId,
     required this.createdAt,

@@ -171,6 +171,7 @@ class ChartData {
 
   static ChartData? tryFromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
+    if (!_hasTypedChartDataShape(json)) return null;
     try {
       return ChartData.fromJson(json);
     } on FormatException {
@@ -178,6 +179,12 @@ class ChartData {
     } on TypeError {
       return null;
     }
+  }
+
+  static bool _hasTypedChartDataShape(Map<String, dynamic> json) {
+    const expectedKeys = {'chart_type', 'title', 'x_label', 'y_label', 'datasets'};
+    final chartType = json['chart_type'];
+    return (chartType == 'line' || chartType == 'bar') && json.keys.every(expectedKeys.contains);
   }
 
   factory ChartData.fromGenerated(wire.GeneratedChartData generated) {
@@ -273,11 +280,12 @@ class ServerMessage {
       askForNps: askForNps,
       rating: generated.rating,
       chartData: parsedChartData,
-      rawChartData: parsedChartData == null ? rawChartData : null,
+      rawChartData: rawChartData,
     );
   }
 
   Map<String, dynamic> toJson() {
+    final chartJson = rawChartData ?? chartData?.toJson();
     return {
       'id': id,
       'created_at': createdAt.toUtc().toIso8601String(),
@@ -290,7 +298,7 @@ class ServerMessage {
       'files': files.map((m) => m.toJson()).toList(),
       'ask_for_nps': askForNps,
       'rating': rating,
-      'chart_data': chartData?.toJson() ?? rawChartData,
+      'chart_data': chartJson,
     };
   }
 

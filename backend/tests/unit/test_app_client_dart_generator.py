@@ -65,6 +65,7 @@ def test_messages_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedVoiceMessageTranscriptionResponse' in generated
     assert 'final Map<String, dynamic>? chartData;' in generated
     assert 'chartData: _readFieldValue<Map<String, dynamic>>' in generated
+    assert 'this.askForNps = false' in generated
     assert 'this.files = const []' in generated
     assert 'transcript: _required(_readFieldValue<String>' in generated
 
@@ -73,9 +74,11 @@ def test_message_adapter_preserves_arbitrary_chart_data_union_payloads():
     adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'message.dart').read_text()
 
     assert 'Map<String, dynamic>? rawChartData;' in adapter
+    assert "return (chartType == 'line' || chartType == 'bar') && json.keys.every(expectedKeys.contains);" in adapter
     assert 'final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);' in adapter
-    assert 'rawChartData: parsedChartData == null ? rawChartData : null' in adapter
-    assert "'chart_data': chartData?.toJson() ?? rawChartData" in adapter
+    assert 'rawChartData: rawChartData' in adapter
+    assert 'final chartJson = rawChartData ?? chartData?.toJson();' in adapter
+    assert "'chart_data': chartJson" in adapter
 
 
 def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
