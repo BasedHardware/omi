@@ -57,5 +57,6 @@ def get_person_context_tool(person: str, config: RunnableConfig = None) -> str:
     try:
         return get_person_context(uid, person)
     except Exception as e:
-        logger.error(f"get_person_context_tool failed: {e}")
+        # Log type/uid only — the raw exception can carry person names/handles/snippets (PII).
+        logger.error(f"get_person_context_tool failed for uid={uid}: {type(e).__name__}")
         return f"Error retrieving context for {person}."

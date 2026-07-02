@@ -638,9 +638,10 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str):
         if by_name:
             handles = list(by_name.get('handles') or [])
             if handle and handle not in handles:
-                handles.append(handle)
                 person_ref = db.collection('users').document(uid).collection('people').document(by_name['id'])
-                person_ref.update({'handles': handles, 'updated_at': datetime.now(timezone.utc)})
+                # Atomic merge — ArrayUnion avoids losing a handle under concurrent ingests.
+                person_ref.update({'handles': firestore.ArrayUnion([handle]), 'updated_at': datetime.now(timezone.utc)})
+                handles.append(handle)
                 by_name['handles'] = handles
             return by_name
 
@@ -659,9 +660,13 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str):
 def update_person_profile(uid: str, person_id: str, profile_fields: dict):
     """Merge per-person profile fields (relationship, profile_summary, tone_notes, ...)."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+    if not person_doc.exists:
+        return False
     update = dict(profile_fields)
     update['updated_at'] = datetime.now(timezone.utc)
     person_ref.update(update)
+    return True
 
 
 @transactional

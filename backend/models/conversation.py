@@ -156,6 +156,17 @@ class Conversation(BaseModel):
             return []
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
 
+    @model_validator(mode='after')
+    def _sync_person_ids_index(self):
+        # Derive the unencrypted person_ids index from transcript_segments on every
+        # construction so it is persisted consistently across all create/save paths
+        # (segments themselves are encrypted at rest and can't be queried directly).
+        # Only overwrite when segments are present, to avoid clobbering an already-set
+        # index for lightweight projections that omit segments.
+        if self.transcript_segments:
+            self.person_ids = sorted({s.person_id for s in self.transcript_segments if s.person_id})
+        return self
+
     def as_dict_cleaned_dates(self):
         def convert_datetime_to_iso(obj):
             """Recursively convert datetime objects to ISO format strings"""
