@@ -239,7 +239,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("? .spring(response: 0.34, dampingFraction: 0.86)"))
     XCTAssertTrue(source.contains(": .spring(response: 0.18, dampingFraction: 0.92)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
-    XCTAssertTrue(source.contains("notchOmiChatRow\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
+    XCTAssertTrue(source.contains("notchOmiChatRow\n                            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
     XCTAssertTrue(source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
     XCTAssertTrue(source.contains("notchOmiChatOverlayHitTarget\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
     XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
@@ -269,8 +269,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
     XCTAssertTrue(source.contains("Color.white.opacity(0.96 * Double(1 - progress))"))
     XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
-    XCTAssertTrue(source.contains("if shouldUseOmiChatOverlayHitTarget"))
-    XCTAssertFalse(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
+    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
@@ -427,7 +426,6 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testSubagentDoneBadgeDismissesAndViewedAgentsExpire() throws {
     let agentSource = try agentPillSource()
     let viewSource = try floatingControlBarViewSource()
-    let popoverSource = try agentPillsViewSource()
 
     XCTAssertTrue(agentSource.contains("@Published var viewedAt: Date?"))
     XCTAssertTrue(agentSource.contains("private let viewedFinishedTTL: TimeInterval = 10 * 60"))
@@ -438,8 +436,6 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
     XCTAssertTrue(viewSource.contains("if pill.status == .done"))
     XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
-    XCTAssertTrue(popoverSource.contains("if pill.status == .done"))
-    XCTAssertTrue(popoverSource.contains("Button(action: onDismiss)"))
   }
 
   func testViewedExpirationReArmsWhenActiveChatBlocksExpiry() throws {
@@ -793,41 +789,38 @@ final class AgentPillLifecycleTests: XCTestCase {
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
     let source = try agentPillSource()
-    let pillViewSource = try agentPillsViewSource()
+    let logoMarkSource = try agentProviderLogoMarkSource()
+    let viewSource = try floatingControlBarViewSource()
 
     XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = bridgeHarnessOverride != nil"))
     XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
     XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
     XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
-    XCTAssertTrue(pillViewSource.contains("AgentProviderLogoMark("))
-    XCTAssertTrue(pillViewSource.contains("provider: pill.bridgeHarnessOverride"))
-    XCTAssertTrue(pillViewSource.contains("private var providerPill: some View"))
-    XCTAssertTrue(pillViewSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))
-    XCTAssertTrue(pillViewSource.contains("private static let openClawLogo = load(\"openclaw_logo_flat\")"))
-    XCTAssertTrue(pillViewSource.contains("return hermesLogo"))
-    XCTAssertTrue(pillViewSource.contains("return openClawLogo"))
-    XCTAssertTrue(pillViewSource.contains(".renderingMode(.template)"))
-    XCTAssertTrue(pillViewSource.contains(".foregroundStyle(statusColor)"))
-    XCTAssertFalse(pillViewSource.contains("return load(\"hermes_logo\")"))
-    XCTAssertFalse(pillViewSource.contains("return load(\"openclaw_logo\")"))
-    XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride.rendersProviderMark {\n            return false\n        }"))
+    XCTAssertTrue(viewSource.contains("AgentProviderLogoMark("))
+    XCTAssertTrue(viewSource.contains("provider: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(logoMarkSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))
+    XCTAssertTrue(logoMarkSource.contains("private static let openClawLogo = load(\"openclaw_logo_flat\")"))
+    XCTAssertTrue(logoMarkSource.contains("return hermesLogo"))
+    XCTAssertTrue(logoMarkSource.contains("return openClawLogo"))
+    XCTAssertTrue(logoMarkSource.contains(".renderingMode(.template)"))
+    XCTAssertTrue(logoMarkSource.contains(".foregroundStyle(statusColor)"))
+    XCTAssertFalse(logoMarkSource.contains("return load(\"hermes_logo\")"))
+    XCTAssertFalse(logoMarkSource.contains("return load(\"openclaw_logo\")"))
     // Provider agents without a dedicated logo fall back to a flat, status-tinted
     // robot mark — not the Omi round dot. Omi-native agents (nil override) keep
     // the dot via the `provider != nil` guard.
-    XCTAssertTrue(pillViewSource.contains("} else if provider != nil {"))
-    XCTAssertTrue(pillViewSource.contains("Text(\"🤖\")"))
-    XCTAssertTrue(pillViewSource.contains("statusColor\n                    .mask("))
+    XCTAssertTrue(logoMarkSource.contains("} else if provider != nil {"))
+    XCTAssertTrue(logoMarkSource.contains("Text(\"🤖\")"))
+    XCTAssertTrue(logoMarkSource.contains("statusColor\n                    .mask("))
   }
 
   func testProviderMarkRoutingIsCentralized() throws {
     let routingSource = try agentRuntimeRoutingSource()
     XCTAssertTrue(routingSource.contains("var rendersProviderMark: Bool { self != nil }"))
 
-    let pillViewSource = try agentPillsViewSource()
-    XCTAssertTrue(pillViewSource.contains("pill.bridgeHarnessOverride.rendersProviderMark"))
-
-    let windowSource = try floatingControlBarViewSource()
-    XCTAssertTrue(windowSource.contains("if provider.rendersProviderMark {"))
+    let viewSource = try floatingControlBarViewSource()
+    XCTAssertTrue(viewSource.contains("pill.bridgeHarnessOverride.rendersProviderMark"))
+    XCTAssertTrue(viewSource.contains("if provider.rendersProviderMark {"))
   }
 
   func testDirectedProviderLogoAssetsUseSingleTemplateMasks() throws {
@@ -952,11 +945,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
-  private func agentPillsViewSource() throws -> String {
+  private func agentProviderLogoMarkSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/AgentPillsView.swift")
+      .appendingPathComponent("Sources/FloatingControlBar/AgentProviderLogoMark.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

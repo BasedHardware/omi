@@ -35,7 +35,6 @@ struct FloatingControlBarView: View {
     /// Last reported text-editor height so inputViewHeight can be recomputed
     /// when the pill list changes while the input is open. (Cubic P2.)
     @State private var lastInputEditorHeight: CGFloat = 0
-    private let conversationTransition = Animation.spring(response: 0.22, dampingFraction: 0.9)
     private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
     private var notchHiddenCenterWidth: CGFloat {
         // Without a physical notch there is no dead zone to straddle — keep a
@@ -110,7 +109,7 @@ struct FloatingControlBarView: View {
 
     /// Whether the bar chrome should stretch to fill the window width
     private var barNeedsFullWidth: Bool {
-        isHovering || state.showingAIConversation || state.isVoiceListening
+        isHovering || state.isVoiceListening
     }
 
     private var shouldShowAgentSwitcher: Bool {
@@ -137,24 +136,35 @@ struct FloatingControlBarView: View {
 
     private var unifiedFloatingSurface: some View {
         VStack(spacing: 0) {
-            notchChrome
+            if state.usesNotchIsland {
+                notchChrome
+            } else {
+                // No camera housing to blend into — the pill surface starts
+                // with a slim top inset instead of the notch chrome band.
+                Color.clear
+                    .frame(height: FloatingControlBarWindow.pillSurfaceTopPadding)
+            }
 
             if shouldShowNotchHoverMenu {
-                VStack(spacing: 0) {
-                    notchOmiChatRow
-                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
-                        .opacity(notchSwitcherProgress)
-                        .allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)
+                if state.usesNotchIsland {
+                    VStack(spacing: 0) {
+                        notchOmiChatRow
+                            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                            .opacity(notchSwitcherProgress)
+                            .allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)
 
-                    Color.clear
-                        .frame(
-                            width: notchChromeLayoutWidth,
-                            height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight
-                        )
+                        Color.clear
+                            .frame(
+                                width: notchChromeLayoutWidth,
+                                height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight
+                            )
+                    }
+                    .frame(width: notchChromeLayoutWidth, height: notchHoverMenuHeight, alignment: .top)
+                    .onHover { setAgentSwitcherHovering($0) }
+                    .transition(.identity)
+                } else {
+                    pillAgentListMenu
                 }
-                .frame(width: notchChromeLayoutWidth, height: notchHoverMenuHeight, alignment: .top)
-                .onHover { setAgentSwitcherHovering($0) }
-                .transition(.identity)
             }
 
             if state.showingAIConversation {
@@ -173,7 +183,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if shouldUseOmiChatOverlayHitTarget {
+            if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget {
                 ZStack(alignment: .top) {
                     if !agentPills.pills.isEmpty {
                         NotchAgentMorphField(
@@ -491,46 +501,14 @@ struct FloatingControlBarView: View {
         FloatingControlBarWindow.notchChromeHeight(for: window?.screen ?? NSScreen.main)
     }
 
+    /// Collapsed pill / hover bar chrome. Conversations, notifications-with-
+    /// chat, and the agent list all render on `unifiedFloatingSurface` — this
+    /// chrome only ever shows the idle pill, hover hints, and voice states.
     private var barChrome: some View {
         VStack(spacing: 0) {
-            // Main control bar - always visible
             controlBarView
-
-            // AI conversation view - conditionally visible
-            if state.showingAIConversation {
-                conversationView
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
-                .transition(.opacity)
-            }
         }
         .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
-        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
-        .animation(conversationTransition, value: state.showingAIResponse)
-        .overlay(alignment: .topLeading) {
-            if state.showingAIConversation {
-                Button {
-                    onCloseAI()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-                            .frame(width: 16, height: 16)
-
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8))
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-                .padding(2)
-                .transition(.opacity)
-            }
-        }
         .overlay(alignment: .topTrailing) {
             if isHovering && !state.isVoiceListening {
                 Button {
@@ -546,19 +524,6 @@ struct FloatingControlBarView: View {
                 .buttonStyle(.plain)
                 .padding(6)
                 .transition(.opacity)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if state.showingAIConversation {
-                ZStack {
-                    ResizeHandleView(targetWindow: window)
-                        .frame(width: 20, height: 20)
-                    ResizeGripShape()
-                        .foregroundStyle(.white.opacity(0.3))
-                        .frame(width: 14, height: 14)
-                        .allowsHitTesting(false)
-                }
-                .padding(4)
             }
         }
         .clipped()
@@ -773,6 +738,20 @@ struct FloatingControlBarView: View {
 
         let effectiveHover = hovering && !state.requiresHoverReset && isWithinActivationZoneForCurrentMode()
         state.isHoveringBar = effectiveHover
+
+        // With subagents present, hovering the pill unfurls the agent rows —
+        // the same surface the notch shows on hover — instead of the legacy
+        // expanded bar. Moving the pointer away collapses back to the pill.
+        if !agentPills.pills.isEmpty, !state.showingAIConversation {
+            let barWindow = window as? FloatingControlBarWindow
+            if effectiveHover {
+                barWindow?.setPillAgentListVisible(true)
+            } else {
+                barWindow?.schedulePillAgentListCollapse()
+            }
+            return
+        }
+
         // Resize window BEFORE updating SwiftUI state on expand so the expanded
         // content never renders in a too-small window (which causes overflow).
         if effectiveHover {
@@ -954,7 +933,7 @@ struct FloatingControlBarView: View {
                     .padding(.vertical, 5)
                     .frame(height: 42)
                     .transition(.opacity)
-            } else if allowsHoverExpansion || state.showingAIConversation {
+            } else if allowsHoverExpansion {
                 VStack(spacing: 1) {
                     compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
                         onAskAI()
@@ -963,51 +942,83 @@ struct FloatingControlBarView: View {
                     HStack(spacing: 6) {
                         compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
                     }
-
-                    if !agentPills.pills.isEmpty {
-                        pillAgentsRow
-                    }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .frame(height: agentPills.pills.isEmpty ? 50 : 50 + FloatingControlBarWindow.pillAgentsRowHeight)
+                .frame(height: 50)
                 .transition(.opacity)
             } else {
-                HStack(spacing: 4) {
+                PillStatusObservingView(manager: agentPills) { pills in
                     compactCircleView
-                    if !agentPills.pills.isEmpty {
-                        AgentStatusGemView(manager: agentPills)
-                    }
+                        .modifier(
+                            AgentStatusGlow(
+                                group: state.isVoiceResponseActive
+                                    ? nil
+                                    : NotchAgentStatusGroup.aggregate(for: pills)
+                            )
+                        )
                 }
                 .transition(.opacity)
             }
         }
     }
 
-    /// One row of per-agent status dots inside the hover-expanded pill bar.
-    /// Clicking opens the same agent list surface the notch shows on hover.
-    private var pillAgentsRow: some View {
-        Button {
-            (window as? FloatingControlBarWindow)?.setPillAgentListVisible(true)
-        } label: {
-            HStack(spacing: 4) {
-                PillAgentDotsView(manager: agentPills)
-                Text("Agents")
-                    .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(.white)
-                Text("\(agentPills.pills.count)")
-                    .scaledFont(size: 9)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 4)
-                    .frame(minWidth: 15, minHeight: 15)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(3)
+    /// The pill-mode agent list: same rows as the notch hover menu, rendered
+    /// directly (no notch morph — there is no logo ring to unfurl from).
+    private var pillAgentListMenu: some View {
+        PillStatusObservingView(manager: agentPills) { pills in
+            VStack(spacing: 0) {
+                notchOmiChatRow
+                    .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+
+                ForEach(pills.prefix(NotchAgentStackMetrics.maxAgents), id: \.id) { pill in
+                    Button {
+                        openAgentInChat(pill)
+                    } label: {
+                        NotchAgentListRow(
+                            title: pill.title,
+                            status: pill.status,
+                            activity: pill.latestActivity,
+                            isSelected: pill.id == state.activeAgentChatPillID,
+                            progress: 1
+                        )
+                        .overlay(alignment: .leading) {
+                            pillRowIdentityMark(pill)
+                                .padding(.leading, NotchAgentStackMetrics.listRowLeadingPadding)
+                        }
+                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                    }
+                    .buttonStyle(.plain)
+                    .help(pill.title)
+                }
             }
-            .frame(height: FloatingControlBarWindow.pillAgentsRowHeight)
-            .contentShape(Rectangle())
+            .padding(.bottom, FloatingControlBarWindow.notchHoverMenuBottomMargin)
+            .frame(width: notchChromeLayoutWidth, alignment: .top)
+            .onHover { handleBarHover($0) }
+            .transition(.opacity)
         }
-        .buttonStyle(.plain)
-        .help("Show subagents")
+    }
+
+    @ViewBuilder
+    private func pillRowIdentityMark(_ pill: AgentPill) -> some View {
+        let group = NotchAgentStatusGroup(status: pill.status)
+        if pill.bridgeHarnessOverride.rendersProviderMark {
+            AgentProviderLogoMark(
+                provider: pill.bridgeHarnessOverride,
+                statusColor: group.color,
+                size: NotchAgentStackMetrics.listOrbSize + 5
+            )
+            .shadow(color: group.color.opacity(0.55), radius: 5)
+        } else {
+            Circle()
+                .fill(group.color)
+                .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.42), lineWidth: 0.8)
+                )
+                .shadow(color: group.color.opacity(0.6), radius: 5)
+        }
     }
 
     /// Minimal thin bar shown when not hovering
@@ -1178,7 +1189,10 @@ struct FloatingControlBarView: View {
         let height = lastInputEditorHeight > 0
             ? lastInputEditorHeight
             : FloatingControlBarWindow.notchInputPanelMinimumContentHeight
-        let baseHeight = notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
+        let topBand = state.usesNotchIsland
+            ? notchChromeHeight
+            : FloatingControlBarWindow.pillSurfaceTopPadding
+        let baseHeight = topBand + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
         let headerBudget = !agentPills.pills.isEmpty
             ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
             : 0
@@ -1836,60 +1850,41 @@ private struct PillStatusObservingView<Content: View>: View {
     }
 }
 
-/// Per-agent status dots inside the hover-expanded pill bar.
-private struct PillAgentDotsView: View {
-    let manager: AgentPillsManager
-
-    var body: some View {
-        PillStatusObservingView(manager: manager) { pills in
-            HStack(spacing: 3) {
-                ForEach(pills.prefix(NotchAgentStackMetrics.maxAgents), id: \.id) { pill in
-                    Circle()
-                        .fill(NotchAgentStatusGroup(status: pill.status).color)
-                        .frame(width: 6, height: 6)
-                }
-            }
-        }
-    }
-}
-
-/// Aggregate agent-status gem shown next to the collapsed pill. One dot
-/// summarizing every agent by priority (failed > running > queued > done >
-/// stopped) so the idle pill answers "is anything running / does anything
-/// need me" without spending pixels on per-agent identity.
-private struct AgentStatusGemView: View {
-    let manager: AgentPillsManager
+/// Aggregate agent-status glow on the collapsed pill — the pill itself glows
+/// in the highest-priority status color (failed > running > queued > done >
+/// stopped), breathing while agents are active, mirroring the PTT voice glow.
+private struct AgentStatusGlow: ViewModifier {
+    let group: NotchAgentStatusGroup?
     @State private var breathing = false
 
-    var body: some View {
-        PillStatusObservingView(manager: manager) { pills in
-            let group = Self.aggregateGroup(for: pills)
-            if let group {
-                Circle()
-                    .fill(group.color)
-                    .frame(width: 6, height: 6)
-                    .shadow(color: group.color.opacity(0.7), radius: 3)
-                    .opacity(group == .running ? (breathing ? 1.0 : 0.45) : 0.95)
-                    .scaleEffect(group == .running && breathing ? 1.12 : 1.0)
-                    .animation(
-                        group == .running
-                            ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
-                            : .default,
-                        value: breathing
-                    )
-                    .onAppear { breathing = true }
-                    .accessibilityLabel("Subagents: \(group.title)")
-            }
-        }
-    }
+    private var isAnimated: Bool { group == .running || group == .queued }
+    private var glowColor: Color { group?.color ?? .clear }
 
-    static func aggregateGroup(for pills: [AgentPill]) -> NotchAgentStatusGroup? {
-        let groups = pills.map { NotchAgentStatusGroup(status: $0.status) }
-        for candidate: NotchAgentStatusGroup in [.failed, .running, .queued, .done, .stopped]
-        where groups.contains(candidate) {
-            return candidate
-        }
-        return groups.first
+    func body(content: Content) -> some View {
+        let pulse = isAnimated && breathing
+        content
+            .shadow(
+                color: group == nil ? .clear : glowColor.opacity(pulse ? 0.95 : 0.6),
+                radius: group == nil ? 0 : (pulse ? 15 : 9)
+            )
+            .shadow(
+                color: group == nil ? .clear : glowColor.opacity(pulse ? 0.5 : 0.3),
+                radius: group == nil ? 0 : (pulse ? 26 : 16)
+            )
+            .animation(
+                isAnimated
+                    ? .easeInOut(duration: 1.15).repeatForever(autoreverses: true)
+                    : .easeInOut(duration: 0.25),
+                value: breathing
+            )
+            .onAppear { breathing = true }
+            .onChange(of: isAnimated) { _, _ in
+                // Restart the repeat-forever animation when the aggregate
+                // state flips between animated and static groups.
+                breathing = false
+                DispatchQueue.main.async { breathing = true }
+            }
+            .accessibilityLabel(group.map { "Subagents: \($0.title)" } ?? "")
     }
 }
 
@@ -2338,6 +2333,18 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .stopped: return 3
         case .done: return 4
         }
+    }
+
+    /// Highest-priority aggregate across all pills, for the collapsed-pill
+    /// glow: failure needs the user, activity is ambient, terminal is quiet.
+    @MainActor
+    static func aggregate(for pills: [AgentPill]) -> NotchAgentStatusGroup? {
+        let groups = pills.map { NotchAgentStatusGroup(status: $0.status) }
+        for candidate: NotchAgentStatusGroup in [.failed, .running, .queued, .done, .stopped]
+        where groups.contains(candidate) {
+            return candidate
+        }
+        return groups.first
     }
 
 }
