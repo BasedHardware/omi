@@ -128,12 +128,18 @@ def _account_deletion_module(start_account_deletion):
     return module
 
 
+def _mock_request(uid='uid1'):
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
 def test_delete_account_delegates_to_service():
     start_account_deletion = MagicMock(return_value={'status': 'ok', 'message': 'Account deletion started'})
     request = users_router.DeleteAccountRequest(reason='reason', reason_details='details')
 
     with patch.object(users_router, 'start_account_deletion', start_account_deletion):
-        result = users_router.delete_account(request=request, uid='uid1')
+        result = users_router.delete_account(http_request=_mock_request(), request=request)
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
     start_account_deletion.assert_called_once_with('uid1', reason='reason', reason_details='details')
@@ -143,7 +149,7 @@ def test_delete_account_maps_unexpected_service_error_to_500():
     start_account_deletion = MagicMock(side_effect=Exception('boom'))
     with patch.object(users_router, 'start_account_deletion', start_account_deletion):
         with pytest.raises(HTTPException) as exc:
-            users_router.delete_account(request=users_router.DeleteAccountRequest(), uid='uid1')
+            users_router.delete_account(http_request=_mock_request(), request=users_router.DeleteAccountRequest())
 
     assert exc.value.status_code == 500
     assert exc.value.detail == 'Could not delete account. Please try again.'
@@ -152,7 +158,7 @@ def test_delete_account_maps_unexpected_service_error_to_500():
 def test_export_all_user_data_keeps_streaming_headers():
     users_router.iter_user_data_export = MagicMock(return_value=iter(['{"ok": true}\n']))
 
-    response = users_router.export_all_user_data(uid='uid1')
+    response = users_router.export_all_user_data(request=_mock_request())
 
     assert response.media_type == 'application/json'
     assert response.headers['content-disposition'] == 'attachment; filename="omi-export.json"'

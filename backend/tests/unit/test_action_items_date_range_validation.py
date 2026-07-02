@@ -136,6 +136,11 @@ def _fake_get_current_user_uid():  # pragma: no cover - dependency stand-in
 _endpoints.get_current_user_uid = _fake_get_current_user_uid
 _register_module('utils.other.endpoints', _endpoints)
 
+_auth_mw = ModuleType('utils.auth_middleware')
+_auth_mw.require_firebase = lambda: None
+_auth_mw.require_firebase_no_byok = lambda: None
+_register_module('utils.auth_middleware', _auth_mw)
+
 from fastapi import HTTPException  # noqa: E402
 
 _remove_module_for_fresh_import('routers.action_items')
@@ -146,8 +151,15 @@ finally:
     _restore_stubbed_modules()
 
 
+def _mock_request(uid='u1'):
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
 def _call(**overrides):
     kwargs = dict(
+        http_request=_mock_request(),
         limit=50,
         offset=0,
         completed=None,
@@ -156,7 +168,6 @@ def _call(**overrides):
         end_date=None,
         due_start_date=None,
         due_end_date=None,
-        uid='u1',
     )
     kwargs.update(overrides)
     return ai.get_action_items(**kwargs)

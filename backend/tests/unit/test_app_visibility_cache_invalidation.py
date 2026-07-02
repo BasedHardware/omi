@@ -117,6 +117,12 @@ finally:
         sys.modules.pop('python_multipart', None)
 
 
+def _mock_request(uid='uid1'):
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
 def _change_visibility(approved, private):
     """Drive change_app_visibility for an owned app with the given approved/private state.
 
@@ -130,7 +136,7 @@ def _change_visibility(approved, private):
     ) as invalidate, patch.object(
         apps_mod, 'delete_app_cache_by_id'
     ) as delete_cache:
-        result = apps_mod.change_app_visibility('app-1', private, uid='uid1')
+        result = apps_mod.change_app_visibility(_mock_request(), 'app-1', private)
 
     assert result == {'status': 'ok'}
     update_db.assert_called_once_with('app-1', private)

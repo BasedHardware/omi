@@ -167,7 +167,7 @@ def test_router_wires_helper_and_no_longer_blindly_rearms():
     # the old unconditional "re-arm whenever due_at present" block is gone
     assert "if 'due_at' in update_data and update_data['due_at']:" not in ai
     # creating an already-completed item must not arm a reminder
-    assert "not request.completed" in ai
+    assert "not body.completed" in ai
 
 
 def test_agentic_and_developer_paths_wired():

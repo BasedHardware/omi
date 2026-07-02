@@ -90,11 +90,15 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         if module.__name__ == 'utils.request_validation':
             module.NonNegativeOffset = int
             module.PositiveLimit = int
+        elif module.__name__ == 'utils.auth_middleware':
+            module.require_firebase = lambda: None
+            module.require_firebase_no_byok = lambda: None
         elif module.__name__ == 'utils.other':
             endpoints = types.ModuleType('utils.other.endpoints')
             endpoints.get_current_user_uid = lambda: 'uid1'
             endpoints.timeit = lambda fn: fn
             endpoints.with_rate_limit = lambda dependency, _policy: dependency
+            endpoints.rate_limit_dep = lambda _policy: lambda: None
             module.endpoints = endpoints
             sys.modules['utils.other.endpoints'] = endpoints
 
@@ -117,11 +121,14 @@ def test_invalid_stored_timestamp_returns_400_not_500():
     async def _run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
+    mock_request = MagicMock()
+    mock_request.state.uid = 'uid1'
+
     convo = {'id': 'c1', 'started_at': 'not-a-real-timestamp', 'finished_at': 'not-a-real-timestamp'}
     with (
         patch.object(conv_mod, '_get_valid_conversation_by_id', return_value=convo),
         patch.object(conv_mod, 'run_blocking', _run_blocking),
     ):
         with pytest.raises(HTTPException) as e:
-            asyncio.run(conv_mod.auto_link_calendar_event(conversation_id='c1', uid='uid1'))
+            asyncio.run(conv_mod.auto_link_calendar_event(request=mock_request, conversation_id='c1'))
     assert e.value.status_code == 400

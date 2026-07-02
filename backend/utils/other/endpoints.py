@@ -452,6 +452,22 @@ def check_rate_limit_inline(key: str, policy_name: str):
     _enforce_rate_limit(key, policy_name)
 
 
+def rate_limit_dep(policy_name: str):
+    """Return a FastAPI dependency that enforces rate limiting using request.state.uid.
+
+    For use with router-level auth (require_firebase sets request.state.uid).
+    """
+    if policy_name not in RATE_POLICIES:
+        raise ValueError(f"Unknown rate limit policy: {policy_name}")
+
+    async def dependency(request: Request):
+        uid = getattr(request.state, 'uid', None)
+        if uid:
+            _enforce_rate_limit(uid, policy_name)
+
+    return dependency
+
+
 def timeit(func):
     """
     Decorator for measuring function's running time.

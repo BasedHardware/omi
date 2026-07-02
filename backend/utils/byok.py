@@ -2,8 +2,10 @@
 
 The desktop client sends user-provided API keys as headers on every request
 (`X-BYOK-OpenAI`, `X-BYOK-Anthropic`, `X-BYOK-Gemini`, `X-BYOK-Deepgram`).
-A FastAPI middleware stashes them in a per-request contextvar; the LLM/STT
-clients can then read them without re-reading the request object.
+Per-router auth dependencies (``require_firebase`` in auth_middleware.py)
+validate and install them into a per-request ContextVar; WebSocket handlers
+use explicit helpers in this module.  LLM/STT clients read the ContextVar
+without re-reading the request object.
 
 Keys are NEVER persisted — only fingerprints (see `database.users.set_byok_active`).
 
@@ -22,9 +24,11 @@ from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 from cachetools import TTLCache
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, WebSocketException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocket
+
+import database.users as users_db
 
 logger = logging.getLogger('byok')
 
@@ -48,8 +52,6 @@ def get_cached_byok_state(uid: str) -> dict:
         cached = _byok_state_cache.get(uid)
     if cached is not None:
         return cached
-
-    import database.users as users_db
 
     state = users_db.get_byok_state(uid)
     with _byok_state_cache_lock:
@@ -94,14 +96,14 @@ def has_byok_keys() -> bool:
 
 
 def set_byok_keys(keys: Dict[str, str]):
-    """Used by the middleware; also useful from WS handlers that read headers manually."""
+    """Install validated BYOK keys into the ContextVar. Used by WS handlers."""
     _byok_ctx.set({k: v for k, v in keys.items() if v})
 
 
 def extract_byok_from_websocket(websocket: WebSocket) -> Dict[str, str]:
     """Read BYOK headers from a WebSocket's initial upgrade request.
 
-    BaseHTTPMiddleware only fires for HTTP scope, so WebSocket handlers must
+    Router-level HTTP deps don't fire for WebSocket scope, so WS handlers
     call this manually and then pass the result to ``set_byok_keys``.
     """
     keys: Dict[str, str] = {}
@@ -157,8 +159,6 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     request_keys = _byok_ctx.get() or {}
     if not request_keys:
         return None
-
-    import database.users as users_db
 
     state = get_cached_byok_state(uid)
 
@@ -216,3 +216,98 @@ def validate_byok_websocket(uid: str) -> Optional[str]:
     if error:
         logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
     return error
+
+
+# ---------------------------------------------------------------------------
+# Thread-safe BYOK key validation that returns keys instead of mutating
+# ContextVar.  Designed for use in FastAPI dependencies (which may run in
+# worker threads where ContextVar mutations are discarded).
+# ---------------------------------------------------------------------------
+
+
+def _extract_byok_from_request(request: Request) -> Dict[str, str]:
+    """Read BYOK headers from an HTTP request."""
+    keys: Dict[str, str] = {}
+    for provider, header in BYOK_HEADERS.items():
+        value = request.headers.get(header)
+        if value:
+            keys[provider] = value
+    return keys
+
+
+def validate_and_return_byok_keys(uid: str, keys: Dict[str, str]) -> Dict[str, str]:
+    """Validate BYOK keys against Firestore enrollment and return validated keys.
+
+    This function NEVER mutates the ContextVar — it only reads Firestore state
+    and returns a dict.  The caller (``require_firebase`` for HTTP, WS handler
+    for WebSocket) is responsible for installing keys into ``_byok_ctx``.
+
+    Returns:
+        The validated keys dict if the user is BYOK-active and keys match.
+        Empty dict if the user is not BYOK-active or no keys were provided.
+
+    Raises:
+        HTTPException(403) for HTTP callers when keys are present but invalid.
+    """
+    if not keys:
+        return {}
+
+    state = get_cached_byok_state(uid)
+
+    is_active = False
+    if state.get('active'):
+        last_seen = state.get('last_seen_at')
+        if isinstance(last_seen, datetime):
+            age = (datetime.now(timezone.utc) - last_seen).total_seconds()
+            is_active = age <= users_db.BYOK_HEARTBEAT_TTL_SECONDS
+
+    if not is_active:
+        return {}
+
+    stored_fingerprints = state.get('fingerprints', {})
+    for provider, stored_fp in stored_fingerprints.items():
+        raw_key = keys.get(provider)
+        if not raw_key:
+            error = f"BYOK key header missing for enrolled provider: {provider}"
+            logger.warning('BYOK validation failed uid=%s: %s', uid, error)
+            raise HTTPException(status_code=403, detail=error)
+        request_fp = hashlib.sha256(raw_key.encode()).hexdigest()
+        if request_fp != stored_fp:
+            error = f"BYOK key fingerprint mismatch for provider: {provider}"
+            logger.warning('BYOK validation failed uid=%s: %s', uid, error)
+            raise HTTPException(status_code=403, detail=error)
+
+    return keys
+
+
+def validate_and_return_byok_keys_ws(uid: str, keys: Dict[str, str]) -> Dict[str, str]:
+    """Same as validate_and_return_byok_keys but raises WebSocketException(4003)."""
+    if not keys:
+        return {}
+
+    state = get_cached_byok_state(uid)
+
+    is_active = False
+    if state.get('active'):
+        last_seen = state.get('last_seen_at')
+        if isinstance(last_seen, datetime):
+            age = (datetime.now(timezone.utc) - last_seen).total_seconds()
+            is_active = age <= users_db.BYOK_HEARTBEAT_TTL_SECONDS
+
+    if not is_active:
+        return {}
+
+    stored_fingerprints = state.get('fingerprints', {})
+    for provider, stored_fp in stored_fingerprints.items():
+        raw_key = keys.get(provider)
+        if not raw_key:
+            error = f"BYOK key header missing for enrolled provider: {provider}"
+            logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
+            raise WebSocketException(code=4003, reason=error)
+        request_fp = hashlib.sha256(raw_key.encode()).hexdigest()
+        if request_fp != stored_fp:
+            error = f"BYOK key fingerprint mismatch for provider: {provider}"
+            logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
+            raise WebSocketException(code=4003, reason=error)
+
+    return keys

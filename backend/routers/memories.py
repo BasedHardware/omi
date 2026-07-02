@@ -34,11 +34,12 @@ from utils.memory.memory_system import MemorySystem
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.log_sanitizer import sanitize_pii
-from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
+from utils.other.endpoints import rate_limit_dep
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
@@ -83,7 +84,7 @@ class V3GetRuntime:
     observer: object = None
 
 
-def get_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
+def get_v3_get_runtime(request: Request):
     """Return the production/default runtime bundle for GET `/v3/memories`.
 
     Default production behavior is still disabled. Server-owned configuration can
@@ -93,7 +94,7 @@ def get_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
     composed service to proceed. Client headers, query params, request bodies,
     and persisted user docs alone cannot activate memory.
     """
-
+    uid = request.state.uid
     return build_v3_production_runtime(uid=uid, db_client=getattr(db_client_module, 'db', None))
 
 
@@ -262,13 +263,18 @@ def _validate_mutable_memory(uid: str, memory_id: str, *, db_client) -> dict:
     return fetch_memory_dict(uid, memory_id, db_client=db_client)
 
 
-@router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
+@router.post(
+    '/v3/memories',
+    tags=['memories'],
+    response_model=MemoryDB,
+    dependencies=[Depends(rate_limit_dep("memories:create"))],
+)
 async def create_memory(
-    request: Request,
+    http_request: Request,
     memory: Memory,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:create")),
 ):
-    await _guard_import_memory_write(request, endpoint="/v3/memories", uid=uid)
+    uid = http_request.state.uid
+    await _guard_import_memory_write(http_request, endpoint="/v3/memories", uid=uid)
     # Honor the client-supplied category (the Memory model defaults it to
     # `interesting`). Only memories the user explicitly typed in arrive as
     # `manual`; auto-extracted ones (system/interesting) keep their category so
@@ -329,13 +335,14 @@ async def create_memory(
     '/v3/memories/batch',
     tags=['memories'],
     response_model=BatchMemoriesResponse,
+    dependencies=[Depends(rate_limit_dep("memories:batch"))],
 )
 async def create_memories_batch(
-    request_context: Request,
-    request: BatchMemoriesRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:batch")),
+    http_request: Request,
+    body: BatchMemoriesRequest,
 ):
-    await _guard_import_memory_write(request_context, endpoint="/v3/memories/batch", uid=uid)
+    uid = http_request.state.uid
+    await _guard_import_memory_write(http_request, endpoint="/v3/memories/batch", uid=uid)
     """
     Create many memories in a single request.
 
@@ -347,7 +354,7 @@ async def create_memories_batch(
     One HTTP request here = one Firestore batch write + one embeddings call +
     one Pinecone upsert, regardless of batch size.
     """
-    if not request.memories:
+    if not body.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
     # Honor each item's category (defaults to `interesting` per the Memory
@@ -356,7 +363,7 @@ async def create_memories_batch(
     # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
-    for memory in request.memories:
+    for memory in body.memories:
         manually_added = memory.category == MemoryCategory.manual
         memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
         memory_dbs.append(memory_db)
@@ -436,11 +443,13 @@ async def create_memories_batch(
     '/v3/memory-imports/batch',
     tags=['memories'],
     response_model=MemoryImportBatchResponse,
+    dependencies=[Depends(rate_limit_dep("memory_imports:batch"))],
 )
 async def create_memory_import_batch(
-    request: MemoryImportBatchRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memory_imports:batch")),
+    http_request: Request,
+    body: MemoryImportBatchRequest,
 ):
+    uid = http_request.state.uid
     """
     Ingest imported source artifacts without creating product memories.
 
@@ -461,26 +470,27 @@ async def create_memory_import_batch(
         raise HTTPException(status_code=503, detail="memory_import_canonical_not_ready")
 
     try:
-        result = await run_blocking(db_executor, ingest_memory_import_batch, uid, request, db_client=db_client)
+        result = await run_blocking(db_executor, ingest_memory_import_batch, uid, body, db_client=db_client)
     except Exception:
-        logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
+        logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, body.source_type)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     return result.response
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
 def get_memories(
+    http_request: Request,
     response: Response,
     limit: int = 100,
     offset: int = 0,
     cursor: Optional[str] = None,
     device_scope: str = Query('all'),
     client_device_id: Optional[str] = Query(None),
-    uid: str = Depends(auth.get_current_user_uid),
     memory_runtime: V3GetRuntime = Depends(get_v3_get_runtime),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
+    uid = http_request.state.uid
     scope_request = _resolve_get_memories_device_scope(
         device_scope,
         client_device_id,
@@ -551,41 +561,53 @@ def get_memories(
     return [MemoryDB.model_validate(item) for item in memory_response.body or []]
 
 
-@router.get('/v3/memories/review-queue', tags=['memories'])
+@router.get(
+    '/v3/memories/review-queue',
+    tags=['memories'],
+    dependencies=[Depends(rate_limit_dep("memories:review"))],
+)
 def list_memory_review_queue(
+    http_request: Request,
     status: str = Query('pending'),
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),
 ):
+    uid = http_request.state.uid
     return review_queue.list_review_conflicts(uid, status=status, limit=limit)
 
 
-@router.post('/v3/memories/review-queue/{review_id}/resolve', tags=['memories'])
+@router.post(
+    '/v3/memories/review-queue/{review_id}/resolve',
+    tags=['memories'],
+    dependencies=[Depends(rate_limit_dep("memories:review"))],
+)
 def resolve_memory_review_item(
+    http_request: Request,
     review_id: str,
-    request: ReviewResolutionRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),
+    body: ReviewResolutionRequest,
 ):
-    if request.decision not in ('accept', 'reject', 'correct', 'timeout'):
+    uid = http_request.state.uid
+    if body.decision not in ('accept', 'reject', 'correct', 'timeout'):
         raise HTTPException(status_code=400, detail='Invalid review decision')
     result = review_queue.resolve_review_conflict(
         uid,
         review_id,
-        request.decision,
-        correction=request.correction,
-        reason=request.reason,
-        current_veracity=request.current_veracity,
+        body.decision,
+        correction=body.correction,
+        reason=body.reason,
+        current_veracity=body.current_veracity,
     )
     if result.get('status') == 'not_found':
         raise HTTPException(status_code=404, detail='Review item not found')
     return result
 
 
-@router.delete('/v3/memories/{memory_id}', tags=['memories'])
-def delete_memory(
-    memory_id: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
-):
+@router.delete(
+    '/v3/memories/{memory_id}',
+    tags=['memories'],
+    dependencies=[Depends(rate_limit_dep("memories:delete"))],
+)
+def delete_memory(http_request: Request, memory_id: str):
+    uid = http_request.state.uid
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         try:
@@ -603,10 +625,13 @@ def delete_memory(
     return {'status': 'ok'}
 
 
-@router.delete('/v3/memories', tags=['memories'])
-def delete_memories(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
-):
+@router.delete(
+    '/v3/memories',
+    tags=['memories'],
+    dependencies=[Depends(rate_limit_dep("memories:delete_all"))],
+)
+def delete_memories(http_request: Request):
+    uid = http_request.state.uid
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         MemoryService(db_client=db_client).delete_all(uid)
@@ -634,12 +659,13 @@ def delete_memories(
     return {'status': 'ok'}
 
 
-@router.post('/v3/memories/{memory_id}/review', tags=['memories'])
-def review_memory(
-    memory_id: str,
-    value: bool,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
-):
+@router.post(
+    '/v3/memories/{memory_id}/review',
+    tags=['memories'],
+    dependencies=[Depends(rate_limit_dep("memories:modify"))],
+)
+def review_memory(http_request: Request, memory_id: str, value: bool):
+    uid = http_request.state.uid
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
@@ -650,12 +676,13 @@ def review_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}', tags=['memories'])
-def edit_memory(
-    memory_id: str,
-    value: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
-):
+@router.patch(
+    '/v3/memories/{memory_id}',
+    tags=['memories'],
+    dependencies=[Depends(rate_limit_dep("memories:modify"))],
+)
+def edit_memory(http_request: Request, memory_id: str, value: str):
+    uid = http_request.state.uid
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
@@ -676,12 +703,13 @@ def edit_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'])
-def update_memory_visibility(
-    memory_id: str,
-    value: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
-):
+@router.patch(
+    '/v3/memories/{memory_id}/visibility',
+    tags=['memories'],
+    dependencies=[Depends(rate_limit_dep("memories:modify"))],
+)
+def update_memory_visibility(http_request: Request, memory_id: str, value: str):
+    uid = http_request.state.uid
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)

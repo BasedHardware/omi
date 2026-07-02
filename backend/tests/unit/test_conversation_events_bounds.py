@@ -172,8 +172,14 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
 
 _endpoints.get_current_user_uid = _fake_get_current_user_uid
 _endpoints.with_rate_limit = _fake_with_rate_limit
+_endpoints.rate_limit_dep = lambda _policy: lambda: None
 _endpoints.get_user = MagicMock()
 _register_module('utils.other.endpoints', _endpoints)
+
+_auth_mw = ModuleType('utils.auth_middleware')
+_auth_mw.require_firebase = lambda: None
+_auth_mw.require_firebase_no_byok = lambda: None
+_register_module('utils.auth_middleware', _auth_mw)
 
 install_database_client_stub()
 
@@ -242,6 +248,12 @@ def test_mismatched_lengths_returns_422():
         SetConversationEventsStateRequest(events_idx=[0, 1], values=[True])
 
 
+def _mock_request(uid='u1'):
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
 def test_negative_index_is_skipped_not_corrupting():
     """A negative event_idx (-1) must NOT write to the last event."""
     convo, events = _fake_conversation_with_events(2)
@@ -249,7 +261,7 @@ def test_negative_index_is_skipped_not_corrupting():
         conv, 'deserialize_conversation', return_value=convo
     ):
         data = SetConversationEventsStateRequest(events_idx=[-1], values=[True])
-        result = conv.set_conversation_events_state('c1', data, uid='u1')
+        result = conv.set_conversation_events_state(_mock_request(), 'c1', data)
 
     # No event should have been mutated by the out-of-range negative index.
     assert all(event.created is False for event in events)
@@ -263,7 +275,7 @@ def test_valid_index_still_updates():
         conv, 'deserialize_conversation', return_value=convo
     ):
         data = SetConversationEventsStateRequest(events_idx=[1], values=[True])
-        conv.set_conversation_events_state('c1', data, uid='u1')
+        conv.set_conversation_events_state(_mock_request(), 'c1', data)
 
     assert events[1].created is True
     assert events[0].created is False

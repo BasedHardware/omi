@@ -190,6 +190,7 @@ def _import_router_helper():
         'utils',
         'utils.executors',
         'utils.users',
+        'utils.auth_middleware',
         'utils.other',
         'utils.other.endpoints',
         'utils.notifications',
@@ -202,6 +203,7 @@ def _import_router_helper():
 
     sys.modules['utils.executors'].critical_executor = MagicMock()
     sys.modules['utils.executors'].db_executor = MagicMock()
+    sys.modules['utils.auth_middleware'].require_firebase = lambda: None
     sys.modules['utils.users'].get_user_display_name = lambda *a, **k: ''
     sys.modules['utils.other.endpoints'].get_current_user_uid = lambda: ''
     sys.modules['utils.other'].endpoints = sys.modules['utils.other.endpoints']

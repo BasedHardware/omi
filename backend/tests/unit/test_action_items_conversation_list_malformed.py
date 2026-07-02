@@ -113,11 +113,17 @@ def _valid(aid, completed=False):
     return {'id': aid, 'description': 'do a thing', 'completed': completed}
 
 
+def _mock_request(uid='uid1'):
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
 def test_conversation_list_skips_malformed_not_500():
     bad = {'id': 'a2', 'description': 'missing completed'}  # missing required field -> ValidationError
     page = [_valid('a1'), bad]
     with patch.object(
         ai_mod.conversations_db, 'get_conversation', return_value={'id': 'c1', 'is_locked': False}
     ), patch.object(ai_mod.action_items_db, 'get_action_items_by_conversation', return_value=page):
-        resp = ai_mod.get_conversation_action_items(conversation_id='c1', uid='uid1')
+        resp = ai_mod.get_conversation_action_items(http_request=_mock_request(), conversation_id='c1')
     assert [i.id for i in resp['action_items']] == ['a1']

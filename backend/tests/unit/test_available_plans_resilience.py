@@ -129,13 +129,20 @@ for _name in [
     "utils.other",
     "utils.other.endpoints",
     "utils.other.storage",
+    "utils.auth_middleware",
 ]:
     _m = types.ModuleType(_name)
     sys.modules[_name] = _m
 
+sys.modules["utils.auth_middleware"].require_firebase = lambda: None
+sys.modules["utils.auth_middleware"].require_firebase_no_byok = lambda: None
+
 sys.modules["utils.fair_use"].clear_fair_use_on_upgrade = MagicMock()
 
 _byok_mod = sys.modules["utils.byok"]
+_byok_mod.BYOK_HEADERS = []
+_byok_mod._byok_ctx = MagicMock()
+_byok_mod.validate_and_return_byok_keys = MagicMock(return_value={})
 _byok_mod.get_byok_key = MagicMock(return_value=None)
 _byok_mod.get_byok_keys = MagicMock(return_value={})
 
@@ -184,13 +191,23 @@ import stripe
 stripe.api_key = "sk_test_fake"
 
 # --- Import the real router under test ---
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from routers import payment as payment_router
 
+from utils.auth_middleware import require_firebase, require_firebase_no_byok
+
+
+async def _fake_auth(request: Request):
+    request.state.uid = "test-user"
+    request.state.byok_keys = {}
+    yield "test-user"
+
+
 app = FastAPI()
 app.include_router(payment_router.router)
-app.dependency_overrides[payment_router.auth.get_current_user_uid] = lambda: "test-user"
+app.dependency_overrides[require_firebase] = _fake_auth
+app.dependency_overrides[require_firebase_no_byok] = _fake_auth
 client = TestClient(app)
 
 

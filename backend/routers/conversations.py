@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from typing import Optional, List
 from datetime import datetime, timezone
 
@@ -49,6 +49,8 @@ from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
+from utils.other.endpoints import rate_limit_dep
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
@@ -64,6 +66,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_public_router = APIRouter()
 router = APIRouter()
 
 
@@ -117,11 +121,14 @@ class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
 
-@router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
-def process_in_progress_conversation(
-    request: ProcessConversationRequest = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
-):
+@_firebase_router.post(
+    "/v1/conversations",
+    response_model=CreateConversationResponse,
+    tags=['conversations'],
+    dependencies=[Depends(rate_limit_dep("conversations:create"))],
+)
+def process_in_progress_conversation(http_request: Request, request: ProcessConversationRequest = None):
+    uid = http_request.state.uid
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
@@ -148,20 +155,20 @@ def process_in_progress_conversation(
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
-@router.post(
-    '/v1/conversations/{conversation_id}/finalize', response_model=CreateConversationResponse, tags=['conversations']
+@_firebase_router.post(
+    '/v1/conversations/{conversation_id}/finalize',
+    response_model=CreateConversationResponse,
+    tags=['conversations'],
+    dependencies=[Depends(rate_limit_dep("conversations:create"))],
 )
-def finalize_conversation(
-    conversation_id: str,
-    request: ProcessConversationRequest = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
-):
+def finalize_conversation(http_request: Request, conversation_id: str, request: ProcessConversationRequest = None):
     """Finalize exactly one backend conversation.
 
     Unlike POST /v1/conversations, this does not operate on the user's Redis
     "current in-progress" pointer, so desktop retry/rotation cannot accidentally
     finalize a newer recording.
     """
+    uid = http_request.state.uid
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
 
@@ -205,12 +212,14 @@ def finalize_conversation(
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
-@router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
+@_firebase_router.post(
+    '/v1/conversations/{conversation_id}/reprocess',
+    response_model=Conversation,
+    tags=['conversations'],
+    dependencies=[Depends(rate_limit_dep("conversations:reprocess"))],
+)
 def reprocess_conversation(
-    conversation_id: str,
-    language_code: Optional[str] = None,
-    app_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+    request: Request, conversation_id: str, language_code: Optional[str] = None, app_id: Optional[str] = None
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -219,6 +228,7 @@ def reprocess_conversation(
     :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
     :return: The updated conversation after reprocessing.
     """
+    uid = request.state.uid
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     if not language_code:
@@ -238,7 +248,7 @@ def _ensure_aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
-@router.get(
+@_firebase_router.get(
     '/v1/conversations',
     response_model=List[Conversation],
     tags=['conversations'],
@@ -248,6 +258,7 @@ def _ensure_aware(value: datetime) -> datetime:
     ),
 )
 def get_conversations(
+    request: Request,
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
@@ -256,8 +267,8 @@ def get_conversations(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
@@ -281,16 +292,17 @@ def get_conversations(
     return conversations
 
 
-@router.get('/v1/conversations/count', tags=['conversations'])
+@_firebase_router.get('/v1/conversations/count', tags=['conversations'])
 def get_conversations_count(
+    request: Request,
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
@@ -306,7 +318,7 @@ def get_conversations_count(
     return {'count': count}
 
 
-@router.get(
+@_firebase_router.get(
     "/v1/conversations/{conversation_id}",
     response_model=Conversation,
     tags=['conversations'],
@@ -315,7 +327,8 @@ def get_conversations_count(
         "may include an empty transcript_segments array even though transcript data exists."
     ),
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_by_id(request: Request, conversation_id: str):
+    uid = request.state.uid
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
@@ -325,19 +338,21 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
     return conversation
 
 
-@router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
-def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
+def patch_conversation_title(request: Request, conversation_id: str, title: str):
+    uid = request.state.uid
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
 
 
-@router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
-def unlink_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
+def unlink_calendar_event(request: Request, conversation_id: str):
     """
     Unlink a calendar event from a conversation.
     This removes the calendar_event field from the conversation.
     """
+    uid = request.state.uid
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation(uid, conversation_id, {'calendar_event': None})
     return {'status': 'Ok'}
@@ -366,18 +381,15 @@ def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
     )
 
 
-@router.post(
+@_firebase_router.post(
     "/v1/conversations/{conversation_id}/calendar-event", response_model=CalendarEventLink, tags=['conversations']
 )
-async def link_calendar_event(
-    conversation_id: str,
-    request: LinkCalendarEventRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+async def link_calendar_event(http_request: Request, conversation_id: str, request: LinkCalendarEventRequest):
     """
     Link a specific Google Calendar event to an existing conversation.
     Fetches the event details and stores the calendar_event on the conversation.
     """
+    uid = http_request.state.uid
     await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get Google Calendar access token
@@ -427,17 +439,18 @@ async def link_calendar_event(
     return calendar_event
 
 
-@router.post(
+@_firebase_router.post(
     "/v1/conversations/{conversation_id}/calendar-event/auto-link",
     response_model=CalendarEventLink,
     tags=['conversations'],
 )
-async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def auto_link_calendar_event(request: Request, conversation_id: str):
     """
     Auto-link a conversation to the best overlapping Google Calendar event.
     Uses the conversation's started_at/finished_at to find a matching event.
     Returns 404 if no overlapping event is found.
     """
+    uid = request.state.uid
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get conversation times
@@ -491,10 +504,9 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     return calendar_event
 
 
-@router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
-def patch_conversation_summary(
-    conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
+def patch_conversation_summary(request: Request, conversation_id: str, data: UpdateSummaryRequest):
+    uid = request.state.uid
     result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -503,10 +515,9 @@ def patch_conversation_summary(
     return {'status': 'Ok'}
 
 
-@router.patch("/v1/conversations/{conversation_id}/segments/text", tags=['conversations'])
-def patch_conversation_segment_text(
-    conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.patch("/v1/conversations/{conversation_id}/segments/text", tags=['conversations'])
+def patch_conversation_segment_text(request: Request, conversation_id: str, data: UpdateSegmentTextRequest):
+    uid = request.state.uid
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -517,34 +528,37 @@ def patch_conversation_segment_text(
     return {'status': 'Ok'}
 
 
-@router.get(
+@_firebase_router.get(
     "/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto], tags=['conversations']
 )
-def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_photos(request: Request, conversation_id: str):
+    uid = request.state.uid
     _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
 
-@router.get(
+@_firebase_router.get(
     "/v1/conversations/{conversation_id}/transcripts",
     response_model=dict[str, List[TranscriptSegment]],
     tags=['conversations'],
 )
-def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_transcripts_by_models(request: Request, conversation_id: str):
+    uid = request.state.uid
     _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
-@router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
+@_firebase_router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
 def delete_conversation(
+    request: Request,
     conversation_id: str,
     background_tasks: BackgroundTasks,
     # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
     # docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
@@ -570,16 +584,16 @@ def delete_conversation(
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
-def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
+def conversation_has_audio_recording(request: Request, conversation_id: str):
+    uid = request.state.uid
     _get_valid_conversation_by_id(uid, conversation_id)
     return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
-@router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
-def set_conversation_events_state(
-    conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
+def set_conversation_events_state(request: Request, conversation_id: str, data: SetConversationEventsStateRequest):
+    uid = request.state.uid
     if len(data.events_idx) != len(data.values):
         raise HTTPException(status_code=422, detail="events_idx and values must have the same length")
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
@@ -594,10 +608,9 @@ def set_conversation_events_state(
     return {"status": "Ok"}
 
 
-@router.patch("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
-def set_action_item_status(
-    data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
-):
+@_firebase_router.patch("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
+def set_action_item_status(request: Request, data: SetConversationActionItemsStateRequest, conversation_id: str):
+    uid = request.state.uid
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
@@ -653,12 +666,11 @@ def set_action_item_status(
     return {"status": "Ok"}
 
 
-@router.patch(
+@_firebase_router.patch(
     "/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations']
 )
-def update_action_item_description(
-    conversation_id: str, data: UpdateActionItemDescriptionRequest, uid=Depends(auth.get_current_user_uid)
-):
+def update_action_item_description(request: Request, conversation_id: str, data: UpdateActionItemDescriptionRequest):
+    uid = request.state.uid
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
@@ -688,8 +700,11 @@ def update_action_item_description(
     return {"status": "Ok"}
 
 
-@router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
-def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
+@_firebase_router.delete(
+    "/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations']
+)
+def delete_action_item(request: Request, data: DeleteActionItemRequest, conversation_id: str):
+    uid = request.state.uid
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
@@ -709,18 +724,18 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
     return {"status": "Ok"}
 
 
-@router.patch(
+@_firebase_router.patch(
     '/v1/conversations/{conversation_id}/segments/{segment_idx}/assign',
     response_model=Conversation,
     tags=['conversations'],
 )
 def set_assignee_conversation_segment(
+    request: Request,
     conversation_id: str,
     segment_idx: int,
     assign_type: str,
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Another complex endpoint.
@@ -740,6 +755,7 @@ def set_assignee_conversation_segment(
 
     :return: The updated conversation.
     """
+    uid = request.state.uid
     logger.info(
         f'set_assignee_conversation_segment {conversation_id} {segment_idx} {assign_type} {value} {use_for_speech_training} {uid}'
     )
@@ -778,18 +794,18 @@ def set_assignee_conversation_segment(
     return conversation
 
 
-@router.patch(
+@_firebase_router.patch(
     '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
     response_model=Conversation,
     tags=['conversations'],
 )
 def set_assignee_conversation_segment(
+    request: Request,
     conversation_id: str,
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Another complex endpoint.
@@ -809,6 +825,7 @@ def set_assignee_conversation_segment(
 
     :return: The updated conversation.
     """
+    uid = request.state.uid
     logger.info(
         f'set_assignee_conversation_segment {conversation_id} {speaker_id} {assign_type} {value} {use_for_speech_training} {uid}'
     )
@@ -860,17 +877,15 @@ def set_assignee_conversation_segment(
     return conversation
 
 
-@router.patch(
+@_firebase_router.patch(
     '/v1/conversations/{conversation_id}/segments/assign-bulk',
     response_model=Conversation,
     tags=['conversations'],
 )
 def assign_segments_bulk(
-    conversation_id: str,
-    data: BulkAssignSegmentsRequest,
-    background_tasks: BackgroundTasks,
-    uid: str = Depends(auth.get_current_user_uid),
+    request: Request, conversation_id: str, data: BulkAssignSegmentsRequest, background_tasks: BackgroundTasks
 ):
+    uid = request.state.uid
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
 
@@ -914,10 +929,9 @@ def assign_segments_bulk(
 # *********************************************
 
 
-@router.patch('/v1/conversations/{conversation_id}/visibility', tags=['conversations'])
-def set_conversation_visibility(
-    conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.patch('/v1/conversations/{conversation_id}/visibility', tags=['conversations'])
+def set_conversation_visibility(request: Request, conversation_id: str, value: ConversationVisibility):
+    uid = request.state.uid
     logger.info(f'update_conversation_visibility {conversation_id} {value} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_visibility(uid, conversation_id, value)
@@ -931,15 +945,16 @@ def set_conversation_visibility(
     return {"status": "Ok"}
 
 
-@router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
-def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
+def set_conversation_starred(request: Request, conversation_id: str, starred: bool):
+    uid = request.state.uid
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_starred(uid, conversation_id, starred)
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
+@_public_router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
 def get_shared_conversation_by_id(conversation_id: str):
     uid = redis_db.get_conversation_uid(conversation_id)
     if not uid:
@@ -965,11 +980,14 @@ def get_shared_conversation_by_id(conversation_id: str):
     return response_dict
 
 
-@router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
-def search_conversations_endpoint(
-    search_request: SearchRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
-):
+@_firebase_router.post(
+    "/v1/conversations/search",
+    response_model=dict,
+    tags=['conversations'],
+    dependencies=[Depends(rate_limit_dep("conversations:search"))],
+)
+def search_conversations_endpoint(request: Request, search_request: SearchRequest):
+    uid = request.state.uid
     if search_request.speaker_id and search_request.speaker_id != 'user':
         person = users_db.get_person(uid, search_request.speaker_id)
         if person is None:
@@ -1003,8 +1021,9 @@ def search_conversations_endpoint(
     )
 
 
-@router.get("/v1/conversations/{conversation_id}/suggested-apps", response_model=dict, tags=['conversations'])
-def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/conversations/{conversation_id}/suggested-apps", response_model=dict, tags=['conversations'])
+def get_conversation_suggested_apps(request: Request, conversation_id: str):
+    uid = request.state.uid
     from utils.apps import get_available_apps, get_available_app_by_id_with_reviews
     from models.app import App
 
@@ -1037,12 +1056,14 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
     return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
 
 
-@router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
-def test_prompt(
-    conversation_id: str,
-    request: TestPromptRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "test:prompt")),
-):
+@_firebase_router.post(
+    "/v1/conversations/{conversation_id}/test-prompt",
+    response_model=dict,
+    tags=['conversations'],
+    dependencies=[Depends(rate_limit_dep("test:prompt"))],
+)
+def test_prompt(http_request: Request, conversation_id: str, request: TestPromptRequest):
+    uid = http_request.state.uid
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
@@ -1062,12 +1083,13 @@ def test_prompt(
 # *********************************************
 
 
-@router.post('/v1/conversations/merge', response_model=MergeConversationsResponse, tags=['conversations'])
-def merge_conversations(
-    request: MergeConversationsRequest,
-    background_tasks: BackgroundTasks,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
-):
+@_firebase_router.post(
+    '/v1/conversations/merge',
+    response_model=MergeConversationsResponse,
+    tags=['conversations'],
+    dependencies=[Depends(rate_limit_dep("conversations:merge"))],
+)
+def merge_conversations(http_request: Request, request: MergeConversationsRequest, background_tasks: BackgroundTasks):
     """
     Merge multiple conversations into a new conversation (async).
 
@@ -1084,6 +1106,7 @@ def merge_conversations(
     - Copied audio chunks
     - Regenerated title, summary, action items, memories via process_conversation()
     """
+    uid = http_request.state.uid
     from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
 
     # Validate minimum number of conversations
@@ -1121,3 +1144,7 @@ def merge_conversations(
         warning=warning_message,
         conversation_ids=request.conversation_ids,
     )
+
+
+router.include_router(_firebase_router)
+router.include_router(_public_router)

@@ -6,7 +6,7 @@ remains an importable alias. Registers ``/memory/*`` product paths.
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from database._client import db
 from database.memory_vector_repair_outbox import write_vector_repair_purge_outbox_records
@@ -25,9 +25,9 @@ from utils.memory.vector_search_service import (
     MAX_MEMORY_VECTOR_SEARCH_LIMIT,
     fetch_default_vector_memory_search,
 )
-from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 def _current_time() -> datetime:
@@ -85,11 +85,12 @@ def _require_product_authorization(context: ProductAuthorizationContext):
 
 @router.get('/memory/search', tags=['memories', 'memory'])
 def search_product_memory(
+    request: Request,
     query: str = Query(''),
     limit: int = Query(100),
     offset: int = Query(0),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     """Search default-visible memory product memory for the authenticated user.
 
     This product endpoint constructs the default Omi-chat access policy explicitly
@@ -127,11 +128,12 @@ def search_product_memory(
 
 @router.get('/memory/vector/search', tags=['memories', 'memory'])
 def search_vector_memory(
+    request: Request,
     query: str = Query(...),
     limit: int = Query(10),
-    uid: str = Depends(auth.get_current_user_uid),
     vector_query=None,
 ):
+    uid = request.state.uid
     """Search default-visible memory memory through hydrated vector candidates.
 
     The route fails closed unless the persisted server-owned default-read rollout
@@ -182,12 +184,13 @@ def search_vector_memory(
 
 @router.get('/memory/archive/search', tags=['memories', 'memory'])
 def search_archive_memory(
+    request: Request,
     query: str = Query(''),
     limit: int = Query(100),
     offset: int = Query(0),
     include_archive: bool = Query(False),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     """Search explicit memory Archive memory for archive-capable product callers only.
 
     This route is intentionally separate from `/memory/search` and requires
