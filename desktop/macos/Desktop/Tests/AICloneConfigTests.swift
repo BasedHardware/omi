@@ -389,20 +389,22 @@ final class AICloneConfigTests: XCTestCase {
 
     // MARK: - Telegram user-account ToS acknowledgement (plan §8)
 
-    func testTelegramUserSessionEnabledPersistsIndependentlyFromAcknowledgement() {
-        // plan §8: the ToS acknowledgement is a separate @AppStorage
-        // flag from telegramAccountEnabled. They're tracked
-        // independently: enabling the account (via the generator
-        // writing to Keychain) doesn't auto-acknowledge the ToS,
-        // and acknowledging the ToS doesn't auto-enable the
-        // account. Pin that the two are distinct concepts.
+    func testSetTelegramUserSessionEnablesAccount() {
+        // Renamed from testTelegramUserSessionEnabledPersistsIndependentlyFromAcknowledgement
+        // per cubic review 4617059500 P2: the previous name and
+        // docstring claimed to verify that the ToS acknowledgement
+        // flag and telegramAccountEnabled are independent concepts,
+        // but the test only asserted that setting a session
+        // enables the account -- it never read the acknowledgement
+        // flag. The renamed test pins what the test actually
+        // exercises: setTelegramUserSession(non-empty) flips
+        // telegramAccountEnabled to true. The two-flag-independence
+        // contract is exercised by the SwiftUI view layer (the
+        // "Generate session" button is gated on
+        // telegramAccountAcknowledged) -- not by a config-only
+        // unit test.
         let config = AICloneConfig(defaults: customDefaults)
         XCTAssertFalse(config.telegramAccountEnabled)
-        // The acknowledgement flag lives in @AppStorage which
-        // is separate from the config; the test just confirms
-        // that the config's `telegramAccountEnabled` is the
-        // authoritative source of truth for "is the session in
-        // Keychain?" and not coupled to user acknowledgement.
         try? config.setTelegramUserSession(
             "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
         )

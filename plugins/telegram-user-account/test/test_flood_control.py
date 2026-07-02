@@ -167,7 +167,89 @@ class TestDetectFloodWait:
 
 
 # ---------------------------------------------------------------------------
-# Section 4: default_rate_limit singleton
+# Section 4: external cooldown / block_for_seconds (cubic 4617059500 P1)
+# ---------------------------------------------------------------------------
+
+
+class TestBlockForSeconds:
+    def test_can_send_returns_false_while_blocked(self):
+        # cubic review 4617059500 P1: when Telegram returns
+        # FLOOD_WAIT, the endpoint must register the cooldown
+        # with the local rate limiter so the next request
+        # can't sneak past via a fresh rolling window.
+        rl = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1000.0)
+        assert rl.can_send() is True
+        rl.block_for_seconds(60)
+        assert rl.can_send() is False
+
+    def test_can_send_recovers_after_block_expires(self):
+        rl = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1000.0)
+        rl.block_for_seconds(60)
+        assert rl.can_send() is False
+        # The fake clock is static; build a new one that
+        # returns 1061.0 to simulate 61 seconds having passed.
+        rl2 = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1061.0)
+        # A fresh instance has no block, but the same instance
+        # needs a clock that advances. Use the clock injection
+        # properly: rebuild the instance with an advanced
+        # clock.
+        # Simpler: just verify the math via seconds_until_next_slot.
+        # Replace the clock mid-test by mutating _now.
+        t = [1000.0]
+        rl3 = flood_control.RateLimit(max_per_hour=100, clock=lambda: t[0])
+        rl3.block_for_seconds(60)
+        assert rl3.can_send() is False
+        t[0] = 1061.0
+        assert rl3.can_send() is True
+
+    def test_seconds_until_next_slot_returns_cooldown(self):
+        # While the external block is active,
+        # seconds_until_next_slot returns the REMAINING
+        # cooldown, NOT the rolling-window wait. Otherwise
+        # the desktop would back off for the wrong duration.
+        rl = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1000.0)
+        rl.block_for_seconds(120)
+        assert rl.seconds_until_next_slot() == 120
+
+    def test_block_for_seconds_is_idempotent_max(self):
+        # A longer block extends; a shorter one is ignored.
+        # This handles FLOOD_WAIT_5 right after FLOOD_WAIT_60.
+        rl = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1000.0)
+        rl.block_for_seconds(60)
+        rl.block_for_seconds(5)  # shorter, should be ignored
+        assert rl.seconds_until_next_slot() == 60
+        rl.block_for_seconds(120)  # longer, should extend
+        assert rl.seconds_until_next_slot() == 120
+
+    def test_block_for_seconds_zero_or_negative_is_noop(self):
+        rl = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1000.0)
+        rl.block_for_seconds(0)
+        assert rl.can_send() is True
+        rl.block_for_seconds(-1)
+        assert rl.can_send() is True
+
+    def test_is_blocked(self):
+        rl = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1000.0)
+        assert rl.is_blocked() is False
+        rl.block_for_seconds(60)
+        assert rl.is_blocked() is True
+
+    def test_block_independent_of_window(self):
+        # The external block must apply EVEN when the rolling
+        # window is empty. This is the cubic 4617059500 P1
+        # concern: without the block, a fresh start with an
+        # empty window would pass can_send() immediately after
+        # a FLOOD_WAIT.
+        rl = flood_control.RateLimit(max_per_hour=100, clock=lambda: 1000.0)
+        # No record_send called -- rolling window is empty.
+        # But the external block is active.
+        rl.block_for_seconds(60)
+        assert rl.can_send() is False
+        assert rl.in_window_count() == 0  # window is still empty
+
+
+# ---------------------------------------------------------------------------
+# Section 5: default_rate_limit singleton
 # ---------------------------------------------------------------------------
 
 

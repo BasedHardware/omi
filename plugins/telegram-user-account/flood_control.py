@@ -41,7 +41,7 @@ from typing import Optional
 
 # Configurable via env. Plan §8: 30 outbound messages/hour/chats.
 # Default 30. We use the same constant for "per hour" and
-# "per chats" (the plan column says "<= 30 outbound messages/hour/
+# "per chats" (the plan column says "≤ 30 outbound messages/hour/
 # chats" which we read as "30 per hour total" -- the /chats suffix
 # just notes the scope).
 MAX_PER_HOUR = int(os.environ.get("TELEGRAM_USER_RATE_PER_HOUR", "30"))
@@ -49,15 +49,22 @@ WINDOW_SECONDS = 3600
 
 
 class RateLimit:
-    """Rolling-window outbound-message counter.
+    """Rolling-window outbound-message counter with external cooldown.
 
-    Thread-safe. ``record_send(now)`` adds a timestamp; ``can_send``
-    returns True iff the rolling 60-minute window has fewer than
-    ``max_per_hour`` entries.
+    Two independent gating conditions, both checked by ``can_send``:
 
-    ``seconds_until_next_slot()`` is informational: how long until
-    the OLDEST in-window message ages out, opening a new slot.
-    """
+    1. Rolling 60-minute window: ``record_send(now)`` adds a
+       timestamp; the window has at most ``max_per_hour`` entries.
+    2. External cooldown: ``block_for_seconds(seconds)`` sets a
+       "blocked until" timestamp (set by ``main.py`` when Telegram
+       returns ``FLOOD_WAIT``). While the cooldown is active,
+       ``can_send`` returns False.
+
+    Thread-safe. ``seconds_until_next_slot()`` returns the
+    larger of the two waits: either the time until the oldest
+    in-window message ages out, OR the remaining cooldown
+    duration. This is the value the endpoint surfaces as
+    ``Retry-After``."""
 
     def __init__(
         self,
@@ -69,6 +76,14 @@ class RateLimit:
         self.window_seconds = window_seconds
         self._now = clock or time.monotonic
         self._send_times: "deque[float]" = deque()
+        # cubic review 4617059500 P1: external cooldown
+        # timestamp. While self._blocked_until > self._now(),
+        # can_send() returns False. Set by block_for_seconds()
+        # when Telegram returns FLOOD_WAIT_*; this prevents the
+        # caller from immediately retrying (and wasting LLM
+        # tokens on the persona call) for the duration Telegram
+        # requested.
+        self._blocked_until: float = 0.0
         self._lock = Lock()
 
     def _trim(self, now: float) -> None:
@@ -76,33 +91,70 @@ class RateLimit:
         while self._send_times and self._send_times[0] < cutoff:
             self._send_times.popleft()
 
+    def block_for_seconds(self, seconds: int, now: Optional[float] = None) -> None:
+        """Set the external cooldown to ``seconds`` from now.
+
+        Called by ``main.py`` after a FLOOD_WAIT detection. While
+        the cooldown is active, ``can_send()`` returns False and
+        ``seconds_until_next_slot()`` returns the remaining
+        cooldown. Idempotent: a longer cooldown extends the
+        block; a shorter one is ignored.
+        """
+        if seconds <= 0:
+            return
+        with self._lock:
+            current = self._now() if now is None else now
+            # Don't shrink an existing block. This handles the
+            # case where Telegram returns FLOOD_WAIT_5 right after
+            # we just got FLOOD_WAIT_60 -- we wait the longer one.
+            requested = current + seconds
+            if requested > self._blocked_until:
+                self._blocked_until = requested
+
     def can_send(self) -> bool:
         with self._lock:
-            self._trim(self._now())
+            now = self._now()
+            self._trim(now)
+            if self._blocked_until > now:
+                return False
             return len(self._send_times) < self.max_per_hour
 
     def record_send(self, now: Optional[float] = None) -> None:
         with self._lock:
-            self._trim(self._now() if now is None else now)
-            self._send_times.append(self._now() if now is None else now)
+            now = self._now() if now is None else now
+            self._trim(now)
+            self._send_times.append(now)
 
     def seconds_until_next_slot(self) -> int:
-        """If the limit is hit, how many seconds until the oldest
-        in-window message ages out? Returns 0 if a slot is free
-        right now.
+        """If the limit is hit, how many seconds until a slot is
+        free? Returns the LARGER of:
+        - (rolling window) time until the oldest in-window
+          message ages out
+        - (external cooldown) remaining time on the active block
+
+        Returns 0 if a slot is free right now.
         """
         with self._lock:
-            self._trim(self._now())
+            now = self._now()
+            self._trim(now)
+            # External cooldown takes precedence.
+            if self._blocked_until > now:
+                return int(self._blocked_until - now)
             if len(self._send_times) < self.max_per_hour:
                 return 0
             oldest = self._send_times[0]
-            wait = self.window_seconds - (self._now() - oldest)
+            wait = self.window_seconds - (now - oldest)
             return max(1, int(wait))
 
     def in_window_count(self) -> int:
         with self._lock:
             self._trim(self._now())
             return len(self._send_times)
+
+    def is_blocked(self) -> bool:
+        """True iff an external cooldown is currently active."""
+        with self._lock:
+            return self._blocked_until > self._now()
 
 
 def detect_flood_wait(exc: BaseException) -> Optional[int]:

@@ -323,10 +323,23 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
         # wait" message instead of a generic 502.
         flood_seconds = flood_control.detect_flood_wait(e)
         if flood_seconds is not None:
+            # cubic review 4617059500 P1: register the cooldown
+            # with the local rate limiter so the next request
+            # from this desktop is rejected at can_send() before
+            # it reaches the persona API. Without this, the
+            # caller could immediately retry, hit can_send()=True
+            # (the rolling window is still empty), call the
+            # persona API (wasting LLM tokens), and fail again
+            # at the Telegram send_message stage. Now: the
+            # local gate blocks retries for the duration
+            # Telegram requested.
+            flood_control.default_rate_limit.block_for_seconds(flood_seconds)
             logger.warning(
                 "FLOOD_WAIT from Telegram for chat_id=%s: wait %ds. "
-                "This is Telegram's anti-flood signal -- slow down.",
+                "This is Telegram's anti-flood signal -- slow down. "
+                "Local rate limiter blocked for %ds.",
                 body.chat_id,
+                flood_seconds,
                 flood_seconds,
             )
             raise HTTPException(
