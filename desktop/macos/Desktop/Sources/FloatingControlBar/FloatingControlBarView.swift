@@ -79,8 +79,8 @@ struct FloatingControlBarView: View {
     }
     var body: some View {
         Group {
-            if state.usesNotchIsland {
-                notchModeBody
+            if state.usesNotchIsland || state.showingAIConversation {
+                unifiedFloatingSurface
             } else {
                 VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
                     barChrome
@@ -94,7 +94,11 @@ struct FloatingControlBarView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: state.usesNotchIsland ? .top : .center)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: state.usesNotchIsland || state.showingAIConversation ? .top : .center
+        )
         .background(Color.clear)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
     }
@@ -126,11 +130,11 @@ struct FloatingControlBarView: View {
         shouldShowNotchHoverMenu && !showingNotchWaveform
     }
 
-    private var notchModeBody: some View {
+    private var unifiedFloatingSurface: some View {
         VStack(spacing: 0) {
             notchChrome
 
-            if shouldShowNotchHoverMenu {
+            if state.usesNotchIsland && shouldShowNotchHoverMenu {
                 VStack(spacing: 0) {
                     notchOmiChatRow
                         .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
@@ -143,9 +147,9 @@ struct FloatingControlBarView: View {
                             height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight
                         )
                 }
-                    .frame(width: notchChromeLayoutWidth, height: notchHoverMenuHeight, alignment: .top)
-                    .onHover { setAgentSwitcherHovering($0) }
-                    .transition(.identity)
+                .frame(width: notchChromeLayoutWidth, height: notchHoverMenuHeight, alignment: .top)
+                .onHover { setAgentSwitcherHovering($0) }
+                .transition(.identity)
             }
 
             if state.showingAIConversation {
@@ -164,7 +168,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if shouldUseOmiChatOverlayHitTarget {
+            if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget {
                 ZStack(alignment: .top) {
                     if !agentPills.pills.isEmpty {
                         NotchAgentMorphField(
@@ -200,7 +204,9 @@ struct FloatingControlBarView: View {
         .padding(.bottom, notchSurfaceBottomInset)
         .background(alignment: .top) {
             GeometryReader { geometry in
-                let hasExpandedSurface = state.showingAIConversation || state.currentNotification != nil || shouldShowNotchHoverMenu
+                let hasExpandedSurface = state.showingAIConversation
+                    || state.currentNotification != nil
+                    || (state.usesNotchIsland && shouldShowNotchHoverMenu)
                 let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
                 let surfaceWidth = hasExpandedSurface
                     ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
@@ -248,6 +254,7 @@ struct FloatingControlBarView: View {
         .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
         .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)
         .onChange(of: shouldShowNotchHoverMenu) { _, visible in
+            guard state.usesNotchIsland else { return }
             (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
             // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
             // dots are back in the notch before the surface shrinks (no stranded dots).
@@ -259,7 +266,7 @@ struct FloatingControlBarView: View {
             }
         }
         .onChange(of: state.showingAIConversation) { _, isShowing in
-            guard !isShowing, shouldShowNotchHoverMenu else { return }
+            guard state.usesNotchIsland, !isShowing, shouldShowNotchHoverMenu else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                 guard shouldShowNotchHoverMenu else { return }
                 (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: true)
@@ -600,7 +607,7 @@ struct FloatingControlBarView: View {
 
     @ViewBuilder
     private func mainConversationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        if state.usesNotchIsland && !agentPills.pills.isEmpty {
+        if !agentPills.pills.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Button(action: showAgentListFromConversation) {
@@ -1084,7 +1091,7 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
-            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
+            canClearVisibleConversation: false,
             onSend: { message in
                 (window as? FloatingControlBarWindow)?
                     .beginVisibleMainQuery(message, fromVoice: false, animated: true)
@@ -1094,11 +1101,7 @@ struct FloatingControlBarView: View {
             onEscape: onEscape,
             onHeightChange: { [self] height in
                 lastInputEditorHeight = height
-                if state.usesNotchIsland {
-                    recomputeNotchInputHeight()
-                } else {
-                    state.inputViewHeight = 50 + height + 24
-                }
+                recomputeUnifiedInputHeight()
             }
         )
         .onChange(of: agentPills.pills.count) {
@@ -1106,7 +1109,7 @@ struct FloatingControlBarView: View {
             // recompute the input height when the pill list changes while the
             // input/chat view is open. Without this the budget goes stale and
             // causes clipping or extra empty space. (Cubic P2.)
-            recomputeNotchInputHeight()
+            recomputeUnifiedInputHeight()
         }
         .transition(
             .asymmetric(
@@ -1117,9 +1120,8 @@ struct FloatingControlBarView: View {
 
     /// Recompute inputViewHeight from the last known editor height and the
     /// current agent-pills presence. Called on editor height change and on
-    /// pill-list change so the header height budget never goes stale.
-    private func recomputeNotchInputHeight() {
-        guard state.usesNotchIsland else { return }
+    /// pill-list change so the shared expanded surface budget never goes stale.
+    private func recomputeUnifiedInputHeight() {
         // Guard against stale zero editor height: the editor has not reported
         // its size yet (or was just re-created after a surface switch), so
         // recomputing now would shrink the window and clip input/send
@@ -1152,8 +1154,8 @@ struct FloatingControlBarView: View {
                 get: { state.voiceFollowUpTranscript },
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
-            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
-            showsHeader: !state.usesNotchIsland,
+            canClearVisibleConversation: false,
+            showsHeader: false,
             onClearVisibleConversation: onClearVisibleConversation,
             onEscape: onEscape,
             onSendFollowUp: { message in

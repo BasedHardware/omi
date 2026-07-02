@@ -106,13 +106,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let voiceBarSize = NSSize(width: 224, height: 42)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
-    private static let expandedWidth: CGFloat = 430
     static let notchExpandedWidth: CGFloat = 382
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
-    private static let askOmiAnimationDuration: TimeInterval = 0.055
-    private static let askOmiSettleDelay: TimeInterval = 0.065
+    private static let askOmiAnimationDuration: TimeInterval = 0.14
+    private static let askOmiSettleDelay: TimeInterval = 0.16
     private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
@@ -237,14 +236,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         notchSize(sideWidth: notchSideWidth, for: screen)
     }
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
-    private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
-    private var inputChromeHeight: CGFloat { notchModeEnabled ? notchChromeHeightForCurrentScreen : 50 }
+    private var expandedContentWidth: CGFloat { Self.notchExpandedWidth }
     private var inputPanelHeight: CGFloat {
         let base = notchModeEnabled ? notchInputPanelHeightForCurrentScreen : 120
         // When notch mode renders the "Back / Omi Chat" header (agent pills
         // present), the input panel needs additional vertical room so the
         // header + editor + padding all fit. (Codex P2 — input/send clipping.)
-        if notchModeEnabled, !AgentPillsManager.shared.pills.isEmpty {
+        if !AgentPillsManager.shared.pills.isEmpty {
             return base + Self.notchChatHeaderVerticalBudget
         }
         return base
@@ -550,7 +548,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         frameIncludesVoiceGlow: Bool? = nil
     ) -> NSSize {
         if state.showingAIConversation {
-            let defaultWidth = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
+            let defaultWidth = Self.notchExpandedWidth
             let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
             let panelHeight = usesNotchIsland ? notchInputPanelHeightForCurrentScreen : 120
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
@@ -579,8 +577,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func frameForCurrentState(on screen: NSScreen, usesNotchIsland: Bool) -> NSRect {
         let size: NSSize
         if state.showingAIConversation {
-            let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
-            let chromeHeight = usesNotchIsland ? Self.notchChromeHeight(for: screen) : 50
+            let width = Self.notchExpandedWidth
+            let chromeHeight = Self.notchChromeHeight(for: screen)
             let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight(for: screen) : 120
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
