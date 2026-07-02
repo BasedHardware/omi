@@ -34,6 +34,8 @@ if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
   exit 0
 fi
 
+# Fallback: hardcoded test list for local runs without BACKEND_UNIT_TEST_FILE_LIST.
+# CI uses: scripts/select_backend_unit_tests.py --all
 pytest tests/unit/test_transcript_segment.py -v
 pytest tests/unit/test_import_job_status_detail_enum.py -v
 pytest tests/unit/test_text_similarity.py -v
