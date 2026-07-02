@@ -161,38 +161,39 @@ final class AICloneConfig: ObservableObject {
 
         var changed = false
 
-        if self.pluginURL.isEmpty {
-            // Write directly to UserDefaults (bypassing didSet which may
-            // not fire reliably during init). Then set the property for
-            // the in-memory state.
-            defaults.set(discoveryURL, forKey: DefaultsKeys.pluginURL)
-            self.pluginURL = discoveryURL
-            changed = true
-        }
-
-        if self.bearerToken.isEmpty {
-            // Write directly to Keychain.
-            try? AICloneKeychain.set(.pluginBearerToken, discovery.bearerToken)
-            self.bearerToken = discovery.bearerToken
-            changed = true
-        }
-
-        // ALWAYS refresh discovery-derived fields. The discovery file is
-        // written by the plugin on every restart, so its values reflect
-        // the LIVE plugin instance (with a new instance_id and possibly
-        // a different tunnel URL). The UserDefaults-cached pluginURL /
-        // bearerToken can be stale if the user restarted the plugin or
-        // a sibling worktree is competing for the same port — refreshing
-        // only `publicBaseURL` while leaving the other discovery-derived
-        // fields gated behind `changed` would create a mixed
-        // configuration where ConnectSheet posts to the OLD pluginURL
-        // but passes the NEW publicBaseURL + STALE pluginDevMode /
-        // discoveryBackendURL. (P2 cubic review 4601373760.)
+        // Cubic review 4614064929 P1: previously, the in-memory
+        // `self.pluginURL` and `self.bearerToken` were only updated
+        // when the local copies were EMPTY. After the first auto-
+        // discovery both fields are persisted and non-empty, so later
+        // plugin restarts that change the local port or bearer
+        // token are silently ignored in-memory. The desktop then
+        // hits the OLD URL while passing NEW publicBaseURL/
+        // pluginDevMode — a mixed-config bug.
         //
-        // UserDefaults (pluginURL) and Keychain (bearerToken) still
-        // only get WRITTEN when changed=true (preserving the user's
-        // manual edits) — but the in-memory copy of every discovery-
-        // derived field always reflects the current plugin.
+        // Fix: ALWAYS refresh the in-memory copies. The UserDefaults
+        // (pluginURL) and Keychain (bearerToken) WRITES still gate
+        // on `isEmpty` so we don't clobber a user's manual override
+        // on disk. But the in-memory copy always reflects the live
+        // plugin. If the user manually edits, their edit takes
+        // effect for this session; on next launch, discovery
+        // refreshes again.
+        let isFirstDiscovery = self.pluginURL.isEmpty && self.bearerToken.isEmpty
+
+        if isFirstDiscovery {
+            // First run: persist the discovery values to disk so
+            // they survive across launches.
+            defaults.set(discoveryURL, forKey: DefaultsKeys.pluginURL)
+            try? AICloneKeychain.set(.pluginBearerToken, discovery.bearerToken)
+            changed = true
+        }
+        // Always refresh in-memory.
+        self.pluginURL = discoveryURL
+        self.bearerToken = discovery.bearerToken
+
+        // Refresh the rest of the discovery-derived fields (publicBaseURL,
+        // pluginDevMode, discoveryBackendURL) unconditionally so the
+        // desktop always reflects the live plugin instance. (P2 cubic
+        // review 4601373760.)
         self.publicBaseURL = discovery.publicURL ?? discovery.pluginURL
         self.pluginDevMode = discovery.devMode
         self.discoveryBackendURL = discovery.omiBaseURL
@@ -208,16 +209,57 @@ final class AICloneConfig: ObservableObject {
     /// Move legacy UserDefaults-stored secrets into the Keychain.
     /// Called once at init; idempotent.
     private func migrateFromUserDefaultsIfNeeded(defaults: UserDefaults) {
-        _ = try? AICloneKeychain.migrateFromUserDefaults(
+        // Cubic review 4614064929 P1: the previous `try?` swallowed
+        // BOTH the keychain-write failure AND the subsequent
+        // UserDefaults-remove step. If the keychain write fails
+        // (e.g. user denied keychain access), the legacy plaintext
+        // secret stays in UserDefaults indefinitely — a security
+        // regression masked by silent failure.
+        //
+        // Fix: separate the two steps. Always delete the legacy
+        // UserDefaults entry, even if the keychain write fails. The
+        // keychain write is best-effort but logged. This way the
+        // plaintext exposure window is closed as soon as the
+        // migration runs, regardless of subsequent failure.
+        migrateLegacySecret(
             .pluginBearerToken,
             defaultsKey: LegacyDefaultsKeys.bearerToken,
-            defaults: defaults
+            defaults: defaults,
         )
-        _ = try? AICloneKeychain.migrateFromUserDefaults(
+        migrateLegacySecret(
             .devApiKey,
             defaultsKey: LegacyDefaultsKeys.devApiKey,
-            defaults: defaults
+            defaults: defaults,
         )
+    }
+
+    private func migrateLegacySecret(
+        _ keychainKey: AICloneKeychain.Key,
+        defaultsKey: String,
+        defaults: UserDefaults,
+    ) {
+        do {
+            try AICloneKeychain.migrateFromUserDefaults(
+                keychainKey,
+                defaultsKey: defaultsKey,
+                defaults: defaults
+            )
+        } catch {
+            // Keychain write failed. Still delete the legacy
+            // plaintext entry — the keychain set is best-effort
+            // and we don't want the secret lingering in
+            // UserDefaults if the keychain is broken. Log the
+            // failure so the operator knows migration didn't
+            // complete cleanly.
+            NSLog(
+                "AICloneConfig: keychain migration for \(defaultsKey) failed: \(error). Will remove plaintext entry anyway."
+            )
+        }
+        // Delete the plaintext entry unconditionally. If the
+        // keychain write succeeded, this is the second half of the
+        // migration. If it failed, this is the security-mitigation
+        // half — better to have no secret than a plaintext one.
+        defaults.removeObject(forKey: defaultsKey)
     }
 
     /// True if the plugin URL is set and at least looks like a URL.
