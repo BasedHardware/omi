@@ -76,7 +76,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("ForEach(displayedMessages) { message in"))
     XCTAssertTrue(source.contains("agentMessageBubble(message)"))
     XCTAssertTrue(source.contains("agentAssistantContent(message)"))
-    XCTAssertTrue(source.contains("ForEach(ContentBlockGroup.group(message.contentBlocks))"))
+    XCTAssertTrue(source.contains("ForEach(groupedContentBlocks(for: message))"))
+    XCTAssertTrue(source.contains("private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup]"))
     XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
     XCTAssertTrue(source.contains("Markdown(trimmed)"))
@@ -773,6 +774,20 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordLocalSuccess("))
     XCTAssertTrue(statusStoreSource.contains("func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil)"))
     XCTAssertTrue(statusStoreSource.contains("if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {\n      return\n    }"))
+  }
+
+  func testStoppedPillIgnoresLateNonCancellationProjection() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(
+      source.contains(
+        """
+        if pill.status == .stopped && projection.status != .cancelled {
+                    return
+                }
+
+                switch projection.status {
+        """))
   }
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
