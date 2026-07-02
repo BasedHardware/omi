@@ -84,7 +84,12 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.request_validation import ImageChunkEnvelope
-from utils.speaker_identification import detect_speaker_from_text
+from utils.speaker_identification_regex import detect_speaker_from_text
+from utils.text_speaker_detection import (
+    identify_speaker_from_transcript,
+    is_self_identification_candidate,
+    is_text_speaker_llm_configured,
+)
 from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
@@ -492,6 +497,7 @@ async def _stream_handler(
     SPEAKER_ID_TARGET_AUDIO = 4.0
 
     speaker_id_segment_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
+    text_speaker_detection_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     # Speaker ID fields on session are set once private_cloud_sync_enabled is known.
     # Dedicated set for speaker match tasks so the final pass can drain them independently
@@ -1603,6 +1609,73 @@ async def _stream_handler(
         except Exception as e:
             logger.error(f"Speaker ID: match error for speaker {speaker_id}: {e} {uid} {session_id}")
 
+    async def _send_text_speaker_suggestion(segment: TranscriptSegment, detected_name: str):
+        if not detected_name or segment.id in suggested_segments:
+            return
+
+        person = await run_blocking(db_executor, user_db.get_person_by_name, uid, detected_name)
+        if person:
+            person_id = person['id']
+        elif create_speakers:
+            # Backend creates person if missing.
+            person_id = str(uuid.uuid4())
+            await run_blocking(
+                db_executor,
+                user_db.create_person,
+                uid,
+                {
+                    'id': person_id,
+                    'name': detected_name,
+                    'created_at': datetime.now(timezone.utc),
+                    'updated_at': datetime.now(timezone.utc),
+                },
+            )
+        else:
+            # User disabled auto-create: don't persist a new person.
+            # Still surface the detected name so it can be tagged manually.
+            person_id = None
+
+        _send_message_event(
+            SpeakerLabelSuggestionEvent(
+                speaker_id=segment.speaker_id,
+                person_id=_person_id_for_client(person_id) if person_id else "",
+                person_name=detected_name,
+                segment_id=segment.id,
+            )
+        )
+        if person_id:
+            if should_update_speaker_to_person_map(segment.speaker_id):
+                speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
+            segment_person_assignment_map[segment.id] = person_id
+        suggested_segments.add(segment.id)
+
+    async def text_speaker_identification_task():
+        while True:
+            try:
+                item = await asyncio.wait_for(text_speaker_detection_queue.get(), timeout=2.0)
+            except asyncio.TimeoutError:
+                if not session.active:
+                    break
+                continue
+
+            try:
+                segment = item['segment']
+                if segment.id in suggested_segments:
+                    continue
+
+                detected_name = item.get('detected_name')
+                if detected_name is None:
+                    detected_name = await identify_speaker_from_transcript(segment.text)
+
+                if detected_name:
+                    await _send_text_speaker_suggestion(segment, detected_name)
+            except Exception as e:
+                logger.error(f"Text speaker ID error: {e} {uid} {session_id}")
+            finally:
+                text_speaker_detection_queue.task_done()
+
+        logger.info(f"Text speaker ID task ended {uid} {session_id}")
+
     # In-memory conversation cache to avoid Firestore re-reads every 0.6s
     _cached_conversation_data = None
     _cached_conversation_id = None
@@ -1823,47 +1896,21 @@ async def _stream_handler(
                         except asyncio.QueueFull:
                             pass  # Drop if queue is full
 
-                    # Text-based detection
+                    # Text-based speaker self-identification. Keep the stream hot path
+                    # local-only; any vLLM call and DB work happens in the bounded queue.
                     detected_name = detect_speaker_from_text(segment.text)
-                    if detected_name:
-                        person = user_db.get_person_by_name(uid, detected_name)
-                        generated_person_id = str(uuid.uuid4()) if not person and create_speakers else ''
-                        text_assignment = decide_text_speaker_assignment(
-                            existing_person_id=person['id'] if person else None,
-                            create_speakers=create_speakers,
-                            generated_person_id=generated_person_id,
-                            speaker_auto_assign_enabled=speaker_auto_assign_enabled,
-                        )
-                        if text_assignment.should_create_person:
-                            # Backend creates person if missing
-                            user_db.create_person(
-                                uid,
+                    if detected_name or (
+                        is_text_speaker_llm_configured() and is_self_identification_candidate(segment.text)
+                    ):
+                        try:
+                            text_speaker_detection_queue.put_nowait(
                                 {
-                                    'id': text_assignment.person_id,
-                                    'name': detected_name,
-                                    'created_at': datetime.now(timezone.utc),
-                                    'updated_at': datetime.now(timezone.utc),
-                                },
+                                    'segment': segment,
+                                    'detected_name': detected_name,
+                                }
                             )
-                        _send_message_event(
-                            SpeakerLabelSuggestionEvent(
-                                speaker_id=segment.speaker_id,
-                                person_id=text_assignment.event_person_id,
-                                person_name=detected_name,
-                                segment_id=segment.id,
-                            )
-                        )
-                        # Set maps for future segments, but only if diarization is active
-                        # (speaker_id > 0 means diarization assigned a real speaker)
-                        # Set maps for future segments using helper function
-                        if text_assignment.update_maps:
-                            if should_update_speaker_to_person_map(segment.speaker_id):
-                                speaker_to_person_map[segment.speaker_id] = (
-                                    text_assignment.person_id,
-                                    detected_name,
-                                )
-                            segment_person_assignment_map[segment.id] = text_assignment.person_id
-                        suggested_segments.add(segment.id)
+                        except asyncio.QueueFull:
+                            logger.warning(f"Text speaker ID queue full, dropping segment {uid} {session_id}")
 
         # Wait for speaker_identification_task to finish consuming its queue and spawning
         # all _match_speaker_embedding tasks, then drain those tasks so speaker maps are
@@ -2354,6 +2401,9 @@ async def _stream_handler(
             stream_transcript_process(), name="stream_transcript"
         )
         record_usage_task = task_supervisor.create_lifetime_task(_record_usage_periodically(), name="record_usage")
+        text_speaker_id_task = task_supervisor.create_lifetime_task(
+            text_speaker_identification_task(), name="text_speaker_id"
+        )
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
@@ -2361,6 +2411,7 @@ async def _stream_handler(
             stream_transcript_task,
             heartbeat_task,
             record_usage_task,
+            text_speaker_id_task,
         ] + pusher_tasks
 
         if is_multi_channel:
