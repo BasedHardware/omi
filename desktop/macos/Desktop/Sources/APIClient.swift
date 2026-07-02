@@ -684,6 +684,22 @@ extension APIClient {
     return response.count
   }
 
+  /// True when this account has any conversations captured by an Omi wearable
+  /// (paired on any platform — usually the mobile app).
+  func hasOmiDeviceConversations() async throws -> Bool {
+    struct CountResponse: Decodable {
+      let count: Int
+      // Backends without the sources filter ignore the param and return the
+      // unfiltered total without this echo — decoding then fails, so we never
+      // read a false positive from an old backend.
+      let sources: [String]
+    }
+
+    let response: CountResponse = try await get(
+      "v1/conversations/count?include_discarded=true&sources=friend,omi")
+    return response.count > 0
+  }
+
   /// Gets the count of AI chat messages from PostHog
   func getChatMessageCount() async throws -> Int {
     struct CountResponse: Decodable {
