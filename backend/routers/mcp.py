@@ -14,6 +14,7 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+import database.calendar_meetings as calendar_meetings_db
 from database._client import db
 import database.phone_calls as phone_calls_db
 from firebase_admin import auth as firebase_auth
@@ -39,6 +40,14 @@ from dependencies import (
 )
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_meeting,
+    clean_person,
+    clean_screen_activity_row,
+    inclusive_end_of_day,
+)
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     guard_legacy_memory_write,
@@ -49,7 +58,6 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -733,6 +741,33 @@ class SimplePerson(BaseModel):
 def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_people {uid}")
     return [clean_person(p) for p in users_db.get_people(uid)]
+
+
+# ---------------------------------------------------------------------------
+# Calendar meetings: the user's synced meetings (title, time, participants)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/mcp/calendar-meetings", tags=["mcp"])
+def get_calendar_meetings(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = 50,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"get_calendar_meetings {uid} {limit} {start_date} {end_date}")
+    limit = max(1, min(limit, 200))
+    end_date = inclusive_end_of_day(end_date)
+    meetings = calendar_meetings_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)
+    return [clean_meeting(m) for m in meetings]
+
+
+@router.get("/v1/mcp/calendar-meetings/{meeting_id}", tags=["mcp"])
+def get_calendar_meeting_by_id(meeting_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    meeting = calendar_meetings_db.get_meeting(uid, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return clean_meeting(meeting)
 
 
 # ---------------------------------------------------------------------------
