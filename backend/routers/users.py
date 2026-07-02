@@ -7,7 +7,7 @@ import hashlib
 import os
 
 import pytz
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -97,6 +97,7 @@ from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from models.notification_message import NotificationMessage
+from utils.auth_middleware import require_firebase, require_firebase_no_byok
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -110,7 +111,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_no_byok_router = APIRouter(dependencies=[Depends(require_firebase_no_byok)])
+_public_router = APIRouter()
 router = APIRouter()
+router.include_router(_firebase_router)
+router.include_router(_no_byok_router)
+router.include_router(_public_router)
 
 
 class MigrationRequest(BaseModel):
@@ -127,9 +134,10 @@ class BatchMigrationRequest(BaseModel):
     requests: List[MigrationRequest]
 
 
-@router.get('/v1/users/profile', tags=['v1'])
-def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/profile', tags=['v1'])
+def get_user_profile_endpoint(request: Request):
     """Gets the full user profile, including data protection and migration status."""
+    uid = request.state.uid
     profile = get_user_profile(uid)
     if not profile:
         raise HTTPException(status_code=410, detail="User not found")
@@ -141,11 +149,12 @@ class DeleteAccountRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-@router.delete('/v1/users/delete-account', tags=['v1'])
+@_firebase_router.delete('/v1/users/delete-account', tags=['v1'])
 def delete_account(
+    http_request: Request,
     request: DeleteAccountRequest = DeleteAccountRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = http_request.state.uid
     try:
         return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
     except Exception as e:
@@ -153,8 +162,9 @@ def delete_account(
         raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
-@router.patch('/v1/users/geolocation', tags=['v1'])
-def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.patch('/v1/users/geolocation', tags=['v1'])
+def set_user_geolocation(request: Request, geolocation: Geolocation):
+    uid = request.state.uid
     last_location_data = get_cached_user_geolocation(uid)
     if last_location_data:
         try:
@@ -185,8 +195,9 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 # ***********************************************
 
 
-@router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
-def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+def set_user_webhook_endpoint(request: Request, wtype: WebhookType, data: dict):
+    uid = request.state.uid
     url = data.get('url')
     if url is None:
         raise HTTPException(status_code=400, detail='url is required')
@@ -196,26 +207,30 @@ def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'])
-def get_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+def get_user_webhook_endpoint(request: Request, wtype: WebhookType):
+    uid = request.state.uid
     return {'url': get_user_webhook_db(uid, wtype)}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'])
-def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'])
+def disable_user_webhook_endpoint(request: Request, wtype: WebhookType):
+    uid = request.state.uid
     disable_user_webhook_db(uid, wtype)
     return {'status': 'ok'}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
-def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
+def enable_user_webhook_endpoint(request: Request, wtype: WebhookType):
+    uid = request.state.uid
     enable_user_webhook_db(uid, wtype)
     record_dev_webhook_success(uid, wtype.value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhooks/status', tags=['v1'])
-def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/developer/webhooks/status', tags=['v1'])
+def get_user_webhooks_status(request: Request):
+    uid = request.state.uid
     # This only happens the first time because the user_webhook_status_db function will return None for existing users
     audio_bytes = user_webhook_status_db(uid, WebhookType.audio_bytes)
     if audio_bytes is None:
@@ -242,19 +257,22 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
 # *************************************************
 
 
-@router.post('/v1/users/store-recording-permission', tags=['v1'])
-def store_recording_permission(value: bool, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/store-recording-permission', tags=['v1'])
+def store_recording_permission(request: Request, value: bool):
+    uid = request.state.uid
     set_user_store_recording_permission(uid, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/store-recording-permission', tags=['v1'])
-def get_store_recording_permission(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/store-recording-permission', tags=['v1'])
+def get_store_recording_permission(request: Request):
+    uid = request.state.uid
     return {'store_recording_permission': get_user_store_recording_permission(uid)}
 
 
-@router.delete('/v1/users/store-recording-permission', tags=['v1'])
-def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete('/v1/users/store-recording-permission', tags=['v1'])
+def delete_permission_and_recordings(request: Request):
+    uid = request.state.uid
     set_user_store_recording_permission(uid, False)
     delete_all_conversation_recordings(uid)
     return {'status': 'ok'}
@@ -265,9 +283,10 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 # *************************************************
 
 
-@router.get('/v1/users/onboarding', tags=['v1'])
-def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/onboarding', tags=['v1'])
+def get_onboarding_state(request: Request):
     """Get the user's onboarding state (completed status, acquisition source, etc.)."""
+    uid = request.state.uid
     state = get_user_onboarding_state(uid)
     return {
         'completed': state.get('completed', False),
@@ -276,9 +295,10 @@ def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     }
 
 
-@router.patch('/v1/users/onboarding', tags=['v1'])
-def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.patch('/v1/users/onboarding', tags=['v1'])
+def update_onboarding_state(request: Request, data: dict):
     """Update the user's onboarding state."""
+    uid = request.state.uid
     current_state = get_user_onboarding_state(uid)
     if 'completed' in data:
         current_state['completed'] = data['completed']
@@ -295,14 +315,16 @@ def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user
 # *************************************************
 
 
-@router.post('/v1/users/private-cloud-sync', tags=['v1'])
-def set_private_cloud_sync(value: bool, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/private-cloud-sync', tags=['v1'])
+def set_private_cloud_sync(request: Request, value: bool):
+    uid = request.state.uid
     set_user_private_cloud_sync_enabled(uid, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/private-cloud-sync', tags=['v1'])
-def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/private-cloud-sync', tags=['v1'])
+def get_private_cloud_sync(request: Request):
+    uid = request.state.uid
     return {'private_cloud_sync_enabled': get_user_private_cloud_sync_enabled(uid)}
 
 
@@ -312,13 +334,14 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 
 
 # TODO: consider adding person photo.
-@router.post('/v1/users/people', tags=['v1'], response_model=Person)
-def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/people', tags=['v1'], response_model=Person)
+def get_or_create_person(request: Request, data: CreatePerson):
     """Create a new person or return existing one with same name (idempotent by name).
 
     This enables backward compatibility: old apps can call this API and get the
     same person that backend already created, preventing duplicates.
     """
+    uid = request.state.uid
     # Check if person with same name already exists
     existing_person = get_person_by_name(uid, data.name)
     if existing_person:
@@ -335,10 +358,9 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
     return result
 
 
-@router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
-def get_single_person(
-    person_id: str, include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
+def get_single_person(request: Request, person_id: str, include_speech_samples: bool = False):
+    uid = request.state.uid
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -349,8 +371,9 @@ def get_single_person(
     return person
 
 
-@router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
+def get_all_people(request: Request, include_speech_samples: bool = True):
+    uid = request.state.uid
     logger.info(f'get_all_people {include_speech_samples}')
     people = get_people(uid)
     if include_speech_samples:
@@ -361,30 +384,33 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     return people
 
 
-@router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
+@_firebase_router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
 def update_person_name(
+    request: Request,
     person_id: str,
     value: str,  # = Field(min_length=2, max_length=40),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     update_person(uid, person_id, value)
     return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
-def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
+def delete_person_endpoint(request: Request, person_id: str):
+    uid = request.state.uid
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
     return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}/speech-samples/{sample_index}', tags=['v1'])
+@_firebase_router.delete('/v1/users/people/{person_id}/speech-samples/{sample_index}', tags=['v1'])
 def delete_person_speech_sample_endpoint(
+    request: Request,
     person_id: str,
     sample_index: int,
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Delete a specific speech sample for a person by index."""
+    uid = request.state.uid
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -414,8 +440,9 @@ def delete_person_speech_sample_endpoint(
 # **********************************************************
 
 
-@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
-def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
+def delete_person_endpoint(request: Request, memory_id: str):
+    uid = request.state.uid
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
         if not memory:
@@ -425,6 +452,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
     if not memory:
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
+        uid = request.state.uid
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
     memory = deserialize_conversation(memory)
     return {'result': followup_question_prompt(uid, memory.transcript_segments)}
@@ -435,20 +463,20 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
 # **************************************
 
 
-@router.post('/v1/users/analytics/memory_summary', tags=['v1'])
+@_firebase_router.post('/v1/users/analytics/memory_summary', tags=['v1'])
 def set_memory_summary_rating(
+    request: Request,
     memory_id: str,
     value: int,  # 0, 1, -1 (shown)
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     set_conversation_summary_rating_score(uid, memory_id, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'])
+@_firebase_router.get('/v1/users/analytics/memory_summary', tags=['v1'])
 def get_memory_summary_rating(
     memory_id: str,
-    _: str = Depends(auth.get_current_user_uid),
 ):
     rating = get_conversation_summary_rating_score(memory_id)
     # TODO: later ask reason, a set of options, if user says good, whats the best, if bad, whats the worst
@@ -457,12 +485,11 @@ def get_memory_summary_rating(
     return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
 
 
-@router.post('/v1/users/analytics/chat_message', tags=['v1'])
+@_firebase_router.post('/v1/users/analytics/chat_message', tags=['v1'])
 def set_chat_message_analytics(
     message_id: str,
     value: int,
     reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Submit feedback rating for a chat message.
@@ -477,6 +504,7 @@ def set_chat_message_analytics(
             - 'didnt_follow_instructions': Response didn't follow user instructions
             - 'other': Other reason
     """
+    uid = request.state.uid
     # Always store feedback in Firestore analytics collection
     set_chat_message_rating_score(uid, message_id, value, reason)
 
@@ -522,18 +550,20 @@ def set_chat_message_analytics(
 # ***************************************
 
 
-@router.get('/v1/users/language', tags=['v1'])
-def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/language', tags=['v1'])
+def get_user_language(request: Request):
     """Get the user's preferred language."""
+    uid = request.state.uid
     language = get_user_language_preference(uid)
     if not language:
         return {'language': None}
     return {'language': language}
 
 
-@router.patch('/v1/users/language', tags=['v1'])
-def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.patch('/v1/users/language', tags=['v1'])
+def set_user_language(request: Request, data: dict):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
+    uid = request.state.uid
     language = data.get('language')
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
@@ -561,23 +591,25 @@ class TranscriptionPreferencesUpdate(BaseModel):
     vocabulary: Optional[List[str]] = None
 
 
-@router.get('/v1/users/transcription-preferences', tags=['v1'], response_model=TranscriptionPreferencesResponse)
-def get_transcription_preferences_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get(
+    '/v1/users/transcription-preferences', tags=['v1'], response_model=TranscriptionPreferencesResponse
+)
+def get_transcription_preferences_endpoint(request: Request):
     """Get user's transcription preferences (single language mode, vocabulary)."""
+    uid = request.state.uid
     prefs = get_user_transcription_preferences(uid)
     return prefs
 
 
-@router.patch('/v1/users/transcription-preferences', tags=['v1'])
-def update_transcription_preferences_endpoint(
-    data: TranscriptionPreferencesUpdate, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.patch('/v1/users/transcription-preferences', tags=['v1'])
+def update_transcription_preferences_endpoint(request: Request, data: TranscriptionPreferencesUpdate):
     """
     Update user's transcription preferences.
 
     - single_language_mode: If True, uses exact language for higher accuracy but disables translation
     - vocabulary: List of custom keywords/terms (max 100) for better transcription accuracy
     """
+    uid = request.state.uid
     set_user_transcription_preferences(uid, single_language_mode=data.single_language_mode, vocabulary=data.vocabulary)
     return {'status': 'ok'}
 
@@ -587,15 +619,17 @@ def update_transcription_preferences_endpoint(
 # **************************************
 
 
-@router.post('/v1/users/migration/requests', tags=['v1'])
+@_firebase_router.post('/v1/users/migration/requests', tags=['v1'])
 def handle_migration_requests(
-    request: Union[MigrationRequest, MigrationTargetRequest], uid: str = Depends(auth.get_current_user_uid)
+    http_request: Request,
+    request: Union[MigrationRequest, MigrationTargetRequest],
 ):
     """
     Handles data migration requests.
     - If 'id' and 'type' are present, it migrates a single object.
     - Otherwise, it initiates the data migration process for a 'target_level'.
     """
+    uid = http_request.state.uid
     if isinstance(request, MigrationRequest):
         # This is for migrating a single object
         if request.type == 'conversation':
@@ -629,9 +663,10 @@ def handle_migration_requests(
         return {'status': 'ok', 'message': 'Migration status set.'}
 
 
-@router.get('/v1/users/migration/requests', tags=['v1'])
-def get_migration_requests(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/migration/requests', tags=['v1'])
+def get_migration_requests(request: Request, target_level: str):
     """Checks which documents need to be migrated to the target level."""
+    uid = request.state.uid
     if target_level != 'enhanced':
         raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
@@ -642,11 +677,13 @@ def get_migration_requests(target_level: str, uid: str = Depends(auth.get_curren
     return {"needs_migration": needs_migration}
 
 
-@router.post('/v1/users/migration/batch-requests', tags=['v1'])
+@_firebase_router.post('/v1/users/migration/batch-requests', tags=['v1'])
 def handle_batch_migration_requests(
-    batch_request: BatchMigrationRequest, uid: str = Depends(auth.get_current_user_uid)
+    request: Request,
+    batch_request: BatchMigrationRequest,
 ):
     """Migrates a batch of data objects to the target protection level."""
+    uid = request.state.uid
     errors = []
 
     # Group requests by type and target_level
@@ -678,9 +715,10 @@ def handle_batch_migration_requests(
     return {'status': 'ok'}
 
 
-@router.post('/v1/users/migration/requests/data-protection-level/finalize', tags=['v1'])
-def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/migration/requests/data-protection-level/finalize', tags=['v1'])
+def finalize_migration_request(http_request: Request, request: MigrationTargetRequest):
     """Finalizes the migration by setting the user's global protection level."""
+    uid = http_request.state.uid
     if request.target_level != 'enhanced':
         raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
@@ -689,12 +727,13 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
     return {'status': 'ok'}
 
 
-@router.put('/v1/users/preferences/app', tags=['v1'])
+@_firebase_router.put('/v1/users/preferences/app', tags=['v1'])
 def set_preferred_app_for_user(
+    request: Request,
     app_id: str = Query(..., description="The ID of the app to set as preferred"),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Sets the user's preferred app for future processing."""
+    uid = request.state.uid
 
     app_id_to_set = app_id
 
@@ -716,22 +755,25 @@ def set_preferred_app_for_user(
 # **************************************
 
 
-@router.get('/v1/users/training-data-opt-in', tags=['v1'])
-def get_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/training-data-opt-in', tags=['v1'])
+def get_training_data_opt_in_status(request: Request):
     """Get the user's training data opt-in status."""
+    uid = request.state.uid
     opt_in_data = get_user_training_data_opt_in(uid)
     if not opt_in_data:
         return {'opted_in': False, 'status': None}
     return {'opted_in': True, 'status': opt_in_data.get('status')}
 
 
-@router.post('/v1/users/training-data-opt-in', tags=['v1'])
-def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/training-data-opt-in', tags=['v1'])
+def set_training_data_opt_in_status(request: Request):
     """Opt-in for training data program. User's request will be reviewed."""
+    uid = request.state.uid
     set_user_training_data_opt_in(uid, 'pending_review')
 
     # Check if private cloud sync is enabled, if not, enable it
     if not get_user_private_cloud_sync_enabled(uid):
+        uid = request.state.uid
         set_user_private_cloud_sync_enabled(uid, True)
 
     # Send notification to user
@@ -745,12 +787,13 @@ def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
 # **************************************
 
 
-@router.get('/v1/users/me/usage', tags=['v1'], response_model=UserUsageResponse)
+@_firebase_router.get('/v1/users/me/usage', tags=['v1'], response_model=UserUsageResponse)
 def get_user_usage_stats_endpoint(
-    uid: str = Depends(auth.get_current_user_uid),
+    request: Request,
     period: UsagePeriod = UsagePeriod.TODAY,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
+    uid = request.state.uid
     stats = user_usage_db.get_current_user_usage(uid, period.value)
     return stats
 
@@ -763,14 +806,15 @@ class BYOKActivateRequest(BaseModel):
     fingerprints: Dict[str, str]
 
 
-@router.post('/v1/users/me/byok-active', tags=['v1'])
-def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
+@_no_byok_router.post('/v1/users/me/byok-active', tags=['v1'])
+def activate_byok_endpoint(request: Request, data: BYOKActivateRequest):
     """Flip the user onto the BYOK free plan.
 
     The client sends SHA-256 fingerprints of the 4 provider keys so we can
     detect rotation without ever seeing the keys. The live keys themselves
     travel on every request as headers; they are never persisted.
     """
+    uid = request.state.uid
     missing = _BYOK_REQUIRED_PROVIDERS - set(data.fingerprints.keys())
     if missing:
         raise HTTPException(
@@ -790,16 +834,17 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
     return {"active": True}
 
 
-@router.delete('/v1/users/me/byok-active', tags=['v1'])
-def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
+@_no_byok_router.delete('/v1/users/me/byok-active', tags=['v1'])
+def deactivate_byok_endpoint(request: Request):
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
+    uid = request.state.uid
     users_db.clear_byok_active(uid)
     invalidate_byok_state_cache(uid)
     clear_trial_paywall_cache(uid)
     return {"active": False}
 
 
-def _byok_unlimited_subscription() -> Subscription:
+def _byok_unlimited_subscription(request: Request) -> Subscription:
     """BYOK free plan: unlimited limits, marked with the `byok` feature flag."""
     return Subscription(
         plan=PlanType.unlimited,
@@ -813,15 +858,16 @@ def _byok_unlimited_subscription() -> Subscription:
     )
 
 
-@router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
+@_no_byok_router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
 def get_user_subscription_endpoint(
+    request: Request,
     # Keep reachable even when BYOK fingerprints drift — broken-BYOK users
     # must still see their plan so they can recover.
-    uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
     """Gets the user's subscription plan and usage."""
+    uid = request.state.uid
     # BYOK free plan: user supplies their own OpenAI/Anthropic/Gemini/Deepgram keys.
     # Only return unlimited when the request actually carries BYOK headers (desktop).
     # Mobile (no BYOK headers) should see the real subscription even if BYOK is active.
@@ -1021,15 +1067,16 @@ def get_user_subscription_endpoint(
     )
 
 
-@router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
+@_firebase_router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
 def get_user_chat_usage_quota(
-    uid: str = Depends(auth.get_current_user_uid),
+    request: Request,
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """Current-month chat usage for the user, plus their plan's cap.
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
     """
+    uid = request.state.uid
     # BYOK free plan: user brings their own keys, so there's no Omi-side cost
     # to meter. Only return unlimited when BYOK headers are on the request (desktop).
     # Mobile (no headers) should see real quota.
@@ -1069,9 +1116,8 @@ class PaywallStatusResponse(BaseModel):
     paywalled: bool
 
 
-@router.get('/v1/users/me/paywall', tags=['users'], response_model=PaywallStatusResponse)
+@_firebase_router.get('/v1/users/me/paywall', tags=['users'], response_model=PaywallStatusResponse)
 def get_user_paywall_status(
-    uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     platform: Optional[str] = Query(None),
 ):
@@ -1086,12 +1132,13 @@ def get_user_paywall_status(
     Platform comes from `X-App-Platform` header (preferred) or `platform`
     query param (fallback). Unknown / missing platforms are never paywalled.
     """
+    uid = request.state.uid
     resolved_platform = x_app_platform or platform
     return PaywallStatusResponse(paywalled=is_trial_paywalled(uid, resolved_platform))
 
 
-@router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
-def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
+def get_user_trial_status(request: Request):
     """Structured trial metadata for the calling user.
 
     Returns trial timing info (start, end, remaining seconds, expired flag)
@@ -1102,6 +1149,7 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
     Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
     (trial is irrelevant to them — they have full access).
     """
+    uid = request.state.uid
     return get_trial_metadata(uid)
 
 
@@ -1120,8 +1168,8 @@ class DailySummarySettingsUpdate(BaseModel):
     hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
 
 
-@router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
-def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
+def get_daily_summary_settings(request: Request):
     """
     Get user's daily summary notification settings.
 
@@ -1129,6 +1177,7 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
         - enabled: Whether daily summary notifications are enabled (default: True)
         - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
     """
+    uid = request.state.uid
     enabled = notification_db.get_daily_summary_enabled(uid)
     local_hour = notification_db.get_daily_summary_hour_local(uid)
 
@@ -1139,8 +1188,8 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
 
 
-@router.patch('/v1/users/daily-summary-settings', tags=['v1'])
-def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.patch('/v1/users/daily-summary-settings', tags=['v1'])
+def update_daily_summary_settings(request: Request, data: DailySummarySettingsUpdate):
     """
     Update user's daily summary notification settings.
 
@@ -1152,6 +1201,7 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
     Note: Hour is stored as local time. The system determines when to send
     based on the user's timezone and will send the summary at the correct local time
     """
+    uid = request.state.uid
     if data.enabled is not None:
         notification_db.set_daily_summary_enabled(uid, data.enabled)
 
@@ -1171,13 +1221,14 @@ class TestDailySummaryRequest(BaseModel):
     date: Optional[str] = None  # YYYY-MM-DD format, defaults to today
 
 
-@router.post('/v1/users/daily-summary-settings/test', tags=['v1'])
-def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/daily-summary-settings/test', tags=['v1'])
+def test_daily_summary(http_request: Request, request: TestDailySummaryRequest = None):
     """
     Test endpoint to manually trigger daily summary for the authenticated user.
     This bypasses the time check and sends a summary immediately.
     Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
     """
+    uid = http_request.state.uid
     time_zone_name = notification_db.get_user_time_zone(uid)
     tokens = notification_db.get_all_tokens(uid)
 
@@ -1281,35 +1332,37 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
 # Daily Summaries API
 
 
-@router.get('/v1/users/daily-summaries', tags=['v1'])
-def get_daily_summaries(
-    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.get('/v1/users/daily-summaries', tags=['v1'])
+def get_daily_summaries(request: Request, limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0)):
     """
     Get list of daily summaries for the authenticated user.
     Returns summaries in reverse chronological order.
     """
+    uid = request.state.uid
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
     return {'summaries': summaries}
 
 
-@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
-def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+def get_daily_summary(request: Request, summary_id: str):
     """
     Get a single daily summary by ID.
     """
+    uid = request.state.uid
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
     return summary
 
 
-@router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'])
-def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'])
+def set_daily_summary_visibility(request: Request, summary_id: str, value: str):
     """
     Set the visibility of a daily summary. Use value='shared' to make it shareable.
     """
+    uid = request.state.uid
     if value not in ('shared', 'private'):
+        uid = request.state.uid
         raise HTTPException(status_code=400, detail="Invalid visibility value. Must be 'shared' or 'private'")
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
@@ -1322,11 +1375,12 @@ def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends
     return {'status': 'Ok'}
 
 
-@router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
-def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+def delete_daily_summary(request: Request, summary_id: str):
     """
     Delete a daily summary by ID.
     """
+    uid = request.state.uid
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
@@ -1340,13 +1394,14 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 _REGENERATE_COOLDOWN_SECONDS = 30
 
 
-@router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'])
-def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'])
+def regenerate_daily_summary(request: Request, summary_id: str):
     """
     Re-run summary generation for the date of an existing daily summary and
     overwrite the same doc in place. No push notification — the user is
     already looking at the page.
     """
+    uid = request.state.uid
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
@@ -1414,7 +1469,7 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
     return refreshed or {**summary_data, 'id': summary_id}
 
 
-@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
+@_public_router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
 def get_shared_daily_summary(summary_id: str):
     """
     Public endpoint to retrieve a daily summary for sharing. No auth required.
@@ -1455,8 +1510,10 @@ class MentorNotificationSettingsUpdate(BaseModel):
     frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
 
 
-@router.get('/v1/users/mentor-notification-settings', tags=['v1'], response_model=MentorNotificationSettingsResponse)
-def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get(
+    '/v1/users/mentor-notification-settings', tags=['v1'], response_model=MentorNotificationSettingsResponse
+)
+def get_mentor_notification_settings(request: Request):
     """
     Get user's mentor notification frequency preference.
 
@@ -1467,14 +1524,13 @@ def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_ui
           - 3 = balanced (default)
           - 5 = very proactive (most frequent)
     """
+    uid = request.state.uid
     frequency = notification_db.get_mentor_notification_frequency(uid)
     return MentorNotificationSettingsResponse(frequency=frequency)
 
 
-@router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
-def update_mentor_notification_settings(
-    data: MentorNotificationSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
+def update_mentor_notification_settings(data: MentorNotificationSettingsUpdate):
     """
     Update user's mentor notification frequency preference.
 
@@ -1485,6 +1541,7 @@ def update_mentor_notification_settings(
           - 3 = balanced (default)
           - 5 = very proactive (most frequent)
     """
+    uid = request.state.uid
     try:
         notification_db.set_mentor_notification_frequency(uid, data.frequency)
     except ValueError as e:
@@ -1496,16 +1553,17 @@ def update_mentor_notification_settings(
 # LLM Usage Tracking Endpoints
 
 
-@router.get('/v1/users/me/llm-usage', tags=['users'])
+@_firebase_router.get('/v1/users/me/llm-usage', tags=['users'])
 def get_llm_usage(
+    request: Request,
     days: int = Query(default=30, ge=1, le=365),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Get LLM token usage summary for the current user.
 
     Returns usage breakdown by feature for the specified time period.
     """
+    uid = request.state.uid
     summary = llm_usage_db.get_usage_summary(uid, days=days)
     top_features = llm_usage_db.get_top_features(uid, days=days, limit=5)
 
@@ -1516,23 +1574,25 @@ def get_llm_usage(
     }
 
 
-@router.get('/v1/users/me/llm-usage/top-features', tags=['users'])
+@_firebase_router.get('/v1/users/me/llm-usage/top-features', tags=['users'])
 def get_llm_top_features(
+    request: Request,
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=3, ge=1, le=10),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Get top features by LLM token usage for the current user.
 
     Returns the top N features sorted by total token consumption.
     """
+    uid = request.state.uid
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
-@router.get('/v1/users/export', tags=['v1'])
-def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/export', tags=['v1'])
+def export_all_user_data(request: Request):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
+    uid = request.state.uid
     return StreamingResponse(
         iter_user_data_export(uid),
         media_type='application/json',
@@ -1550,16 +1610,18 @@ class UpdateNotificationSettingsRequest(BaseModel):
     frequency: int | None = Field(None, ge=0, le=5)
 
 
-@router.get('/v1/users/notification-settings', tags=['users'])
-def get_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/notification-settings', tags=['users'])
+def get_notification_settings(request: Request):
+    uid = request.state.uid
     return users_db.get_notification_settings(uid)
 
 
-@router.patch('/v1/users/notification-settings', tags=['users'])
+@_firebase_router.patch('/v1/users/notification-settings', tags=['users'])
 def update_notification_settings(
+    http_request: Request,
     request: UpdateNotificationSettingsRequest,
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = http_request.state.uid
     return users_db.update_notification_settings(uid, enabled=request.enabled, frequency=request.frequency)
 
 
@@ -1626,16 +1688,18 @@ class UpdateAssistantSettingsRequest(BaseModel):
     update_channel: str | None = Field(None, max_length=50)
 
 
-@router.get('/v1/users/assistant-settings', tags=['users'])
-def get_assistant_settings(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/assistant-settings', tags=['users'])
+def get_assistant_settings(request: Request):
+    uid = request.state.uid
     return users_db.get_assistant_settings(uid)
 
 
-@router.patch('/v1/users/assistant-settings', tags=['users'])
+@_firebase_router.patch('/v1/users/assistant-settings', tags=['users'])
 def update_assistant_settings(
+    http_request: Request,
     request: UpdateAssistantSettingsRequest,
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = http_request.state.uid
     settings = request.model_dump(exclude_unset=True)
     return users_db.update_assistant_settings(uid, settings)
 
@@ -1651,16 +1715,18 @@ class UpdateAIUserProfileRequest(BaseModel):
     data_sources_used: int | None = Field(None, ge=0)
 
 
-@router.get('/v1/users/ai-profile', tags=['users'])
-def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/ai-profile', tags=['users'])
+def get_ai_profile(request: Request):
+    uid = request.state.uid
     return users_db.get_ai_user_profile(uid)
 
 
-@router.patch('/v1/users/ai-profile', tags=['users'])
+@_firebase_router.patch('/v1/users/ai-profile', tags=['users'])
 def update_ai_profile(
+    http_request: Request,
     request: UpdateAIUserProfileRequest,
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = http_request.state.uid
     return users_db.update_ai_user_profile(
         uid,
         profile_text=request.profile_text,
@@ -1684,11 +1750,12 @@ class RecordLlmUsageBucketRequest(BaseModel):
     account: str = Field('omi', max_length=100)
 
 
-@router.post('/v1/users/me/llm-usage', tags=['users'])
+@_firebase_router.post('/v1/users/me/llm-usage', tags=['users'])
 def record_llm_usage_bucket(
+    http_request: Request,
     request: RecordLlmUsageBucketRequest,
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = http_request.state.uid
     llm_usage_db.record_llm_usage_bucket(
         uid,
         input_tokens=request.input_tokens,
@@ -1702,7 +1769,8 @@ def record_llm_usage_bucket(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/me/llm-usage/total', tags=['users'])
-def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get('/v1/users/me/llm-usage/total', tags=['users'])
+def get_total_llm_cost(request: Request):
+    uid = request.state.uid
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}
