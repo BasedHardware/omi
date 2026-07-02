@@ -2328,6 +2328,32 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }.joined(separator: "\n")
     }
 
+    /// Bounded top-level transcript used to seed realtime PTT sessions after provider
+    /// reconnects. Voice turns are mirrored into this same provider, so this keeps
+    /// main chat and push-to-talk grounded in one visible conversation history.
+    func buildTopLevelVoiceContinuityContext(maxMessages: Int = 8, maxCharacters: Int = 3_500) -> String {
+        let recent = messages
+            .filter { !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.isStreaming }
+            .suffix(maxMessages)
+
+        var lines: [String] = []
+        var remaining = max(0, maxCharacters)
+        for message in recent.reversed() {
+            guard remaining > 0 else { break }
+            let role = message.sender == .user ? "User" : "Omi"
+            let sanitized = message.copyableText
+                .replacingOccurrences(of: "`", with: "'")
+                .replacingOccurrences(of: "\u{0000}", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !sanitized.isEmpty else { continue }
+            let line = "\(role): \(String(sanitized.prefix(remaining)))"
+            lines.append(line)
+            remaining -= line.count + 1
+        }
+
+        return lines.reversed().joined(separator: "\n")
+    }
+
     private func buildMainChatContextPacketPrompt(
         for userMessage: String,
         bridge: AgentBridge,

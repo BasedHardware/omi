@@ -404,7 +404,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
-    let instructions = RealtimeHubTools.systemInstruction(aboutUser: aboutUserCard)
+    let topLevelContext = FloatingControlBarManager.shared.topLevelVoiceContinuityContext()
+    let instructions = RealtimeHubTools.systemInstruction(
+      aboutUser: aboutUserCard,
+      topLevelConversationContext: topLevelContext)
     let s = RealtimeHubSession(provider: provider, auth: auth, instructions: instructions, delegate: self)
     lastWarmAt = nil
     hubConnected = false

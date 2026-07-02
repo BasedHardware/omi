@@ -3114,6 +3114,10 @@ class FloatingControlBarManager {
         historyChatProvider?.recordVoiceTurn(userText: userText, assistantText: assistantText)
     }
 
+    func topLevelVoiceContinuityContext() -> String {
+        historyChatProvider?.buildTopLevelVoiceContinuityContext() ?? ""
+    }
+
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
         guard let mostRecentNotificationID else { return false }
         return openNotificationConversation(notificationID: mostRecentNotificationID, in: window)

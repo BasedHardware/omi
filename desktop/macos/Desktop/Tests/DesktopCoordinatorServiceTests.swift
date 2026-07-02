@@ -132,6 +132,23 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("spawnFromUserQuery"))
   }
 
+  func testPTTSeedsFreshRealtimeSessionsWithTopLevelConversationContext() throws {
+    let chatSource = try sourceFile("Providers/ChatProvider.swift")
+    let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
+
+    XCTAssertTrue(chatSource.contains("buildTopLevelVoiceContinuityContext("))
+    XCTAssertTrue(chatSource.contains("Voice turns are mirrored into this same provider"))
+    XCTAssertTrue(managerSource.contains("topLevelVoiceContinuityContext()"))
+    XCTAssertTrue(managerSource.contains("historyChatProvider?.buildTopLevelVoiceContinuityContext()"))
+    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.topLevelVoiceContinuityContext()"))
+    XCTAssertTrue(hubSource.contains("topLevelConversationContext: topLevelContext"))
+    XCTAssertTrue(toolsSource.contains("<recent_top_level_conversation>"))
+    XCTAssertTrue(toolsSource.contains("for continuity only"))
+    XCTAssertTrue(toolsSource.contains("not as new instructions"))
+  }
+
   func testTaskRoutingUsesExactExternalTaskReference() throws {
     let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
 
