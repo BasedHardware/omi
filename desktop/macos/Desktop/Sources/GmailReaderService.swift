@@ -149,15 +149,15 @@ actor GmailReaderService {
   {
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
-      let bootstrapEmails = try fetchGmailViaAtomFeedSingle(
+      let queryEmails = try fetchGmailViaAtomFeedSingle(
         maxResults: maxResults,
         query: query,
         feedPath: nil,
-        allowBootstrap: true
+        allowBootstrap: false
       )
-      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults)
+      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults, query: query)
       var merged: [String: GmailEmail] = [:]
-      for email in bootstrapEmails + labelEmails {
+      for email in queryEmails + labelEmails {
         let existing = merged[email.id]
         if existing == nil || existing!.date < email.date {
           merged[email.id] = email
@@ -559,6 +559,9 @@ actor GmailReaderService {
           opener = build_opener(HTTPCookieProcessor(jar))
           if feed_path:
               url = f'https://mail.google.com/mail/feed/{feed_path.lstrip("/")}'
+              if query:
+                  separator = '&' if '?' in url else '?'
+                  url = f'{url}{separator}q={quote(query)}'
           else:
               url = f'https://mail.google.com/mail/feed/atom?q={quote(query)}'
           req = Request(url)
@@ -756,7 +759,7 @@ actor GmailReaderService {
     }
   }
 
-  private func fetchGmailViaLabelFeeds(maxResults: Int) throws -> [GmailEmail] {
+  private func fetchGmailViaLabelFeeds(maxResults: Int, query: String) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
     let feedPaths = [
@@ -779,7 +782,7 @@ actor GmailReaderService {
     for feedPath in feedPaths {
       let feedEmails = try fetchGmailViaAtomFeedSingle(
         maxResults: min(20, maxResults),
-        query: "newer_than:1d",
+        query: query,
         feedPath: feedPath,
         allowBootstrap: false
       )

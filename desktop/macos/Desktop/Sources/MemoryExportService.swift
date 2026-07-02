@@ -318,17 +318,17 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         openTitle: nil
       )
     case .openclaw:
+      let serverJSON =
+        #"{"enabled":true,"url":"\#(url)","transport":"sse","headers":{"Authorization":"Bearer \#(key)"}}"#
       return MCPSetup(
         serverURL: url,
-        copyTitle: "Copy memory bank",
+        copyTitle: "Copy command",
         copyText: """
-          ## OMI memory (search FIRST)
-          - MCP: \(url)  (Authorization: Bearer \(key))
-          Before any task, search Omi memory for context; save durable new facts.
+          openclaw mcp set omi-memory \(Self.shellQuote(serverJSON))
           """,
         steps: [
-          "Paste the block below into your OpenClaw MEMORY.md (additive — don't replace it)",
-          "OpenClaw will search Omi memory first on every task",
+          "Run the command below to add the Omi MCP server to ~/.openclaw/openclaw.json",
+          "Add a SOUL.md note asking OpenClaw to search Omi memory first",
         ],
         openURL: nil,
         openTitle: nil
@@ -336,6 +336,10 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .notion, .obsidian, .gemini, .agents:
       return nil
     }
+  }
+
+  private static func shellQuote(_ value: String) -> String {
+    "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
 
   /// Title + body for an Omi task that asks Omi to perform this connection

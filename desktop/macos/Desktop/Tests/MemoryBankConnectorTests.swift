@@ -12,11 +12,13 @@ final class MemoryBankConnectorTests: XCTestCase {
     try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
     MemoryBankConnector.homeOverrideForTesting = tempHome
     MemoryBankConnector.openClawCLIPathOverrideForTesting = try writeFakeOpenClawCLI().path
+    MemoryBankConnector.processTimeoutSecondsForTesting = 2
   }
 
   override func tearDownWithError() throws {
     MemoryBankConnector.homeOverrideForTesting = nil
     MemoryBankConnector.openClawCLIPathOverrideForTesting = nil
+    MemoryBankConnector.processTimeoutSecondsForTesting = nil
     if let tempHome {
       try? FileManager.default.removeItem(at: tempHome)
     }
@@ -89,6 +91,21 @@ final class MemoryBankConnectorTests: XCTestCase {
     let configContent = try String(contentsOf: config, encoding: .utf8)
     XCTAssertTrue(configContent.contains(#""mcp":[]"#))
     XCTAssertFalse(configContent.contains("omi-memory"))
+  }
+
+  func testOpenClawConnectTimesOutHungCLI() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    let cli = tempHome.appendingPathComponent("hung-openclaw")
+    try "#!/bin/sh\nsleep 5\n".write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+    MemoryBankConnector.processTimeoutSecondsForTesting = 0.2
+
+    XCTAssertThrowsError(try MemoryBankConnector.connect(.openclaw, key: "test-key")) { error in
+      XCTAssertTrue(error.localizedDescription.contains("timed out"), error.localizedDescription)
+    }
   }
 
   func testHermesConnectRequiresRealInstallEvidence() throws {
