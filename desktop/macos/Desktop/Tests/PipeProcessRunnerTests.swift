@@ -61,4 +61,16 @@ final class PipeProcessRunnerTests: XCTestCase {
     XCTAssertEqual(result.terminationStatus, 0)
     XCTAssertEqual(String(data: result.stdout, encoding: .utf8), "BROWSER CONFIG")
   }
+
+  func testPassesEnvironmentOverrides() throws {
+    let result = try PipeProcessRunner.run(
+      executableURL: URL(fileURLWithPath: "/bin/sh"),
+      arguments: ["-c", "printf %s \"$OMI_PIPE_PROCESS_TEST\""],
+      environment: ["OMI_PIPE_PROCESS_TEST": "custom-env"],
+      timeoutSeconds: 5
+    )
+
+    XCTAssertEqual(result.terminationStatus, 0)
+    XCTAssertEqual(String(data: result.stdout, encoding: .utf8), "custom-env")
+  }
 }

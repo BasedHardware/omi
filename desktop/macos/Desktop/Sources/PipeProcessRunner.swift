@@ -31,6 +31,7 @@ enum PipeProcessRunner {
   static func run(
     executableURL: URL,
     arguments: [String],
+    environment: [String: String] = [:],
     stdinData: Data? = nil,
     timeoutSeconds: TimeInterval,
     killGraceSeconds: TimeInterval = 2
@@ -38,6 +39,13 @@ enum PipeProcessRunner {
     let process = Process()
     process.executableURL = executableURL
     process.arguments = arguments
+    if !environment.isEmpty {
+      var processEnvironment = ProcessInfo.processInfo.environment
+      for (key, value) in environment {
+        processEnvironment[key] = value
+      }
+      process.environment = processEnvironment
+    }
 
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
