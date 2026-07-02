@@ -113,12 +113,13 @@ def get_message_structure(
 
 def summarize_experience_text(text: str, text_source_spec: str = None) -> Structured:
     source_context = f"Source: {text_source_spec}" if text_source_spec else "their own experiences or thoughts"
+    current_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     prompt = f'''The user sent a text of {source_context}, and wants to create a memory from it.
       For the title, use the main topic of the experience or thought.
       For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
       For the category, classify the scenes into one of the available categories.
       For the action items, include any tasks or actions that need to be taken based on the content.
-      For Calendar Events, include any events or meetings mentioned in the content.
+      For Calendar Events, include any events or meetings mentioned in the content. For date context, today is {current_date} (UTC); resolve any relative dates like "tomorrow" or "next week" against it.
 
       Text: ```{text}```
       '''.replace('    ', '').strip()
