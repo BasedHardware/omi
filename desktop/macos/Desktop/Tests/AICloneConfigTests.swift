@@ -152,17 +152,18 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertFalse(config.telegramAccountEnabled)
     }
 
-    func testSetTelegramUserSessionEmptyIsThrows() {
+    func testSetTelegramUserSessionEmptyHappyPathDoesNotThrow() {
         // cubic review 4615559812 P1: the empty-string sign-out
         // path is `throws` so callers can handle Keychain delete
-        // failures instead of masking them. Pin the throws-ness.
+        // failures instead of masking them. This test pins the
+        // happy-path contract: when there is no preexisting entry
+        // to delete, the empty-string call must NOT throw.
+        //
+        // (Renamed from testSetTelegramUserSessionEmptyIsThrows
+        // per cubic review 4615819409 P3: the original name read
+        // as if it verified the call throws, but the actual
+        // assertion is XCTAssertNoThrow on the happy path.)
         let config = AICloneConfig(defaults: customDefaults)
-        // Signature check: the method must be marked `throws` so
-        // callers cannot silently swallow the failure with `try?`
-        // without acknowledging it. We can't introspect Swift
-        // signatures in tests, but we can verify the contract by
-        // attempting the call and expecting no throw on the happy
-        // path (no preexisting entry to delete => no error).
         try? AICloneKeychain.delete(.telegramUserSession)
         XCTAssertNoThrow(try config.setTelegramUserSession(""))
         XCTAssertFalse(config.telegramAccountEnabled)
