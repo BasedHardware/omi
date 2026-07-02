@@ -6,8 +6,23 @@ export function useDevice(): [BluetoothRemoteGATTServer | null, () => Promise<vo
 
     // Create state
     let deviceRef = React.useRef<BluetoothRemoteGATTServer | null>(null);
+    let connectedDeviceRef = React.useRef<BluetoothDevice | null>(null);
     let [device, setDevice] = React.useState<BluetoothRemoteGATTServer | null>(null);
     let [isAutoConnecting, setIsAutoConnecting] = React.useState<boolean>(false);
+
+    // Cleanup on unmount: disconnect GATT and clear auto-reconnect handler
+    React.useEffect(() => {
+        return () => {
+            if (connectedDeviceRef.current) {
+                connectedDeviceRef.current.ongattserverdisconnected = null;
+                connectedDeviceRef.current = null;
+            }
+            if (deviceRef.current) {
+                deviceRef.current.disconnect().catch(() => {});
+                deviceRef.current = null;
+            }
+        };
+    }, []);
 
     // Setup disconnect handler
     const setupDisconnectHandler = (connectedDevice: BluetoothDevice) => {
@@ -20,12 +35,14 @@ export function useDevice(): [BluetoothRemoteGATTServer | null, () => Promise<vo
                 if (connectedDevice.gatt) {
                     const gatt = await connectedDevice.gatt.connect();
                     deviceRef.current = gatt;
+                    connectedDeviceRef.current = connectedDevice;
                     setDevice(gatt);
                     console.log('Reconnection successful!');
                 }
             } catch (err) {
                 console.error('Reconnection failed:', err);
                 deviceRef.current = null;
+                connectedDeviceRef.current = null;
                 setDevice(null);
             } finally {
                 setIsAutoConnecting(false);
@@ -54,6 +71,7 @@ export function useDevice(): [BluetoothRemoteGATTServer | null, () => Promise<vo
 
             // Update state
             deviceRef.current = gatt;
+            connectedDeviceRef.current = connected;
             setDevice(gatt);
             
             // Setup disconnect handler for auto-reconnect

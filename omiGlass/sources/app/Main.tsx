@@ -5,6 +5,13 @@ import { Theme } from './components/theme';
 import { useDevice } from '../modules/useDevice';
 import { DeviceView } from './DeviceView';
 import { startAudio } from '../modules/openai';
+import { MemoryProfilerOverlay } from '../utils/MemoryProfilerOverlay';
+import { setupGlobalMemorySnapshot } from '../utils/useMemoryProfiler';
+
+// Enable global __takeMemSnapshot() for console profiling in DEV
+if (__DEV__) {
+    setupGlobalMemorySnapshot();
+}
 
 export const Main = React.memo(() => {
 
@@ -35,6 +42,7 @@ export const Main = React.memo(() => {
             {device && (
                 <DeviceView device={device} />
             )}
+            {__DEV__ && <MemoryProfilerOverlay />}
         </SafeAreaView>
     );
 });
