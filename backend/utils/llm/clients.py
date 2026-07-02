@@ -46,9 +46,11 @@ from utils.llm.providers import (
     GEMINI_OPENAI_BASE_URL,
     get_default_client,
     get_or_create_gemini_llm as _get_or_create_gemini_llm,
+    get_or_create_omi_gateway_llm,
     get_or_create_openai_compatible_llm,
     _llm_cache,
 )
+from utils.llm.gateway_client import CHAT_STRUCTURED_AUTO_LANE_ID
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -322,6 +324,21 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
 
     if cache_key and supports_prompt_cache(model):
+        return result.bind(prompt_cache_key=cache_key)
+    return result
+
+
+def get_llm_gateway_chat_structured(streaming: bool = False, cache_key: Optional[str] = None) -> BaseChatModel:
+    """Return the gateway chat-structured lane as a LangChain chat model.
+
+    Use this for shadow/eval comparisons that must preserve the existing
+    LangChain prompt and parser chain shape. Live feature routing should still
+    go through ``get_llm(feature)`` until an explicit rollout promotes the
+    gateway provider for that feature.
+    """
+
+    result = get_or_create_omi_gateway_llm(CHAT_STRUCTURED_AUTO_LANE_ID, streaming)
+    if cache_key:
         return result.bind(prompt_cache_key=cache_key)
     return result
 

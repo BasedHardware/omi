@@ -19,6 +19,27 @@ def test_accepts_non_streaming_text_messages_with_json_schema_output():
     assert validated.response_format['type'] == 'json_schema'
 
 
+def test_accepts_prompt_parser_style_request_without_response_format():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request()
+    request.pop('response_format')
+
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.model == LANE_ID
+    assert len(validated.messages) == 2
+    assert validated.response_format is None
+
+
+def test_forwards_prompt_cache_key():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(prompt_cache_key='omi-extract-actions')
+
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.forwarded_params['prompt_cache_key'] == 'omi-extract-actions'
+
+
 def test_rejects_streaming():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(stream=True)
