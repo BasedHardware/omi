@@ -47,6 +47,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import memory_system_request_scope
@@ -636,7 +637,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation):
         return
 
     logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
-    memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
+    memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) for fact in parsed_memories])
 
     for memory_db_obj in parsed_memories:
         upsert_memory_vector(

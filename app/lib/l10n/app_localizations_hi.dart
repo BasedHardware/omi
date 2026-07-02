@@ -9346,16 +9346,23 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'यह डिवाइस';
+
   @override
   String get memoryThisIphone => 'यह iPhone';
+
   @override
   String get memoryThisPhone => 'यह फ़ोन';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Omi का उपयोग कैसे करें';
 
   @override
@@ -9456,4 +9463,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get latest => 'नवीनतम';
+
+  @override
+  String get flashFirmware => 'फ़र्मवेयर फ़्लैश करें';
 }

@@ -248,8 +248,9 @@ async def send_credit_limit_notification(user_id: str):
 
 async def send_silent_user_notification(user_id: str):
     """Send a notification if a basic-plan user is silent for too long."""
-    # Check if notification was sent recently (within 24 hours)
-    if has_silent_user_notification_been_sent(user_id):
+    # Check if notification was sent recently (within 24 hours). Offloaded: the Redis read is sync
+    # and blocks the event loop in this async path.
+    if await run_blocking(db_executor, has_silent_user_notification_been_sent, user_id):
         logger.info(f"Silent user notification already sent recently for user {user_id}")
         return
 
@@ -271,8 +272,9 @@ async def send_silent_user_notification(user_id: str):
     # Send notification
     send_notification(user_id, title, body)
 
-    # Cache that notification was sent (24 hours TTL)
-    set_silent_user_notification_sent(user_id)
+    # Cache that notification was sent (24 hours TTL). Offloaded: the Redis write is sync and blocks
+    # the event loop in this async path.
+    await run_blocking(db_executor, set_silent_user_notification_sent, user_id)
     logger.info(f"Silent user notification sent to user {user_id}")
 
 
@@ -330,7 +332,7 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
         invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
         if invalid_tokens:
             logger.error(f"Removing {len(invalid_tokens)} invalid tokens")
-            notification_db.remove_bulk_tokens(invalid_tokens)
+            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
 
     except Exception as e:
         logger.error(f"Error sending bulk notification: {e}")

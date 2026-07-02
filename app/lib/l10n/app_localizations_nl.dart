@@ -1717,7 +1717,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'APPARATEN',
+      one: 'APPARAAT',
+    );
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -9390,16 +9395,23 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Dit apparaat';
+
   @override
   String get memoryThisIphone => 'Deze iPhone';
+
   @override
   String get memoryThisPhone => 'Deze telefoon';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Hoe je Omi gebruikt';
 
   @override
@@ -9501,4 +9513,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get latest => 'Nieuwste';
+
+  @override
+  String get flashFirmware => 'Firmware flashen';
 }

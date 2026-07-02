@@ -2,6 +2,29 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.594",
+      "date": "2026-07-02",
+      "changes": [
+        "Fixed connector rows showing disconnected when Notes or local MCP clients are already set up",
+        "Home: shortened the memory export subtitle so it fits on one line"
+      ]
+    },
+    {
+      "version": "0.11.593",
+      "date": "2026-07-02",
+      "changes": [
+        "Improved desktop app packaging so the bundled agent runtime no longer depends on developer-machine Node libraries",
+        "Fixed OpenClaw memory setup so Omi can use OpenClaw's bundled Node runtime when updating MCP config"
+      ]
+    },
+    {
+      "version": "0.11.592",
+      "date": "2026-07-02",
+      "changes": [
+        "Prompt to update to the latest Omi when running an older desktop version"
+      ]
+    },
+    {
       "version": "0.11.591",
       "date": "2026-07-02",
       "changes": [

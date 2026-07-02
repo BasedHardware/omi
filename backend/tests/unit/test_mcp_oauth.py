@@ -266,6 +266,33 @@ def test_chatgpt_prod_redirect_prefix_rejects_bypass_attempts(monkeypatch):
     assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauthish/OUbdUMlL15Ct')
 
 
+def test_chatgpt_prod_configured_client_keeps_dynamic_connector_callback_prefix():
+    collection = database_client.db.collection('mcp_oauth_clients')
+    original_docs = dict(collection._docs)
+    try:
+        collection.document('omi-chatgpt-prod').set(
+            {
+                'id': 'omi-chatgpt-prod',
+                'name': 'ChatGPT',
+                'allowed_redirect_uris': ['https://chatgpt.com/connector/oauth/OUbdUMlL15Ct'],
+                'allowed_resources': [mcp_oauth.MCP_RESOURCE_URL],
+                'allowed_scopes': mcp_oauth.SUPPORTED_SCOPES,
+                'token_endpoint_auth_method': 'none',
+                'client_secret_hash': '',
+            }
+        )
+
+        client = mcp_oauth.get_client('omi-chatgpt-prod')
+
+        assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/new-custom-app-id')
+        assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/new-custom-app-id?x=1')
+        assert not mcp_oauth.validate_redirect_uri(
+            client, 'https://chatgpt.com.evil.test/connector/oauth/new-custom-app-id'
+        )
+    finally:
+        collection._docs = original_docs
+
+
 def test_claude_prod_client_is_registered_for_cloud_connector_callback():
     client = mcp_oauth.get_client('omi-claude-prod')
 

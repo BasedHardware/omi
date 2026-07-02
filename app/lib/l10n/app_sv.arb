@@ -3103,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "En snabb, praktisk rundtur i allt din Omi kan.",
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
     "jumpToLatestMessage": "Hoppa till senaste meddelandet",
-    "latest": "Senaste"
+    "latest": "Senaste",
+    "flashFirmware": "Installera firmware"
 }

@@ -1720,7 +1720,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVI', one: 'DISPOSITIVO');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOSITIVI',
+      one: 'DISPOSITIVO',
+    );
     return '$count $_temp0 TROVATO/I NELLE VICINANZE';
   }
 
@@ -9419,16 +9424,23 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Questo dispositivo';
+
   @override
   String get memoryThisIphone => 'Questo iPhone';
+
   @override
   String get memoryThisPhone => 'Questo telefono';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Come usare Omi';
 
   @override
@@ -9530,4 +9542,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get latest => 'Più recente';
+
+  @override
+  String get flashFirmware => 'Installa il firmware';
 }

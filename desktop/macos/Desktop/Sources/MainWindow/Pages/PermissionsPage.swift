@@ -880,8 +880,10 @@ private func instructionStep(number: Int, text: String) -> some View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     PermissionsPage(appState: AppState())
         .frame(width: 800, height: 700)
         .background(OmiColors.backgroundPrimary)
 }
+#endif

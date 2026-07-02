@@ -126,8 +126,9 @@ enum MemoryBankConnector {
       )
       return false
     } catch {
+      let message = sanitizeOpenClawError(error.localizedDescription)
       throw ConnectError.invalidConfig(
-        "OpenClaw rejected MCP config update for \(displayPath(for: configURL)): \(error.localizedDescription)")
+        "OpenClaw rejected MCP config update for \(displayPath(for: configURL)): \(message)")
     }
   }
 
@@ -140,11 +141,7 @@ enum MemoryBankConnector {
     if let override = openClawCLIPathOverrideForTesting {
       return override.isEmpty ? nil : override
     }
-    let candidates = [
-      home.appendingPathComponent(".hermes/node/bin/openclaw").path,
-      "/opt/homebrew/bin/openclaw",
-      "/usr/local/bin/openclaw",
-    ]
+    let candidates = commonExecutableDirs().map { ($0 as NSString).appendingPathComponent("openclaw") }
     if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
       return path
     }
@@ -153,15 +150,111 @@ enum MemoryBankConnector {
   }
 
   private static func runOpenClawCLI(cliPath: String, configURL: URL, arguments: [String]) throws -> CommandOutput {
-    try runProcess(
-      executable: cliPath,
-      arguments: arguments,
-      environment: ["OPENCLAW_CONFIG_PATH": configURL.path]
+    let command = openClawCommand(cliPath: cliPath)
+    return try runProcess(
+      executable: command.executable,
+      arguments: command.argumentsPrefix + arguments,
+      environment: openClawEnvironment(cliPath: cliPath, configURL: configURL)
     )
+  }
+
+  private struct OpenClawCommand {
+    let executable: String
+    let argumentsPrefix: [String]
+  }
+
+  private static func openClawCommand(cliPath: String, fileManager: FileManager = .default) -> OpenClawCommand {
+    let nodePath = ((cliPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
+    if fileManager.isExecutableFile(atPath: nodePath), launcherUsesNode(cliPath: cliPath) {
+      return OpenClawCommand(executable: nodePath, argumentsPrefix: [cliPath])
+    }
+    return OpenClawCommand(executable: cliPath, argumentsPrefix: [])
+  }
+
+  private static func launcherUsesNode(cliPath: String) -> Bool {
+    guard let handle = FileHandle(forReadingAtPath: cliPath) else {
+      return false
+    }
+    defer { try? handle.close() }
+    guard
+      let data = try? handle.read(upToCount: 512),
+      let prefix = String(data: data, encoding: .utf8)
+    else {
+      return false
+    }
+    let firstLine = prefix.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+    return firstLine.hasPrefix("#!") && firstLine.contains("node")
+  }
+
+  private static func openClawEnvironment(cliPath: String, configURL: URL) -> [String: String] {
+    let cliDir = (cliPath as NSString).deletingLastPathComponent
+    let pathPrefix = [cliDir] + commonExecutableDirs() + systemExecutableDirs()
+    let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    let path = (pathPrefix + existingPath.split(separator: ":").map(String.init))
+      .reduce(into: [String]()) { elements, item in
+        if !item.isEmpty && !elements.contains(item) {
+          elements.append(item)
+        }
+      }
+      .joined(separator: ":")
+    return [
+      "OPENCLAW_CONFIG_PATH": configURL.path,
+      "PATH": path,
+    ]
   }
 
   private static func runShell(_ arguments: [String]) throws -> CommandOutput {
     try runProcess(executable: "/bin/zsh", arguments: arguments, environment: [:])
+  }
+
+  private static func commonExecutableDirs() -> [String] {
+    let homePath = home.path
+    let userDirs = [
+      "\(homePath)/.hermes/node/bin",
+      "\(homePath)/.local/bin",
+      "\(homePath)/.volta/bin",
+      "\(homePath)/.asdf/shims",
+      "\(homePath)/.bun/bin",
+      "\(homePath)/Library/pnpm",
+      "\(homePath)/.npm-global/bin",
+      "\(homePath)/.node_modules_global/bin",
+    ]
+    let globalDirs = [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
+    let managedNodeDirs = [
+      "\(homePath)/.nvm/versions/node",
+      "\(homePath)/.fnm/node-versions",
+      "\(homePath)/.local/share/fnm/node-versions",
+      "\(homePath)/.nodenv/versions",
+      "\(homePath)/.asdf/installs/nodejs",
+    ].flatMap(nodeInstallBinDirs(root:))
+    return uniquePaths(userDirs + managedNodeDirs + globalDirs + ["/opt/local/bin"])
+  }
+
+  private static func systemExecutableDirs() -> [String] {
+    ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+  }
+
+  private static func nodeInstallBinDirs(root: String) -> [String] {
+    let fm = FileManager.default
+    guard let versions = try? fm.contentsOfDirectory(atPath: root) else { return [] }
+    return versions.compactMap { version in
+      let versionDir = (root as NSString).appendingPathComponent(version)
+      let directBin = (versionDir as NSString).appendingPathComponent("bin")
+      if fm.fileExists(atPath: directBin) { return directBin }
+      let installationBin = (versionDir as NSString).appendingPathComponent("installation/bin")
+      if fm.fileExists(atPath: installationBin) { return installationBin }
+      return nil
+    }
+  }
+
+  private static func uniquePaths(_ paths: [String]) -> [String] {
+    paths.reduce(into: [String]()) { result, path in
+      guard !path.isEmpty, !result.contains(path) else { return }
+      result.append(path)
+    }
   }
 
   private static func runProcess(
@@ -204,10 +297,38 @@ enum MemoryBankConnector {
   }
 
   private static func normalizedPath(_ raw: String) -> URL? {
-    let path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    var path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if
+      path.count >= 2,
+      let first = path.first,
+      let last = path.last,
+      (first == "\"" && last == "\"") || (first == "'" && last == "'")
+    {
+      path = String(path.dropFirst().dropLast())
+    }
     guard !path.isEmpty else { return nil }
-    let expanded = path.replacingOccurrences(of: "~", with: home.path, options: .anchored)
+    let expanded = path
+      .replacingOccurrences(of: "~", with: home.path, options: .anchored)
+      .replacingOccurrences(of: "${HOME}", with: home.path)
+      .replacingOccurrences(of: "$HOME", with: home.path)
     return URL(fileURLWithPath: expanded)
+  }
+
+  private static func sanitizeOpenClawError(_ message: String) -> String {
+    let patterns = [
+      #"Authorization\\?":\\?"Bearer [^"\\\s}]+"#,
+      #"Authorization:\s*Bearer\s+[^\s"'}]+"#,
+      #"Bearer\s+[A-Za-z0-9._~+/=-]+"#,
+    ]
+    var sanitized = message
+    for pattern in patterns {
+      sanitized = sanitized.replacingOccurrences(
+        of: pattern,
+        with: "Authorization: Bearer [redacted]",
+        options: .regularExpression
+      )
+    }
+    return sanitized
   }
 
   @discardableResult

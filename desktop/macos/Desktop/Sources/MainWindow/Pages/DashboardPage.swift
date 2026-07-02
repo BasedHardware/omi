@@ -318,6 +318,7 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
             Task { await loadMemoryExportStatuses() }
@@ -326,6 +327,7 @@ struct DashboardPage: View {
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
             Task { await loadMemoryExportStatuses() }
@@ -573,7 +575,7 @@ struct DashboardPage: View {
                     .font(.system(size: 22, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
-                Text("Bring your memories and tasks into the apps you already use")
+                Text("Bring your memories to the apps you use")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3144,6 +3146,7 @@ private struct HomeAIButton: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     DashboardPage(
         viewModel: DashboardViewModel(),
@@ -3156,3 +3159,4 @@ private struct HomeAIButton: View {
     .frame(width: 800, height: 600)
     .background(OmiColors.backgroundPrimary)
 }
+#endif

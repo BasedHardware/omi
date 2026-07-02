@@ -3103,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Nopea ja käytännönläheinen kierros kaikkeen, mitä Omisi osaa.",
     "deviceOnboardingIntroDuration": "Noin 1 minuutti",
     "jumpToLatestMessage": "Siirry uusimpaan viestiin",
-    "latest": "Uusin"
+    "latest": "Uusin",
+    "flashFirmware": "Asenna laiteohjelmisto"
 }

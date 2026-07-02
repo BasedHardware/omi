@@ -84,6 +84,8 @@ actor APIClient {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
+      "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
       "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
       "X-Desktop-Request-ID": UUID().uuidString,
@@ -126,13 +128,14 @@ actor APIClient {
   func get<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
     return try await performRequest(request)
   }
@@ -1753,6 +1756,11 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
+  struct MemoryListPage {
+    let memories: [ServerMemory]
+    let canonicalLifecycleExposed: Bool
+    let deviceScopeSupported: Bool?
+  }
 
   /// Fetches memories from the API with optional filtering
   func getMemories(
@@ -1777,6 +1785,67 @@ extension APIClient {
       endpoint += "&device_scope=\(deviceScope)"
     }
     return try await get(endpoint)
+  }
+
+  /// Fetches memories plus server-authoritative capability headers.
+  func getMemoriesPage(
+    limit: Int = 100,
+    offset: Int = 0,
+    category: String? = nil,
+    tags: [String]? = nil,
+    includeDismissed: Bool = false,
+    deviceScope: String? = nil
+  ) async throws -> MemoryListPage {
+    var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
+    if let category = category {
+      endpoint += "&category=\(category)"
+    }
+    if let tags = tags, !tags.isEmpty {
+      endpoint += "&tags=\(tags.joined(separator: ","))"
+    }
+    if includeDismissed {
+      endpoint += "&include_dismissed=true"
+    }
+    if let deviceScope = deviceScope {
+      endpoint += "&device_scope=\(deviceScope)"
+    }
+
+    let url = URL(string: baseURL + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    return try await performMemoryListRequest(request, retriedAuth: false)
+  }
+
+  private func performMemoryListRequest(_ request: URLRequest, retriedAuth: Bool) async throws -> MemoryListPage {
+    let (data, response) = try await session.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401, !retriedAuth {
+      let authService = await MainActor.run { AuthService.shared }
+      var retry = request
+      retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      return try await performMemoryListRequest(retry, retriedAuth: true)
+    }
+    if httpResponse.statusCode == 401 {
+      throw APIError.unauthorized
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let detail = Self.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
+
+    let memories = try decoder.decode([ServerMemory].self, from: data)
+    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: "X-Omi-Memory-Device-Scope-Supported")
+    let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    return MemoryListPage(
+      memories: memories,
+      canonicalLifecycleExposed: deviceScopeSupported == true,
+      deviceScopeSupported: deviceScopeSupported
+    )
   }
 
   /// Creates a new memory (manual or extracted)
@@ -4117,6 +4186,15 @@ extension APIClient {
     return try await patch("v1/users/assistant-settings", body: settings)
   }
 
+  /// Fetches server-controlled desktop update/banner policy.
+  func getDesktopUpdatePolicy(currentBuild: Int?) async throws -> DesktopUpdatePolicyResponse {
+    var endpoint = "v2/desktop/update-policy?platform=macos"
+    if let currentBuild {
+      endpoint += "&current_build=\(currentBuild)"
+    }
+    return try await get(endpoint, requireAuth: false, includeBYOK: false)
+  }
+
   // MARK: - Knowledge Graph API
 
   /// Get the full knowledge graph (nodes and edges)
@@ -4595,6 +4673,40 @@ struct UserProfileResponse: Codable {
     useCase = try container.decodeIfPresent(String.self, forKey: .useCase)
     job = try container.decodeIfPresent(String.self, forKey: .job)
     company = try container.decodeIfPresent(String.self, forKey: .company)
+  }
+}
+
+// MARK: - Desktop Update Policy Models
+
+struct DesktopUpdatePolicyResponse: Codable, Equatable {
+  enum Severity: String, Codable {
+    case none
+    case banner
+    case required
+  }
+
+  let id: String
+  let active: Bool
+  let severity: Severity
+  let maximumBuildNumber: Int?
+  let latestBuildNumber: Int?
+  let title: String?
+  let message: String?
+  let ctaText: String
+  let downloadURL: String
+  let canDismiss: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id, active, severity, title, message
+    case maximumBuildNumber = "maximum_build_number"
+    case latestBuildNumber = "latest_build_number"
+    case ctaText = "cta_text"
+    case downloadURL = "download_url"
+    case canDismiss = "can_dismiss"
+  }
+
+  var isRequired: Bool {
+    active && severity == .required
   }
 }
 

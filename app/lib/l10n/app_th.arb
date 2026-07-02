@@ -3103,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "ทัวร์สั้น ๆ แบบลงมือทำจริงเกี่ยวกับทุกสิ่งที่ Omi ของคุณทำได้",
     "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
     "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
-    "latest": "ล่าสุด"
+    "latest": "ล่าสุด",
+    "flashFirmware": "แฟลชเฟิร์มแวร์"
 }
