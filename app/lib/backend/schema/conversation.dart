@@ -88,11 +88,9 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status:
-          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model:
-          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -143,7 +141,7 @@ class ConversationPhoto {
       base64: generated.base64,
       description: generated.description,
       createdAt: generated.createdAt ?? DateTime.now(),
-      discarded: generated.discarded ?? false,
+      discarded: generated.discarded,
     );
   }
 
@@ -189,8 +187,8 @@ class CalendarEventLink {
     return CalendarEventLink(
       eventId: generated.eventId,
       title: generated.title,
-      attendees: generated.attendees ?? const [],
-      attendeeEmails: generated.attendeeEmails ?? const [],
+      attendees: generated.attendees,
+      attendeeEmails: generated.attendeeEmails,
       startTime: generated.startTime,
       endTime: generated.endTime,
       htmlLink: generated.htmlLink,
@@ -242,7 +240,7 @@ class AudioFile {
       uid: generated.uid,
       conversationId: generated.conversationId,
       chunkTimestamps: generated.chunkTimestamps,
-      provider: generated.provider ?? 'gcp',
+      provider: generated.provider,
       startedAt: generated.startedAt,
       duration: generated.duration,
     );
@@ -327,37 +325,46 @@ class ServerConversation {
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedConversation.fromJson(json);
+    return ServerConversation.fromGenerated(
+      generated,
+      structured: json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null,
+      geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
+      deleted: json['deleted'] ?? false,
+    );
+  }
+
+  factory ServerConversation.fromGenerated(
+    wire.GeneratedConversation generated, {
+    Structured? structured,
+    Geolocation? geolocation,
+    bool deleted = false,
+  }) {
     return ServerConversation(
       id: generated.id,
       createdAt: generated.createdAt,
-      structured: json['structured'] is Map<String, dynamic>
-          ? Structured.fromJson(json['structured'])
-          : Structured.fromJson(generated.structured.toJson()),
+      structured: structured ?? Structured.fromJson(generated.structured.toJson()),
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
-      transcriptSegments: (generated.transcriptSegments ?? const []).map(_transcriptSegmentFromGenerated).toList(),
-      appResults: (generated.appsResults ?? const []).map(AppResponse.fromGenerated).toList(),
-      suggestedSummarizationApps: generated.suggestedSummarizationApps ?? const [],
-      geolocation: json['geolocation'] is Map<String, dynamic>
-          ? Geolocation.fromJson(json['geolocation'])
-          : (generated.geolocation == null ? null : Geolocation.fromJson(generated.geolocation!.toJson())),
-      photos: (generated.photos ?? const []).map(ConversationPhoto.fromGenerated).toList(),
-      audioFiles: (generated.audioFiles ?? const []).map(AudioFile.fromGenerated).toList(),
-      discarded: generated.discarded ?? false,
-      source: generated.source != null
-          ? ConversationSource.values.asNameMap()[generated.source]
-          : ConversationSource.omi,
+      transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
+      appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
+      suggestedSummarizationApps: generated.suggestedSummarizationApps,
+      geolocation:
+          geolocation ?? (generated.geolocation == null ? null : Geolocation.fromJson(generated.geolocation!.toJson())),
+      photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
+      audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
+      discarded: generated.discarded,
+      source:
+          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
       language: generated.language,
-      deleted: json['deleted'] ?? false,
-      externalIntegration: generated.externalData != null
-          ? ConversationExternalData.fromJson(generated.externalData!)
-          : null,
+      deleted: deleted,
+      externalIntegration:
+          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
           : ConversationStatus.completed,
-      isLocked: generated.isLocked ?? false,
-      starred: generated.starred ?? false,
+      isLocked: generated.isLocked,
+      starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
     );

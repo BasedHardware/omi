@@ -93,8 +93,12 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories =
-        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
+    var memories = (jsonDecode(body) as List<dynamic>)
+        .map(
+          (conversation) => ServerConversation.fromGenerated(
+              wire.GeneratedConversation.fromJson(conversation as Map<String, dynamic>)),
+        )
+        .toList();
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true);
   }
@@ -112,7 +116,9 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   if (response == null) return null;
   Logger.debug('reProcessConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body));
+    return ServerConversation.fromGenerated(
+      wire.GeneratedConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   return null;
 }
@@ -151,7 +157,9 @@ Future<CalendarEventLink?> linkCalendarEvent(String conversationId, String event
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return CalendarEventLink.fromJson(jsonDecode(response.body));
+    return CalendarEventLink.fromGenerated(
+      wire.GeneratedCalendarEventLink.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   debugPrint('linkCalendarEvent error: ${response.statusCode} - ${response.body}');
   return null;
@@ -168,7 +176,9 @@ Future<CalendarEventLink?> autoLinkCalendarEvent(String conversationId) async {
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return CalendarEventLink.fromJson(jsonDecode(response.body));
+    return CalendarEventLink.fromGenerated(
+      wire.GeneratedCalendarEventLink.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   // 404 means no overlapping event found - not an error, just no match
   if (response.statusCode == 404) {
@@ -203,7 +213,12 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>).map((event) => CalendarEventLink.fromJson(event)).toList();
+    return (jsonDecode(body) as List<dynamic>)
+        .map(
+          (event) =>
+              CalendarEventLink.fromGenerated(wire.GeneratedCalendarEventLink.fromJson(event as Map<String, dynamic>)),
+        )
+        .toList();
   }
   debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
   return [];
@@ -218,7 +233,9 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body));
+    return ServerConversation.fromGenerated(
+      wire.GeneratedConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   } else if (response.statusCode == 402) {
     Logger.debug('Unlimited Plan Required for conversation: $conversationId');
     return null;
@@ -445,10 +462,16 @@ Future<UploadFilesResult> uploadLocalFilesV2(
 
   if (response.statusCode == 200) {
     // Fast-path: server processed synchronously and returned the result.
-    return UploadFilesResult.done(SyncLocalFilesResponse.fromJson(jsonDecode(response.body)));
+    return UploadFilesResult.done(
+      SyncLocalFilesResponse.fromGenerated(
+        wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      ),
+    );
   }
   if (response.statusCode == 202) {
-    final start = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    final start = SyncJobStartResponse.fromGenerated(
+      wire.GeneratedSyncJobStartResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
     if (start.jobId.isEmpty) {
       throw Exception('Upload accepted but no job id returned');
     }
@@ -510,7 +533,12 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   try {
-    return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
+    return SyncJobFetch(
+      SyncJobFetchOutcome.ok,
+      SyncJobStatusResponse.fromGenerated(
+        wire.GeneratedSyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      ),
+    );
   } catch (e) {
     Logger.debug('fetchSyncJobStatus parse error: $e');
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
