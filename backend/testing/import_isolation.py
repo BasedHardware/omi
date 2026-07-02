@@ -205,4 +205,32 @@ def load_module_fresh(name: str, path: str) -> ModuleType:
     return module
 
 
-__all__ = ["AutoMockModule", "stub_modules", "load_module_fresh"]
+def fake_firestore_transactional(func):
+    """Firestore ``transactional`` replacement for unit-test fake transactions.
+
+    The production fallback in ``database.memory_non_active_routes`` exists only for
+    environments where Firestore is unavailable. Tests that load the module against a
+    fake Firestore module need the same transaction lifecycle contract without
+    copying the wrapper body into each test file.
+    """
+
+    def wrapper(transaction, *args, **kwargs):
+        if hasattr(transaction, "_begin"):
+            transaction._begin()
+        try:
+            result = func(transaction, *args, **kwargs)
+            if hasattr(transaction, "_commit"):
+                transaction._commit()
+            return result
+        except Exception:
+            if hasattr(transaction, "_rollback"):
+                transaction._rollback()
+            raise
+        finally:
+            if hasattr(transaction, "_clean_up"):
+                transaction._clean_up()
+
+    return wrapper
+
+
+__all__ = ["AutoMockModule", "stub_modules", "load_module_fresh", "fake_firestore_transactional"]

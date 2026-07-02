@@ -5,38 +5,13 @@ from types import ModuleType
 
 import pytest
 
-from testing.import_isolation import load_module_fresh, stub_modules
+from testing.import_isolation import fake_firestore_transactional, load_module_fresh, stub_modules
 
 from database.memory_collections import MemoryCollections
 
 from tests.unit.fixtures.non_active_firestore import TransactionalFakeDb as _FakeDb
 
 _BACKEND = Path(__file__).resolve().parents[2]
-
-
-def _make_fake_transactional():
-    """Fake-transaction-compatible ``transactional`` that drives the FakeTransaction lifecycle."""
-
-    def transactional(func):
-        def wrapper(transaction, *args, **kwargs):
-            if hasattr(transaction, "_begin"):
-                transaction._begin()
-            try:
-                result = func(transaction, *args, **kwargs)
-                if hasattr(transaction, "_commit"):
-                    transaction._commit()
-                return result
-            except Exception:
-                if hasattr(transaction, "_rollback"):
-                    transaction._rollback()
-                raise
-            finally:
-                if hasattr(transaction, "_clean_up"):
-                    transaction._clean_up()
-
-        return wrapper
-
-    return transactional
 
 
 @pytest.fixture(scope="module")
@@ -55,7 +30,7 @@ def nar():
 
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.__dict__.update(real_fv1.__dict__)
-    fv1_stub.transactional = _make_fake_transactional()
+    setattr(fv1_stub, "transactional", fake_firestore_transactional)
 
     with stub_modules({"google.cloud.firestore_v1": fv1_stub}):
         module = load_module_fresh(
