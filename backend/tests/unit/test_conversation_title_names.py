@@ -117,6 +117,10 @@ byok_stub.has_byok_keys = MagicMock(return_value=False)
 gateway_client_stub = sys.modules.get("utils.llm.gateway_client") or _stub_module("utils.llm.gateway_client")
 gateway_client_stub.invoke_chat_structured_gateway = MagicMock()
 gateway_client_stub.record_chat_extraction_gateway_result = MagicMock()
+gateway_client_stub.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+
+gateway_obs_stub = sys.modules.get("utils.llm.gateway_observability") or _stub_module("utils.llm.gateway_observability")
+gateway_obs_stub.record_gateway_shadow_comparison = MagicMock()
 
 # Real models (pure pydantic) resolve from the models package directory.
 if not hasattr(sys.modules.get("models", None), "__path__"):
