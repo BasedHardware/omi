@@ -194,22 +194,17 @@ enum WhatsAppSenderService {
       throw WhatsAppSenderError.notConfirmed
     }
 
-    // Stale-draft guard: the recipient guard trusts "compose == reply" as proof the deep
-    // link navigated to the target. That's only sound if the reply text wasn't ALREADY in
-    // some chat's compose box — e.g. a stale draft a prior failed attempt left behind. If
-    // the same reply is then sent again and the deep link fails to navigate away from that
-    // chat, the stale text would satisfy the guard for the wrong recipient. So if a chat
-    // already shows this exact reply before we prefill, fail closed — don't send. This is
-    // non-destructive (we never clear the user's text) and biases to not-sending over
-    // wrong-sending. Skipped when WhatsApp is closed (nothing stale can be open).
-    if let app = runningWhatsApp(),
-      let pre = await readComposeValueOffMain(pid: app.processIdentifier), composeMatches(pre, reply)
-    {
-      throw WhatsAppSenderError.notConfirmed
-    }
-
     // Prefill launches WhatsApp if it's closed, opens the target 1:1, and fills the
     // compose box; the guard below then waits for it to come up and navigate.
+    //
+    // Residual (accepted): the recipient guard trusts "compose == reply" as proof the deep
+    // link reached the target. In the rare case the same reply is sent to two people and
+    // the deep link fails to navigate away from a chat still holding that identical text,
+    // the guard could match the wrong chat. We do NOT pre-block on "compose already equals
+    // reply" — that also blocks a legitimate resend of the same text (our own prefill
+    // lingers there after a failed attempt) and deadlocks retries. Instead the post-send
+    // proof is the backstop: it's keyed to the TARGET's JID, so a send that went to the
+    // wrong chat yields `.sendUnconfirmed` (draft kept), never a false "sent".
     try prefill(text: reply, phone: phone)
 
     // Recipient guard: wait for WhatsApp to navigate + prefill, proven by compose == reply,
