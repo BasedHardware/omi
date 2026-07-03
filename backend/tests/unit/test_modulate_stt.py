@@ -1,166 +1,8 @@
 import asyncio
-import importlib.util
 import json
 import struct
-import sys
-import threading
-import types
 import unittest
-from contextlib import contextmanager
-from io import BytesIO
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-
-
-def _restore_package_path(name, path):
-    package = sys.modules.get(name)
-    if package is not None:
-        package.__path__ = [str(path)]
-
-
-_restore_package_path('utils', BACKEND_DIR / 'utils')
-
-# Stub heavy deps before import
-for mod in [
-    'google.cloud',
-    'google.cloud.firestore',
-    'google.cloud.firestore_v1',
-    'google.cloud.storage',
-    'google.auth',
-    'google.auth.transport',
-    'google.auth.transport.requests',
-    'google.api_core',
-    'google.api_core.exceptions',
-    'firebase_admin',
-    'firebase_admin.auth',
-    'firebase_admin.firestore',
-    'database.redis_db',
-    'database.auth',
-    'utils.other.storage',
-    'deepgram',
-    'deepgram.clients.live.v1',
-    'fal_client',
-    'opuslib',
-    'silero_vad',
-]:
-    if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
-
-
-class _StubWebSocketException(Exception):
-    pass
-
-
-class _StubConnectionClosed(_StubWebSocketException):
-    pass
-
-
-_websockets_stub = types.ModuleType('websockets')
-_websockets_exceptions_stub = types.ModuleType('websockets.exceptions')
-_websockets_exceptions_stub.WebSocketException = _StubWebSocketException
-_websockets_exceptions_stub.ConnectionClosed = _StubConnectionClosed
-_websockets_stub.exceptions = _websockets_exceptions_stub
-_websockets_stub.connect = AsyncMock()
-sys.modules.setdefault('websockets', _websockets_stub)
-sys.modules.setdefault('websockets.exceptions', _websockets_exceptions_stub)
-
-
-def _install_prometheus_client_stub():
-    if 'prometheus_client' in sys.modules:
-        return
-    if importlib.util.find_spec('prometheus_client') is not None:
-        return
-
-    prometheus_client = types.ModuleType('prometheus_client')
-
-    class _Registry:
-        def __init__(self):
-            self._names_to_collectors = {}
-
-    registry = _Registry()
-
-    @contextmanager
-    def _timer():
-        yield
-
-    class _Value:
-        def __init__(self):
-            self._amount = 0
-
-        def inc(self, amount):
-            self._amount += amount
-
-        def set(self, value):
-            self._amount = value
-
-    class _Metric:
-        def __init__(self, name, documentation, labelnames=(), **kwargs):
-            self._name = name
-            self._documentation = documentation
-            self._labelnames = tuple(labelnames or ())
-            self._kwargs = kwargs
-            self._value = _Value()
-            self._register(name)
-
-        def _register(self, name):
-            names = [name]
-            if name.endswith('_total'):
-                names.append(name[: -len('_total')])
-            for metric_name in names:
-                existing = registry._names_to_collectors.get(metric_name)
-                if existing is not None and existing is not self:
-                    raise ValueError(f'Duplicated timeseries in CollectorRegistry: {metric_name}')
-            for metric_name in names:
-                registry._names_to_collectors[metric_name] = self
-
-        def labels(self, *args, **kwargs):
-            return self
-
-        def inc(self, amount=1):
-            self._value.inc(amount)
-
-        def dec(self, amount=1):
-            self._value.inc(-amount)
-
-        def set(self, value):
-            self._value.set(value)
-
-        def observe(self, value):
-            self._value.set(value)
-
-        def time(self):
-            return _timer()
-
-    prometheus_client.Counter = _Metric
-    prometheus_client.Histogram = _Metric
-    prometheus_client.REGISTRY = registry
-    sys.modules['prometheus_client'] = prometheus_client
-
-
-_install_prometheus_client_stub()
-
-_byok_stub = types.ModuleType('utils.byok')
-_byok_stub.get_byok_key = MagicMock(return_value=None)
-sys.modules.setdefault('utils.byok', _byok_stub)
-
-_endpoints_stub = types.ModuleType('utils.other.endpoints')
-_endpoints_stub.timeit = lambda func: func
-sys.modules.setdefault('utils.other.endpoints', _endpoints_stub)
-
-_speaker_embedding_stub = types.ModuleType('utils.stt.speaker_embedding')
-_speaker_embedding_stub.SPEAKER_MATCH_THRESHOLD = 0.75
-_speaker_embedding_stub.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
-_speaker_embedding_stub.compare_embeddings = MagicMock(return_value=0)
-_speaker_embedding_stub.extract_embedding_from_bytes = MagicMock(return_value=None)
-sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding_stub)
-
-# Stub deepgram classes needed at import time
-sys.modules['deepgram'].DeepgramClient = MagicMock
-sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 
 from utils.stt.streaming import (
     STTService,
@@ -881,6 +723,7 @@ class _FakeParakeetWebSocket:
         if data == 'finalize':
             await self._messages.put(json.dumps({'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}))
             await self._messages.put(None)
+            await self._messages.put(None)
 
     async def close(self):
         await self._messages.put(None)
@@ -914,15 +757,16 @@ class TestProcessAudioParakeet(unittest.TestCase):
                     ws, enter_started, allow_enter
                 )
 
-                socket_task = asyncio.create_task(process_audio_parakeet(segments.extend, 'en', 16000, 1))
-                await asyncio.wait_for(enter_started.wait(), timeout=1)
-                await asyncio.sleep(0)
-                self.assertFalse(socket_task.done())
+                with patch('utils.stt.streaming.asyncio.sleep', AsyncMock()):
+                    socket_task = asyncio.create_task(process_audio_parakeet(segments.extend, 'en', 16000, 1))
+                    await asyncio.wait_for(enter_started.wait(), timeout=1)
+                    await asyncio.sleep(0)
+                    self.assertFalse(socket_task.done())
 
-                allow_enter.set()
-                sock = await asyncio.wait_for(socket_task, timeout=1)
-                sock.send(b'pcm')
-                await sock.drain_and_close()
+                    allow_enter.set()
+                    sock = await asyncio.wait_for(socket_task, timeout=1)
+                    sock.send(b'pcm')
+                    await sock.drain_and_close()
 
                 self.assertEqual(ws.sent, [b'pcm', 'finalize'])
                 self.assertEqual(segments, [{'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}])

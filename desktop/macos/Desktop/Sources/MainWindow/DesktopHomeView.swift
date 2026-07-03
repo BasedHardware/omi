@@ -22,6 +22,7 @@ struct DesktopHomeView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
+  @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
@@ -139,12 +140,25 @@ struct DesktopHomeView: View {
                 )
               }
             }
+            .overlay(alignment: .top) {
+              if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
+                DesktopUpdatePolicyBanner(
+                  policy: policy,
+                  onDownload: { updatePolicyManager.openDownload(policy) },
+                  onDismiss: { updatePolicyManager.dismiss(policy) }
+                )
+                .padding(.top, 12)
+                .padding(.horizontal, 20)
+                .transition(.move(edge: .top).combined(with: .opacity))
+              }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
               let reason = notification.userInfo?["reason"] as? String ?? ""
               appState.triggerUsageLimitPopup(reason: reason)
             }
             .onAppear {
               log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
+              updatePolicyManager.refresh(force: true)
               // Check all permissions on launch
               appState.checkAllPermissions()
 
@@ -236,6 +250,7 @@ struct DesktopHomeView: View {
                 lastActivationRefresh = now
                 Task { await appState.refreshConversations() }
               }
+              updatePolicyManager.refresh()
               // Auto-start monitoring when returning to app if screen analysis is enabled
               // but monitoring is not running. Handles the case where the user granted
               // screen recording permission in System Settings and switched back.
@@ -248,7 +263,7 @@ struct DesktopHomeView: View {
                 }
               }
             }
-            .onChange(of: apiKeyService.isLoaded) { loaded in
+            .onChange(of: apiKeyService.isLoaded) { _, loaded in
               guard loaded else { return }
               log("DesktopHomeView: API keys loaded — retrying deferred services")
               // Retry transcription
@@ -364,6 +379,17 @@ struct DesktopHomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(OmiColors.backgroundPrimary)
             .transition(.opacity.animation(.easeOut(duration: 0.3)))
+          }
+
+          if let policy = updatePolicyManager.visiblePolicy, policy.isRequired {
+            Color.black.opacity(0.62)
+              .ignoresSafeArea()
+              .zIndex(20)
+            DesktopRequiredUpdatePrompt(
+              policy: policy,
+              onDownload: { updatePolicyManager.openDownload(policy) }
+            )
+            .zIndex(21)
           }
         }
       }
@@ -1175,6 +1201,8 @@ private struct ConversationsPageHost: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   DesktopHomeView()
 }
+#endif

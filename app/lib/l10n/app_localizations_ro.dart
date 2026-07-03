@@ -9413,6 +9413,24 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
 
   @override
+  String get memoryThisDevice => 'Acest dispozitiv';
+
+  @override
+  String get memoryThisIphone => 'Acest iPhone';
+
+  @override
+  String get memoryThisPhone => 'Acest telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Cum să folosești Omi';
 
   @override
@@ -9514,4 +9532,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get latest => 'Recent';
+
+  @override
+  String get flashFirmware => 'Instalați firmware-ul';
 }

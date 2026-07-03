@@ -79,6 +79,14 @@ class SharedPreferencesUtil {
 
   set batchMuted(bool value) => saveBool('batchMuted', value);
 
+  // Realtime device mute (double-tap pause). Persisted so the mute survives an
+  // app kill/restart — otherwise the device silently resumes recording on the
+  // next reconnect even though the user muted it. Restored into
+  // CaptureProvider._isPaused at startup and re-applied on reconnect.
+  bool get deviceMuted => getBool('deviceMuted');
+
+  set deviceMuted(bool value) => saveBool('deviceMuted', value);
+
   // Transcribe Later: one-shot flag — when set, the native writer finalizes the
   // current file and starts a fresh one (manual "New recording" cut), then clears it.
   bool get batchCutRequested => getBool('batchCutRequested');

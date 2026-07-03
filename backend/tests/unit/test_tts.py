@@ -9,112 +9,16 @@ integration tests — the unit layer here is intentionally scoped to the bits
 that are easy to regress by accident when someone edits the router.
 """
 
-import importlib
-import importlib.util
-import os
-import sys
-import types
-from pathlib import Path
-from unittest.mock import MagicMock
-
 import pytest
+from pydantic import ValidationError
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+from models.tts import (
+    DEFAULT_MODEL_ID,
+    DEFAULT_OUTPUT_FORMAT,
+    DEFAULT_VOICE_ID,
+    TtsSynthesizeRequest,
 )
-
-
-def _stub_module(name):
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    return mod
-
-
-def _stub_package(name):
-    mod = types.ModuleType(name)
-    mod.__path__ = []
-    sys.modules[name] = mod
-    return mod
-
-
-def _restore_real_package(name, path):
-    mod = sys.modules.get(name)
-    if mod is None or not getattr(mod, "__path__", None):
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    mod.__path__ = [str(path)]
-    return mod
-
-
-# ---------------------------------------------------------------------------
-# Stub heavy deps pulled in transitively by routers.tts → database.redis_db
-# ---------------------------------------------------------------------------
-for mod_name in [
-    "firebase_admin",
-    "firebase_admin.firestore",
-    "firebase_admin.auth",
-    "firebase_admin.credentials",
-]:
-    _stub_package(mod_name) if "." not in mod_name else _stub_module(mod_name)
-
-redis_stub = _stub_module("redis")
-redis_stub.Redis = MagicMock(return_value=MagicMock())
-
-
-def _load_tts_router_module():
-    """Load routers/tts.py while stubbing its heavy collaborators."""
-    # Stub the auth dependency chain so importing the router doesn't explode
-    endpoints_stub = types.ModuleType("utils.other.endpoints")
-
-    def _fake_dep_factory():
-        async def _dep():
-            return "test-uid"
-
-        return _dep
-
-    endpoints_stub.get_current_user_uid = _fake_dep_factory()
-    endpoints_stub.with_rate_limit = lambda _auth, _policy: _fake_dep_factory()
-    sys.modules["utils.other.endpoints"] = endpoints_stub
-
-    # Stub redis_db helpers
-    redis_db_stub = types.ModuleType("database.redis_db")
-    redis_db_stub.check_tts_rate_limit = MagicMock(return_value=(0, 0))
-    sys.modules["database.redis_db"] = redis_db_stub
-    sys.modules.setdefault("database", _stub_package("database"))
-    sys.modules["database"].redis_db = redis_db_stub
-
-    # Stub http_client
-    http_client_stub = types.ModuleType("utils.http_client")
-    http_client_stub.get_tts_client = MagicMock()
-    http_client_stub.get_tts_semaphore = MagicMock()
-    sys.modules["utils.http_client"] = http_client_stub
-
-    # Stub log_sanitizer
-    log_sanitizer_stub = types.ModuleType("utils.log_sanitizer")
-    log_sanitizer_stub.sanitize = lambda s: str(s)
-    sys.modules["utils.log_sanitizer"] = log_sanitizer_stub
-
-    # Use the real models.tts module even if an earlier test installed a package stub.
-    sys.path.insert(0, str(BACKEND_DIR))
-    _restore_real_package("models", BACKEND_DIR / "models")
-    existing_tts_model = sys.modules.get("models.tts")
-    if existing_tts_model is not None and not getattr(existing_tts_model, "__file__", None):
-        del sys.modules["models.tts"]
-
-    spec = importlib.util.spec_from_file_location(
-        "routers.tts",
-        str(BACKEND_DIR / "routers" / "tts.py"),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["routers.tts"] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-tts_router = _load_tts_router_module()
+from routers import tts as tts_router
 
 
 # ---------------------------------------------------------------------------
@@ -171,26 +75,18 @@ def test_burst_window_matches_desktop():
 # Model defaults
 # ---------------------------------------------------------------------------
 def test_default_voice_id_is_sloane():
-    from models.tts import DEFAULT_VOICE_ID
-
     assert DEFAULT_VOICE_ID == "BAMYoBHLZM7lJgJAmFz0"
 
 
 def test_default_model_id():
-    from models.tts import DEFAULT_MODEL_ID
-
     assert DEFAULT_MODEL_ID == "eleven_turbo_v2_5"
 
 
 def test_default_output_format():
-    from models.tts import DEFAULT_OUTPUT_FORMAT
-
     assert DEFAULT_OUTPUT_FORMAT == "mp3_44100_128"
 
 
 def test_request_model_applies_defaults():
-    from models.tts import TtsSynthesizeRequest
-
     req = TtsSynthesizeRequest(text="hello")
     assert req.text == "hello"
     assert req.voice_id == "BAMYoBHLZM7lJgJAmFz0"
@@ -200,9 +96,5 @@ def test_request_model_applies_defaults():
 
 
 def test_request_model_rejects_empty_text():
-    from pydantic import ValidationError
-
-    from models.tts import TtsSynthesizeRequest
-
     with pytest.raises(ValidationError):
         TtsSynthesizeRequest(text="")

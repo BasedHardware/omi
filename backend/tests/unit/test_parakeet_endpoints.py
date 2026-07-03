@@ -1,7 +1,5 @@
-import asyncio
 import io
 import os
-import struct
 import sys
 import wave
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -10,55 +8,72 @@ import numpy as np
 import pytest
 import soundfile as sf
 
+from fastapi.testclient import TestClient
+
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
 os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
 os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 os.environ.setdefault("PARAKEET_INFERENCE_MODE", "nemo")
 
-_torch = MagicMock()
-_torch.cuda.is_available.return_value = False
-_torch.cuda.memory_allocated.return_value = 0
-_torch_props = MagicMock()
-_torch_props.total_memory = 16 * 1024**3
-_torch.cuda.get_device_properties.return_value = _torch_props
-_torch.cuda.empty_cache = MagicMock()
-_torch.inference_mode = lambda: (lambda fn: fn)
-_torch.compile = lambda m: m
-_torch.backends.cudnn = MagicMock()
-sys.modules["torch"] = _torch
-
-_nemo_asr = MagicMock()
-_nemo = MagicMock()
-_nemo.collections.asr = _nemo_asr
-sys.modules["nemo"] = _nemo
-sys.modules["nemo.collections"] = _nemo.collections
-sys.modules["nemo.collections.asr"] = _nemo_asr
-
 PARAKEET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../parakeet"))
-sys.path.insert(0, PARAKEET_DIR)
 
-import importlib
 
-os.environ["PARAKEET_STREAM_MODEL"] = ""
-if "transcribe" in sys.modules:
-    _existing = sys.modules["transcribe"]
-    if not hasattr(_existing, "__file__") or _existing.__file__ is None:
-        del sys.modules["transcribe"]
-        import transcribe  # noqa: F811
+@pytest.fixture(scope="module", autouse=True)
+def _parakeet_modules():
+    """Load the parakeet subservice modules fresh against faked torch/nemo.
 
-        importlib.reload(transcribe)
+    torch and nemo are not installed in the test environment, and the parakeet
+    modules import them at module top level. This module-scoped fixture installs
+    sanctioned fakes via ``stub_modules`` and exec's each parakeet module fresh
+    inside the block, exposing the public symbols the tests need as module
+    globals. On teardown ``stub_modules`` evicts every module loaded here so
+    nothing leaks to later test files.
+    """
+    os.environ["PARAKEET_STREAM_MODEL"] = ""
+    if str(PARAKEET_DIR) not in sys.path:
+        sys.path.insert(0, PARAKEET_DIR)
 
-if "main" in sys.modules:
-    _existing_main = sys.modules["main"]
-    _existing_main_file = os.path.abspath(getattr(_existing_main, "__file__", "") or "")
-    if _existing_main_file != os.path.join(PARAKEET_DIR, "main.py"):
-        del sys.modules["main"]
+    torch_fake = AutoMockModule("torch")
+    torch_fake.cuda.is_available.return_value = False
+    torch_fake.cuda.memory_allocated.return_value = 0
+    _torch_props = MagicMock()
+    _torch_props.total_memory = 16 * 1024**3
+    torch_fake.cuda.get_device_properties.return_value = _torch_props
+    torch_fake.cuda.empty_cache = MagicMock()
+    torch_fake.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
+    torch_fake.inference_mode = lambda: (lambda fn: fn)
+    torch_fake.compile = lambda m: m
+    torch_fake.backends.cudnn = MagicMock()
 
-from gpu_worker import GPUWorker, AudioDurationExceededError
-from batch_engine import BatchEngine, QueueFullError
+    nemo_asr_fake = AutoMockModule("nemo.collections.asr")
+    nemo_fake = AutoMockModule("nemo")
+    nemo_fake.collections.asr = nemo_asr_fake
+    nemo_collections_fake = AutoMockModule("nemo.collections")
+    nemo_collections_fake.asr = nemo_asr_fake
 
-from fastapi.testclient import TestClient
+    fakes = {
+        "torch": torch_fake,
+        "nemo": nemo_fake,
+        "nemo.collections": nemo_collections_fake,
+        "nemo.collections.asr": nemo_asr_fake,
+    }
+    with stub_modules(fakes):
+        gpu_worker = load_module_fresh("gpu_worker", os.path.join(PARAKEET_DIR, "gpu_worker.py"))
+        batch_engine = load_module_fresh("batch_engine", os.path.join(PARAKEET_DIR, "batch_engine.py"))
+        load_module_fresh("speaker_math", os.path.join(PARAKEET_DIR, "speaker_math.py"))
+        load_module_fresh("transcribe", os.path.join(PARAKEET_DIR, "transcribe.py"))
+        load_module_fresh("stream_handler", os.path.join(PARAKEET_DIR, "stream_handler.py"))
+        load_module_fresh("main", os.path.join(PARAKEET_DIR, "main.py"))
+
+        g = sys.modules[__name__]
+        g.GPUWorker = gpu_worker.GPUWorker
+        g.AudioDurationExceededError = gpu_worker.AudioDurationExceededError
+        g.BatchEngine = batch_engine.BatchEngine
+        g.QueueFullError = batch_engine.QueueFullError
+        yield
 
 
 def _make_app_with_mocks(gpu_ready=True, nim_mode=False):

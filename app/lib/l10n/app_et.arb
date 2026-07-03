@@ -3064,6 +3064,12 @@
     "captureModeLiveDescription": "Transkribeeri reaalajas, kui räägid.",
     "captureModeLaterDescription": "Salvesta heli kohe ja transkribeeri, millal soovid.",
     "backgroundModeUnavailable": "Taustarežiim pole saadaval, sest ühtegi ühilduvat seadet pole ühendatud. Selle funktsiooni kasutamiseks ühenda Omi, OpenGlass või Friend Pendant seade.",
+    "memoryThisDevice": "See seade",
+    "memoryThisIphone": "See iPhone",
+    "memoryThisPhone": "See telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Kuidas Omi't kasutada",
     "deviceOnboardingTranscriptionTitle": "Räägi oma Omisse",
     "deviceOnboardingTranscriptionSubtitle": "Ütle paar sõna ja vaata, kuidas need reaalajas ilmuvad",
@@ -3097,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.",
     "deviceOnboardingIntroDuration": "Umbes 1 minut",
     "jumpToLatestMessage": "Hüppa uusima sõnumi juurde",
-    "latest": "Uusim"
+    "latest": "Uusim",
+    "flashFirmware": "Installi püsivara"
 }

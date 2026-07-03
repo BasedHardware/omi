@@ -70,6 +70,15 @@ export function failureFromProcessExit(input: {
 }): RuntimeFailure {
   const diagnostic = sanitizeProcessDiagnostic(input.recentStderr);
   const technicalMessage = diagnostic || `${input.adapterId} ACP process exited with code ${input.exitCode}`;
+  const classified = classifyAdapterProcessFailure(input.adapterId, diagnostic);
+  if (classified) {
+    return normalizeRuntimeFailure({
+      source: "adapter_process",
+      adapterId: input.adapterId,
+      technicalMessage,
+      ...classified,
+    });
+  }
   const provider = providerFromDiagnostic(diagnostic);
   const label = adapterFailureLabel(input.adapterId, provider);
   return normalizeRuntimeFailure({
@@ -81,6 +90,33 @@ export function failureFromProcessExit(input: {
     userMessage: `${label} failed: ${technicalMessage}`,
     technicalMessage,
   });
+}
+
+function classifyAdapterProcessFailure(
+  adapterId: ProductionAdapterId,
+  diagnostic: string
+): (Pick<RuntimeFailure, "code" | "userMessage"> & Partial<RuntimeFailure>) | undefined {
+  if (adapterId === "openclaw" && isOpenClawInvalidConfig(diagnostic)) {
+    return {
+      code: "adapter_config_invalid",
+      retryable: false,
+      userMessage:
+        "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`.",
+    };
+  }
+  return undefined;
+}
+
+function isOpenClawInvalidConfig(diagnostic: string): boolean {
+  const lower = diagnostic.toLowerCase();
+  return (
+    lower.includes("openclaw config is invalid") ||
+    lower.includes("invalid config at") ||
+    lower.includes("legacy config keys detected") ||
+    lower.includes("openclaw doctor --fix") ||
+    lower.includes("openclaw config validate") ||
+    lower.includes("channels.telegram.streaming: invalid config")
+  );
 }
 
 export function failureFromProcessError(input: {

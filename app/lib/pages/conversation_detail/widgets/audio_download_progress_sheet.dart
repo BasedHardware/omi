@@ -87,7 +87,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 30, offset: const Offset(0, 10))
+            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 30, offset: const Offset(0, 10)),
           ],
         ),
         child: Padding(

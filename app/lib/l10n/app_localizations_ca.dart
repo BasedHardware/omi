@@ -9422,6 +9422,24 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
 
   @override
+  String get memoryThisDevice => 'Aquest dispositiu';
+
+  @override
+  String get memoryThisIphone => 'Aquest iPhone';
+
+  @override
+  String get memoryThisPhone => 'Aquest telèfon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Com utilitzar l\'Omi';
 
   @override
@@ -9523,4 +9541,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get latest => 'Últim';
+
+  @override
+  String get flashFirmware => 'Grava el microprogramari';
 }

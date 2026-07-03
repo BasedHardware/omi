@@ -3064,6 +3064,12 @@
     "captureModeLiveDescription": "Транскрибуйте в реальному часі, поки говорите.",
     "captureModeLaterDescription": "Збережіть аудіо зараз і транскрибуйте коли завгодно.",
     "backgroundModeUnavailable": "Фоновий режим недоступний, оскільки не підключено сумісний пристрій. Підключіть пристрій Omi, OpenGlass або Friend Pendant, щоб скористатися цією функцією.",
+    "memoryThisDevice": "Цей пристрій",
+    "memoryThisIphone": "Цей iPhone",
+    "memoryThisPhone": "Цей телефон",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Як користуватися Omi",
     "deviceOnboardingTranscriptionTitle": "Говоріть у свій Omi",
     "deviceOnboardingTranscriptionSubtitle": "Скажіть кілька слів і спостерігайте, як вони з'являються в реальному часі",
@@ -3097,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Швидкий практичний огляд усього, що вміє ваш Omi.",
     "deviceOnboardingIntroDuration": "Близько 1 хвилини",
     "jumpToLatestMessage": "Перейти до останнього повідомлення",
-    "latest": "Останнє"
+    "latest": "Останнє",
+    "flashFirmware": "Встановити прошивку"
 }

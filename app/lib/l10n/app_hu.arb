@@ -3160,6 +3160,12 @@
     "captureModeLiveDescription": "Átírás valós időben, miközben beszélsz.",
     "captureModeLaterDescription": "Mentsd el a hangot most, és írd át, amikor csak akarod.",
     "backgroundModeUnavailable": "A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.",
+    "memoryThisDevice": "Ez az eszköz",
+    "memoryThisIphone": "Ez az iPhone",
+    "memoryThisPhone": "Ez a telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Az Omi használata",
     "deviceOnboardingTranscriptionTitle": "Beszélj az Omihoz",
     "deviceOnboardingTranscriptionSubtitle": "Mondj néhány szót, és nézd, ahogy valós időben megjelennek",
@@ -3193,5 +3199,6 @@
     "deviceOnboardingIntroSubtitle": "Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.",
     "deviceOnboardingIntroDuration": "Körülbelül 1 perc",
     "jumpToLatestMessage": "Ugrás a legújabb üzenethez",
-    "latest": "Legújabb"
+    "latest": "Legújabb",
+    "flashFirmware": "Firmware flashelése"
 }

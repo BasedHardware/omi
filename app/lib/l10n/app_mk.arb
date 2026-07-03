@@ -10642,6 +10642,12 @@
     "captureModeLiveDescription": "Транскрибирајте во реално време додека зборувате.",
     "captureModeLaterDescription": "Зачувајте го звукот сега и транскрибирајте кога сакате.",
     "backgroundModeUnavailable": "Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција.",
+    "memoryThisDevice": "Овој уред",
+    "memoryThisIphone": "Овој iPhone",
+    "memoryThisPhone": "Овој телефон",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Како да го користите Omi",
     "deviceOnboardingTranscriptionTitle": "Зборувајте во вашиот Omi",
     "deviceOnboardingTranscriptionSubtitle": "Кажете неколку зборови и гледајте како се појавуваат во реално време",
@@ -10675,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "Брза, практична прошетка низ сè што може да направи вашиот Omi.",
     "deviceOnboardingIntroDuration": "Околу 1 минута",
     "jumpToLatestMessage": "Оди до последната порака",
-    "latest": "Најново"
+    "latest": "Најново",
+    "flashFirmware": "Инсталирај фирмвер"
 }

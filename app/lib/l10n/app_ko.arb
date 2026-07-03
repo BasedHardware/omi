@@ -3064,6 +3064,12 @@
     "captureModeLiveDescription": "말하는 동안 실시간으로 변환합니다.",
     "captureModeLaterDescription": "지금 오디오를 저장하고 원할 때 변환하세요.",
     "backgroundModeUnavailable": "호환되는 기기가 연결되어 있지 않아 백그라운드 모드를 사용할 수 없습니다. 이 기능을 사용하려면 Omi, OpenGlass 또는 Friend Pendant 기기를 연결하세요.",
+    "memoryThisDevice": "이 기기",
+    "memoryThisIphone": "이 iPhone",
+    "memoryThisPhone": "이 휴대폰",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Omi 사용법",
     "deviceOnboardingTranscriptionTitle": "Omi에 대고 말해보세요",
     "deviceOnboardingTranscriptionSubtitle": "몇 마디 말하면 실시간으로 텍스트가 나타나요",
@@ -3097,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.",
     "deviceOnboardingIntroDuration": "약 1분",
     "jumpToLatestMessage": "최신 메시지로 이동",
-    "latest": "최신"
+    "latest": "최신",
+    "flashFirmware": "펌웨어 플래시"
 }

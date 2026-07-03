@@ -3032,6 +3032,12 @@
     "captureModeLiveDescription": "Transkribiere in Echtzeit, während du sprichst.",
     "captureModeLaterDescription": "Audio jetzt speichern und transkribieren, wann du willst.",
     "backgroundModeUnavailable": "Der Hintergrundmodus ist nicht verfügbar, weil kein kompatibles Gerät verbunden ist. Verbinde ein Omi-, OpenGlass- oder Friend Pendant-Gerät, um diese Funktion zu nutzen.",
+    "memoryThisDevice": "Dieses Gerät",
+    "memoryThisIphone": "Dieses iPhone",
+    "memoryThisPhone": "Dieses Telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "So verwendest du Omi",
     "deviceOnboardingTranscriptionTitle": "Sprich in dein Omi",
     "deviceOnboardingTranscriptionSubtitle": "Sag ein paar Worte und sieh ihnen in Echtzeit beim Erscheinen zu",
@@ -3065,5 +3071,6 @@
     "deviceOnboardingIntroSubtitle": "Ein kurzer, praktischer Rundgang durch alles, was dein Omi kann.",
     "deviceOnboardingIntroDuration": "Etwa 1 Minute",
     "jumpToLatestMessage": "Zur neuesten Nachricht springen",
-    "latest": "Neueste"
+    "latest": "Neueste",
+    "flashFirmware": "Firmware flashen"
 }

@@ -3073,6 +3073,12 @@
     "captureModeLiveDescription": "Transskriber i realtid, mens du taler.",
     "captureModeLaterDescription": "Gem lyden nu, og transskriber den, når du vil.",
     "backgroundModeUnavailable": "Baggrundstilstand er ikke tilgængelig, fordi der ikke er tilsluttet en kompatibel enhed. Tilslut en Omi-, OpenGlass- eller Friend Pendant-enhed for at bruge denne funktion.",
+    "memoryThisDevice": "Denne enhed",
+    "memoryThisIphone": "Denne iPhone",
+    "memoryThisPhone": "Denne telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Sådan bruger du Omi",
     "deviceOnboardingTranscriptionTitle": "Tal til din Omi",
     "deviceOnboardingTranscriptionSubtitle": "Sig et par ord, og se dem dukke op i realtid",
@@ -3106,5 +3112,6 @@
     "deviceOnboardingIntroSubtitle": "En hurtig, praktisk rundvisning i alt, hvad din Omi kan.",
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
     "jumpToLatestMessage": "Gå til nyeste besked",
-    "latest": "Nyeste"
+    "latest": "Nyeste",
+    "flashFirmware": "Flash firmware"
 }

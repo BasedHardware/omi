@@ -262,6 +262,43 @@ describe("AcpRuntimeAdapter process spawning", () => {
     });
   });
 
+  it("classifies OpenClaw invalid config exits with repair instructions", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "openclaw",
+      command: "openclaw acp",
+      envCommandName: "OMI_OPENCLAW_ADAPTER_COMMAND",
+    });
+    proc.stdin.on("data", () => {});
+    await adapter.start();
+
+    const request = adapter.request("initialize");
+    proc.stderr.write("OpenClaw config is invalid\n");
+    proc.stderr.write("File: ~/.openclaw/openclaw.json\n");
+    proc.stderr.write("- channels.telegram.streaming: invalid config: must be object\n");
+    proc.stderr.write("Fix: openclaw doctor --fix\n");
+    proc.stderr.write("Inspect: openclaw config validate\n");
+    await Promise.resolve();
+    proc.emit("exit", 1);
+
+    await expect(request).rejects.toThrow(
+      "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`."
+    );
+    await request.catch((error) => {
+      expect(error).toBeInstanceOf(AdapterRuntimeError);
+      expect((error as AdapterRuntimeError).failure).toMatchObject({
+        code: "adapter_config_invalid",
+        source: "adapter_process",
+        adapterId: "openclaw",
+        retryable: false,
+        userMessage:
+          "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`.",
+        technicalMessage: expect.stringContaining("OpenClaw config is invalid"),
+      });
+    });
+  });
+
   it("structures OpenClaw subprocess spawn errors", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);

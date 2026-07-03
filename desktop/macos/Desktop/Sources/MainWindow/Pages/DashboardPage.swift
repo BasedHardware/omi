@@ -227,6 +227,11 @@ struct DashboardPage: View {
     @State private var conversationCount: Int?
     @State private var memoryCount: Int?
     @State private var taskCount: Int?
+    // Wearable used on this account (any friend/omi-sourced conversation).
+    // Seeded from UserDefaults so the badge is instant on later launches.
+    @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
+        forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
+    @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -256,8 +261,11 @@ struct DashboardPage: View {
         isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
     }
 
+    private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
+            || accountHasOmiDeviceConversations
     }
 
     /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
@@ -266,9 +274,15 @@ struct DashboardPage: View {
         return importConnectorStatusStore.snapshot(for: connector).isConnected
     }
 
-    /// Whether the hosted MCP key exists — the app's own definition of "configured" for MCP destinations.
-    private var hasMCPDestinationConnected: Bool {
-        MemoryExportService.shared.hasStoredMCPKey
+    private func isMCPDestinationConnected(_ destination: MemoryExportDestination) -> Bool {
+        switch destination {
+        case .claude, .claudeCode:
+            return [.claude, .claudeCode].contains { memoryExportStatuses[$0]?.hasConnection == true }
+        case .chatgpt, .codex:
+            return [.chatgpt, .codex].contains { memoryExportStatuses[$0]?.hasConnection == true }
+        default:
+            return memoryExportStatuses[destination]?.hasConnection == true
+        }
     }
 
     var body: some View {
@@ -311,15 +325,19 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
+            Task { await loadMemoryExportStatuses() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
+            Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
+            Task { await loadMemoryExportStatuses() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -560,31 +578,31 @@ struct DashboardPage: View {
     private var destinationStack: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Connect your AI")
+                Text("Use omi memory anywhere")
                     .font(.system(size: 22, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
-                Text("Use Omi memory where you already work.")
+                Text("Bring your memories to the apps you use")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(height: 62, alignment: .bottomLeading)
 
-            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: hasMCPDestinationConnected) {
-                openExportDestination(.claudeCode)
-            }
-            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: hasMCPDestinationConnected) {
-                openExportDestination(.codex)
-            }
-            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: hasMCPDestinationConnected) {
-                openExportDestination(.openclaw)
-            }
-            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: hasMCPDestinationConnected) {
-                openExportDestination(.hermes)
-            }
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
                 navigate(to: .chat)
+            }
+            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: isMCPDestinationConnected(.claude)) {
+                openExportDestination(.claudeCode)
+            }
+            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: isMCPDestinationConnected(.chatgpt)) {
+                openExportDestination(.codex)
+            }
+            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: isMCPDestinationConnected(.openclaw)) {
+                openExportDestination(.openclaw)
+            }
+            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: isMCPDestinationConnected(.hermes)) {
+                openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
                 openAppsPage()
@@ -781,6 +799,13 @@ struct DashboardPage: View {
         }
     }
 
+    private func loadMemoryExportStatuses() async {
+        let statuses = await MemoryExportService.shared.allStatuses()
+        await MainActor.run {
+            memoryExportStatuses = statuses
+        }
+    }
+
     /// Load the true totals behind the "What omi knows" tiles. Conversations come
     /// from the server count endpoint (not stored locally); memories and tasks are
     /// counted from the synced local DB — the same totals the detail pages show.
@@ -790,11 +815,18 @@ struct DashboardPage: View {
         // Open tasks only (matches the "Tasks" label and the old tile's intent —
         // the old value just under-counted, capping each bucket at a 7-day window).
         async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        let (c, m, t) = await (convos, mems, tasks)
+        async let deviceHistory = try? APIClient.shared.hasOmiDeviceConversations()
+        let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
         await MainActor.run {
             if let c { conversationCount = c }
             if let m { memoryCount = m }
             if let t { taskCount = t }
+            // Sticky: device history never un-happens; keep the badge across
+            // launches and network failures once observed.
+            if d == true {
+                accountHasOmiDeviceConversations = true
+                UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
+            }
         }
     }
 
@@ -1057,8 +1089,13 @@ private enum HomePalette {
     static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
     static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
     static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-    static let glow = Color(red: 0.95, green: 0.33, blue: 0.45)
-    static let glowSoft = Color(red: 0.52, green: 0.18, blue: 0.27)
+    // Home ambient glow is PURPLE per Nik's explicit, repeated preference — the rose/red
+    // variant (0.95,0.33,0.45) was disliked. The purple VALUE lives on `.glow` on purpose:
+    // earlier purple fixes kept getting reverted by "HomePalette.purple → .glow" merge
+    // cleanups (e.g. 317424f57), so we put the purple on the name those reverts converge to.
+    // Do NOT change this back to red/rose.
+    static let glow = Color(red: 0.48, green: 0.30, blue: 0.95)      // purple
+    static let glowSoft = Color(red: 0.28, green: 0.17, blue: 0.57)  // purpleSoft
     static let flowPink = Color(red: 1.0, green: 0.16, blue: 0.44)
 }
 
@@ -3123,6 +3160,7 @@ private struct HomeAIButton: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     DashboardPage(
         viewModel: DashboardViewModel(),
@@ -3135,3 +3173,4 @@ private struct HomeAIButton: View {
     .frame(width: 800, height: 600)
     .background(OmiColors.backgroundPrimary)
 }
+#endif

@@ -9417,6 +9417,24 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transcribeLaterPaused => 'పాజ్ చేయబడింది — ఆడియో రికార్డ్ కావడం లేదు';
 
   @override
+  String get memoryThisDevice => 'ఈ పరికరం';
+
+  @override
+  String get memoryThisIphone => 'ఈ iPhone';
+
+  @override
+  String get memoryThisPhone => 'ఈ ఫోన్';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Omi ని ఎలా ఉపయోగించాలి';
 
   @override
@@ -9517,4 +9535,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get latest => 'తాజా';
+
+  @override
+  String get flashFirmware => 'ఫర్మ్‌వేర్ ఫ్లాష్ చేయండి';
 }

@@ -9395,6 +9395,24 @@ class AppLocalizationsSl extends AppLocalizations {
   String get transcribeLaterPaused => 'Premor – zvok se ne snema';
 
   @override
+  String get memoryThisDevice => 'Ta naprava';
+
+  @override
+  String get memoryThisIphone => 'Ta iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ta telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Kako uporabljati Omi';
 
   @override
@@ -9496,4 +9514,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get latest => 'Najnovejše';
+
+  @override
+  String get flashFirmware => 'Namesti vdelano programsko opremo';
 }

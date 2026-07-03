@@ -87,6 +87,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }

@@ -9378,6 +9378,24 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
 
   @override
+  String get memoryThisDevice => 'Bu cihaz';
+
+  @override
+  String get memoryThisIphone => 'Bu iPhone';
+
+  @override
+  String get memoryThisPhone => 'Bu telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Omi Nasıl Kullanılır';
 
   @override
@@ -9479,4 +9497,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get latest => 'En son';
+
+  @override
+  String get flashFirmware => 'Donanım Yazılımını Yükle';
 }

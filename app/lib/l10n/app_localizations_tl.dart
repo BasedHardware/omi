@@ -9453,6 +9453,24 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
 
   @override
+  String get memoryThisDevice => 'Device na ito';
+
+  @override
+  String get memoryThisIphone => 'iPhone na ito';
+
+  @override
+  String get memoryThisPhone => 'Teleponong ito';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Paano Gamitin ang Omi';
 
   @override
@@ -9557,4 +9575,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get latest => 'Pinakabago';
+
+  @override
+  String get flashFirmware => 'I-flash ang Firmware';
 }

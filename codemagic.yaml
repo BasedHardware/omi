@@ -2414,6 +2414,8 @@ workflows:
 
       - name: Sign app
         script: |
+          scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
+
           xattr -cr "$APP_BUNDLE"
 
           # Sign ffmpeg (inside SPM resource bundle)
@@ -2515,6 +2517,10 @@ workflows:
 
           codesign --verify --verbose=2 "$APP_BUNDLE" 2>&1 | head -3
           echo "App signed successfully"
+
+      - name: Audit app bundle dependencies
+        script: |
+          scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
       - name: Notarize app
         script: |
@@ -2628,11 +2634,11 @@ workflows:
             fi
           fi
 
-          if [ -n "$ED_SIGNATURE" ]; then
-            echo "EdDSA signature: $ED_SIGNATURE"
-          else
-            echo "WARNING: Could not generate EdDSA signature — Sparkle auto-update will not work"
+          if [ -z "$ED_SIGNATURE" ]; then
+            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work"
+            exit 1
           fi
+          echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
 
       - name: Create GitHub release
@@ -2745,7 +2751,7 @@ workflows:
           RELEASE_JSON=$(python3 -c "
           import json, os
           data = {
-            'version':      os.environ['BUILD_NAME'],
+            'version':      os.environ['VERSION'],
             'build_number': int(os.environ['BUILD_NUMBER']),
             'download_url': os.environ.get('DOWNLOAD_URL', ''),
             'ed_signature': os.environ.get('ED_SIGNATURE', ''),

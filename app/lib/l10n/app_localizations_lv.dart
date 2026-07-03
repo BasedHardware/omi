@@ -9390,6 +9390,24 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcribeLaterPaused => 'Apturēts — audio netiek ierakstīts';
 
   @override
+  String get memoryThisDevice => 'Šī ierīce';
+
+  @override
+  String get memoryThisIphone => 'Šis iPhone';
+
+  @override
+  String get memoryThisPhone => 'Šis tālrunis';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Kā lietot Omi';
 
   @override
@@ -9491,4 +9509,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get latest => 'Jaunākais';
+
+  @override
+  String get flashFirmware => 'Instalēt aparātprogrammatūru';
 }

@@ -252,7 +252,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("activeControlRequests[requestKey]"))
     XCTAssertTrue(source.contains("completeControlRequest(message)"))
     XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestKey)"))
-    XCTAssertTrue(source.contains("controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))"))
+    XCTAssertTrue(source.contains("failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)"))
+    XCTAssertTrue(source.contains(#"["failed", "timed_out", "orphaned"].contains(terminalStatus)"#))
   }
 
   func testDirectControlToolRequestsUseDedicatedSignedInOwnerEnvelope() throws {
@@ -291,5 +292,75 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("resumeInitContinuations(throwing: BridgeError.timeout)"))
     XCTAssertFalse(source.contains("withThrowingTaskGroup(of: Void.self)"))
+  }
+
+  func testOutOfMemoryDiagnosticRequiresConfirmedRuntimeSignature() {
+    XCTAssertTrue(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory"
+      )
+    )
+    XCTAssertTrue(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "FatalProcessOutOfMemory: Zone Allocation failed"
+      )
+    )
+    XCTAssertTrue(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "Failed to reserve virtual memory for CodeRange"
+      )
+    )
+
+    XCTAssertFalse(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "Provider returned: the requested model is out of memory for this prompt"
+      )
+    )
+    XCTAssertFalse(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "The browser extension reported out of memory while reading a page"
+      )
+    )
+  }
+
+  func testRuntimeDoesNotTreatGenericAbortSignalsAsOutOfMemory() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)"))
+    XCTAssertFalse(source.contains("exitCode == 134"))
+    XCTAssertFalse(source.contains("exitCode == 133"))
+  }
+
+  func testStderrOutOfMemoryLatchIsSynchronousAndGenerationScoped() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("oomDiagnosticLatch.markIfConfirmed(text, generation: expectedGeneration)"))
+    XCTAssertTrue(source.contains("private final class AgentRuntimeOOMDiagnosticLatch: @unchecked Sendable"))
+    XCTAssertTrue(source.contains("guard self.generation == generation else { return }"))
+    XCTAssertFalse(source.contains("Task { await self?.markOOM"))
+  }
+
+  func testIntentionalStopInvalidatesOldProcessGenerationBeforeTerminating() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("""
+  private func stopProcess(resumeRequestsWith error: BridgeError) async {
+    let proc = process
+    processGeneration &+= 1
+    lastExitWasOOM = false
+    oomDiagnosticLatch.reset(generation: processGeneration)
+"""))
   }
 }

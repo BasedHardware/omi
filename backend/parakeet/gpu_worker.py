@@ -69,6 +69,7 @@ class GPUWorker:
         self._ready = threading.Event()
         self._load_error: Optional[Exception] = None
         self._running = False
+        self._submit_lock = threading.Lock()
         self._attn_mode = os.getenv("PARAKEET_ATTENTION_MODE", "full").lower()
         if self._attn_mode not in _VALID_ATTN_MODES:
             raise ValueError(f"PARAKEET_ATTENTION_MODE must be one of {_VALID_ATTN_MODES}, got '{self._attn_mode}'")
@@ -78,10 +79,21 @@ class GPUWorker:
         self._attn_is_local = False
         self._model_dtype = None
         self._max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+        self._vram_total_mb = 0.0
+        self._vram_baseline_mb = 0.0
 
     @property
     def is_ready(self) -> bool:
         return self._ready.is_set() and self._load_error is None
+
+    @property
+    def vram_info(self) -> dict:
+        return {
+            "total_mb": self._vram_total_mb,
+            "baseline_mb": self._vram_baseline_mb,
+            "attention_mode": self._attn_mode,
+            "auto_threshold_sec": self._attn_auto_threshold_sec,
+        }
 
     def start(self) -> None:
         self._running = True
@@ -95,14 +107,15 @@ class GPUWorker:
             raise self._load_error
 
     def stop(self) -> None:
-        if not self._running:
-            return
+        with self._submit_lock:
+            if not self._running:
+                return
+            self._running = False
         evt = threading.Event()
         try:
             self._queue.put(WorkItem(WorkType.SHUTDOWN, None, sync_event=evt), timeout=5)
         except queue.Full:
             pass
-        self._running = False
         if self._thread:
             self._thread.join(timeout=30)
 
@@ -111,23 +124,31 @@ class GPUWorker:
             fut = loop.create_future()
             fut.set_exception(RuntimeError("GPU worker not ready"))
             return fut, None
-        fut = loop.create_future()
-        item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
-        try:
-            self._queue.put_nowait(item)
-        except queue.Full:
-            fut.set_exception(RuntimeError("GPU queue full"))
-        return fut, item
+        with self._submit_lock:
+            if not self._running:
+                fut = loop.create_future()
+                fut.set_exception(RuntimeError("GPU worker shutting down"))
+                return fut, None
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            try:
+                self._queue.put_nowait(item)
+            except queue.Full:
+                fut.set_exception(RuntimeError("GPU queue full"))
+            return fut, item
 
     def submit_sync(self, payload: dict, timeout: float = 120.0) -> list:
         if not self.is_ready:
             raise RuntimeError("GPU worker not ready")
-        evt = threading.Event()
-        item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, sync_event=evt)
-        try:
-            self._queue.put(item, timeout=5)
-        except queue.Full:
-            raise RuntimeError("GPU queue full")
+        with self._submit_lock:
+            if not self._running:
+                raise RuntimeError("GPU worker shutting down")
+            evt = threading.Event()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, sync_event=evt)
+            try:
+                self._queue.put(item, timeout=5)
+            except queue.Full:
+                raise RuntimeError("GPU queue full")
         if not evt.wait(timeout=timeout):
             raise TimeoutError("GPU transcription timed out")
         if item.sync_error is not None:
@@ -137,12 +158,15 @@ class GPUWorker:
     def submit_embedding_sync(self, payload: dict, timeout: float = 30.0):
         if not self.is_ready:
             raise RuntimeError("GPU worker not ready")
-        evt = threading.Event()
-        item = WorkItem(WorkType.EMBEDDING, payload, sync_event=evt)
-        try:
-            self._queue.put(item, timeout=5)
-        except queue.Full:
-            raise RuntimeError("GPU queue full")
+        with self._submit_lock:
+            if not self._running:
+                raise RuntimeError("GPU worker shutting down")
+            evt = threading.Event()
+            item = WorkItem(WorkType.EMBEDDING, payload, sync_event=evt)
+            try:
+                self._queue.put(item, timeout=5)
+            except queue.Full:
+                raise RuntimeError("GPU queue full")
         if not evt.wait(timeout=timeout):
             raise TimeoutError("GPU embedding timed out")
         if item.sync_error is not None:
@@ -266,9 +290,16 @@ class GPUWorker:
 
         self._load_embedding_model()
 
-        vram_used = torch.cuda.memory_allocated() / 1024**2
-        vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**2
-        logger.info(f"VRAM after model load: {vram_used:.0f}MiB / {vram_total:.0f}MiB")
+        if torch.cuda.is_available():
+            device = os.getenv("PARAKEET_DEVICE", "cuda:0")
+            dev_idx = int(device.split(":")[-1]) if ":" in device else 0
+            free_bytes, total_bytes = torch.cuda.mem_get_info(dev_idx)
+            self._vram_total_mb = total_bytes / (1024 * 1024)
+            self._vram_baseline_mb = (total_bytes - free_bytes) / (1024 * 1024)
+            logger.info(
+                f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB used / "
+                f"{self._vram_total_mb:.0f}MiB total ({free_bytes / (1024 * 1024):.0f}MiB free)"
+            )
         logger.info("Batch model loaded and ready")
 
     def _load_embedding_model(self) -> None:
@@ -351,7 +382,11 @@ class GPUWorker:
                     )
 
         if self._attn_mode == "auto":
-            max_dur = max((self._get_audio_duration_sec(p) for p in audio_paths), default=0.0)
+            durations_from_batcher = payload.get("durations")
+            if durations_from_batcher:
+                max_dur = max(durations_from_batcher)
+            else:
+                max_dur = max((self._get_audio_duration_sec(p) for p in audio_paths), default=0.0)
             need_local = max_dur >= self._attn_auto_threshold_sec
             if need_local != self._attn_is_local:
                 mode_name = "local" if need_local else "full"

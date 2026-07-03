@@ -9370,6 +9370,24 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transcribeLaterPaused => 'متوقف شد — صدا ضبط نمی‌شود';
 
   @override
+  String get memoryThisDevice => 'این دستگاه';
+
+  @override
+  String get memoryThisIphone => 'این iPhone';
+
+  @override
+  String get memoryThisPhone => 'این تلفن';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'نحوه استفاده از Omi';
 
   @override
@@ -9471,4 +9489,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get latest => 'آخرین';
+
+  @override
+  String get flashFirmware => 'فلش کردن میان‌افزار';
 }

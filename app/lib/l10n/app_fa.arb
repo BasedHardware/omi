@@ -10642,6 +10642,12 @@
     "captureModeLiveDescription": "رونویسی همزمان هنگام صحبت کردن.",
     "captureModeLaterDescription": "صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید.",
     "backgroundModeUnavailable": "حالت پس‌زمینه در دسترس نیست چون هیچ دستگاه سازگاری متصل نیست. برای استفاده از این ویژگی، یک دستگاه Omi، OpenGlass یا Friend Pendant وصل کنید.",
+    "memoryThisDevice": "این دستگاه",
+    "memoryThisIphone": "این iPhone",
+    "memoryThisPhone": "این تلفن",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "نحوه استفاده از Omi",
     "deviceOnboardingTranscriptionTitle": "با Omi خود صحبت کنید",
     "deviceOnboardingTranscriptionSubtitle": "چند کلمه بگویید و ظاهر شدن آن‌ها را به‌صورت لحظه‌ای ببینید",
@@ -10675,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "یک گشت سریع و کاربردی در همه‌ی کارهایی که Omi شما می‌تواند انجام دهد.",
     "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
     "jumpToLatestMessage": "پرش به آخرین پیام",
-    "latest": "آخرین"
+    "latest": "آخرین",
+    "flashFirmware": "فلش کردن میان‌افزار"
 }

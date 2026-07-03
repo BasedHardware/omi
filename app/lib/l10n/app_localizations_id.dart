@@ -9376,6 +9376,24 @@ class AppLocalizationsId extends AppLocalizations {
   String get transcribeLaterPaused => 'Dijeda — audio tidak sedang direkam';
 
   @override
+  String get memoryThisDevice => 'Perangkat ini';
+
+  @override
+  String get memoryThisIphone => 'iPhone ini';
+
+  @override
+  String get memoryThisPhone => 'Ponsel ini';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Cara Menggunakan Omi';
 
   @override
@@ -9478,4 +9496,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get latest => 'Terbaru';
+
+  @override
+  String get flashFirmware => 'Flash Firmware';
 }

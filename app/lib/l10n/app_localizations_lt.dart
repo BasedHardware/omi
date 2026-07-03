@@ -9382,6 +9382,24 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
 
   @override
+  String get memoryThisDevice => 'Šis įrenginys';
+
+  @override
+  String get memoryThisIphone => 'Šis iPhone';
+
+  @override
+  String get memoryThisPhone => 'Šis telefonas';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Kaip naudoti Omi';
 
   @override
@@ -9485,4 +9503,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get latest => 'Naujausias';
+
+  @override
+  String get flashFirmware => 'Įrašyti programinę aparatinę įrangą';
 }

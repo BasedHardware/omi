@@ -11075,6 +11075,30 @@
     "@transcribeLaterPaused": {
         "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
     },
+    "memoryThisDevice": "This device",
+    "@memoryThisDevice": {
+        "description": "Filter chip and provenance label for the current device"
+    },
+    "memoryThisIphone": "This iPhone",
+    "@memoryThisIphone": {
+        "description": "Provenance label when capture device is this iPhone"
+    },
+    "memoryThisPhone": "This phone",
+    "@memoryThisPhone": {
+        "description": "Provenance label when capture device is this Android phone"
+    },
+    "memoryProvenanceMac": "Mac",
+    "@memoryProvenanceMac": {
+        "description": "Provenance label for a Mac capture device"
+    },
+    "memoryProvenanceIphone": "iPhone",
+    "@memoryProvenanceIphone": {
+        "description": "Provenance label for an iPhone capture device"
+    },
+    "memoryProvenanceAndroid": "Android",
+    "@memoryProvenanceAndroid": {
+        "description": "Provenance label for an Android capture device"
+    },
     "deviceTutorial": "How to Use Your Omi",
     "@deviceTutorial": {
         "description": "Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)"
@@ -11210,5 +11234,9 @@
     "latest": "Latest",
     "@latest": {
         "description": "Visible label for the jump-to-latest button in chat"
+    },
+    "flashFirmware": "Flash Firmware",
+    "@flashFirmware": {
+        "description": "Button on the manual firmware flash page (developer settings)"
     }
 }

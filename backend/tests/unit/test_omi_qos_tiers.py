@@ -106,7 +106,6 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('models.structured', Structured=MagicMock())
 _install_module('utils.byok', get_byok_key=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
@@ -132,6 +131,9 @@ for _package, _path in {
         module = types.ModuleType(_package)
         sys.modules[_package] = module
     module.__path__ = [str(_path)]
+    if '.' in _package:
+        parent_name, child_name = _package.rsplit('.', 1)
+        setattr(sys.modules[parent_name], child_name, module)
 
 _clients_stub = sys.modules.get('utils.llm.clients')
 if _clients_stub is not None and not hasattr(_clients_stub, 'MODEL_QOS_PROFILES'):
@@ -153,6 +155,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "from unittest.mock import MagicMock",
         "for module_name in [",
         "    'anthropic',",
+        "    'cachetools',",
         "    'firebase_admin',",
         "    'firebase_admin.firestore',",
         "    'google.cloud.firestore',",
@@ -169,6 +172,8 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'database',",
         "    'database._client',",
         "    'database.llm_usage',",
+        "    'models.structured_extraction',",
+        "    'prometheus_client',",
         "]:",
         "    sys.modules.setdefault(module_name, MagicMock())",
         "os.environ['OPENAI_API_KEY'] = 'sk-test'",
@@ -951,6 +956,44 @@ class TestBYOKWrapperArchitecture:
             'llm_medium_experiment',
         ]:
             assert not hasattr(mod, name), f'{name} should have been removed from clients.py'
+
+
+class TestBYOKEmbeddingsProxy:
+    def test_model_access_403_falls_back_to_default_embeddings(self, monkeypatch):
+        """BYOK OpenAI projects can reject text-embedding-3-large with model_not_found."""
+        import utils.llm.clients as mod
+
+        class _FailingBYOKEmbeddings:
+            def embed_documents(self, _texts):
+                raise RuntimeError(
+                    "openai.PermissionDeniedError: Error code: 403 - project does not have access "
+                    "to model text-embedding-3-large; code: model_not_found"
+                )
+
+            def embed_query(self, _text):
+                raise RuntimeError(
+                    "openai.PermissionDeniedError: Error code: 403 - project does not have access "
+                    "to model text-embedding-3-large; code: model_not_found"
+                )
+
+        default = MagicMock()
+        default.embed_documents.return_value = [[0.1, 0.2]]
+        default.embed_query.return_value = [0.1, 0.2]
+
+        monkeypatch.setattr(mod, 'get_byok_key', lambda provider: 'sk-byok' if provider == 'openai' else None)
+        monkeypatch.setattr(mod, 'OpenAIEmbeddings', lambda **_kwargs: _FailingBYOKEmbeddings())
+        mod._openai_cache.clear()
+
+        proxy = mod._OpenAIEmbeddingsProxy(
+            model='text-embedding-3-large',
+            default=default,
+            ctor_kwargs={},
+        )
+
+        assert proxy.embed_documents(['hello']) == [[0.1, 0.2]]
+        assert proxy.embed_query('hello') == [0.1, 0.2]
+        default.embed_documents.assert_called_once_with(['hello'])
+        default.embed_query.assert_called_once_with('hello')
 
 
 class TestBYOKProfile:

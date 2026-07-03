@@ -9423,6 +9423,24 @@ class AppLocalizationsIt extends AppLocalizations {
   String get transcribeLaterPaused => 'In pausa — l\'audio non viene registrato';
 
   @override
+  String get memoryThisDevice => 'Questo dispositivo';
+
+  @override
+  String get memoryThisIphone => 'Questo iPhone';
+
+  @override
+  String get memoryThisPhone => 'Questo telefono';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Come usare Omi';
 
   @override
@@ -9524,4 +9542,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get latest => 'Più recente';
+
+  @override
+  String get flashFirmware => 'Installa il firmware';
 }

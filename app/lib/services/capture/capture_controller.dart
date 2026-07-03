@@ -145,6 +145,10 @@ class CaptureController extends ChangeNotifier
 
   CaptureController({CaptureExternalActions? externalActions})
       : externalActions = externalActions ?? const NoopCaptureExternalActions() {
+    // Restore a persisted device mute so it survives an app kill/restart. When
+    // the device reconnects, streamDeviceRecording() reads _isPaused as
+    // `wasPaused` and re-applies the mute instead of silently resuming.
+    _isPaused = SharedPreferencesUtil().deviceMuted;
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
@@ -2194,6 +2198,8 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
     _isPaused = true;
+    // Persist so the mute survives an app kill/restart, not just a reconnect.
+    SharedPreferencesUtil().deviceMuted = true;
     updateRecordingState(RecordingState.pause);
     notifyListeners();
   }
@@ -2201,6 +2207,8 @@ class CaptureController extends ChangeNotifier
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
     _isPaused = false;
+    // Clear the persisted mute so we don't re-mute on the next restart.
+    SharedPreferencesUtil().deviceMuted = false;
     // Update widget immediately — don't wait for streaming setup
     BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device

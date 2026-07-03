@@ -1,0 +1,171 @@
+{
+  "public_client_env": {
+    "allowed": [
+      "PUBLIC_API_BASE_URL",
+      "PUBLIC_STAGING_API_URL",
+      "PUBLIC_USE_WEB_AUTH",
+      "PUBLIC_USE_AUTH_CUSTOM_TOKEN",
+      "PUBLIC_GOOGLE_MAPS_API_KEY",
+      "PUBLIC_GOOGLE_CLIENT_ID",
+      "PUBLIC_POSTHOG_API_KEY",
+      "PUBLIC_INTERCOM_APP_ID",
+      "PUBLIC_INTERCOM_IOS_API_KEY",
+      "PUBLIC_INTERCOM_ANDROID_API_KEY"
+    ]
+  },
+  "legacy_public_client_env": {
+    "allowed": [
+      "FIREBASE_API_KEY",
+      "MIXPANEL_PROJECT_TOKEN",
+      "OMI_DESKTOP_API_URL",
+      "OMI_PYTHON_API_URL"
+    ]
+  },
+  "public_web_build_args": {
+    "allowed": [
+      "API_URL",
+      "NEXT_PUBLIC_API_BASE_URL",
+      "NEXT_PUBLIC_FIREBASE_API_KEY",
+      "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+      "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+      "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
+      "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
+      "NEXT_PUBLIC_FIREBASE_APP_ID",
+      "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID",
+      "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
+      "NEXT_PUBLIC_MIXPANEL_TOKEN",
+      "NEXT_PUBLIC_EXTRA_PROMPT_RULES",
+      "NEXT_PUBLIC_PLUGINS_APP_ID",
+      "NEXT_PUBLIC_OMI_API_URL"
+    ]
+  },
+  "public_client_env_sources": {
+    "allowed": [
+      "STAGING_API_URL"
+    ]
+  },
+  "restricted_public_client_keys": {
+    "PUBLIC_GOOGLE_MAPS_API_KEY": {
+      "owner": "mobile-platform",
+      "purpose": "Google Maps rendering in the public mobile client",
+      "restriction": "Must be restricted in Google Cloud by the released iOS bundle id, Android package/certificate, and Maps APIs only.",
+      "revocation": "Rotate in Google Cloud, update the mobile_public_config CI group, and rebuild affected releases."
+    },
+    "PUBLIC_POSTHOG_API_KEY": {
+      "owner": "growth",
+      "purpose": "Public PostHog event ingestion from the mobile client",
+      "restriction": "Project ingestion token only; no admin/read capability.",
+      "revocation": "Rotate in PostHog, update the mobile_public_config CI group, and rebuild affected releases."
+    },
+    "PUBLIC_INTERCOM_IOS_API_KEY": {
+      "owner": "support",
+      "purpose": "Public Intercom iOS SDK key",
+      "restriction": "Client SDK key only; no admin/read capability.",
+      "revocation": "Rotate in Intercom, update the mobile_public_config CI group, and rebuild affected releases."
+    },
+    "PUBLIC_INTERCOM_ANDROID_API_KEY": {
+      "owner": "support",
+      "purpose": "Public Intercom Android SDK key",
+      "restriction": "Client SDK key only; no admin/read capability.",
+      "revocation": "Rotate in Intercom, update the mobile_public_config CI group, and rebuild affected releases."
+    },
+    "PUBLIC_USE_AUTH_CUSTOM_TOKEN": {
+      "owner": "mobile-platform",
+      "purpose": "Public boolean feature flag selecting custom-token auth flow.",
+      "restriction": "Boolean config only; never a credential value.",
+      "revocation": "Set false in public client config and rebuild affected releases."
+    }
+  },
+  "server_secret_env": {
+    "denied_exact": [
+      "OPENAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "CLAUDE_API_KEY",
+      "SLIDESGPT_API_KEY",
+      "GOOGLE_CLIENT_SECRET",
+      "GEMINI_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "DEEPGRAM_API_KEY",
+      "PINECONE_API_KEY",
+      "SUPABASE_KEY",
+      "UPSTASH_REDIS_PASSWORD",
+      "GOOGLE_CALENDAR_API_KEY",
+      "JWT_SECRET",
+      "OMI_APP_SECRET",
+      "DECK_APP_SECRET",
+      "RESEND_API_KEY",
+      "SENTRY_AUTH_TOKEN",
+      "REDIS_DB_PASSWORD",
+      "DESKTOP_DEEPGRAM_API_KEY",
+      "DESKTOP_ANTHROPIC_API_KEY",
+      "DESKTOP_GOOGLE_CALENDAR_API_KEY",
+      "SPARKLE_PRIVATE_KEY",
+      "APP_STORE_CONNECT_PRIVATE_KEY",
+      "FIREBASE_SERVICE_ACCOUNT_KEY",
+      "FIREBASE_SERVICE_ACCOUNT_DEV_KEY",
+      "GOOGLE_APPLICATION_CREDENTIALS",
+      "SERVICE_ACCOUNT_JSON",
+      "ADMIN_KEY",
+      "ENCRYPTION_SECRET"
+    ],
+    "denied_name_patterns": [
+      "(^|_)SECRET($|_)",
+      "(^|_)PRIVATE_KEY($|_)",
+      "(^|_)SERVICE_ACCOUNT($|_)",
+      "(^|_)ADMIN_KEY($|_)",
+      "(^|_)WEBHOOK_SECRET($|_)",
+      "(^|_)API_KEY($|_)",
+      "(^|_)TOKEN($|_)",
+      "(^|_)PASSWORD($|_)",
+      "(^|_)CREDENTIALS?($|_)",
+      "(^|_)KEYSTORE($|_)",
+      "(^|_)P12($|_)"
+    ]
+  },
+  "allowed_build_secret_source_references": [
+    "CM_KEYSTORE_PATH",
+    "CM_KEYSTORE_PASSWORD",
+    "CM_KEY_PASSWORD",
+    "MATCH_PASSWORD"
+  ],
+  "allowed_public_client_tokens": [
+    "INTERCOM_APP_ID",
+    "INTERCOM_ANDROID_API_KEY"
+  ],
+  "direct_provider_domains_denied_in_app": [
+    "api.openai.com",
+    "api.anthropic.com",
+    "generativelanguage.googleapis.com",
+    "api.deepgram.com"
+  ],
+  "legacy_direct_provider_domain_exceptions": {
+    "app/lib/models/stt_provider.dart": {
+      "owner": "mobile-platform",
+      "reason": "Legacy user-supplied custom STT templates. New provider integrations must go through backend-owned secret storage and a provider proxy.",
+      "migration": "Replace direct BYOK STT calls with backend BYOK references before adding new provider domains.",
+      "allowed_occurrences": {
+        "api.openai.com": 2,
+        "api.deepgram.com": 2,
+        "generativelanguage.googleapis.com": 2
+      }
+    },
+    "app/lib/services/sockets/transcription_polling_service.dart": {
+      "owner": "mobile-platform",
+      "reason": "Legacy user-supplied custom STT polling implementation. New provider integrations must go through backend-owned secret storage and a provider proxy.",
+      "migration": "Replace direct BYOK STT calls with backend BYOK references before adding new provider domains.",
+      "allowed_occurrences": {
+        "api.openai.com": 2,
+        "api.deepgram.com": 1,
+        "generativelanguage.googleapis.com": 1
+      }
+    },
+    "app/lib/services/sockets/pure_streaming_stt.dart": {
+      "owner": "mobile-platform",
+      "reason": "Legacy user-supplied Gemini streaming STT implementation. New provider integrations must go through backend-owned secret storage and a provider proxy.",
+      "migration": "Replace direct BYOK STT calls with backend BYOK references before adding new provider domains.",
+      "allowed_occurrences": {
+        "generativelanguage.googleapis.com": 1
+      }
+    }
+  }
+}

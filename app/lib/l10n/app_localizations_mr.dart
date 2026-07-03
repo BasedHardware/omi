@@ -9378,6 +9378,24 @@ class AppLocalizationsMr extends AppLocalizations {
   String get transcribeLaterPaused => 'थांबवले — ऑडिओ रेकॉर्ड होत नाही';
 
   @override
+  String get memoryThisDevice => 'हे डिव्हाइस';
+
+  @override
+  String get memoryThisIphone => 'हा iPhone';
+
+  @override
+  String get memoryThisPhone => 'हा फोन';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Omi कसे वापरावे';
 
   @override
@@ -9478,4 +9496,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get latest => 'नवीनतम';
+
+  @override
+  String get flashFirmware => 'फर्मवेअर फ्लॅश करा';
 }

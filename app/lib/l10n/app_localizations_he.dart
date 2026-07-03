@@ -9297,6 +9297,24 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcribeLaterPaused => 'מושהה — האודיו אינו מוקלט';
 
   @override
+  String get memoryThisDevice => 'המכשיר הזה';
+
+  @override
+  String get memoryThisIphone => 'ה-iPhone הזה';
+
+  @override
+  String get memoryThisPhone => 'הטלפון הזה';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'איך להשתמש ב-Omi';
 
   @override
@@ -9397,4 +9415,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get latest => 'האחרון';
+
+  @override
+  String get flashFirmware => 'צריבת קושחה';
 }

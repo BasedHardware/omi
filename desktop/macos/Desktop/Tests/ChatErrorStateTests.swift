@@ -128,6 +128,40 @@ final class ChatErrorStateTests: XCTestCase {
       )
     )
     XCTAssertNil(ChatErrorState.from(.agentError("something opaque went wrong")))
+    XCTAssertNil(
+      ChatErrorState.from(
+        .agentRuntimeFailure(
+          AgentRuntimeFailure(
+            code: "adapter_config_invalid",
+            userMessage: "OpenClaw needs a config migration.",
+            technicalMessage: nil,
+            source: "adapter_process",
+            adapterId: "openclaw",
+            provider: nil,
+            retryable: false
+          )
+        )
+      )
+    )
+  }
+
+  func testStructuredAgentRuntimeFailureKeepsUserMessage() {
+    let error = BridgeError.agentRuntimeFailure(
+      AgentRuntimeFailure(
+        code: "adapter_config_invalid",
+        userMessage: "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry.",
+        technicalMessage: "OpenClaw config is invalid",
+        source: "adapter_process",
+        adapterId: "openclaw",
+        provider: nil,
+        retryable: false
+      )
+    )
+
+    XCTAssertEqual(
+      error.localizedDescription,
+      "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry."
+    )
   }
 
   // MARK: - Bridge-unavailable reason coverage

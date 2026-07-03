@@ -3064,6 +3064,12 @@
     "captureModeLiveDescription": "Transkribējiet reāllaikā, kamēr runājat.",
     "captureModeLaterDescription": "Saglabājiet audio tagad un transkribējiet, kad vēlaties.",
     "backgroundModeUnavailable": "Fona režīms nav pieejams, jo nav pievienota saderīga ierīce. Pievienojiet Omi, OpenGlass vai Friend Pendant ierīci, lai izmantotu šo funkciju.",
+    "memoryThisDevice": "Šī ierīce",
+    "memoryThisIphone": "Šis iPhone",
+    "memoryThisPhone": "Šis tālrunis",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Kā lietot Omi",
     "deviceOnboardingTranscriptionTitle": "Runā savā Omi",
     "deviceOnboardingTranscriptionSubtitle": "Pasaki dažus vārdus un vēro, kā tie parādās reāllaikā",
@@ -3097,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Ātrs, praktisks ieskats visā, ko spēj tavs Omi.",
     "deviceOnboardingIntroDuration": "Apmēram 1 minūte",
     "jumpToLatestMessage": "Pārlēkt uz jaunāko ziņojumu",
-    "latest": "Jaunākais"
+    "latest": "Jaunākais",
+    "flashFirmware": "Instalēt aparātprogrammatūru"
 }

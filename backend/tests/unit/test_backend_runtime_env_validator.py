@@ -24,6 +24,21 @@ def write_yaml(path: Path, payload: dict) -> None:
         yaml.safe_dump(payload, handle, sort_keys=False)
 
 
+def with_memory_env(payload: str) -> str:
+    memory_env = '''\
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_MODE", "value": "write"},
+        {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
+        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
+        {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "false"},'''
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n' + memory_env,
+    )
+
+
 def test_repo_gke_values_match_manifest():
     validator = load_validator()
 
@@ -32,34 +47,55 @@ def test_repo_gke_values_match_manifest():
     assert errors == []
 
 
+def test_repo_cloud_run_workflows_match_manifest():
+    validator = load_validator()
+
+    errors = validator.validate_runtime_env(env='dev', check_workflows=True)
+
+    assert errors == []
+
+
 def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        '''
+        with_memory_env(
+            '''
 {
   "services": {
     "backend": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
       ]
     },
     "backend-sync": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
       ]
     },
     "backend-integration": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
@@ -68,6 +104,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
   }
 }
 ''',
+        ),
         encoding='utf-8',
     )
 
@@ -77,35 +114,207 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     assert errors[0].scope == 'cloud_run/backend'
 
 
-def test_cloud_run_state_accepts_secret_bindings(tmp_path):
+def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
+    validator = load_validator()
+    values_file = tmp_path / 'backend_listen.yaml'
+    write_yaml(
+        values_file,
+        {
+            'env': [
+                {'name': 'OMI_LLM_GATEWAY_URL', 'value': 'http://gateway.local'},
+            ]
+        },
+    )
+    workflow_file = tmp_path / 'deploy.yml'
+    write_yaml(
+        workflow_file,
+        {
+            'env': {'SERVICE': 'backend'},
+            'jobs': {
+                'deploy': {
+                    'steps': [
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}',
+                                'env_vars': 'GOOGLE_CLOUD_PROJECT=${{ vars.RUNTIME_GCP_PROJECT_ID }}\n',
+                            },
+                        }
+                    ]
+                }
+            },
+        },
+    )
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(
+        manifest_path,
+        {
+            'schema_version': 1,
+            'environments': {
+                'dev': {
+                    'gcp_project': 'based-hardware-dev',
+                    'runtime_gcp_project': 'based-hardware',
+                    'region': 'us-central1',
+                    'gke': {
+                        'backend-listen': {
+                            'values_file': str(values_file),
+                            'env': {
+                                'OMI_LLM_GATEWAY_URL': {
+                                    'value': 'http://gateway.local',
+                                },
+                            },
+                        }
+                    },
+                    'cloud_run': {
+                        'workflow_files': [str(workflow_file)],
+                        'services': {
+                            'backend': {
+                                'env': {
+                                    'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'},
+                                    'OMI_LLM_GATEWAY_URL': {'value': 'http://172.16.63.232'},
+                                },
+                                'secrets': {},
+                            }
+                        },
+                    },
+                }
+            },
+        },
+    )
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+
+    assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
+    assert errors[0].scope == 'cloud_run_workflow/backend'
+
+
+def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outputs(tmp_path):
+    validator = load_validator()
+    values_file = tmp_path / 'backend_listen.yaml'
+    write_yaml(
+        values_file,
+        {
+            'env': [
+                {'name': 'OMI_LLM_GATEWAY_URL', 'value': 'http://gateway.local'},
+            ]
+        },
+    )
+    workflow_file = tmp_path / 'deploy.yml'
+    write_yaml(
+        workflow_file,
+        {
+            'env': {'SERVICE': 'backend'},
+            'jobs': {
+                'deploy': {
+                    'steps': [
+                        {
+                            'id': 'runtime-env',
+                            'run': 'python3 backend/scripts/render-backend-runtime-env.py --env dev',
+                        },
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}',
+                                'flags': '${{ steps.runtime-env.outputs.cloud_run_flags }}',
+                                'env_vars': '${{ steps.runtime-env.outputs.backend_env_vars }}',
+                                'secrets': '${{ steps.runtime-env.outputs.backend_secrets }}',
+                            },
+                        },
+                    ]
+                }
+            },
+        },
+    )
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(
+        manifest_path,
+        {
+            'schema_version': 1,
+            'environments': {
+                'dev': {
+                    'gcp_project': 'based-hardware-dev',
+                    'runtime_gcp_project': 'based-hardware',
+                    'region': 'us-central1',
+                    'gke': {
+                        'backend-listen': {
+                            'values_file': str(values_file),
+                            'env': {
+                                'OMI_LLM_GATEWAY_URL': {
+                                    'value': 'http://gateway.local',
+                                },
+                            },
+                        }
+                    },
+                    'cloud_run': {
+                        'workflow_files': [str(workflow_file)],
+                        'network': {
+                            'flags': {
+                                '--network': 'custom-network',
+                                '--subnet': 'custom-subnet',
+                                '--vpc-egress': 'private-ranges-only',
+                            }
+                        },
+                        'services': {
+                            'backend': {
+                                'env': {
+                                    'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'},
+                                    'OMI_LLM_GATEWAY_URL': {'value': 'http://custom-manifest-gateway'},
+                                    'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
+                                },
+                                'secrets': {},
+                            }
+                        },
+                    },
+                }
+            },
+        },
+    )
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+
+    assert errors == []
+
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        '''
+        with_memory_env(
+            '''
 {
   "services": {
     "backend": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
       ]
     },
     "backend-sync": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
       ]
     },
     "backend-integration": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
@@ -114,6 +323,7 @@ def test_cloud_run_state_accepts_secret_bindings(tmp_path):
   }
 }
 ''',
+        ),
         encoding='utf-8',
     )
 
@@ -126,31 +336,44 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        '''
+        with_memory_env(
+            '''
 {
   "services": {
     "backend": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
       ]
     },
     "backend-sync": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
       ]
     },
     "backend-integration": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
+        {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
@@ -159,6 +382,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
   }
 }
 ''',
+        ),
         encoding='utf-8',
     )
 
@@ -266,3 +490,10 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     )
 
     assert errors == []
+
+
+def test_backend_listen_chart_only_workflow_preserves_runtime_project():
+    workflow_path = ROOT.parent / '.github/workflows/gcp_backend_listen_helm.yml'
+    workflow_text = workflow_path.read_text(encoding='utf-8')
+
+    assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2

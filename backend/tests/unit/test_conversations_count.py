@@ -1,25 +1,18 @@
 """Tests for get_conversations_count logic and /v1/conversations/count endpoint.
 
-The DB function is tested inline because database.conversations requires
-Firestore client init at import time. The test_source_matches_implementation
-test verifies that the real module's source matches this test's logic.
+The DB function is tested inline against a module-local MagicMock ``mock_db``; the
+test never imports ``database.*`` (it only reads production source via ``open()`` for
+the parity assertions), so no import-time stubbing is required. The inline copy is
+kept hermetic and fast; ``test_source_matches_implementation`` guards against drift.
 """
 
 import os
-import sys
-import types
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
 from unittest.mock import MagicMock
 
 try:
     from google.cloud.firestore_v1 import FieldFilter
 except ImportError:
-    # Lightweight test runs may not install Firestore, or may inherit an empty stub from another test.
+    # Lightweight test runs may not install Firestore.
 
     class FieldFilter:
         def __init__(self, field_path, op_string, value):
@@ -28,46 +21,7 @@ except ImportError:
             self.value = value
 
 
-def _stub_module(name):
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    return mod
-
-
-# Stub database to avoid Firestore init
-if "database" not in sys.modules:
-    database_mod = _stub_module("database")
-    database_mod.__path__ = []
-else:
-    database_mod = sys.modules["database"]
-
-for sub in [
-    "_client",
-    "redis_db",
-    "users",
-    "conversations",
-    "chat",
-    "memories",
-    "action_items",
-    "apps",
-    "auth",
-    "notifications",
-    "daily_summaries",
-    "folders",
-    "goals",
-    "knowledge_graph",
-    "phone_calls",
-    "vector_db",
-]:
-    full = f"database.{sub}"
-    if full not in sys.modules:
-        mod = _stub_module(full)
-        setattr(database_mod, sub, mod)
-
-# Set up mock db on _client
 mock_db = MagicMock()
-sys.modules["database._client"].db = mock_db
-sys.modules["database._client"].document_id_from_seed = lambda *a: "test"
 
 
 def get_conversations_count(
@@ -79,11 +33,14 @@ def get_conversations_count(
     categories=None,
     folder_id=None,
     starred=None,
+    sources=None,
 ):
     """Mirrors database.conversations.get_conversations_count."""
     conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if sources:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
@@ -116,6 +73,7 @@ class TestConversationsCount:
             source = f.read()
         assert 'def get_conversations_count(' in source
         assert "FieldFilter('discarded', '==', False)" in source
+        assert "FieldFilter('source', 'in', sources)" in source
         assert "FieldFilter('status', 'in', statuses)" in source
         assert "FieldFilter('folder_id', '==', folder_id)" in source
         assert "FieldFilter('starred', '==', starred)" in source
@@ -305,6 +263,26 @@ class TestConversationsCountRouteSource:
         with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert "{'count': count}" in source or "{'count':count}" in source
+
+    def test_route_forwards_sources_as_list(self):
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'sources=source_list' in source
+
+    def test_route_rejects_statuses_combined_with_sources(self):
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'statuses and sources filters cannot be combined' in source
+
+    def test_route_echoes_sources_when_filtered(self):
+        # Clients rely on the echo to distinguish a filtered count from an
+        # older backend that ignored the unknown sources param.
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert "{'count': count, 'sources': source_list}" in source
 
 
 class TestAppsV2LimitBoundary:

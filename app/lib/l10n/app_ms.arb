@@ -3064,6 +3064,12 @@
     "captureModeLiveDescription": "Transkripsi secara masa nyata semasa anda bercakap.",
     "captureModeLaterDescription": "Simpan audio sekarang dan transkripsi bila-bila masa.",
     "backgroundModeUnavailable": "Mod Latar Belakang tidak tersedia kerana tiada peranti serasi yang disambungkan. Sambungkan peranti Omi, OpenGlass atau Friend Pendant untuk menggunakan ciri ini.",
+    "memoryThisDevice": "Peranti ini",
+    "memoryThisIphone": "iPhone ini",
+    "memoryThisPhone": "Telefon ini",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Cara Menggunakan Omi",
     "deviceOnboardingTranscriptionTitle": "Bercakap dengan Omi Anda",
     "deviceOnboardingTranscriptionSubtitle": "Sebut beberapa patah perkataan dan lihat ia muncul secara langsung",
@@ -3097,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Lawatan ringkas dan praktikal tentang semua yang Omi anda boleh lakukan.",
     "deviceOnboardingIntroDuration": "Kira-kira 1 minit",
     "jumpToLatestMessage": "Lompat ke mesej terkini",
-    "latest": "Terkini"
+    "latest": "Terkini",
+    "flashFirmware": "Flash Perisian Tegar"
 }

@@ -1,0 +1,91 @@
+{
+  "deployments": [
+    {
+      "metadata": {
+        "name": "prod-omi-backend-listen",
+        "generation": 43,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "42"
+        }
+      },
+      "spec": {
+        "replicas": 3,
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "name": "backend",
+                "image": "gcr.io/example/backend:abc1234"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "observedGeneration": 42,
+        "updatedReplicas": 2,
+        "availableReplicas": 1,
+        "unavailableReplicas": 2
+      }
+    }
+  ],
+  "replicaSets": [
+    {
+      "metadata": {
+        "name": "prod-omi-backend-listen-old",
+        "creationTimestamp": "2026-07-01T12:00:00Z",
+        "annotations": {
+          "deployment.kubernetes.io/revision": "41"
+        },
+        "ownerReferences": [
+          {
+            "kind": "Deployment",
+            "name": "prod-omi-backend-listen"
+          }
+        ]
+      },
+      "status": {
+        "replicas": 1
+      }
+    }
+  ],
+  "pods": [
+    {
+      "metadata": {
+        "name": "prod-omi-backend-listen-abc-pod",
+        "ownerReferences": [
+          {
+            "kind": "ReplicaSet",
+            "name": "prod-omi-backend-listen-abc"
+          }
+        ]
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "backend",
+            "state": {
+              "waiting": {
+                "reason": "CrashLoopBackOff"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "type": "Warning",
+      "reason": "BackOff",
+      "message": "Back-off restarting failed container backend",
+      "count": 3
+    },
+    {
+      "type": "Normal",
+      "reason": "Pulled",
+      "message": "Container image already present",
+      "count": 5
+    }
+  ]
+}

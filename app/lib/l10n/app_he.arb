@@ -10642,6 +10642,12 @@
     "captureModeLiveDescription": "תמלול בזמן אמת תוך כדי דיבור.",
     "captureModeLaterDescription": "שמרו את האודיו עכשיו ותמללו מתי שתרצו.",
     "backgroundModeUnavailable": "מצב רקע אינו זמין כי לא מחובר מכשיר תואם. חבר מכשיר Omi, OpenGlass או Friend Pendant כדי להשתמש בתכונה הזו.",
+    "memoryThisDevice": "המכשיר הזה",
+    "memoryThisIphone": "ה-iPhone הזה",
+    "memoryThisPhone": "הטלפון הזה",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "איך להשתמש ב-Omi",
     "deviceOnboardingTranscriptionTitle": "דברו אל ה-Omi שלכם",
     "deviceOnboardingTranscriptionSubtitle": "אמרו כמה מילים וצפו בהן מופיעות בזמן אמת",
@@ -10675,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "סיור מהיר ומעשי בכל מה שה-Omi שלכם יכול לעשות.",
     "deviceOnboardingIntroDuration": "כדקה אחת",
     "jumpToLatestMessage": "קפוץ להודעה האחרונה",
-    "latest": "האחרון"
+    "latest": "האחרון",
+    "flashFirmware": "צריבת קושחה"
 }

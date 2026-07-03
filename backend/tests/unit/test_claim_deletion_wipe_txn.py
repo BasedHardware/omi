@@ -50,7 +50,13 @@ _install_stub('database._client', _fake_client_mod)
 # imports from them at module level, and they transitively require real clients.
 for _mod_name in ('database.firestore_cache', 'database.redis_db'):
     _mod = types.ModuleType(_mod_name)
-    for _attr in ('CachePolicy', 'get_or_fetch', 'invalidate', 'try_acquire_user_platform_write_lock'):
+    for _attr in (
+        'CachePolicy',
+        'get_or_fetch',
+        'invalidate',
+        'try_acquire_client_device_write_lock',
+        'try_acquire_user_platform_write_lock',
+    ):
         setattr(_mod, _attr, MagicMock())
     _install_stub(_mod_name, _mod)
 

@@ -10642,6 +10642,12 @@
     "captureModeLiveDescription": "Transkribiraj u stvarnom vremenu dok govoriš.",
     "captureModeLaterDescription": "Spremi zvuk sada i transkribiraj kad god želiš.",
     "backgroundModeUnavailable": "Pozadinski način nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da biste koristili ovu značajku.",
+    "memoryThisDevice": "Ovaj uređaj",
+    "memoryThisIphone": "Ovaj iPhone",
+    "memoryThisPhone": "Ovaj telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Kako koristiti Omi",
     "deviceOnboardingTranscriptionTitle": "Govorite u svoj Omi",
     "deviceOnboardingTranscriptionSubtitle": "Recite nekoliko riječi i gledajte kako se pojavljuju u stvarnom vremenu",
@@ -10675,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "Brz i praktičan obilazak svega što vaš Omi može.",
     "deviceOnboardingIntroDuration": "Otprilike 1 minuta",
     "jumpToLatestMessage": "Idi na najnoviju poruku",
-    "latest": "Najnovije"
+    "latest": "Najnovije",
+    "flashFirmware": "Instaliraj firmver"
 }

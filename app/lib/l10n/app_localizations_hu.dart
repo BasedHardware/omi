@@ -9408,6 +9408,24 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
 
   @override
+  String get memoryThisDevice => 'Ez az eszköz';
+
+  @override
+  String get memoryThisIphone => 'Ez az iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ez a telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Az Omi használata';
 
   @override
@@ -9509,4 +9527,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get latest => 'Legújabb';
+
+  @override
+  String get flashFirmware => 'Firmware flashelése';
 }

@@ -1,7 +1,7 @@
 """Tests for the desktop trial paywall reconnect gate (#7318).
 
 Validates:
-- Admission phase rejects paywalled desktop before gauge increment
+- Admission phase rejects paywalled desktop before session start
 - No paywall close block inside the session body (removed, handled in admission)
 - Cache invalidation on payment/BYOK changes
 - is_trial_paywalled handles platform filtering (only desktop/macos affected)
@@ -24,34 +24,34 @@ def _read_source(path):
 
 
 class TestAdmissionPhase:
-    """Verify paywalled desktop users are rejected in the admission phase, before gauge increment."""
+    """Verify paywalled desktop users are rejected in the admission phase, before session start."""
 
-    def test_paywall_check_before_gauge_inc(self):
+    def test_paywall_check_before_session_start(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         paywall_pos = handler_body.find('is_trial_paywalled(uid, source)')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        session_pos = handler_body.find('task_supervisor.start_session()')
         assert paywall_pos != -1, "is_trial_paywalled call not found in _stream_handler"
-        assert gauge_pos != -1, "gauge inc not found in _stream_handler"
-        assert paywall_pos < gauge_pos, "paywall check must come before gauge inc"
+        assert session_pos != -1, "session start not found in _stream_handler"
+        assert paywall_pos < session_pos, "paywall check must come before session start"
 
-    def test_paywall_rejection_returns_before_gauge(self):
+    def test_paywall_rejection_returns_before_session(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
-        assert 'return' in paywall_block, "paywall rejection must return before gauge inc"
+        session_pos = handler_body.find('task_supervisor.start_session()')
+        paywall_block = handler_body[paywall_pos:session_pos]
+        assert 'return' in paywall_block, "paywall rejection must return before session start"
 
     def test_paywall_close_uses_1008(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
+        session_pos = handler_body.find('task_supervisor.start_session()')
+        paywall_block = handler_body[paywall_pos:session_pos]
         assert (
             'websocket.close' in paywall_block and '1008' in paywall_block
         ), "admission paywall must close with code 1008"
@@ -61,27 +61,27 @@ class TestAdmissionPhase:
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
+        session_pos = handler_body.find('task_supervisor.start_session()')
+        paywall_block = handler_body[paywall_pos:session_pos]
         assert 'trial_expired' in paywall_block, "paywall close must use reason 'trial_expired'"
 
-    def test_uid_check_before_gauge(self):
+    def test_uid_check_before_session(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         uid_check_pos = handler_body.find('Bad uid')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        session_pos = handler_body.find('task_supervisor.start_session()')
         assert uid_check_pos != -1, "uid check not found in _stream_handler"
-        assert gauge_pos != -1, "gauge inc not found in _stream_handler"
-        assert uid_check_pos < gauge_pos, "uid check must come before gauge inc"
+        assert session_pos != -1, "session start not found in _stream_handler"
+        assert uid_check_pos < session_pos, "uid check must come before session start"
 
     def test_freemium_event_sent_before_close(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
+        session_pos = handler_body.find('task_supervisor.start_session()')
+        paywall_block = handler_body[paywall_pos:session_pos]
         event_pos = paywall_block.find('FreemiumThresholdReachedEvent')
         close_pos = paywall_block.find('websocket.close')
         assert event_pos != -1, "admission must send FreemiumThresholdReachedEvent for desktop client"
@@ -90,34 +90,35 @@ class TestAdmissionPhase:
 
 
 class TestGaugeIncTryFinally:
-    """Verify gauge inc is immediately before the try/finally that decrements it — no leakable returns."""
+    """Verify session start is immediately before the try/finally that decrements it — no leakable returns."""
 
-    def test_inc_immediately_before_try(self):
+    def test_start_immediately_inside_try(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        inc_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        try_pos = handler_body.find('try:', inc_pos)
-        between = handler_body[inc_pos + len('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()') : try_pos]
-        assert 'return' not in between, "no return statements allowed between gauge inc and try block"
+        try_pos = handler_body.find('try:')
+        start_pos = handler_body.find('task_supervisor.start_session()')
+        assert try_pos != -1
+        assert start_pos != -1
+        assert try_pos < start_pos, "session start must be inside the guarded try block"
 
-    def test_unsupported_language_return_before_gauge(self):
+    def test_unsupported_language_return_before_session(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         lang_pos = handler_body.find('The language is not supported')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        session_pos = handler_body.find('task_supervisor.start_session()')
         assert lang_pos != -1, "unsupported language check not found"
-        assert lang_pos < gauge_pos, "unsupported language return must come before gauge inc"
+        assert lang_pos < session_pos, "unsupported language return must come before session start"
 
-    def test_bad_user_return_before_gauge(self):
+    def test_bad_user_return_before_session(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         user_pos = handler_body.find('Bad user')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        session_pos = handler_body.find('task_supervisor.start_session()')
         assert user_pos != -1, "bad user check not found"
-        assert user_pos < gauge_pos, "bad user return must come before gauge inc"
+        assert user_pos < session_pos, "bad user return must come before session start"
 
 
 class TestNoPaywallBlockInSession:
@@ -127,25 +128,25 @@ class TestNoPaywallBlockInSession:
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        after_gauge = handler_body[gauge_pos:]
+        session_pos = handler_body.find('task_supervisor.start_session()')
+        after_session = handler_body[session_pos:]
         assert (
-            'is_paywalled_desktop' not in after_gauge
-        ), "is_paywalled_desktop variable should not exist after gauge inc — handled in admission"
+            'is_paywalled_desktop' not in after_session
+        ), "is_paywalled_desktop variable should not exist after session start — handled in admission"
 
     def test_no_cooldown_calls(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         assert 'check_trial_paywall_ws_cooldown' not in src, "cooldown check removed"
         assert 'set_trial_paywall_ws_cooldown' not in src, "cooldown set removed"
 
-    def test_gauge_dec_in_finally(self):
+    def test_session_dec_in_finally(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         finally_pos = handler_body.rfind('finally:')
         assert finally_pos != -1
         finally_block = handler_body[finally_pos:]
-        assert 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' in finally_block, "gauge dec must be in the finally block"
+        assert 'task_supervisor.end_session()' in finally_block, "session end must be in the finally block"
 
 
 class TestCacheInvalidation:
@@ -262,8 +263,8 @@ class TestPlatformFiltering:
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        admission_body = handler_body[:gauge_pos]
+        session_pos = handler_body.find('task_supervisor.start_session()')
+        admission_body = handler_body[:session_pos]
         assert (
             'is_trial_paywalled(uid, source)' in admission_body
         ), "admission phase must call is_trial_paywalled with uid and source"

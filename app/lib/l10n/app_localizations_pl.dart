@@ -9393,6 +9393,24 @@ class AppLocalizationsPl extends AppLocalizations {
   String get transcribeLaterPaused => 'Wstrzymano — dźwięk nie jest nagrywany';
 
   @override
+  String get memoryThisDevice => 'To urządzenie';
+
+  @override
+  String get memoryThisIphone => 'Ten iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ten telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Jak korzystać z Omi';
 
   @override
@@ -9494,4 +9512,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get latest => 'Najnowsza';
+
+  @override
+  String get flashFirmware => 'Wgraj oprogramowanie układowe';
 }

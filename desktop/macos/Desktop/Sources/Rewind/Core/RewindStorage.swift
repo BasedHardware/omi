@@ -36,10 +36,8 @@ actor RewindStorage {
 
     /// Initialize the storage directories
     func initialize() async throws {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let userId = RewindDatabase.currentUserId ?? "anonymous"
-        let omiDir = appSupport
-            .appendingPathComponent("Omi", isDirectory: true)
+        let omiDir = DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
 

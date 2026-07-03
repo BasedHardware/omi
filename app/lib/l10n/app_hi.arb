@@ -3065,6 +3065,12 @@
     "captureModeLiveDescription": "बोलते समय रीयल-टाइम में ट्रांसक्राइब करें।",
     "captureModeLaterDescription": "अभी ऑडियो सहेजें और जब चाहें ट्रांसक्राइब करें।",
     "backgroundModeUnavailable": "बैकग्राउंड मोड उपलब्ध नहीं है क्योंकि कोई संगत डिवाइस कनेक्ट नहीं है। इस सुविधा का उपयोग करने के लिए Omi, OpenGlass या Friend Pendant डिवाइस कनेक्ट करें।",
+    "memoryThisDevice": "यह डिवाइस",
+    "memoryThisIphone": "यह iPhone",
+    "memoryThisPhone": "यह फ़ोन",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Omi का उपयोग कैसे करें",
     "deviceOnboardingTranscriptionTitle": "अपने Omi से बात करें",
     "deviceOnboardingTranscriptionSubtitle": "कुछ शब्द बोलें और उन्हें रियल-टाइम में दिखते हुए देखें",
@@ -3098,5 +3104,6 @@
     "deviceOnboardingIntroSubtitle": "आपका Omi जो कुछ भी कर सकता है, उसका एक त्वरित और व्यावहारिक दौरा।",
     "deviceOnboardingIntroDuration": "लगभग 1 मिनट",
     "jumpToLatestMessage": "नवीनतम संदेश पर जाएं",
-    "latest": "नवीनतम"
+    "latest": "नवीनतम",
+    "flashFirmware": "फ़र्मवेयर फ़्लैश करें"
 }

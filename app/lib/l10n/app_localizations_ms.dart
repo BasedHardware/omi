@@ -9391,6 +9391,24 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcribeLaterPaused => 'Dijeda — audio tidak dirakam';
 
   @override
+  String get memoryThisDevice => 'Peranti ini';
+
+  @override
+  String get memoryThisIphone => 'iPhone ini';
+
+  @override
+  String get memoryThisPhone => 'Telefon ini';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Cara Menggunakan Omi';
 
   @override
@@ -9494,4 +9512,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get latest => 'Terkini';
+
+  @override
+  String get flashFirmware => 'Flash Perisian Tegar';
 }

@@ -15,7 +15,7 @@ import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';

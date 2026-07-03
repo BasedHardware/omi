@@ -9368,6 +9368,24 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 
   @override
+  String get memoryThisDevice => 'Tämä laite';
+
+  @override
+  String get memoryThisIphone => 'Tämä iPhone';
+
+  @override
+  String get memoryThisPhone => 'Tämä puhelin';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Näin käytät Omia';
 
   @override
@@ -9469,4 +9487,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get latest => 'Uusin';
+
+  @override
+  String get flashFirmware => 'Asenna laiteohjelmisto';
 }

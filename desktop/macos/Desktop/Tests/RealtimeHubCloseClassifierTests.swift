@@ -39,4 +39,20 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
     XCTAssertNil(category)
     XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
   }
+
+  func testCredentialClassifierDetectsProviderAuthFailures() {
+    let failure = CredentialHealthManager.classifyProviderClose(
+      message: "Request had invalid authentication credentials",
+      provider: .openai)
+
+    XCTAssertEqual(failure, .providerAuthFailed(provider: .openai, mode: .byok))
+  }
+
+  func testCredentialClassifierDetectsQuotaFailures() {
+    let failure = CredentialHealthManager.classifyProviderClose(
+      message: "insufficient_quota.insufficient_quota",
+      provider: .gemini)
+
+    XCTAssertEqual(failure, .providerQuotaExceeded(provider: .gemini))
+  }
 }

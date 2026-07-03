@@ -239,10 +239,14 @@ async def _get_users_in_timezone(target_time: str):
 
 
 def _get_timezones_at_time(target_time):
+    # Match on the local hour, not an exact "HH:MM" string. The cron runs at the top of
+    # each UTC hour, so an exact-string match against "08:00" silently excludes every
+    # sub-hour-offset timezone (e.g. India +5:30, Nepal +5:45, Iran +3:30), which read
+    # "08:30"/"08:45". This mirrors _get_timezones_grouped_by_hour, which buckets by hour.
+    target_hour = int(target_time.split(":")[0])
     target_timezones = []
     for tz_name in pytz.all_timezones:
         tz = pytz.timezone(tz_name)
-        current_time = datetime.now(tz).strftime("%H:%M")
-        if current_time == target_time:
+        if datetime.now(tz).hour == target_hour:
             target_timezones.append(tz_name)
     return target_timezones

@@ -9365,6 +9365,24 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
 
   @override
+  String get memoryThisDevice => 'See seade';
+
+  @override
+  String get memoryThisIphone => 'See iPhone';
+
+  @override
+  String get memoryThisPhone => 'See telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Kuidas Omi\'t kasutada';
 
   @override
@@ -9466,4 +9484,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get latest => 'Uusim';
+
+  @override
+  String get flashFirmware => 'Installi püsivara';
 }

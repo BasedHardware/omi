@@ -1,123 +1,5 @@
 import SwiftUI
 
-/// Detects user scroll-wheel / trackpad gestures, mouse interactions, and
-/// keyboard scroll-navigation on the enclosing NSScrollView and fires a
-/// callback immediately — before the scroll position settles.
-/// This wins the race against throttled programmatic scrolls during streaming.
-private struct UserScrollDetector: NSViewRepresentable {
-    let onUserScroll: () -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            context.coordinator.install(for: view)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onUserScroll: onUserScroll)
-    }
-
-    class Coordinator: NSObject {
-        let onUserScroll: () -> Void
-        private var monitor: Any?
-
-        /// Key codes that navigate within a scroll view when it has keyboard
-        /// focus. These are unambiguous reader-intent scroll signals.
-        private static let scrollNavigationKeyCodes: Set<UInt16> = [
-            125,  // Down arrow
-            126,  // Up arrow
-            116,  // Page Up
-            121,  // Page Down
-            115,  // Home
-            119,  // End
-        ]
-
-        init(onUserScroll: @escaping () -> Void) {
-            self.onUserScroll = onUserScroll
-        }
-
-        func install(for view: NSView) {
-            // Find the enclosing NSScrollView so we can scope the monitor
-            var scrollView: NSScrollView?
-            var current: NSView? = view
-            while let v = current {
-                if let sv = v as? NSScrollView {
-                    scrollView = sv
-                    break
-                }
-                current = v.superview
-            }
-            let targetScrollView = scrollView
-
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown]) { [weak self] event in
-                guard let self = self, let targetScrollView = targetScrollView else { return event }
-                // Only respond to events in our scroll view's window
-                guard event.window == targetScrollView.window else { return event }
-
-                if event.type == .keyDown {
-                    // Keyboard scroll-navigation (Page Up/Down, arrows, Home/End)
-                    // is reader intent — but only when the scroll view (or a
-                    // descendant view like the document content) is the keyboard
-                    // target. This prevents sidebar tables, buttons, or other
-                    // controls in the same window from falsely breaking live-follow.
-                    guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
-                    guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
-                    self.onUserScroll()
-                } else {
-                    // Mouse/wheel events: check if inside the scroll view
-                    let locationInWindow = event.locationInWindow
-                    let locationInScrollView = targetScrollView.convert(locationInWindow, from: nil)
-                    guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-                    if event.type == .scrollWheel {
-                        // Any physical wheel/trackpad scroll inside the transcript is reader intent.
-                        if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
-                            self.onUserScroll()
-                        }
-                    } else {
-                        // Mouse click/drag inside the transcript is reader intent: it may be
-                        // a scrollbar drag, text selection, or another reading interaction.
-                        self.onUserScroll()
-                    }
-                }
-                return event
-            }
-        }
-
-        /// Returns true if the window's first responder is the scroll view or a
-        /// descendant of it — meaning keyboard events go to the scroll view and
-        /// should be treated as scroll navigation. This is more precise than
-        /// checking "not a text view": it excludes sidebar tables, buttons, and
-        /// other controls that happen to have keyboard focus in the same window.
-        private static func isScrollViewKeyboardTarget(in window: NSWindow?, scrollView: NSScrollView) -> Bool {
-            guard let window = window else { return false }
-            let fr = window.firstResponder
-            guard let frView = fr as? NSView else { return false }
-            return frView === scrollView || frView.isDescendant(of: scrollView)
-        }
-
-        deinit {
-            if let monitor = monitor {
-                NSEvent.removeMonitor(monitor)
-            }
-        }
-    }
-}
-
-/// Explicit scroll intent model for streaming follow behavior.
-/// `followingBottom` = the reader is at the live edge; streamed chunks may auto-scroll.
-/// `freeScrolling`  = the reader intentionally scrolled away; viewport must not move.
-/// `anchoringTurn`  = the viewport is intentionally anchored to the latest local
-///                     user turn; assistant streaming below must not yank to bottom.
-private enum ChatScrollMode: Equatable {
-    case followingBottom
-    case freeScrolling
-    case anchoringTurn
-}
-
 /// A token that callers pass when the local user sends a message.
 /// This allows ChatMessagesView to distinguish genuine user sends from
 /// messages arriving via polling, sync, or other sources — without
@@ -617,6 +499,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 }
                 userScrollEndWorkItem = endWork
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+            } onScrollSettledAtBottom: {
+                guard scrollMode == .freeScrolling || scrollMode == .anchoringTurn else { return }
+                cancelAllPendingScrolls()
+                userIsScrolling = false
+                scrollMode = .followingBottom
+                hasActivityBelow = false
             }
         }
     }

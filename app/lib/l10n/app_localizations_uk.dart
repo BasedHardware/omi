@@ -9386,6 +9386,24 @@ class AppLocalizationsUk extends AppLocalizations {
   String get transcribeLaterPaused => 'Призупинено — аудіо не записується';
 
   @override
+  String get memoryThisDevice => 'Цей пристрій';
+
+  @override
+  String get memoryThisIphone => 'Цей iPhone';
+
+  @override
+  String get memoryThisPhone => 'Цей телефон';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Як користуватися Omi';
 
   @override
@@ -9488,4 +9506,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get latest => 'Останнє';
+
+  @override
+  String get flashFirmware => 'Встановити прошивку';
 }

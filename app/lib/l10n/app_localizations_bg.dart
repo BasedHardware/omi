@@ -9403,6 +9403,24 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 
   @override
+  String get memoryThisDevice => 'Това устройство';
+
+  @override
+  String get memoryThisIphone => 'Този iPhone';
+
+  @override
+  String get memoryThisPhone => 'Този телефон';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Как да използвате Omi';
 
   @override
@@ -9504,4 +9522,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get latest => 'Последно';
+
+  @override
+  String get flashFirmware => 'Инсталирай фърмуера';
 }
