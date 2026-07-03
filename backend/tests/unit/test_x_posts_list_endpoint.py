@@ -14,10 +14,22 @@ import os
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+import inspect  # noqa: E402
+
 import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
 from routers import x_connector as x_mod  # noqa: E402
+
+
+def test_list_x_posts_limit_has_documented_bounds_and_default():
+    # The limit is declared Query(100, ge=1, le=500); FastAPI rejects out-of-range values
+    # (e.g. limit=0 or limit=501) with 422 based on this declaration, and defaults to 100.
+    param = inspect.signature(x_mod.list_x_posts).parameters['limit'].default
+    assert param.default == 100
+    bounds = {type(m).__name__: m for m in param.metadata}
+    assert bounds['Ge'].ge == 1
+    assert bounds['Le'].le == 500
 
 
 def test_list_x_posts_returns_posts_wrapped(monkeypatch):
