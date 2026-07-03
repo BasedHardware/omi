@@ -42,6 +42,11 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `database/import_jobs.py`
   - `database/daily_summaries.py`
   - `database/x_posts.py`
+  - `database/announcements.py`
+  - `database/calendar_meetings.py`
+  - `database/notifications.py`
+  - `database/phone_call_config.py`
+  - `database/phone_calls.py`
   - `database/auth.py`
   - `database/cache_manager.py`
   - `database/memory_vector_repair_outbox.py`

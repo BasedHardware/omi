@@ -17,11 +17,17 @@ from google.cloud.firestore import DELETE_FIELD
 from ._client import db
 from .cache import get_memory_cache
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 logger = logging.getLogger(__name__)
 
 
-def save_token(uid: str, data: dict):
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def save_token(uid: str, data: Dict[str, Any]) -> None:
     """
     Store token in subcollection with device key as document ID
     Structure: users/{uid}/fcm_tokens/{device_key}
@@ -36,13 +42,15 @@ def save_token(uid: str, data: dict):
 
     # Step 1: Migrate legacy token if exists
     user_doc = user_ref.get()
-    if user_doc.exists:
-        user_data = user_doc.to_dict()
+    if getattr(user_doc, "exists", False):
+        user_data = _typed_doc(user_doc)
         legacy_token = user_data.get('fcm_token')
 
         if legacy_token:
             # Check if legacy token already exists in subcollection
-            existing_tokens = [doc.to_dict().get('token') for doc in user_ref.collection('fcm_tokens').stream()]
+            existing_tokens: List[object] = [
+                t for t in (_typed_doc(d).get('token') for d in user_ref.collection('fcm_tokens').stream())
+            ]
 
             if legacy_token not in existing_tokens:
                 # Migrate to unknown_default
@@ -62,8 +70,8 @@ def save_token(uid: str, data: dict):
     if device_key != 'unknown_default':
         unknown_ref = user_ref.collection('fcm_tokens').document('unknown_default')
         unknown_doc = unknown_ref.get()
-        if unknown_doc.exists:
-            unknown_token = unknown_doc.to_dict().get('token')
+        if getattr(unknown_doc, "exists", False):
+            unknown_token = _typed_doc(unknown_doc).get('token')
             # Only delete if it's the same token being migrated to proper device_key
             if unknown_token == token:
                 unknown_ref.delete()
@@ -78,12 +86,13 @@ def save_token(uid: str, data: dict):
         user_ref.set({'time_zone': time_zone}, merge=True)
 
 
-def get_user_time_zone(uid: str):
+def get_user_time_zone(uid: str) -> Optional[str]:
     """Get timezone from main user document"""
     user_ref = db.collection('users').document(uid).get()
-    if user_ref.exists:
-        user_data = user_ref.to_dict()
-        return user_data.get('time_zone')
+    if getattr(user_ref, "exists", False):
+        user_data = _typed_doc(user_ref)
+        tz = user_data.get('time_zone')
+        return str(tz) if tz is not None else None
     return None
 
 
@@ -98,9 +107,10 @@ DEFAULT_DAILY_SUMMARY_HOUR_LOCAL = 22
 def get_daily_summary_hour_local(uid: str) -> int | None:
     """Get user's preferred daily summary hour in local time. Returns None if not set."""
     user_ref = db.collection('users').document(uid).get()
-    if user_ref.exists:
-        user_data = user_ref.to_dict()
-        return user_data.get('daily_summary_hour_local')
+    if getattr(user_ref, "exists", False):
+        user_data = _typed_doc(user_ref)
+        value = user_data.get('daily_summary_hour_local')
+        return int(value) if isinstance(value, (int, float)) else None
     return None
 
 
@@ -126,9 +136,9 @@ def set_daily_summary_hour_local(uid: str, hour_local: int) -> bool:
 def get_daily_summary_enabled(uid: str) -> bool:
     """Check if daily summary is enabled for user. Enabled by default."""
     user_ref = db.collection('users').document(uid).get()
-    if user_ref.exists:
-        user_data = user_ref.to_dict()
-        return user_data.get('daily_summary_enabled', True)
+    if getattr(user_ref, "exists", False):
+        user_data = _typed_doc(user_ref)
+        return bool(user_data.get('daily_summary_enabled', True))
     return True
 
 
@@ -162,11 +172,12 @@ def get_mentor_notification_frequency(uid: str) -> int:
     """
     cache = get_memory_cache()
 
-    def fetch():
+    def fetch() -> int:
         doc = db.collection('users').document(uid).get(field_paths=['mentor_notification_frequency'])
-        if doc.exists:
-            data = doc.to_dict()
-            return data.get('mentor_notification_frequency', DEFAULT_MENTOR_NOTIFICATION_FREQUENCY)
+        if getattr(doc, "exists", False):
+            data = _typed_doc(doc)
+            value = data.get('mentor_notification_frequency', DEFAULT_MENTOR_NOTIFICATION_FREQUENCY)
+            return int(value) if isinstance(value, (int, float)) else DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
         return DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
 
     return cache.get_or_fetch(f"mentor_frequency:{uid}", fetch, ttl=30)
@@ -198,27 +209,28 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
 
 def get_all_tokens(uid: str) -> list[str]:
     """Get all device tokens for a user from subcollection and legacy field"""
-    tokens = []
+    tokens: List[str] = []
 
     # Get tokens from new subcollection
     token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
     for doc in token_docs:
-        token_data = doc.to_dict()
-        if token_data.get('token'):
-            tokens.append(token_data['token'])
+        token_data = _typed_doc(doc)
+        token_value = token_data.get('token')
+        if token_value:
+            tokens.append(str(token_value))
 
     # Get legacy token from main user document (backward compatibility)
     user_ref = db.collection('users').document(uid).get()
-    if user_ref.exists:
-        user_data = user_ref.to_dict()
+    if getattr(user_ref, "exists", False):
+        user_data = _typed_doc(user_ref)
         legacy_token = user_data.get('fcm_token')
         if legacy_token and legacy_token not in tokens:
-            tokens.append(legacy_token)
+            tokens.append(str(legacy_token))
 
     return tokens
 
 
-def remove_invalid_token(token: str):
+def remove_invalid_token(token: str) -> None:
     """Remove invalid token using collection group query (rare operation)"""
     # Query across ALL users' fcm_tokens subcollections
     query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token)).limit(1)
@@ -228,7 +240,7 @@ def remove_invalid_token(token: str):
         return
 
 
-def remove_bulk_tokens(tokens: list[str]):
+def remove_bulk_tokens(tokens: list[str]) -> None:
     """Remove multiple invalid tokens efficiently using IN queries and batch deletes"""
     if not tokens:
         return
@@ -260,15 +272,15 @@ def remove_bulk_tokens(tokens: list[str]):
             batch.commit()
 
 
-async def get_users_token_in_timezones(timezones: list[str]):
+async def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
     return await _get_users_in_timezones(timezones, 'fcm_token')
 
 
-async def get_users_id_in_timezones(timezones: list[str]):
+async def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str, List[str], Any]]]:
     return await _get_users_in_timezones(timezones, 'id')
 
 
-async def get_users_for_daily_summary(timezones: list[str], target_local_hour: int):
+async def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
     """
     Get users who should receive daily summary notifications.
 
@@ -287,21 +299,21 @@ async def get_users_for_daily_summary(timezones: list[str], target_local_hour: i
     if not timezones:
         return []
 
-    users = []
+    users: List[Tuple[str, List[str], Any]] = []
 
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
-    async def query_chunk(chunk):
-        def sync_query():
-            chunk_users = []
+    async def query_chunk(chunk: List[str]) -> List[Tuple[str, List[str], Any]]:
+        def sync_query() -> List[Tuple[str, List[str], Any]]:
+            chunk_users: List[Tuple[str, List[str], Any]] = []
             try:
                 # Query users in these timezones
                 query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
 
                 for user_doc in query.stream():
-                    uid = user_doc.id
-                    user_data = user_doc.to_dict()
+                    uid = str(user_doc.id)
+                    user_data = _typed_doc(user_doc)
 
                     # Check if daily summary is enabled (default: True)
                     if user_data.get('daily_summary_enabled') is False:
@@ -314,17 +326,18 @@ async def get_users_for_daily_summary(timezones: list[str], target_local_hour: i
                         continue
 
                     # Collect tokens from subcollection
-                    tokens = []
+                    tokens: List[str] = []
                     token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
                     for token_doc in token_docs:
-                        token_data = token_doc.to_dict()
-                        if token_data.get('token'):
-                            tokens.append(token_data['token'])
+                        token_data = _typed_doc(token_doc)
+                        token_value = token_data.get('token')
+                        if token_value:
+                            tokens.append(str(token_value))
 
                     # Add legacy token if exists and not already in list
                     legacy_token = user_data.get('fcm_token')
                     if legacy_token and legacy_token not in tokens:
-                        tokens.append(legacy_token)
+                        tokens.append(str(legacy_token))
 
                     # Skip users with no tokens
                     if not tokens:
@@ -348,36 +361,37 @@ async def get_users_for_daily_summary(timezones: list[str], target_local_hour: i
     return users
 
 
-async def _get_users_in_timezones(timezones: list[str], filter: str):
+async def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
     """Query main user documents by timezone, then get tokens from subcollection and legacy field"""
-    users = []
+    users: List[Any] = []
 
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
-    async def query_chunk(chunk):
-        def sync_query():
-            chunk_users = []
+    async def query_chunk(chunk: List[str]) -> List[Any]:
+        def sync_query() -> List[Any]:
+            chunk_users: List[Any] = []
             try:
                 # Query main user documents by time_zone
                 query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
 
                 for user_doc in query.stream():
-                    uid = user_doc.id
-                    user_data = user_doc.to_dict()
+                    uid = str(user_doc.id)
+                    user_data = _typed_doc(user_doc)
 
                     # Collect tokens from subcollection
-                    tokens = []
+                    tokens: List[str] = []
                     token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
                     for token_doc in token_docs:
-                        token_data = token_doc.to_dict()
-                        if token_data.get('token'):
-                            tokens.append(token_data['token'])
+                        token_data = _typed_doc(token_doc)
+                        token_value = token_data.get('token')
+                        if token_value:
+                            tokens.append(str(token_value))
 
                     # Add legacy token if exists and not already in list
                     legacy_token = user_data.get('fcm_token')
                     if legacy_token and legacy_token not in tokens:
-                        tokens.append(legacy_token)
+                        tokens.append(str(legacy_token))
 
                     # Skip users with no tokens
                     if not tokens:

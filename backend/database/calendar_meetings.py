@@ -1,30 +1,42 @@
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import transactional
+from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from ._client import db
 from database.document_ids import calendar_meeting_doc_id
 
+T = TypeVar("T")
 
-def _get_meetings_collection(uid: str):
+
+def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
+    """Wrap @transactional preserving the wrapped function's typed signature.
+
+    google-cloud-firestore's @transactional decorator surfaces as partially
+    unknown under strict Pyright (no stubs); this thin wrapper keeps the typed
+    call site while delegating runtime behavior to the SDK decorator.
+    """
+    return transactional(func)
+
+
+def _get_meetings_collection(uid: str) -> Any:
     """Get user's meetings collection reference"""
     return db.collection('users').document(uid).collection('meetings')
 
 
-@transactional
-def _upsert_meeting_transaction(transaction, doc_ref, meeting_data: Dict, now: datetime) -> None:
+@_typed_transactional
+def _upsert_meeting_transaction(transaction: Any, doc_ref: Any, meeting_data: Dict[str, Any], now: datetime) -> None:
     """Upsert a natural-key meeting while preserving first-created metadata."""
     snapshot = doc_ref.get(transaction=transaction)
-    payload = dict(meeting_data)
+    payload: Dict[str, Any] = dict(meeting_data)
     payload['synced_at'] = now
-    if not snapshot.exists:
+    if not getattr(snapshot, "exists", False):
         payload['created_at'] = now
     transaction.set(doc_ref, payload, merge=True)
 
 
-def create_meeting(uid: str, meeting_data: Dict) -> str:
+def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
     """
     Create or idempotently upsert a calendar meeting in Firestore.
     Returns the deterministic Firestore document ID.
@@ -38,7 +50,7 @@ def create_meeting(uid: str, meeting_data: Dict) -> str:
     return meeting_id
 
 
-def update_meeting(uid: str, meeting_id: str, meeting_data: Dict) -> None:
+def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> None:
     """
     Update an existing calendar meeting.
 
@@ -51,14 +63,15 @@ def update_meeting(uid: str, meeting_id: str, meeting_data: Dict) -> None:
     _get_meetings_collection(uid).document(meeting_id).update(meeting_data)
 
 
-def get_meeting(uid: str, meeting_id: str) -> Optional[Dict]:
+def get_meeting(uid: str, meeting_id: str) -> Optional[Dict[str, Any]]:
     """Get a calendar meeting by its Firestore document ID"""
     doc = _get_meetings_collection(uid).document(meeting_id).get()
 
-    if not doc.exists:
+    if not getattr(doc, "exists", False):
         return None
 
-    data = doc.to_dict()
+    raw: object = doc.to_dict()
+    data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     data['id'] = doc.id
     return data
 
@@ -77,14 +90,14 @@ def get_meeting_id_by_calendar_event(uid: str, calendar_event_id: str, calendar_
 
     docs = list(query.stream())
     if docs:
-        return docs[0].id
+        return str(docs[0].id)
 
     return None
 
 
 def list_meetings(
     uid: str, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, limit: int = 50
-) -> List[Dict]:
+) -> List[Dict[str, Any]]:
     """
     List calendar meetings, optionally filtered by date range.
     Returns meetings sorted by start_time descending.
@@ -97,9 +110,10 @@ def list_meetings(
     if end_date:
         query = query.where('start_time', '<=', end_date)
 
-    meetings = []
+    meetings: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         data['id'] = doc.id
         meetings.append(data)
 
@@ -140,7 +154,7 @@ def delete_old_meetings(uid: str, before_date: datetime) -> int:
     return deleted_count
 
 
-def get_meetings_in_time_range(uid: str, start_time: datetime, end_time: datetime) -> List[Dict]:
+def get_meetings_in_time_range(uid: str, start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
     """
     Find meetings that overlap with the given time range.
     A meeting overlaps if: meeting.start_time < range.end_time AND meeting.end_time > range.start_time
@@ -160,9 +174,10 @@ def get_meetings_in_time_range(uid: str, start_time: datetime, end_time: datetim
         .limit(10)  # Cap to prevent excessive results
     )
 
-    meetings = []
+    meetings: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         data['id'] = doc.id
         meetings.append(data)
 

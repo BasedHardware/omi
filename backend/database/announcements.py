@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -11,8 +11,10 @@ def get_announcement_by_id(announcement_id: str) -> Optional[Announcement]:
     """Get a single announcement by ID."""
     doc_ref = db.collection("announcements").document(announcement_id)
     doc = doc_ref.get()
-    if doc.exists:
-        return Announcement.from_dict(doc.to_dict())
+    if getattr(doc, "exists", False):
+        raw: object = doc.to_dict()
+        if isinstance(raw, dict):
+            return Announcement.from_dict(cast(Dict[str, Any], raw))
     return None
 
 
@@ -28,21 +30,24 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
     )
 
     docs = query.stream()
-    changelogs = []
+    changelogs: List[Announcement] = []
 
     for doc in docs:
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        if not isinstance(raw, dict):
+            continue
+        data = cast(Dict[str, Any], raw)
         app_version = data.get("app_version")
         # Skip entries without app_version, then filter by version range
         if (
             app_version
-            and compare_versions(from_version, app_version) < 0
-            and compare_versions(app_version, to_version) <= 0
+            and compare_versions(from_version, str(app_version)) < 0
+            and compare_versions(str(app_version), to_version) <= 0
         ):
             changelogs.append(Announcement.from_dict(data))
 
     # Sort by version descending (newest first)
-    changelogs.sort(key=lambda x: _version_tuple(x.app_version), reverse=True)
+    changelogs.sort(key=lambda x: _version_tuple(x.app_version or "0"), reverse=True)
     return changelogs
 
 
@@ -58,19 +63,23 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
     )
 
     docs = query.stream()
-    changelogs = []
+    changelogs: List[Announcement] = []
 
     for doc in docs:
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        if not isinstance(raw, dict):
+            continue
+        data = cast(Dict[str, Any], raw)
         app_version = data.get("app_version")
         if app_version:
+            app_version_str = str(app_version)
             # Filter out versions newer than max_version if specified
-            if max_version and compare_versions(app_version, max_version) > 0:
+            if max_version and compare_versions(app_version_str, max_version) > 0:
                 continue
             changelogs.append(Announcement.from_dict(data))
 
     # Sort by version descending
-    changelogs.sort(key=lambda x: _version_tuple(x.app_version), reverse=True)
+    changelogs.sort(key=lambda x: _version_tuple(x.app_version or "0"), reverse=True)
 
     # Return only the most recent N changelogs
     return changelogs[:limit]
@@ -89,10 +98,13 @@ def get_firmware_features(firmware_version: str, device_model: Optional[str] = N
     )
 
     docs = query.stream()
-    features = []
+    features: List[Announcement] = []
 
     for doc in docs:
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        if not isinstance(raw, dict):
+            continue
+        data = cast(Dict[str, Any], raw)
         announcement = Announcement.from_dict(data)
 
         # Filter by device model if specified
@@ -117,7 +129,12 @@ def get_app_features(app_version: str) -> List[Announcement]:
     )
 
     docs = query.stream()
-    return [Announcement.from_dict(doc.to_dict()) for doc in docs]
+    out: List[Announcement] = []
+    for doc in docs:
+        raw: object = doc.to_dict()
+        if isinstance(raw, dict):
+            out.append(Announcement.from_dict(cast(Dict[str, Any], raw)))
+    return out
 
 
 def get_general_announcements(last_checked_at: Optional[datetime] = None) -> List[Announcement]:
@@ -132,10 +149,13 @@ def get_general_announcements(last_checked_at: Optional[datetime] = None) -> Lis
     )
 
     docs = query.stream()
-    announcements = []
+    announcements: List[Announcement] = []
 
     for doc in docs:
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        if not isinstance(raw, dict):
+            continue
+        data = cast(Dict[str, Any], raw)
         announcement = Announcement.from_dict(data)
 
         # Skip if created before last check
@@ -174,7 +194,11 @@ def get_all_announcements(
         query = query.where(filter=FieldFilter("active", "==", True))
 
     docs = query.stream()
-    announcements = [Announcement.from_dict(doc.to_dict()) for doc in docs]
+    announcements: List[Announcement] = []
+    for doc in docs:
+        raw: object = doc.to_dict()
+        if isinstance(raw, dict):
+            announcements.append(Announcement.from_dict(cast(Dict[str, Any], raw)))
 
     # Sort by created_at descending
     announcements.sort(key=lambda x: x.created_at, reverse=True)
@@ -188,11 +212,11 @@ def create_announcement(announcement: Announcement) -> Announcement:
     return announcement
 
 
-def update_announcement(announcement_id: str, updates: dict) -> Optional[Announcement]:
+def update_announcement(announcement_id: str, updates: Dict[str, Any]) -> Optional[Announcement]:
     """Update an existing announcement."""
     doc_ref = db.collection("announcements").document(announcement_id)
     doc = doc_ref.get()
-    if not doc.exists:
+    if not getattr(doc, "exists", False):
         return None
 
     doc_ref.update(updates)
@@ -203,7 +227,7 @@ def delete_announcement(announcement_id: str) -> bool:
     """Delete an announcement."""
     doc_ref = db.collection("announcements").document(announcement_id)
     doc = doc_ref.get()
-    if not doc.exists:
+    if not getattr(doc, "exists", False):
         return False
 
     doc_ref.delete()
@@ -214,7 +238,7 @@ def deactivate_announcement(announcement_id: str) -> bool:
     """Soft delete - set active to False."""
     doc_ref = db.collection("announcements").document(announcement_id)
     doc = doc_ref.get()
-    if not doc.exists:
+    if not getattr(doc, "exists", False):
         return False
 
     doc_ref.update({"active": False})
@@ -222,7 +246,7 @@ def deactivate_announcement(announcement_id: str) -> bool:
 
 
 # Helper functions for version comparison
-def _parse_version(version: str) -> tuple:
+def _parse_version(version: str) -> Tuple[Any, ...]:
     """
     Parse version string into semantic tuple, build number, and has_build flag.
 
@@ -261,13 +285,13 @@ def _parse_version(version: str) -> tuple:
         return ((0, 0, 0), 0, False)
 
 
-def _version_tuple(version: str) -> tuple:
+def _version_tuple(version: str) -> Tuple[Any, ...]:
     """
     Convert version string to tuple for sorting.
     Returns full tuple including build number for proper sorting.
     """
     semantic, build, _ = _parse_version(version)
-    return semantic + (build,)
+    return tuple(semantic) + (build,)
 
 
 def compare_versions(v1: str, v2: str) -> int:
@@ -314,11 +338,11 @@ def compare_versions(v1: str, v2: str) -> int:
 # ============================================================================
 
 
-def get_dismissed_announcement_ids(uid: str) -> set:
+def get_dismissed_announcement_ids(uid: str) -> set[str]:
     """Get the set of announcement IDs that a user has dismissed."""
     dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements")
     docs = dismissed_ref.stream()
-    return {doc.id for doc in docs}
+    return {str(doc.id) for doc in docs}
 
 
 def dismiss_announcement(uid: str, announcement_id: str, cta_clicked: bool = False) -> bool:
@@ -340,7 +364,7 @@ def is_announcement_dismissed(uid: str, announcement_id: str) -> bool:
     """Check if a user has dismissed a specific announcement."""
     dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
     doc = dismissed_ref.get()
-    return doc.exists
+    return bool(getattr(doc, "exists", False))
 
 
 # ============================================================================
@@ -396,10 +420,13 @@ def get_pending_announcements(
     query = announcements_ref.where(filter=FieldFilter("active", "==", True))
     docs = query.stream()
 
-    pending = []
+    pending: List[Announcement] = []
 
     for doc in docs:
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        if not isinstance(raw, dict):
+            continue
+        data = cast(Dict[str, Any], raw)
         announcement = Announcement.from_dict(data)
 
         # Get effective targeting and display configs
