@@ -142,14 +142,17 @@ def main() -> int:
     changes = releasable_desktop_changes_since(latest_tag)
     set_output("latest_tag", latest_tag or "")
 
-    if not changes:
+    if not changes and args.mode == "force_release":
+        print("No releasable desktop app changes since the latest desktop tag, but force_release was requested.")
+    elif not changes:
         set_output("should_release", "false")
         set_output("reason", "No releasable desktop app changes since the latest desktop tag.")
         return 0
 
-    print("Releasable desktop app changes since latest tag:")
-    for path in changes:
-        print(f"  - {path}")
+    if changes:
+        print("Releasable desktop app changes since latest tag:")
+        for path in changes:
+            print(f"  - {path}")
 
     if args.mode != "force_release":
         active_reason = active_release_reason(args.repository, latest_tag)
