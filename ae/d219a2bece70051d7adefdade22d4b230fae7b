@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/WhatsAppSenderService.swift
+  s_51e027d4890829::t_c3139d8e2009ee 199-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "aed219a2bece70051d7adefdade22d4b230fae7b",
+  "prompts": {},
+  "sessions": {
+    "s_51e027d4890829": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61e4d8cb-cb32-46e7-903c-106ed88e5fde",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
