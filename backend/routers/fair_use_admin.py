@@ -211,6 +211,16 @@ def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     }
 
 
+@router.get('/v1/fair-use/violations', tags=['fair_use'])
+def get_my_fair_use_violations(uid: str = Depends(get_current_user_uid)):
+    """User-facing endpoint: a rolling count of your own fair-use events.
+
+    Complements /v1/fair-use/status (which reports the current stage and speech usage) with
+    how many fair-use events you have had in the last 7 and 30 days.
+    """
+    return fair_use_db.get_violation_counts(uid)
+
+
 def _user_facing_message(stage: str, case_ref: str = '') -> str:
     ref_note = f' Your case reference is {case_ref}.' if case_ref else ''
     messages = {
