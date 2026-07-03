@@ -15,7 +15,7 @@ WORKDIR /app
 # --no-deps: don't reinstall PyTorch (breaks CUDA alignment)
 # --force-reinstall: overwrite the container's nemo_toolkit
 RUN pip install --no-cache-dir --no-deps --force-reinstall \
-    "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
+    "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@3c736deb8b3b5fec7029e88af9c59e84a48b4294"
 
 # NGC torch ABI is incompatible with torchaudio C extensions.
 # Pin torchaudio==2.5.1 which has all symbols pyannote.audio 3.3.2 needs
