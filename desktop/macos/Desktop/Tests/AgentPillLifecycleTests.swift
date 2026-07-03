@@ -190,6 +190,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(viewSource.contains("proxy.scrollTo(\"agentBottom\", anchor: .bottom)"))
     XCTAssertTrue(scrollSource.contains("struct ChatScrollContainer<Content: View>: View"))
     XCTAssertTrue(scrollSource.contains("UserScrollDetector {"))
+    XCTAssertTrue(scrollSource.contains("onScrollSettledAtBottom"))
+    XCTAssertTrue(scrollSource.contains("scheduleSettledBottomChecks"))
+    XCTAssertTrue(scrollSource.contains("Self.isAtBottom(scrollView)"))
     XCTAssertTrue(scrollSource.contains("scrollMode = .freeScrolling"))
     XCTAssertTrue(scrollSource.contains("if scrollMode == .followingBottom"))
   }
