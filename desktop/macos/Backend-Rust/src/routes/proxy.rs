@@ -270,14 +270,9 @@ async fn gemini_proxy(
         }
 
         // Non-BYOK path: use server key with Vertex AI / AI Studio routing
-        let response = gemini_proxy_server_key(
-            &state,
-            &effective_path,
-            action,
-            model,
-            &sanitized_body,
-        )
-        .await?;
+        let response =
+            gemini_proxy_server_key(&state, &effective_path, action, model, &sanitized_body)
+                .await?;
         if response.status().is_success() {
             tracing::info!(
                 "gemini_proxy: forwarded uid={} path={}",
@@ -319,20 +314,17 @@ async fn gemini_proxy(
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream
-        .bytes()
-        .await
-        .map_err(|e| {
-            map_upstream_error_with_context(
-                e,
-                "body_read",
-                "ai_studio_byok",
-                model,
-                action,
-                request_payload_bucket,
-                started,
-            )
-        })?;
+    let bytes = upstream.bytes().await.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "body_read",
+            "ai_studio_byok",
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
     log_upstream_result(
         "ai_studio_byok",
         model,
@@ -480,20 +472,17 @@ async fn gemini_proxy_server_key(
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream
-        .bytes()
-        .await
-        .map_err(|e| {
-            map_upstream_error_with_context(
-                e,
-                "body_read",
-                upstream_provider,
-                model,
-                action,
-                request_payload_bucket,
-                started,
-            )
-        })?;
+    let bytes = upstream.bytes().await.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "body_read",
+            upstream_provider,
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
     log_upstream_result(
         upstream_provider,
         model,
