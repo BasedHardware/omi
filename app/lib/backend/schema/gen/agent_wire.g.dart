@@ -6,23 +6,32 @@ class GeneratedAgentVmInfo {
   final bool hasVm;
   final String? status;
 
-  const GeneratedAgentVmInfo({
-    required this.hasVm,
-    this.status,
-  });
+  const GeneratedAgentVmInfo({required this.hasVm, this.status});
 
   factory GeneratedAgentVmInfo.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentVmInfo(
-      hasVm: _required(_readFieldValue<bool>(_readField(json, const ["has_vm"]), "has_vm", _readBool, requiredField: true, nullable: false), "has_vm"),
-      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true),
+      hasVm: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["has_vm"]),
+          "has_vm",
+          _readBool,
+          requiredField: true,
+          nullable: false,
+        ),
+        "has_vm",
+      ),
+      status: _readFieldValue<String>(
+        _readField(json, const ["status"]),
+        "status",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'has_vm': hasVm,
-      'status': status,
-    };
+    return {'has_vm': hasVm, 'status': status};
   }
 }
 
@@ -30,23 +39,26 @@ class GeneratedAgentKeepaliveResponse {
   final bool ok;
   final String? reason;
 
-  const GeneratedAgentKeepaliveResponse({
-    required this.ok,
-    this.reason,
-  });
+  const GeneratedAgentKeepaliveResponse({required this.ok, this.reason});
 
   factory GeneratedAgentKeepaliveResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentKeepaliveResponse(
-      ok: _required(_readFieldValue<bool>(_readField(json, const ["ok"]), "ok", _readBool, requiredField: true, nullable: false), "ok"),
-      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
+      ok: _required(
+        _readFieldValue<bool>(_readField(json, const ["ok"]), "ok", _readBool, requiredField: true, nullable: false),
+        "ok",
+      ),
+      reason: _readFieldValue<String>(
+        _readField(json, const ["reason"]),
+        "reason",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'ok': ok,
-      'reason': reason,
-    };
+    return {'ok': ok, 'reason': reason};
   }
 }
 
@@ -134,37 +146,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

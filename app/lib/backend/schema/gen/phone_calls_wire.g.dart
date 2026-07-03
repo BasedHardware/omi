@@ -17,10 +17,46 @@ class GeneratedVerifyPhoneNumberResponse {
 
   factory GeneratedVerifyPhoneNumberResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedVerifyPhoneNumberResponse(
-      phoneNumber: _required(_readFieldValue<String>(_readField(json, const ["phone_number"]), "phone_number", _readString, requiredField: true, nullable: false), "phone_number"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      validationCode: _required(_readFieldValue<String>(_readField(json, const ["validation_code"]), "validation_code", _readString, requiredField: true, nullable: false), "validation_code"),
-      verificationSid: _required(_readFieldValue<String>(_readField(json, const ["verification_sid"]), "verification_sid", _readString, requiredField: true, nullable: false), "verification_sid"),
+      phoneNumber: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["phone_number"]),
+          "phone_number",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "phone_number",
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
+      validationCode: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["validation_code"]),
+          "validation_code",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "validation_code",
+      ),
+      verificationSid: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["verification_sid"]),
+          "verification_sid",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "verification_sid",
+      ),
     );
   }
 
@@ -38,23 +74,32 @@ class GeneratedCheckVerificationResponse {
   final String? phoneNumberId;
   final bool verified;
 
-  const GeneratedCheckVerificationResponse({
-    this.phoneNumberId,
-    required this.verified,
-  });
+  const GeneratedCheckVerificationResponse({this.phoneNumberId, required this.verified});
 
   factory GeneratedCheckVerificationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedCheckVerificationResponse(
-      phoneNumberId: _readFieldValue<String>(_readField(json, const ["phone_number_id"]), "phone_number_id", _readString, requiredField: false, nullable: true),
-      verified: _required(_readFieldValue<bool>(_readField(json, const ["verified"]), "verified", _readBool, requiredField: true, nullable: false), "verified"),
+      phoneNumberId: _readFieldValue<String>(
+        _readField(json, const ["phone_number_id"]),
+        "phone_number_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      verified: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["verified"]),
+          "verified",
+          _readBool,
+          requiredField: true,
+          nullable: false,
+        ),
+        "verified",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'phone_number_id': phoneNumberId,
-      'verified': verified,
-    };
+    return {'phone_number_id': phoneNumberId, 'verified': verified};
   }
 }
 
@@ -75,11 +120,53 @@ class GeneratedPhoneNumberResponse {
 
   factory GeneratedPhoneNumberResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneNumberResponse(
-      friendlyName: _readFieldValue<String>(_readField(json, const ["friendly_name"]), "friendly_name", _readString, requiredField: false, nullable: true),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      isPrimary: _required(_readFieldValue<bool>(_readField(json, const ["is_primary"]), "is_primary", _readBool, requiredField: true, nullable: false), "is_primary"),
-      phoneNumber: _required(_readFieldValue<String>(_readField(json, const ["phone_number"]), "phone_number", _readString, requiredField: true, nullable: false), "phone_number"),
-      verifiedAt: _required(_readFieldValue<String>(_readField(json, const ["verified_at"]), "verified_at", _readString, requiredField: true, nullable: false), "verified_at"),
+      friendlyName: _readFieldValue<String>(
+        _readField(json, const ["friendly_name"]),
+        "friendly_name",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      id: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["id"]),
+          "id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "id",
+      ),
+      isPrimary: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["is_primary"]),
+          "is_primary",
+          _readBool,
+          requiredField: true,
+          nullable: false,
+        ),
+        "is_primary",
+      ),
+      phoneNumber: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["phone_number"]),
+          "phone_number",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "phone_number",
+      ),
+      verifiedAt: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["verified_at"]),
+          "verified_at",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "verified_at",
+      ),
     );
   }
 
@@ -97,40 +184,50 @@ class GeneratedPhoneNumberResponse {
 class GeneratedPhoneNumbersResponse {
   final List<GeneratedPhoneNumberResponse> numbers;
 
-  const GeneratedPhoneNumbersResponse({
-    required this.numbers,
-  });
+  const GeneratedPhoneNumbersResponse({required this.numbers});
 
   factory GeneratedPhoneNumbersResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneNumbersResponse(
-      numbers: _required(_readFieldValue<List<GeneratedPhoneNumberResponse>>(_readField(json, const ["numbers"]), "numbers", (value) => _readObjectList(value, GeneratedPhoneNumberResponse.fromJson), requiredField: true, nullable: false), "numbers"),
+      numbers: _required(
+        _readFieldValue<List<GeneratedPhoneNumberResponse>>(
+          _readField(json, const ["numbers"]),
+          "numbers",
+          (value) => _readObjectList(value, GeneratedPhoneNumberResponse.fromJson),
+          requiredField: true,
+          nullable: false,
+        ),
+        "numbers",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'numbers': numbers.map((value) => value.toJson()).toList(),
-    };
+    return {'numbers': numbers.map((value) => value.toJson()).toList()};
   }
 }
 
 class GeneratedPhoneMutationResponse {
   final bool success;
 
-  const GeneratedPhoneMutationResponse({
-    required this.success,
-  });
+  const GeneratedPhoneMutationResponse({required this.success});
 
   factory GeneratedPhoneMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPhoneMutationResponse(
-      success: _required(_readFieldValue<bool>(_readField(json, const ["success"]), "success", _readBool, requiredField: true, nullable: false), "success"),
+      success: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["success"]),
+          "success",
+          _readBool,
+          requiredField: true,
+          nullable: false,
+        ),
+        "success",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'success': success,
-    };
+    return {'success': success};
   }
 }
 
@@ -139,26 +236,39 @@ class GeneratedTokenResponse {
   final String identity;
   final int ttl;
 
-  const GeneratedTokenResponse({
-    required this.accessToken,
-    required this.identity,
-    required this.ttl,
-  });
+  const GeneratedTokenResponse({required this.accessToken, required this.identity, required this.ttl});
 
   factory GeneratedTokenResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedTokenResponse(
-      accessToken: _required(_readFieldValue<String>(_readField(json, const ["access_token"]), "access_token", _readString, requiredField: true, nullable: false), "access_token"),
-      identity: _required(_readFieldValue<String>(_readField(json, const ["identity"]), "identity", _readString, requiredField: true, nullable: false), "identity"),
-      ttl: _required(_readFieldValue<int>(_readField(json, const ["ttl"]), "ttl", _readInt, requiredField: true, nullable: false), "ttl"),
+      accessToken: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["access_token"]),
+          "access_token",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "access_token",
+      ),
+      identity: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["identity"]),
+          "identity",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "identity",
+      ),
+      ttl: _required(
+        _readFieldValue<int>(_readField(json, const ["ttl"]), "ttl", _readInt, requiredField: true, nullable: false),
+        "ttl",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'access_token': accessToken,
-      'identity': identity,
-      'ttl': ttl,
-    };
+    return {'access_token': accessToken, 'identity': identity, 'ttl': ttl};
   }
 }
 
@@ -246,37 +356,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

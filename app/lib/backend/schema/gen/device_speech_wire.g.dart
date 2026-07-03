@@ -27,15 +27,81 @@ class GeneratedFirmwareVersionResponse {
 
   factory GeneratedFirmwareVersionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFirmwareVersionResponse(
-      changelog: _required(_readFieldValue<dynamic>(_readField(json, const ["changelog"]), "changelog", (value) => value, requiredField: false, nullable: false, defaultValue: ""), "changelog"),
-      draft: _required(_readFieldValue<bool>(_readField(json, const ["draft"]), "draft", _readBool, requiredField: false, nullable: false, defaultValue: false), "draft"),
-      isLegacySecureDfu: _required(_readFieldValue<bool>(_readField(json, const ["is_legacy_secure_dfu"]), "is_legacy_secure_dfu", _readBool, requiredField: false, nullable: false, defaultValue: true), "is_legacy_secure_dfu"),
-      minAppVersion: _readFieldValue<String>(_readField(json, const ["min_app_version"]), "min_app_version", _readString, requiredField: false, nullable: true),
-      minAppVersionCode: _readFieldValue<String>(_readField(json, const ["min_app_version_code"]), "min_app_version_code", _readString, requiredField: false, nullable: true),
-      minVersion: _readFieldValue<String>(_readField(json, const ["min_version"]), "min_version", _readString, requiredField: false, nullable: true),
-      otaUpdateSteps: _readFieldValue<List<String>>(_readField(json, const ["ota_update_steps"]), "ota_update_steps", _readStringList, requiredField: false, nullable: true),
-      version: _readFieldValue<String>(_readField(json, const ["version"]), "version", _readString, requiredField: false, nullable: true),
-      zipUrl: _readFieldValue<String>(_readField(json, const ["zip_url"]), "zip_url", _readString, requiredField: false, nullable: true),
+      changelog: _required(
+        _readFieldValue<dynamic>(
+          _readField(json, const ["changelog"]),
+          "changelog",
+          (value) => value,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "",
+        ),
+        "changelog",
+      ),
+      draft: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["draft"]),
+          "draft",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "draft",
+      ),
+      isLegacySecureDfu: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["is_legacy_secure_dfu"]),
+          "is_legacy_secure_dfu",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: true,
+        ),
+        "is_legacy_secure_dfu",
+      ),
+      minAppVersion: _readFieldValue<String>(
+        _readField(json, const ["min_app_version"]),
+        "min_app_version",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      minAppVersionCode: _readFieldValue<String>(
+        _readField(json, const ["min_app_version_code"]),
+        "min_app_version_code",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      minVersion: _readFieldValue<String>(
+        _readField(json, const ["min_version"]),
+        "min_version",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      otaUpdateSteps: _readFieldValue<List<String>>(
+        _readField(json, const ["ota_update_steps"]),
+        "ota_update_steps",
+        _readStringList,
+        requiredField: false,
+        nullable: true,
+      ),
+      version: _readFieldValue<String>(
+        _readField(json, const ["version"]),
+        "version",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      zipUrl: _readFieldValue<String>(
+        _readField(json, const ["zip_url"]),
+        "zip_url",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
@@ -57,106 +123,126 @@ class GeneratedFirmwareVersionResponse {
 class GeneratedHasSpeechProfileResponse {
   final bool hasProfile;
 
-  const GeneratedHasSpeechProfileResponse({
-    required this.hasProfile,
-  });
+  const GeneratedHasSpeechProfileResponse({required this.hasProfile});
 
   factory GeneratedHasSpeechProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedHasSpeechProfileResponse(
-      hasProfile: _required(_readFieldValue<bool>(_readField(json, const ["has_profile"]), "has_profile", _readBool, requiredField: true, nullable: false), "has_profile"),
+      hasProfile: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["has_profile"]),
+          "has_profile",
+          _readBool,
+          requiredField: true,
+          nullable: false,
+        ),
+        "has_profile",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'has_profile': hasProfile,
-    };
+    return {'has_profile': hasProfile};
   }
 }
 
 class GeneratedSpeechProfileResponse {
   final String? url;
 
-  const GeneratedSpeechProfileResponse({
-    this.url,
-  });
+  const GeneratedSpeechProfileResponse({this.url});
 
   factory GeneratedSpeechProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeechProfileResponse(
-      url: _readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: false, nullable: true),
+      url: _readFieldValue<String>(
+        _readField(json, const ["url"]),
+        "url",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'url': url,
-    };
+    return {'url': url};
   }
 }
 
 class GeneratedSpeechProfileUploadResponse {
   final String url;
 
-  const GeneratedSpeechProfileUploadResponse({
-    required this.url,
-  });
+  const GeneratedSpeechProfileUploadResponse({required this.url});
 
   factory GeneratedSpeechProfileUploadResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeechProfileUploadResponse(
-      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
+      url: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["url"]),
+          "url",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "url",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'url': url,
-    };
+    return {'url': url};
   }
 }
 
 class GeneratedSpeechProfileMutationResponse {
   final String status;
 
-  const GeneratedSpeechProfileMutationResponse({
-    required this.status,
-  });
+  const GeneratedSpeechProfileMutationResponse({required this.status});
 
   factory GeneratedSpeechProfileMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeechProfileMutationResponse(
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'status': status,
-    };
+    return {'status': status};
   }
 }
 
 class GeneratedExpandedSpeechProfileSamplesResponse {
   final List<String> items;
 
-  const GeneratedExpandedSpeechProfileSamplesResponse({
-    required this.items,
-  });
+  const GeneratedExpandedSpeechProfileSamplesResponse({required this.items});
 
   factory GeneratedExpandedSpeechProfileSamplesResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedExpandedSpeechProfileSamplesResponse(
-      items: _required(_readFieldValue<List<String>>(_readField(json, const ["items"]), "items", _readStringList, requiredField: true, nullable: false), "items"),
+      items: _required(
+        _readFieldValue<List<String>>(
+          _readField(json, const ["items"]),
+          "items",
+          _readStringList,
+          requiredField: true,
+          nullable: false,
+        ),
+        "items",
+      ),
     );
   }
 
   factory GeneratedExpandedSpeechProfileSamplesResponse.fromJsonList(List<dynamic> json) {
-    return GeneratedExpandedSpeechProfileSamplesResponse(
-      items: _required(_readStringList(json), "items"),
-    );
+    return GeneratedExpandedSpeechProfileSamplesResponse(items: _required(_readStringList(json), "items"));
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'items': items,
-    };
+    return {'items': items};
   }
 }
 
@@ -244,37 +330,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

@@ -33,18 +33,120 @@ class GeneratedEvidence {
 
   factory GeneratedEvidence.fromJson(Map<String, dynamic> json) {
     return GeneratedEvidence(
-      artifactRef: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["artifact_ref"]), "artifact_ref", _readMap, requiredField: false, nullable: true),
-      captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: false, defaultValue: 0.5), "capture_confidence"),
-      clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
-      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
-      evidenceId: _required(_readFieldValue<String>(_readField(json, const ["evidence_id"]), "evidence_id", _readString, requiredField: true, nullable: false), "evidence_id"),
-      extractorId: _required(_readFieldValue<String>(_readField(json, const ["extractor_id"]), "extractor_id", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "extractor_id"),
-      extractorVersion: _required(_readFieldValue<String>(_readField(json, const ["extractor_version"]), "extractor_version", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "extractor_version"),
-      independenceGroup: _required(_readFieldValue<String>(_readField(json, const ["independence_group"]), "independence_group", _readString, requiredField: true, nullable: false), "independence_group"),
-      redactionStatus: _required(_readFieldValue<String>(_readField(json, const ["redaction_status"]), "redaction_status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "redaction_status"),
-      sourceId: _readFieldValue<String>(_readField(json, const ["source_id"]), "source_id", _readString, requiredField: false, nullable: true),
-      sourceSignal: _required(_readFieldValue<String>(_readField(json, const ["source_signal"]), "source_signal", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "source_signal"),
-      sourceType: _required(_readFieldValue<String>(_readField(json, const ["source_type"]), "source_type", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "source_type"),
+      artifactRef: _readFieldValue<Map<String, dynamic>>(
+        _readField(json, const ["artifact_ref"]),
+        "artifact_ref",
+        _readMap,
+        requiredField: false,
+        nullable: true,
+      ),
+      captureConfidence: _required(
+        _readFieldValue<double>(
+          _readField(json, const ["capture_confidence"]),
+          "capture_confidence",
+          _readDouble,
+          requiredField: false,
+          nullable: false,
+          defaultValue: 0.5,
+        ),
+        "capture_confidence",
+      ),
+      clientDeviceId: _readFieldValue<String>(
+        _readField(json, const ["client_device_id"]),
+        "client_device_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      createdAt: _readFieldValue<DateTime>(
+        _readField(json, const ["created_at"]),
+        "created_at",
+        _readDateTime,
+        requiredField: false,
+        nullable: true,
+      ),
+      evidenceId: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["evidence_id"]),
+          "evidence_id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "evidence_id",
+      ),
+      extractorId: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["extractor_id"]),
+          "extractor_id",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "unknown",
+        ),
+        "extractor_id",
+      ),
+      extractorVersion: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["extractor_version"]),
+          "extractor_version",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "unknown",
+        ),
+        "extractor_version",
+      ),
+      independenceGroup: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["independence_group"]),
+          "independence_group",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "independence_group",
+      ),
+      redactionStatus: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["redaction_status"]),
+          "redaction_status",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "active",
+        ),
+        "redaction_status",
+      ),
+      sourceId: _readFieldValue<String>(
+        _readField(json, const ["source_id"]),
+        "source_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      sourceSignal: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["source_signal"]),
+          "source_signal",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "unknown",
+        ),
+        "source_signal",
+      ),
+      sourceType: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["source_type"]),
+          "source_type",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "unknown",
+        ),
+        "source_type",
+      ),
     );
   }
 
@@ -149,44 +251,320 @@ class GeneratedMemoryDB {
 
   factory GeneratedMemoryDB.fromJson(Map<String, dynamic> json) {
     return GeneratedMemoryDB(
-      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
-      arguments: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["arguments"]), "arguments", _readMap, requiredField: false, nullable: true),
-      captureConfidence: _readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: true),
-      captureDeviceIds: _readFieldValue<List<String>>(_readField(json, const ["capture_device_ids"]), "capture_device_ids", _readStringList, requiredField: false, nullable: true),
-      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "interesting"), "category"),
-      content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
-      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
-      durability: _readFieldValue<String>(_readField(json, const ["durability"]), "durability", _readString, requiredField: false, nullable: true),
-      edited: _required(_readFieldValue<bool>(_readField(json, const ["edited"]), "edited", _readBool, requiredField: false, nullable: false, defaultValue: false), "edited"),
-      evidence: _readFieldValue<List<GeneratedEvidence>>(_readField(json, const ["evidence"]), "evidence", (value) => _readObjectList(value, GeneratedEvidence.fromJson), requiredField: false, nullable: true),
-      headline: _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: false, nullable: true),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      invalidAt: _readFieldValue<DateTime>(_readField(json, const ["invalid_at"]), "invalid_at", _readDateTime, requiredField: false, nullable: true),
-      isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
-      kgExtracted: _required(_readFieldValue<bool>(_readField(json, const ["kg_extracted"]), "kg_extracted", _readBool, requiredField: false, nullable: false, defaultValue: false), "kg_extracted"),
-      layer: _readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: true),
-      manuallyAdded: _required(_readFieldValue<bool>(_readField(json, const ["manually_added"]), "manually_added", _readBool, requiredField: false, nullable: false, defaultValue: false), "manually_added"),
-      memoryId: _readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: false, nullable: true),
-      memoryTier: _readFieldValue<String>(_readField(json, const ["memory_tier"]), "memory_tier", _readString, requiredField: false, nullable: true),
-      objectEntityIds: _readFieldValue<List<String>>(_readField(json, const ["object_entity_ids"]), "object_entity_ids", _readStringList, requiredField: false, nullable: true),
-      predicate: _readFieldValue<String>(_readField(json, const ["predicate"]), "predicate", _readString, requiredField: false, nullable: true),
-      primaryCaptureDevice: _readFieldValue<String>(_readField(json, const ["primary_capture_device"]), "primary_capture_device", _readString, requiredField: false, nullable: true),
-      qualifiers: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["qualifiers"]), "qualifiers", _readMap, requiredField: false, nullable: true),
-      reviewed: _required(_readFieldValue<bool>(_readField(json, const ["reviewed"]), "reviewed", _readBool, requiredField: false, nullable: false, defaultValue: false), "reviewed"),
-      scoring: _readFieldValue<String>(_readField(json, const ["scoring"]), "scoring", _readString, requiredField: false, nullable: true),
-      subjectAttribution: _required(_readFieldValue<String>(_readField(json, const ["subject_attribution"]), "subject_attribution", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "subject_attribution"),
-      subjectEntityId: _readFieldValue<String>(_readField(json, const ["subject_entity_id"]), "subject_entity_id", _readString, requiredField: false, nullable: true),
-      supersededBy: _readFieldValue<String>(_readField(json, const ["superseded_by"]), "superseded_by", _readString, requiredField: false, nullable: true),
-      tags: _required(_readFieldValue<List<String>>(_readField(json, const ["tags"]), "tags", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "tags"),
-      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
-      uncertaintyReasons: _readFieldValue<List<String>>(_readField(json, const ["uncertainty_reasons"]), "uncertainty_reasons", _readStringList, requiredField: false, nullable: true),
-      updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
-      userReview: _readFieldValue<bool>(_readField(json, const ["user_review"]), "user_review", _readBool, requiredField: false, nullable: true),
-      validAt: _readFieldValue<DateTime>(_readField(json, const ["valid_at"]), "valid_at", _readDateTime, requiredField: false, nullable: true),
-      veracity: _readFieldValue<double>(_readField(json, const ["veracity"]), "veracity", _readDouble, requiredField: false, nullable: true),
-      visibility: _readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: true, defaultValue: "public"),
+      appId: _readFieldValue<String>(
+        _readField(json, const ["app_id"]),
+        "app_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      arguments: _readFieldValue<Map<String, dynamic>>(
+        _readField(json, const ["arguments"]),
+        "arguments",
+        _readMap,
+        requiredField: false,
+        nullable: true,
+      ),
+      captureConfidence: _readFieldValue<double>(
+        _readField(json, const ["capture_confidence"]),
+        "capture_confidence",
+        _readDouble,
+        requiredField: false,
+        nullable: true,
+      ),
+      captureDeviceIds: _readFieldValue<List<String>>(
+        _readField(json, const ["capture_device_ids"]),
+        "capture_device_ids",
+        _readStringList,
+        requiredField: false,
+        nullable: true,
+      ),
+      category: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["category"]),
+          "category",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "interesting",
+        ),
+        "category",
+      ),
+      content: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["content"]),
+          "content",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "content",
+      ),
+      conversationId: _readFieldValue<String>(
+        _readField(json, const ["conversation_id"]),
+        "conversation_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      createdAt: _required(
+        _readFieldValue<DateTime>(
+          _readField(json, const ["created_at"]),
+          "created_at",
+          _readDateTime,
+          requiredField: true,
+          nullable: false,
+        ),
+        "created_at",
+      ),
+      dataProtectionLevel: _readFieldValue<String>(
+        _readField(json, const ["data_protection_level"]),
+        "data_protection_level",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      durability: _readFieldValue<String>(
+        _readField(json, const ["durability"]),
+        "durability",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      edited: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["edited"]),
+          "edited",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "edited",
+      ),
+      evidence: _readFieldValue<List<GeneratedEvidence>>(
+        _readField(json, const ["evidence"]),
+        "evidence",
+        (value) => _readObjectList(value, GeneratedEvidence.fromJson),
+        requiredField: false,
+        nullable: true,
+      ),
+      headline: _readFieldValue<String>(
+        _readField(json, const ["headline"]),
+        "headline",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      id: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["id"]),
+          "id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "id",
+      ),
+      invalidAt: _readFieldValue<DateTime>(
+        _readField(json, const ["invalid_at"]),
+        "invalid_at",
+        _readDateTime,
+        requiredField: false,
+        nullable: true,
+      ),
+      isLocked: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["is_locked"]),
+          "is_locked",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "is_locked",
+      ),
+      kgExtracted: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["kg_extracted"]),
+          "kg_extracted",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "kg_extracted",
+      ),
+      layer: _readFieldValue<String>(
+        _readField(json, const ["layer"]),
+        "layer",
+        _readString,
+        requiredField: true,
+        nullable: true,
+      ),
+      manuallyAdded: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["manually_added"]),
+          "manually_added",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "manually_added",
+      ),
+      memoryId: _readFieldValue<String>(
+        _readField(json, const ["memory_id"]),
+        "memory_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      memoryTier: _readFieldValue<String>(
+        _readField(json, const ["memory_tier"]),
+        "memory_tier",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      objectEntityIds: _readFieldValue<List<String>>(
+        _readField(json, const ["object_entity_ids"]),
+        "object_entity_ids",
+        _readStringList,
+        requiredField: false,
+        nullable: true,
+      ),
+      predicate: _readFieldValue<String>(
+        _readField(json, const ["predicate"]),
+        "predicate",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      primaryCaptureDevice: _readFieldValue<String>(
+        _readField(json, const ["primary_capture_device"]),
+        "primary_capture_device",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      qualifiers: _readFieldValue<Map<String, dynamic>>(
+        _readField(json, const ["qualifiers"]),
+        "qualifiers",
+        _readMap,
+        requiredField: false,
+        nullable: true,
+      ),
+      reviewed: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["reviewed"]),
+          "reviewed",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "reviewed",
+      ),
+      scoring: _readFieldValue<String>(
+        _readField(json, const ["scoring"]),
+        "scoring",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      subjectAttribution: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["subject_attribution"]),
+          "subject_attribution",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "unknown",
+        ),
+        "subject_attribution",
+      ),
+      subjectEntityId: _readFieldValue<String>(
+        _readField(json, const ["subject_entity_id"]),
+        "subject_entity_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      supersededBy: _readFieldValue<String>(
+        _readField(json, const ["superseded_by"]),
+        "superseded_by",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      tags: _required(
+        _readFieldValue<List<String>>(
+          _readField(json, const ["tags"]),
+          "tags",
+          _readStringList,
+          requiredField: false,
+          nullable: false,
+          defaultValue: const [],
+        ),
+        "tags",
+      ),
+      uid: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["uid"]),
+          "uid",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "uid",
+      ),
+      uncertaintyReasons: _readFieldValue<List<String>>(
+        _readField(json, const ["uncertainty_reasons"]),
+        "uncertainty_reasons",
+        _readStringList,
+        requiredField: false,
+        nullable: true,
+      ),
+      updatedAt: _required(
+        _readFieldValue<DateTime>(
+          _readField(json, const ["updated_at"]),
+          "updated_at",
+          _readDateTime,
+          requiredField: true,
+          nullable: false,
+        ),
+        "updated_at",
+      ),
+      userReview: _readFieldValue<bool>(
+        _readField(json, const ["user_review"]),
+        "user_review",
+        _readBool,
+        requiredField: false,
+        nullable: true,
+      ),
+      validAt: _readFieldValue<DateTime>(
+        _readField(json, const ["valid_at"]),
+        "valid_at",
+        _readDateTime,
+        requiredField: false,
+        nullable: true,
+      ),
+      veracity: _readFieldValue<double>(
+        _readField(json, const ["veracity"]),
+        "veracity",
+        _readDouble,
+        requiredField: false,
+        nullable: true,
+      ),
+      visibility: _readFieldValue<String>(
+        _readField(json, const ["visibility"]),
+        "visibility",
+        _readString,
+        requiredField: false,
+        nullable: true,
+        defaultValue: "public",
+      ),
     );
   }
 
@@ -318,37 +696,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

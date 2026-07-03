@@ -7,26 +7,39 @@ class GeneratedAudioPrecacheResponse {
   final String? message;
   final String status;
 
-  const GeneratedAudioPrecacheResponse({
-    this.audioFileCount,
-    this.message,
-    required this.status,
-  });
+  const GeneratedAudioPrecacheResponse({this.audioFileCount, this.message, required this.status});
 
   factory GeneratedAudioPrecacheResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioPrecacheResponse(
-      audioFileCount: _readFieldValue<int>(_readField(json, const ["audio_file_count"]), "audio_file_count", _readInt, requiredField: false, nullable: true),
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      audioFileCount: _readFieldValue<int>(
+        _readField(json, const ["audio_file_count"]),
+        "audio_file_count",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      message: _readFieldValue<String>(
+        _readField(json, const ["message"]),
+        "message",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'audio_file_count': audioFileCount,
-      'message': message,
-      'status': status,
-    };
+    return {'audio_file_count': audioFileCount, 'message': message, 'status': status};
   }
 }
 
@@ -47,22 +60,56 @@ class GeneratedAudioFileUrlInfo {
 
   factory GeneratedAudioFileUrlInfo.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioFileUrlInfo(
-      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
-      duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "duration"),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      signedUrl: _readFieldValue<String>(_readField(json, const ["signed_url"]), "signed_url", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      contentType: _readFieldValue<String>(
+        _readField(json, const ["content_type"]),
+        "content_type",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      duration: _required(
+        _readFieldValue<double>(
+          _readField(json, const ["duration"]),
+          "duration",
+          _readDouble,
+          requiredField: false,
+          nullable: false,
+          defaultValue: 0,
+        ),
+        "duration",
+      ),
+      id: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["id"]),
+          "id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "id",
+      ),
+      signedUrl: _readFieldValue<String>(
+        _readField(json, const ["signed_url"]),
+        "signed_url",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'content_type': contentType,
-      'duration': duration,
-      'id': id,
-      'signed_url': signedUrl,
-      'status': status,
-    };
+    return {'content_type': contentType, 'duration': duration, 'id': id, 'signed_url': signedUrl, 'status': status};
   }
 }
 
@@ -70,23 +117,32 @@ class GeneratedAudioUrlsResponse {
   final List<GeneratedAudioFileUrlInfo> audioFiles;
   final int? pollAfterMs;
 
-  const GeneratedAudioUrlsResponse({
-    required this.audioFiles,
-    this.pollAfterMs,
-  });
+  const GeneratedAudioUrlsResponse({required this.audioFiles, this.pollAfterMs});
 
   factory GeneratedAudioUrlsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioUrlsResponse(
-      audioFiles: _required(_readFieldValue<List<GeneratedAudioFileUrlInfo>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFileUrlInfo.fromJson), requiredField: true, nullable: false), "audio_files"),
-      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
+      audioFiles: _required(
+        _readFieldValue<List<GeneratedAudioFileUrlInfo>>(
+          _readField(json, const ["audio_files"]),
+          "audio_files",
+          (value) => _readObjectList(value, GeneratedAudioFileUrlInfo.fromJson),
+          requiredField: true,
+          nullable: false,
+        ),
+        "audio_files",
+      ),
+      pollAfterMs: _readFieldValue<int>(
+        _readField(json, const ["poll_after_ms"]),
+        "poll_after_ms",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'audio_files': audioFiles.map((value) => value.toJson()).toList(),
-      'poll_after_ms': pollAfterMs,
-    };
+    return {'audio_files': audioFiles.map((value) => value.toJson()).toList(), 'poll_after_ms': pollAfterMs};
   }
 }
 
@@ -174,37 +230,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

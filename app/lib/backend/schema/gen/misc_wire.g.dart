@@ -5,40 +5,50 @@
 class GeneratedFcmTokenResponse {
   final String status;
 
-  const GeneratedFcmTokenResponse({
-    required this.status,
-  });
+  const GeneratedFcmTokenResponse({required this.status});
 
   factory GeneratedFcmTokenResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFcmTokenResponse(
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'status': status,
-    };
+    return {'status': status};
   }
 }
 
 class GeneratedDeleteKnowledgeGraphResponse {
   final String status;
 
-  const GeneratedDeleteKnowledgeGraphResponse({
-    required this.status,
-  });
+  const GeneratedDeleteKnowledgeGraphResponse({required this.status});
 
   factory GeneratedDeleteKnowledgeGraphResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDeleteKnowledgeGraphResponse(
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'status': status,
-    };
+    return {'status': status};
   }
 }
 
@@ -46,23 +56,35 @@ class GeneratedKnowledgeGraphResponse {
   final List<Map<String, dynamic>> edges;
   final List<Map<String, dynamic>> nodes;
 
-  const GeneratedKnowledgeGraphResponse({
-    required this.edges,
-    required this.nodes,
-  });
+  const GeneratedKnowledgeGraphResponse({required this.edges, required this.nodes});
 
   factory GeneratedKnowledgeGraphResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedKnowledgeGraphResponse(
-      edges: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["edges"]), "edges", _readMapList, requiredField: true, nullable: false), "edges"),
-      nodes: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["nodes"]), "nodes", _readMapList, requiredField: true, nullable: false), "nodes"),
+      edges: _required(
+        _readFieldValue<List<Map<String, dynamic>>>(
+          _readField(json, const ["edges"]),
+          "edges",
+          _readMapList,
+          requiredField: true,
+          nullable: false,
+        ),
+        "edges",
+      ),
+      nodes: _required(
+        _readFieldValue<List<Map<String, dynamic>>>(
+          _readField(json, const ["nodes"]),
+          "nodes",
+          _readMapList,
+          requiredField: true,
+          nullable: false,
+        ),
+        "nodes",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'edges': edges,
-      'nodes': nodes,
-    };
+    return {'edges': edges, 'nodes': nodes};
   }
 }
 
@@ -71,46 +93,70 @@ class GeneratedRebuildResponse {
   final int nodesCount;
   final String status;
 
-  const GeneratedRebuildResponse({
-    required this.edgesCount,
-    required this.nodesCount,
-    required this.status,
-  });
+  const GeneratedRebuildResponse({required this.edgesCount, required this.nodesCount, required this.status});
 
   factory GeneratedRebuildResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedRebuildResponse(
-      edgesCount: _required(_readFieldValue<int>(_readField(json, const ["edges_count"]), "edges_count", _readInt, requiredField: true, nullable: false), "edges_count"),
-      nodesCount: _required(_readFieldValue<int>(_readField(json, const ["nodes_count"]), "nodes_count", _readInt, requiredField: true, nullable: false), "nodes_count"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      edgesCount: _required(
+        _readFieldValue<int>(
+          _readField(json, const ["edges_count"]),
+          "edges_count",
+          _readInt,
+          requiredField: true,
+          nullable: false,
+        ),
+        "edges_count",
+      ),
+      nodesCount: _required(
+        _readFieldValue<int>(
+          _readField(json, const ["nodes_count"]),
+          "nodes_count",
+          _readInt,
+          requiredField: true,
+          nullable: false,
+        ),
+        "nodes_count",
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'edges_count': edgesCount,
-      'nodes_count': nodesCount,
-      'status': status,
-    };
+    return {'edges_count': edgesCount, 'nodes_count': nodesCount, 'status': status};
   }
 }
 
 class GeneratedErrorResponse {
   final dynamic detail;
 
-  const GeneratedErrorResponse({
-    required this.detail,
-  });
+  const GeneratedErrorResponse({required this.detail});
 
   factory GeneratedErrorResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedErrorResponse(
-      detail: _required(_readFieldValue<dynamic>(_readField(json, const ["detail"]), "detail", (value) => value, requiredField: true, nullable: false), "detail"),
+      detail: _required(
+        _readFieldValue<dynamic>(
+          _readField(json, const ["detail"]),
+          "detail",
+          (value) => value,
+          requiredField: true,
+          nullable: false,
+        ),
+        "detail",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'detail': detail,
-    };
+    return {'detail': detail};
   }
 }
 
@@ -198,37 +244,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

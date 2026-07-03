@@ -7,66 +7,95 @@ class GeneratedMigrationRequest {
   final String targetLevel;
   final String type;
 
-  const GeneratedMigrationRequest({
-    required this.id,
-    required this.targetLevel,
-    required this.type,
-  });
+  const GeneratedMigrationRequest({required this.id, required this.targetLevel, required this.type});
 
   factory GeneratedMigrationRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationRequest(
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      targetLevel: _required(_readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString, requiredField: true, nullable: false), "target_level"),
-      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
+      id: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["id"]),
+          "id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "id",
+      ),
+      targetLevel: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["target_level"]),
+          "target_level",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "target_level",
+      ),
+      type: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["type"]),
+          "type",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "type",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'target_level': targetLevel,
-      'type': type,
-    };
+    return {'id': id, 'target_level': targetLevel, 'type': type};
   }
 }
 
 class GeneratedBatchMigrationRequest {
   final List<GeneratedMigrationRequest> requests;
 
-  const GeneratedBatchMigrationRequest({
-    required this.requests,
-  });
+  const GeneratedBatchMigrationRequest({required this.requests});
 
   factory GeneratedBatchMigrationRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedBatchMigrationRequest(
-      requests: _required(_readFieldValue<List<GeneratedMigrationRequest>>(_readField(json, const ["requests"]), "requests", (value) => _readObjectList(value, GeneratedMigrationRequest.fromJson), requiredField: true, nullable: false), "requests"),
+      requests: _required(
+        _readFieldValue<List<GeneratedMigrationRequest>>(
+          _readField(json, const ["requests"]),
+          "requests",
+          (value) => _readObjectList(value, GeneratedMigrationRequest.fromJson),
+          requiredField: true,
+          nullable: false,
+        ),
+        "requests",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'requests': requests.map((value) => value.toJson()).toList(),
-    };
+    return {'requests': requests.map((value) => value.toJson()).toList()};
   }
 }
 
 class GeneratedMigrationTargetRequest {
   final String targetLevel;
 
-  const GeneratedMigrationTargetRequest({
-    required this.targetLevel,
-  });
+  const GeneratedMigrationTargetRequest({required this.targetLevel});
 
   factory GeneratedMigrationTargetRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationTargetRequest(
-      targetLevel: _required(_readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString, requiredField: true, nullable: false), "target_level"),
+      targetLevel: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["target_level"]),
+          "target_level",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "target_level",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'target_level': targetLevel,
-    };
+    return {'target_level': targetLevel};
   }
 }
 
@@ -74,43 +103,54 @@ class GeneratedMigrationStatusResponse {
   final String? message;
   final String status;
 
-  const GeneratedMigrationStatusResponse({
-    this.message,
-    required this.status,
-  });
+  const GeneratedMigrationStatusResponse({this.message, required this.status});
 
   factory GeneratedMigrationStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationStatusResponse(
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      message: _readFieldValue<String>(
+        _readField(json, const ["message"]),
+        "message",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'message': message,
-      'status': status,
-    };
+    return {'message': message, 'status': status};
   }
 }
 
 class GeneratedMigrationRequestsResponse {
   final List<Map<String, dynamic>>? needsMigration;
 
-  const GeneratedMigrationRequestsResponse({
-    this.needsMigration,
-  });
+  const GeneratedMigrationRequestsResponse({this.needsMigration});
 
   factory GeneratedMigrationRequestsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationRequestsResponse(
-      needsMigration: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["needs_migration"]), "needs_migration", _readMapList, requiredField: false, nullable: true),
+      needsMigration: _readFieldValue<List<Map<String, dynamic>>>(
+        _readField(json, const ["needs_migration"]),
+        "needs_migration",
+        _readMapList,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'needs_migration': needsMigration,
-    };
+    return {'needs_migration': needsMigration};
   }
 }
 
@@ -118,23 +158,29 @@ class GeneratedUserProfileResponse {
   final String? dataProtectionLevel;
   final Map<String, dynamic>? migrationStatus;
 
-  const GeneratedUserProfileResponse({
-    this.dataProtectionLevel,
-    this.migrationStatus,
-  });
+  const GeneratedUserProfileResponse({this.dataProtectionLevel, this.migrationStatus});
 
   factory GeneratedUserProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserProfileResponse(
-      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
-      migrationStatus: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["migration_status"]), "migration_status", _readMap, requiredField: false, nullable: true),
+      dataProtectionLevel: _readFieldValue<String>(
+        _readField(json, const ["data_protection_level"]),
+        "data_protection_level",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      migrationStatus: _readFieldValue<Map<String, dynamic>>(
+        _readField(json, const ["migration_status"]),
+        "migration_status",
+        _readMap,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'data_protection_level': dataProtectionLevel,
-      'migration_status': migrationStatus,
-    };
+    return {'data_protection_level': dataProtectionLevel, 'migration_status': migrationStatus};
   }
 }
 
@@ -222,37 +268,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

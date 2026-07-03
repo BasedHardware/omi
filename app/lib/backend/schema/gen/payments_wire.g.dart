@@ -5,20 +5,25 @@
 class GeneratedPaymentMutationResponse {
   final String status;
 
-  const GeneratedPaymentMutationResponse({
-    required this.status,
-  });
+  const GeneratedPaymentMutationResponse({required this.status});
 
   factory GeneratedPaymentMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentMutationResponse(
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'status': status,
-    };
+    return {'status': status};
   }
 }
 
@@ -26,43 +31,60 @@ class GeneratedStripeConnectAccountResponse {
   final String accountId;
   final String url;
 
-  const GeneratedStripeConnectAccountResponse({
-    required this.accountId,
-    required this.url,
-  });
+  const GeneratedStripeConnectAccountResponse({required this.accountId, required this.url});
 
   factory GeneratedStripeConnectAccountResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedStripeConnectAccountResponse(
-      accountId: _required(_readFieldValue<String>(_readField(json, const ["account_id"]), "account_id", _readString, requiredField: true, nullable: false), "account_id"),
-      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
+      accountId: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["account_id"]),
+          "account_id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "account_id",
+      ),
+      url: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["url"]),
+          "url",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "url",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'account_id': accountId,
-      'url': url,
-    };
+    return {'account_id': accountId, 'url': url};
   }
 }
 
 class GeneratedStripeOnboardingStatusResponse {
   final bool onboardingComplete;
 
-  const GeneratedStripeOnboardingStatusResponse({
-    required this.onboardingComplete,
-  });
+  const GeneratedStripeOnboardingStatusResponse({required this.onboardingComplete});
 
   factory GeneratedStripeOnboardingStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedStripeOnboardingStatusResponse(
-      onboardingComplete: _required(_readFieldValue<bool>(_readField(json, const ["onboarding_complete"]), "onboarding_complete", _readBool, requiredField: true, nullable: false), "onboarding_complete"),
+      onboardingComplete: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["onboarding_complete"]),
+          "onboarding_complete",
+          _readBool,
+          requiredField: true,
+          nullable: false,
+        ),
+        "onboarding_complete",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'onboarding_complete': onboardingComplete,
-    };
+    return {'onboarding_complete': onboardingComplete};
   }
 }
 
@@ -70,23 +92,35 @@ class GeneratedStripeSupportedCountryResponse {
   final String id;
   final String name;
 
-  const GeneratedStripeSupportedCountryResponse({
-    required this.id,
-    required this.name,
-  });
+  const GeneratedStripeSupportedCountryResponse({required this.id, required this.name});
 
   factory GeneratedStripeSupportedCountryResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedStripeSupportedCountryResponse(
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      id: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["id"]),
+          "id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "id",
+      ),
+      name: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["name"]),
+          "name",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "name",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-    };
+    return {'id': id, 'name': name};
   }
 }
 
@@ -94,23 +128,35 @@ class GeneratedPayPalPaymentDetailsResponse {
   final String email;
   final String paypalmeUrl;
 
-  const GeneratedPayPalPaymentDetailsResponse({
-    required this.email,
-    required this.paypalmeUrl,
-  });
+  const GeneratedPayPalPaymentDetailsResponse({required this.email, required this.paypalmeUrl});
 
   factory GeneratedPayPalPaymentDetailsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPayPalPaymentDetailsResponse(
-      email: _required(_readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: true, nullable: false), "email"),
-      paypalmeUrl: _required(_readFieldValue<String>(_readField(json, const ["paypalme_url"]), "paypalme_url", _readString, requiredField: true, nullable: false), "paypalme_url"),
+      email: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["email"]),
+          "email",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "email",
+      ),
+      paypalmeUrl: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["paypalme_url"]),
+          "paypalme_url",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "paypalme_url",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'email': email,
-      'paypalme_url': paypalmeUrl,
-    };
+    return {'email': email, 'paypalme_url': paypalmeUrl};
   }
 }
 
@@ -119,26 +165,42 @@ class GeneratedPaymentMethodStatusResponse {
   final String paypal;
   final String stripe;
 
-  const GeneratedPaymentMethodStatusResponse({
-    this.defaultValue,
-    required this.paypal,
-    required this.stripe,
-  });
+  const GeneratedPaymentMethodStatusResponse({this.defaultValue, required this.paypal, required this.stripe});
 
   factory GeneratedPaymentMethodStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentMethodStatusResponse(
-      defaultValue: _readFieldValue<String>(_readField(json, const ["default"]), "default", _readString, requiredField: false, nullable: true),
-      paypal: _required(_readFieldValue<String>(_readField(json, const ["paypal"]), "paypal", _readString, requiredField: true, nullable: false), "paypal"),
-      stripe: _required(_readFieldValue<String>(_readField(json, const ["stripe"]), "stripe", _readString, requiredField: true, nullable: false), "stripe"),
+      defaultValue: _readFieldValue<String>(
+        _readField(json, const ["default"]),
+        "default",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      paypal: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["paypal"]),
+          "paypal",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "paypal",
+      ),
+      stripe: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["stripe"]),
+          "stripe",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "stripe",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'default': defaultValue,
-      'paypal': paypal,
-      'stripe': stripe,
-    };
+    return {'default': defaultValue, 'paypal': paypal, 'stripe': stripe};
   }
 }
 
@@ -171,17 +233,99 @@ class GeneratedPaymentSubscriptionResponse {
 
   factory GeneratedPaymentSubscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentSubscriptionResponse(
-      cancelAtPeriodEnd: _required(_readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: false, defaultValue: false), "cancel_at_period_end"),
-      currentPeriodEnd: _readFieldValue<int>(_readField(json, const ["current_period_end"]), "current_period_end", _readInt, requiredField: false, nullable: true),
-      currentPeriodStart: _readFieldValue<int>(_readField(json, const ["current_period_start"]), "current_period_start", _readInt, requiredField: false, nullable: true),
-      currentPriceId: _readFieldValue<String>(_readField(json, const ["current_price_id"]), "current_price_id", _readString, requiredField: false, nullable: true),
-      deprecated: _required(_readFieldValue<bool>(_readField(json, const ["deprecated"]), "deprecated", _readBool, requiredField: false, nullable: false, defaultValue: false), "deprecated"),
-      deprecationMessage: _readFieldValue<String>(_readField(json, const ["deprecation_message"]), "deprecation_message", _readString, requiredField: false, nullable: true),
-      features: _readFieldValue<List<String>>(_readField(json, const ["features"]), "features", _readStringList, requiredField: false, nullable: true),
-      limits: _readFieldValue<GeneratedPlanLimits>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedPlanLimits.fromJson), requiredField: false, nullable: true),
-      plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: false, nullable: false, defaultValue: "basic"), "plan"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "status"),
-      stripeSubscriptionId: _readFieldValue<String>(_readField(json, const ["stripe_subscription_id"]), "stripe_subscription_id", _readString, requiredField: false, nullable: true),
+      cancelAtPeriodEnd: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["cancel_at_period_end"]),
+          "cancel_at_period_end",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "cancel_at_period_end",
+      ),
+      currentPeriodEnd: _readFieldValue<int>(
+        _readField(json, const ["current_period_end"]),
+        "current_period_end",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      currentPeriodStart: _readFieldValue<int>(
+        _readField(json, const ["current_period_start"]),
+        "current_period_start",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      currentPriceId: _readFieldValue<String>(
+        _readField(json, const ["current_price_id"]),
+        "current_price_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      deprecated: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["deprecated"]),
+          "deprecated",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "deprecated",
+      ),
+      deprecationMessage: _readFieldValue<String>(
+        _readField(json, const ["deprecation_message"]),
+        "deprecation_message",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      features: _readFieldValue<List<String>>(
+        _readField(json, const ["features"]),
+        "features",
+        _readStringList,
+        requiredField: false,
+        nullable: true,
+      ),
+      limits: _readFieldValue<GeneratedPlanLimits>(
+        _readField(json, const ["limits"]),
+        "limits",
+        (value) => _readObject(value, GeneratedPlanLimits.fromJson),
+        requiredField: false,
+        nullable: true,
+      ),
+      plan: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["plan"]),
+          "plan",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "basic",
+        ),
+        "plan",
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "active",
+        ),
+        "status",
+      ),
+      stripeSubscriptionId: _readFieldValue<String>(
+        _readField(json, const ["stripe_subscription_id"]),
+        "stripe_subscription_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
@@ -206,23 +350,35 @@ class GeneratedPaymentStatusMessageResponse {
   final String message;
   final String status;
 
-  const GeneratedPaymentStatusMessageResponse({
-    required this.message,
-    required this.status,
-  });
+  const GeneratedPaymentStatusMessageResponse({required this.message, required this.status});
 
   factory GeneratedPaymentStatusMessageResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentStatusMessageResponse(
-      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      message: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["message"]),
+          "message",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "message",
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'message': message,
-      'status': status,
-    };
+    return {'message': message, 'status': status};
   }
 }
 
@@ -243,11 +399,41 @@ class GeneratedPaymentCheckoutSessionResponse {
 
   factory GeneratedPaymentCheckoutSessionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentCheckoutSessionResponse(
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      nextBillingDate: _readFieldValue<int>(_readField(json, const ["next_billing_date"]), "next_billing_date", _readInt, requiredField: false, nullable: true),
-      sessionId: _readFieldValue<String>(_readField(json, const ["session_id"]), "session_id", _readString, requiredField: false, nullable: true),
-      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true),
-      url: _readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: false, nullable: true),
+      message: _readFieldValue<String>(
+        _readField(json, const ["message"]),
+        "message",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      nextBillingDate: _readFieldValue<int>(
+        _readField(json, const ["next_billing_date"]),
+        "next_billing_date",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      sessionId: _readFieldValue<String>(
+        _readField(json, const ["session_id"]),
+        "session_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _readFieldValue<String>(
+        _readField(json, const ["status"]),
+        "status",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      url: _readFieldValue<String>(
+        _readField(json, const ["url"]),
+        "url",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
@@ -279,11 +465,53 @@ class GeneratedPaymentUpgradeSubscriptionResponse {
 
   factory GeneratedPaymentUpgradeSubscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentUpgradeSubscriptionResponse(
-      daysRemaining: _required(_readFieldValue<int>(_readField(json, const ["days_remaining"]), "days_remaining", _readInt, requiredField: true, nullable: false), "days_remaining"),
-      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
-      scheduleId: _readFieldValue<String>(_readField(json, const ["schedule_id"]), "schedule_id", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      subscription: _required(_readFieldValue<GeneratedPaymentSubscriptionResponse>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedPaymentSubscriptionResponse.fromJson), requiredField: true, nullable: false), "subscription"),
+      daysRemaining: _required(
+        _readFieldValue<int>(
+          _readField(json, const ["days_remaining"]),
+          "days_remaining",
+          _readInt,
+          requiredField: true,
+          nullable: false,
+        ),
+        "days_remaining",
+      ),
+      message: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["message"]),
+          "message",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "message",
+      ),
+      scheduleId: _readFieldValue<String>(
+        _readField(json, const ["schedule_id"]),
+        "schedule_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
+      subscription: _required(
+        _readFieldValue<GeneratedPaymentSubscriptionResponse>(
+          _readField(json, const ["subscription"]),
+          "subscription",
+          (value) => _readObject(value, GeneratedPaymentSubscriptionResponse.fromJson),
+          requiredField: true,
+          nullable: false,
+        ),
+        "subscription",
+      ),
     );
   }
 
@@ -301,20 +529,25 @@ class GeneratedPaymentUpgradeSubscriptionResponse {
 class GeneratedCustomerPortalSessionResponse {
   final String url;
 
-  const GeneratedCustomerPortalSessionResponse({
-    required this.url,
-  });
+  const GeneratedCustomerPortalSessionResponse({required this.url});
 
   factory GeneratedCustomerPortalSessionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedCustomerPortalSessionResponse(
-      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
+      url: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["url"]),
+          "url",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "url",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'url': url,
-    };
+    return {'url': url};
   }
 }
 
@@ -335,11 +568,41 @@ class GeneratedPlanLimits {
 
   factory GeneratedPlanLimits.fromJson(Map<String, dynamic> json) {
     return GeneratedPlanLimits(
-      chatCostUsdPerMonth: _readFieldValue<double>(_readField(json, const ["chat_cost_usd_per_month"]), "chat_cost_usd_per_month", _readDouble, requiredField: false, nullable: true),
-      chatQuestionsPerMonth: _readFieldValue<int>(_readField(json, const ["chat_questions_per_month"]), "chat_questions_per_month", _readInt, requiredField: false, nullable: true),
-      insightsGained: _readFieldValue<int>(_readField(json, const ["insights_gained"]), "insights_gained", _readInt, requiredField: false, nullable: true),
-      transcriptionSeconds: _readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: true),
-      wordsTranscribed: _readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: true),
+      chatCostUsdPerMonth: _readFieldValue<double>(
+        _readField(json, const ["chat_cost_usd_per_month"]),
+        "chat_cost_usd_per_month",
+        _readDouble,
+        requiredField: false,
+        nullable: true,
+      ),
+      chatQuestionsPerMonth: _readFieldValue<int>(
+        _readField(json, const ["chat_questions_per_month"]),
+        "chat_questions_per_month",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      insightsGained: _readFieldValue<int>(
+        _readField(json, const ["insights_gained"]),
+        "insights_gained",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      transcriptionSeconds: _readFieldValue<int>(
+        _readField(json, const ["transcription_seconds"]),
+        "transcription_seconds",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      wordsTranscribed: _readFieldValue<int>(
+        _readField(json, const ["words_transcribed"]),
+        "words_transcribed",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
@@ -381,16 +644,99 @@ class GeneratedPaymentPricingOption {
 
   factory GeneratedPaymentPricingOption.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentPricingOption(
-      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
-      eyebrow: _readFieldValue<String>(_readField(json, const ["eyebrow"]), "eyebrow", _readString, requiredField: false, nullable: true),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      interval: _required(_readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString, requiredField: true, nullable: false), "interval"),
-      isActive: _required(_readFieldValue<bool>(_readField(json, const ["is_active"]), "is_active", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_active"),
-      planId: _required(_readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString, requiredField: false, nullable: false, defaultValue: ""), "plan_id"),
-      priceString: _required(_readFieldValue<String>(_readField(json, const ["price_string"]), "price_string", _readString, requiredField: true, nullable: false), "price_string"),
-      subtitle: _readFieldValue<String>(_readField(json, const ["subtitle"]), "subtitle", _readString, requiredField: false, nullable: true),
-      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
-      unitAmount: _required(_readFieldValue<int>(_readField(json, const ["unit_amount"]), "unit_amount", _readInt, requiredField: true, nullable: false), "unit_amount"),
+      description: _readFieldValue<String>(
+        _readField(json, const ["description"]),
+        "description",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      eyebrow: _readFieldValue<String>(
+        _readField(json, const ["eyebrow"]),
+        "eyebrow",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      id: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["id"]),
+          "id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "id",
+      ),
+      interval: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["interval"]),
+          "interval",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "interval",
+      ),
+      isActive: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["is_active"]),
+          "is_active",
+          _readBool,
+          requiredField: false,
+          nullable: false,
+          defaultValue: false,
+        ),
+        "is_active",
+      ),
+      planId: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["plan_id"]),
+          "plan_id",
+          _readString,
+          requiredField: false,
+          nullable: false,
+          defaultValue: "",
+        ),
+        "plan_id",
+      ),
+      priceString: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["price_string"]),
+          "price_string",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "price_string",
+      ),
+      subtitle: _readFieldValue<String>(
+        _readField(json, const ["subtitle"]),
+        "subtitle",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      title: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["title"]),
+          "title",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "title",
+      ),
+      unitAmount: _required(
+        _readFieldValue<int>(
+          _readField(json, const ["unit_amount"]),
+          "unit_amount",
+          _readInt,
+          requiredField: true,
+          nullable: false,
+        ),
+        "unit_amount",
+      ),
     );
   }
 
@@ -413,20 +759,25 @@ class GeneratedPaymentPricingOption {
 class GeneratedAvailablePlansResponse {
   final List<GeneratedPaymentPricingOption> plans;
 
-  const GeneratedAvailablePlansResponse({
-    required this.plans,
-  });
+  const GeneratedAvailablePlansResponse({required this.plans});
 
   factory GeneratedAvailablePlansResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAvailablePlansResponse(
-      plans: _required(_readFieldValue<List<GeneratedPaymentPricingOption>>(_readField(json, const ["plans"]), "plans", (value) => _readObjectList(value, GeneratedPaymentPricingOption.fromJson), requiredField: true, nullable: false), "plans"),
+      plans: _required(
+        _readFieldValue<List<GeneratedPaymentPricingOption>>(
+          _readField(json, const ["plans"]),
+          "plans",
+          (value) => _readObjectList(value, GeneratedPaymentPricingOption.fromJson),
+          requiredField: true,
+          nullable: false,
+        ),
+        "plans",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'plans': plans.map((value) => value.toJson()).toList(),
-    };
+    return {'plans': plans.map((value) => value.toJson()).toList()};
   }
 }
 
@@ -449,12 +800,48 @@ class GeneratedAppSubscriptionDetails {
 
   factory GeneratedAppSubscriptionDetails.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSubscriptionDetails(
-      cancelAtPeriodEnd: _readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: true),
-      currentPeriodEnd: _readFieldValue<int>(_readField(json, const ["current_period_end"]), "current_period_end", _readInt, requiredField: false, nullable: true),
-      customerId: _readFieldValue<String>(_readField(json, const ["customer_id"]), "customer_id", _readString, requiredField: false, nullable: true),
-      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
-      priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: false, nullable: true),
-      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true),
+      cancelAtPeriodEnd: _readFieldValue<bool>(
+        _readField(json, const ["cancel_at_period_end"]),
+        "cancel_at_period_end",
+        _readBool,
+        requiredField: false,
+        nullable: true,
+      ),
+      currentPeriodEnd: _readFieldValue<int>(
+        _readField(json, const ["current_period_end"]),
+        "current_period_end",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      customerId: _readFieldValue<String>(
+        _readField(json, const ["customer_id"]),
+        "customer_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      id: _readFieldValue<String>(
+        _readField(json, const ["id"]),
+        "id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      priceId: _readFieldValue<String>(
+        _readField(json, const ["price_id"]),
+        "price_id",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _readFieldValue<String>(
+        _readField(json, const ["status"]),
+        "status",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
@@ -473,20 +860,22 @@ class GeneratedAppSubscriptionDetails {
 class GeneratedAppSubscriptionResponse {
   final GeneratedAppSubscriptionDetails? subscription;
 
-  const GeneratedAppSubscriptionResponse({
-    this.subscription,
-  });
+  const GeneratedAppSubscriptionResponse({this.subscription});
 
   factory GeneratedAppSubscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSubscriptionResponse(
-      subscription: _readFieldValue<GeneratedAppSubscriptionDetails>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedAppSubscriptionDetails.fromJson), requiredField: false, nullable: true),
+      subscription: _readFieldValue<GeneratedAppSubscriptionDetails>(
+        _readField(json, const ["subscription"]),
+        "subscription",
+        (value) => _readObject(value, GeneratedAppSubscriptionDetails.fromJson),
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'subscription': subscription?.toJson(),
-    };
+    return {'subscription': subscription?.toJson()};
   }
 }
 
@@ -505,10 +894,40 @@ class GeneratedAppSubscriptionCancelResponse {
 
   factory GeneratedAppSubscriptionCancelResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSubscriptionCancelResponse(
-      cancelAtPeriodEnd: _readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: true),
-      currentPeriodEnd: _readFieldValue<int>(_readField(json, const ["current_period_end"]), "current_period_end", _readInt, requiredField: false, nullable: true),
-      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      cancelAtPeriodEnd: _readFieldValue<bool>(
+        _readField(json, const ["cancel_at_period_end"]),
+        "cancel_at_period_end",
+        _readBool,
+        requiredField: false,
+        nullable: true,
+      ),
+      currentPeriodEnd: _readFieldValue<int>(
+        _readField(json, const ["current_period_end"]),
+        "current_period_end",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      message: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["message"]),
+          "message",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "message",
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
     );
   }
 
@@ -606,37 +1025,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

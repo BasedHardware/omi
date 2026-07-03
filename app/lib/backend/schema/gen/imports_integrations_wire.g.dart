@@ -23,13 +23,61 @@ class GeneratedImportJobResponse {
 
   factory GeneratedImportJobResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedImportJobResponse(
-      conversationsCreated: _readFieldValue<int>(_readField(json, const ["conversations_created"]), "conversations_created", _readInt, requiredField: false, nullable: true),
-      createdAt: _readFieldValue<String>(_readField(json, const ["created_at"]), "created_at", _readString, requiredField: false, nullable: true),
-      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
-      jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
-      processedFiles: _readFieldValue<int>(_readField(json, const ["processed_files"]), "processed_files", _readInt, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      totalFiles: _readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: false, nullable: true),
+      conversationsCreated: _readFieldValue<int>(
+        _readField(json, const ["conversations_created"]),
+        "conversations_created",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      createdAt: _readFieldValue<String>(
+        _readField(json, const ["created_at"]),
+        "created_at",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      error: _readFieldValue<String>(
+        _readField(json, const ["error"]),
+        "error",
+        _readString,
+        requiredField: false,
+        nullable: true,
+      ),
+      jobId: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["job_id"]),
+          "job_id",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "job_id",
+      ),
+      processedFiles: _readFieldValue<int>(
+        _readField(json, const ["processed_files"]),
+        "processed_files",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
+      totalFiles: _readFieldValue<int>(
+        _readField(json, const ["total_files"]),
+        "total_files",
+        _readInt,
+        requiredField: false,
+        nullable: true,
+      ),
     );
   }
 
@@ -50,43 +98,60 @@ class GeneratedIntegrationResponse {
   final String appKey;
   final bool connected;
 
-  const GeneratedIntegrationResponse({
-    required this.appKey,
-    required this.connected,
-  });
+  const GeneratedIntegrationResponse({required this.appKey, required this.connected});
 
   factory GeneratedIntegrationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedIntegrationResponse(
-      appKey: _required(_readFieldValue<String>(_readField(json, const ["app_key"]), "app_key", _readString, requiredField: true, nullable: false), "app_key"),
-      connected: _required(_readFieldValue<bool>(_readField(json, const ["connected"]), "connected", _readBool, requiredField: true, nullable: false), "connected"),
+      appKey: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["app_key"]),
+          "app_key",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "app_key",
+      ),
+      connected: _required(
+        _readFieldValue<bool>(
+          _readField(json, const ["connected"]),
+          "connected",
+          _readBool,
+          requiredField: true,
+          nullable: false,
+        ),
+        "connected",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'app_key': appKey,
-      'connected': connected,
-    };
+    return {'app_key': appKey, 'connected': connected};
   }
 }
 
 class GeneratedOAuthUrlResponse {
   final String authUrl;
 
-  const GeneratedOAuthUrlResponse({
-    required this.authUrl,
-  });
+  const GeneratedOAuthUrlResponse({required this.authUrl});
 
   factory GeneratedOAuthUrlResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedOAuthUrlResponse(
-      authUrl: _required(_readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: true, nullable: false), "auth_url"),
+      authUrl: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["auth_url"]),
+          "auth_url",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "auth_url",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'auth_url': authUrl,
-    };
+    return {'auth_url': authUrl};
   }
 }
 
@@ -94,23 +159,35 @@ class GeneratedDeleteLimitlessConversationsResponse {
   final int deletedCount;
   final String message;
 
-  const GeneratedDeleteLimitlessConversationsResponse({
-    required this.deletedCount,
-    required this.message,
-  });
+  const GeneratedDeleteLimitlessConversationsResponse({required this.deletedCount, required this.message});
 
   factory GeneratedDeleteLimitlessConversationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDeleteLimitlessConversationsResponse(
-      deletedCount: _required(_readFieldValue<int>(_readField(json, const ["deleted_count"]), "deleted_count", _readInt, requiredField: true, nullable: false), "deleted_count"),
-      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
+      deletedCount: _required(
+        _readFieldValue<int>(
+          _readField(json, const ["deleted_count"]),
+          "deleted_count",
+          _readInt,
+          requiredField: true,
+          nullable: false,
+        ),
+        "deleted_count",
+      ),
+      message: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["message"]),
+          "message",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "message",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'deleted_count': deletedCount,
-      'message': message,
-    };
+    return {'deleted_count': deletedCount, 'message': message};
   }
 }
 
@@ -129,20 +206,48 @@ class GeneratedAppleHealthSyncResponse {
 
   factory GeneratedAppleHealthSyncResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppleHealthSyncResponse(
-      appKey: _required(_readFieldValue<String>(_readField(json, const ["app_key"]), "app_key", _readString, requiredField: true, nullable: false), "app_key"),
-      dataTypesSynced: _readFieldValue<List<String>>(_readField(json, const ["data_types_synced"]), "data_types_synced", _readStringList, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      syncedAt: _required(_readFieldValue<String>(_readField(json, const ["synced_at"]), "synced_at", _readString, requiredField: true, nullable: false), "synced_at"),
+      appKey: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["app_key"]),
+          "app_key",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "app_key",
+      ),
+      dataTypesSynced: _readFieldValue<List<String>>(
+        _readField(json, const ["data_types_synced"]),
+        "data_types_synced",
+        _readStringList,
+        requiredField: false,
+        nullable: true,
+      ),
+      status: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["status"]),
+          "status",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "status",
+      ),
+      syncedAt: _required(
+        _readFieldValue<String>(
+          _readField(json, const ["synced_at"]),
+          "synced_at",
+          _readString,
+          requiredField: true,
+          nullable: false,
+        ),
+        "synced_at",
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'app_key': appKey,
-      'data_types_synced': dataTypesSynced,
-      'status': status,
-      'synced_at': syncedAt,
-    };
+    return {'app_key': appKey, 'data_types_synced': dataTypesSynced, 'status': status, 'synced_at': syncedAt};
   }
 }
 
@@ -230,37 +335,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;
