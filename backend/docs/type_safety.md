@@ -28,8 +28,14 @@ The first required surface covers migration-sensitive gateway, config, memory re
 - `scripts/rollout_schema_readiness.py`
 - `pusher/main.py`
 - adjacent memory boundaries:
+  - `database/__init__.py`
   - `database/document_ids.py`
   - `database/firestore_cache_metrics.py`
+  - `database/firestore_cache.py`
+  - `database/goals.py`
+  - `database/google_credentials.py`
+  - `database/mem_db.py`
+  - `database/tasks.py`
   - `database/desktop_update_policy.py`
   - `database/memory_app_key_grants.py`
   - `database/memory_imports.py`

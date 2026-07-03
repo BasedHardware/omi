@@ -335,8 +335,14 @@ check_backend_typecheck_if_needed() {
     'backend/scripts/pinecone_repair_validation_readiness.py' \
     'backend/scripts/rollout_schema_readiness.py' \
     'backend/pusher/main.py' \
+    'backend/database/__init__.py' \
     'backend/database/document_ids.py' \
     'backend/database/firestore_cache_metrics.py' \
+    'backend/database/firestore_cache.py' \
+    'backend/database/goals.py' \
+    'backend/database/google_credentials.py' \
+    'backend/database/mem_db.py' \
+    'backend/database/tasks.py' \
     'backend/database/desktop_update_policy.py' \
     'backend/database/memory_app_key_grants.py' \
     'backend/database/memory_imports.py' \
