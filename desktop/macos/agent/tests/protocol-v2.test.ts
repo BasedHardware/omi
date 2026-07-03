@@ -90,4 +90,19 @@ describe("protocol v2 compatibility", () => {
     expect(directBlock).toContain("registerSignedDirectControlOwner");
     expect(directBlock).toContain("releaseDirectControlOwner");
   });
+
+  it("treats top-level background-agent spawn as a long-lived correlated control run", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const correlationStart = source.indexOf("function withControlRunCorrelation");
+    const adapterStart = source.indexOf("function controlRunAdapterId");
+    const longLivedStart = source.indexOf("function isLongLivedControlRun");
+    const correlationBlock = source.slice(correlationStart, adapterStart);
+    const adapterBlock = source.slice(adapterStart, longLivedStart);
+    const longLivedBlock = source.slice(longLivedStart, source.indexOf("function controlToolResultOk"));
+
+    expect(correlationBlock).toContain('"spawn_background_agent"');
+    expect(adapterBlock).toContain('"spawn_background_agent"');
+    expect(longLivedBlock).toContain('name === "spawn_background_agent"');
+  });
 });
