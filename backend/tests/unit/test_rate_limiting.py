@@ -438,6 +438,8 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "goals:extract",
             "dev:conversations",
             "dev:conversations_read",
+            "dev:conversation_detail_read",
+            "dev:conversation_transcript_read",
             "dev:action_items_read",
             "dev:action_items_write",
             "dev:goals_read",
@@ -505,9 +507,43 @@ class TestRouterWiring(unittest.TestCase):
             "dev:memories_read",
             "dev:action_items_read",
             "dev:conversations_read",
+            "dev:conversation_detail_read",
+            "dev:conversation_transcript_read",
             "dev:goals_read",
         ]:
             self.assertIn(policy, source)
+
+    def test_developer_conversation_reads_split_detail_and_transcript_policies(self):
+        dependencies_source = open("dependencies.py", encoding='utf-8').read()
+        developer_source = open("routers/developer.py", encoding='utf-8').read()
+
+        self.assertIn('policy_name="dev:conversation_detail_read"', dependencies_source)
+        self.assertIn('policy_name="dev:conversation_transcript_read"', dependencies_source)
+        self.assertIn("get_auth_with_conversations_read", developer_source)
+        self.assertIn("get_auth_with_conversation_detail_read", developer_source)
+        self.assertIn("check_conversation_transcript_read_limit(auth, request=request)", developer_source)
+
+    def test_developer_conversation_reads_emit_sanitized_audit_logs(self):
+        developer_source = open("routers/developer.py", encoding='utf-8').read()
+        dependencies_source = open("dependencies.py", encoding='utf-8').read()
+
+        self.assertIn("developer_api_read operation=%s", developer_source)
+        self.assertIn("developer_api_rate_limit_failure policy=%s", dependencies_source)
+        self.assertIn("auth.app_id or 'unknown_app'", developer_source)
+        self.assertIn("auth.key_id or 'unknown_key'", developer_source)
+        self.assertIn("sanitize(request.headers.get('user-agent'))", developer_source)
+        self.assertIn("sanitize(request.headers.get('user-agent'))", dependencies_source)
+        self.assertNotIn("request.headers.get('Authorization'", developer_source)
+        self.assertNotIn('request.headers.get("Authorization"', developer_source)
+        self.assertNotIn("request.headers.get('Authorization'", dependencies_source)
+        self.assertNotIn('request.headers.get("Authorization"', dependencies_source)
+
+    def test_developer_read_routes_do_not_add_duplicate_uid_wrappers(self):
+        developer_source = open("routers/developer.py", encoding='utf-8').read()
+
+        self.assertNotIn('with_rate_limit(get_uid_with_conversations_read, "dev:conversations_read")', developer_source)
+        self.assertNotIn('with_rate_limit(get_uid_with_action_items_read, "dev:action_items_read")', developer_source)
+        self.assertNotIn('with_rate_limit(get_uid_with_goals_read, "dev:goals_read")', developer_source)
 
     def test_goals_router_has_rate_limits(self):
         matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
