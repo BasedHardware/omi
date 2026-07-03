@@ -557,7 +557,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ),
             ] else ...[
               ListTile(
-                leading: const FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
+                leading: Icon(FontAwesomeIcons.share.data, color: Colors.white, size: 18),
                 title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(sheetContext);

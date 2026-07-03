@@ -704,7 +704,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     Navigator.pop(context);
                   }
                 },
-                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                icon: Icon(FontAwesomeIcons.arrowLeft.data, size: 16.0, color: Colors.white),
               ),
             ),
             title: Align(
@@ -789,8 +789,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : FaIcon(
-                                    provider.conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                                : Icon(
+                                    provider.conversation.starred
+                                        ? FontAwesomeIcons.solidStar.data
+                                        : FontAwesomeIcons.star.data,
                                     size: 16.0,
                                     color: provider.conversation.starred ? Colors.amber : Colors.white,
                                   ),
@@ -861,7 +863,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                                : Icon(FontAwesomeIcons.arrowUpFromBracket.data, size: 16.0, color: Colors.white),
                           ),
                         ),
                         // Search button (second) - only show on transcript and summary tabs
@@ -894,7 +896,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 });
                                 HapticFeedback.mediumImpact();
                               },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                              icon: Icon(FontAwesomeIcons.magnifyingGlass.data, size: 16.0, color: Colors.white),
                             ),
                           ),
                         // Developer Tools button (third) - iOS style pull-down menu
@@ -906,30 +908,30 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             itemBuilder: (context) => [
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
-                                iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
+                                iconWidget: Icon(FontAwesomeIcons.copy.data, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copySummary,
-                                iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
+                                iconWidget: Icon(FontAwesomeIcons.clone.data, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copyConversationId,
-                                iconWidget: FaIcon(FontAwesomeIcons.clipboard, size: 16),
+                                iconWidget: Icon(FontAwesomeIcons.clipboard.data, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
                               ),
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
                                   title: context.l10n.shareAudio,
-                                  iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
+                                  iconWidget: Icon(FontAwesomeIcons.share.data, size: 16),
                                   onTap: _isDownloadingAudio
                                       ? null
                                       : () => _handleMenuSelection(context, 'download_audio', provider),
                                 ),
                               // PullDownMenuItem(
                               //   title: 'Trigger Integration',
-                              //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
+                              //   iconWidget: Icon(FontAwesomeIcons.paperPlane.data, size: 16),
                               //   onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
                               // ),
                               if (provider.conversation.calendarEvent == null)
@@ -948,18 +950,18 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 ),
                               PullDownMenuItem(
                                 title: context.l10n.testPrompt,
-                                iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
+                                iconWidget: Icon(FontAwesomeIcons.commentDots.data, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
                               ),
                               if (!provider.conversation.discarded)
                                 PullDownMenuItem(
                                   title: context.l10n.reprocessConversation,
-                                  iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+                                  iconWidget: Icon(FontAwesomeIcons.arrowsRotate.data, size: 16),
                                   onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                                 ),
                               PullDownMenuItem(
                                 title: context.l10n.deleteConversation,
-                                iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                                iconWidget: Icon(FontAwesomeIcons.trashCan.data, size: 16, color: Colors.red),
                                 onTap: () => _handleMenuSelection(context, 'delete', provider),
                               ),
                             ],
@@ -978,8 +980,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   color: Colors.grey.withValues(alpha: 0.3),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Center(
-                                  child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                                child: Center(
+                                  child: Icon(FontAwesomeIcons.ellipsisVertical.data, size: 16.0, color: Colors.white),
                                 ),
                               ),
                             ),

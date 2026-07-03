@@ -180,10 +180,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         height: 44,
                                         child: SearchBar(
                                           hintText: context.l10n.searchMemories,
-                                          leading: const Padding(
+                                          leading: Padding(
                                             padding: EdgeInsets.only(left: 6.0),
                                             child: Icon(
-                                              FontAwesomeIcons.magnifyingGlass,
+                                              FontAwesomeIcons.magnifyingGlass.data,
                                               color: Colors.white70,
                                               size: 14,
                                             ),
@@ -236,10 +236,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                             height: 44,
                                             child: SearchBar(
                                               hintText: context.l10n.searchMemories,
-                                              leading: const Padding(
+                                              leading: Padding(
                                                 padding: EdgeInsets.only(left: 6.0),
                                                 child: Icon(
-                                                  FontAwesomeIcons.magnifyingGlass,
+                                                  FontAwesomeIcons.magnifyingGlass.data,
                                                   color: Colors.white70,
                                                   size: 14,
                                                 ),
@@ -316,7 +316,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.brain, size: 16),
+                                        child: Icon(FontAwesomeIcons.brain.data, size: 16),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -333,7 +333,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.sliders, size: 16),
+                                        child: Icon(FontAwesomeIcons.sliders.data, size: 16),
                                       ),
                                     ),
                                   ],

@@ -25,7 +25,7 @@ class _EmptyConversationsWidgetState extends State<EmptyConversationsWidget> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: const FaIcon(FontAwesomeIcons.star, color: Colors.amber, size: 32),
+              child: Icon(FontAwesomeIcons.star.data, color: Colors.amber, size: 32),
             ),
             const SizedBox(height: 16),
             Text(

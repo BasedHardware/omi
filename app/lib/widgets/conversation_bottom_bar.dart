@@ -378,7 +378,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildCircularButton(
-              icon: FontAwesomeIcons.solidComments,
+              icon: FontAwesomeIcons.solidComments.data,
               isSelected: widget.selectedTab == ConversationTab.transcript,
               onTap: () => widget.onTabSelected(ConversationTab.transcript),
             ),
@@ -417,7 +417,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             child: (isTranscriptSelected && hasAudio)
                 ? _buildTranscriptPillContent()
                 : _buildCircularButtonContent(
-                    icon: FontAwesomeIcons.solidComments,
+                    icon: FontAwesomeIcons.solidComments.data,
                     isSelected: isTranscriptSelected,
                     onTap: () => widget.onTabSelected(ConversationTab.transcript),
                   ),
@@ -439,7 +439,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             child: isSummarySelected
                 ? _buildSummaryPillContent(context)
                 : _buildCircularButtonContent(
-                    icon: FontAwesomeIcons.solidFileLines,
+                    icon: FontAwesomeIcons.solidFileLines.data,
                     isSelected: false,
                     onTap: () => widget.onTabSelected(ConversationTab.summary),
                   ),
@@ -449,7 +449,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         if (widget.hasActionItems) ...[
           const SizedBox(width: 8),
           _buildCircularButton(
-            icon: FontAwesomeIcons.listCheck,
+            icon: FontAwesomeIcons.listCheck.data,
             isSelected: widget.selectedTab == ConversationTab.actionItems,
             onTap: () => widget.onTabSelected(ConversationTab.actionItems),
           ),
@@ -513,7 +513,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             HapticFeedback.mediumImpact();
             onTap();
           },
-          child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+          child: Center(child: Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
         ),
       ),
     );
@@ -828,7 +828,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               HapticFeedback.mediumImpact();
               onTap();
             },
-            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+            child: Center(child: Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
           ),
         ),
       ),

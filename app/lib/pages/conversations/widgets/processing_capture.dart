@@ -378,7 +378,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
+                  Icon(FontAwesomeIcons.solidStar.data, size: 12, color: Colors.amber),
                   const SizedBox(width: 4),
                   Text(
                     context.l10n.starred,
@@ -397,7 +397,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const FaIcon(FontAwesomeIcons.camera, size: 12, color: Color(0xFFC9CBCF)),
+                  Icon(FontAwesomeIcons.camera.data, size: 12, color: Color(0xFFC9CBCF)),
                   const SizedBox(width: 6),
                   Text(
                     '${provider.photos.length}',
@@ -457,14 +457,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   shape: BoxShape.circle,
                 ),
                 child: Center(
-                  child: FaIcon(
+                  child: Icon(
                     isPaused
                         ? isDeviceRecording
-                            ? FontAwesomeIcons.microphoneSlash
-                            : FontAwesomeIcons.play
+                            ? FontAwesomeIcons.microphoneSlash.data
+                            : FontAwesomeIcons.play.data
                         : isDeviceRecording
-                            ? FontAwesomeIcons.microphone
-                            : FontAwesomeIcons.pause,
+                            ? FontAwesomeIcons.microphone.data
+                            : FontAwesomeIcons.pause.data,
                     color: Colors.white,
                     size: 12,
                   ),

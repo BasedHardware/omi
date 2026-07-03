@@ -313,7 +313,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           labelStyle: TextStyle(color: Colors.grey.shade400),
           prefixIcon: SizedBox(
             width: 48,
-            child: Center(child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 18)),
+            child: Center(child: Icon(icon, color: const Color(0xFF8E8E93), size: 18)),
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           suffixIcon: suffixIcon,
@@ -340,7 +340,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             child: SizedBox(
               width: 24,
               height: 24,
-              child: FaIcon(icon, color: iconColor ?? const Color(0xFF8E8E93), size: 18),
+              child: Icon(icon, color: iconColor ?? const Color(0xFF8E8E93), size: 18),
             ),
           ),
           const SizedBox(width: 16),
@@ -376,7 +376,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           child: Column(
             children: [
               _buildVersionItem(
-                icon: FontAwesomeIcons.microchip,
+                icon: FontAwesomeIcons.microchip.data,
                 label: context.l10n.currentVersion,
                 version: _currentVersion,
                 chipColor: _hasUpdate ? const Color(0xFF3D2A2A) : null,
@@ -384,7 +384,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
               if (_hasUpdate) ...[
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildVersionItem(
-                  icon: FontAwesomeIcons.cloudArrowDown,
+                  icon: FontAwesomeIcons.cloudArrowDown.data,
                   label: context.l10n.latestVersion,
                   version: _latestVersion,
                   chipColor: const Color(0xFF1A3D2E),
@@ -403,7 +403,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
               children: [
                 Text(context.l10n.deviceUpToDate, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
                 const SizedBox(width: 8),
-                const FaIcon(FontAwesomeIcons.circleCheck, color: Color(0xFF4ADE80), size: 14),
+                Icon(FontAwesomeIcons.circleCheck.data, color: Color(0xFF4ADE80), size: 14),
               ],
             ),
           ),
@@ -470,18 +470,18 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             controller: _ssidController,
             label: context.l10n.networkNameSsid,
             hint: context.l10n.enterWifiNetworkName,
-            icon: FontAwesomeIcons.wifi,
+            icon: FontAwesomeIcons.wifi.data,
           ),
           const SizedBox(height: 12),
           _buildTextField(
             controller: _passwordController,
             label: context.l10n.password,
             hint: context.l10n.enterWifiPassword,
-            icon: FontAwesomeIcons.lock,
+            icon: FontAwesomeIcons.lock.data,
             obscureText: _obscurePassword,
             suffixIcon: IconButton(
-              icon: FaIcon(
-                _obscurePassword ? FontAwesomeIcons.eye : FontAwesomeIcons.eyeSlash,
+              icon: Icon(
+                _obscurePassword ? FontAwesomeIcons.eye.data : FontAwesomeIcons.eyeSlash.data,
                 color: const Color(0xFF8E8E93),
                 size: 16,
               ),
@@ -504,7 +504,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const FaIcon(FontAwesomeIcons.triangleExclamation, color: Color(0xFFFFB800), size: 18),
+                  Icon(FontAwesomeIcons.triangleExclamation.data, color: Color(0xFFFFB800), size: 18),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Text(
@@ -524,10 +524,10 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  FaIcon(FontAwesomeIcons.download, color: Colors.black, size: 16),
+                  Icon(FontAwesomeIcons.download.data, color: Colors.black, size: 16),
                   SizedBox(width: 10),
                   Text(
                     'Install Update',
@@ -599,7 +599,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const FaIcon(FontAwesomeIcons.triangleExclamation, color: Color(0xFFFFB800), size: 18),
+                Icon(FontAwesomeIcons.triangleExclamation.data, color: Color(0xFFFFB800), size: 18),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
@@ -622,10 +622,10 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
             ),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                FaIcon(FontAwesomeIcons.xmark, color: Colors.red, size: 16),
+                Icon(FontAwesomeIcons.xmark.data, color: Colors.red, size: 16),
                 SizedBox(width: 10),
                 Text(
                   'Cancel Update',
@@ -653,7 +653,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(color: const Color(0xFF1A3D2E), borderRadius: BorderRadius.circular(40)),
-                  child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Color(0xFF4ADE80), size: 32)),
+                  child: Center(child: Icon(FontAwesomeIcons.check.data, color: Color(0xFF4ADE80), size: 32)),
                 ),
                 const SizedBox(height: 24),
                 const Text(
@@ -705,7 +705,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(color: const Color(0xFF3D1A1A), borderRadius: BorderRadius.circular(40)),
-                  child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Color(0xFFDE4A4A), size: 32)),
+                  child: Center(child: Icon(FontAwesomeIcons.xmark.data, color: Color(0xFFDE4A4A), size: 32)),
                 ),
                 const SizedBox(height: 24),
                 const Text(
@@ -735,10 +735,10 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                FaIcon(FontAwesomeIcons.arrowRotateLeft, color: Colors.black, size: 16),
+                Icon(FontAwesomeIcons.arrowRotateLeft.data, color: Colors.black, size: 16),
                 SizedBox(width: 10),
                 Text(
                   'Try Again',
@@ -833,7 +833,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           leading: _isUpdating
               ? const SizedBox()
               : IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                  icon: Icon(FontAwesomeIcons.chevronLeft.data, size: 18),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
           title: const Text(

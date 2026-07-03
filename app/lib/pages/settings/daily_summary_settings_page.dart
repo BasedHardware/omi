@@ -273,7 +273,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
         children: [
           // Enable toggle row
           _buildSettingRow(
-            icon: FontAwesomeIcons.bell,
+            icon: FontAwesomeIcons.bell.data,
             title: context.l10n.dailySummary,
             trailing: Switch(value: _enabled, onChanged: _updateEnabled, activeThumbColor: const Color(0xFF6366F1)),
           ),
@@ -291,7 +291,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
               onTap: _showHourPicker,
               behavior: HitTestBehavior.opaque,
               child: _buildSettingRow(
-                icon: FontAwesomeIcons.clock,
+                icon: FontAwesomeIcons.clock.data,
                 title: context.l10n.deliveryTime,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -319,7 +319,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-          child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
+          child: Center(child: Icon(icon, color: Colors.grey.shade400, size: 16)),
         ),
         const SizedBox(width: 14),
         Expanded(

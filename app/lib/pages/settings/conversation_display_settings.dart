@@ -62,7 +62,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
             width: 40,
             height: 40,
             decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-            child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
+            child: Center(child: Icon(icon, color: Colors.grey.shade400, size: 16)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -109,7 +109,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                child: Center(child: FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade400, size: 16)),
+                child: Center(child: Icon(FontAwesomeIcons.clock.data, color: Colors.grey.shade400, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -184,7 +184,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
         backgroundColor: const Color(0xFF000000),
         elevation: 0,
         leading: IconButton(
-          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+          icon: Icon(FontAwesomeIcons.chevronLeft.data, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -204,7 +204,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                 _buildSectionContainer(
                   children: [
                     _buildToggleItem(
-                      icon: FontAwesomeIcons.clock,
+                      icon: FontAwesomeIcons.clock.data,
                       title: context.l10n.showShortConversations,
                       description: context.l10n.showShortConversationsDesc,
                       value: provider.showShortConversations,
@@ -217,7 +217,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                     ),
                     const Divider(height: 1, color: Color(0xFF3C3C43)),
                     _buildToggleItem(
-                      icon: FontAwesomeIcons.trash,
+                      icon: FontAwesomeIcons.trash.data,
                       title: context.l10n.showDiscardedConversations,
                       description: context.l10n.showDiscardedConversationsDesc,
                       value: provider.showDiscardedConversations,

@@ -222,7 +222,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           children: [
             Expanded(
               child: _statusCard(
-                icon: FontAwesomeIcons.clock,
+                icon: FontAwesomeIcons.clock.data,
                 label: context.l10n.connectionUptime,
                 value: _formatUptime(connectedAt),
               ),
@@ -230,7 +230,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             const SizedBox(width: 12),
             Expanded(
               child: _statusCard(
-                icon: FontAwesomeIcons.arrowsRotate,
+                icon: FontAwesomeIcons.arrowsRotate.data,
                 label: context.l10n.reconnections,
                 value: '$reconnections',
                 valueColor: reconnections > 5 ? const Color(0xFFF44336) : null,
@@ -245,7 +245,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             children: [
               Expanded(
                 child: _statusCard(
-                  icon: FontAwesomeIcons.batteryThreeQuarters,
+                  icon: FontAwesomeIcons.batteryThreeQuarters.data,
                   label: context.l10n.battery,
                   value: battery >= 0 ? '$battery%' : '--',
                 ),
@@ -253,7 +253,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               const SizedBox(width: 12),
               Expanded(
                 child: _statusCard(
-                  icon: FontAwesomeIcons.signal,
+                  icon: FontAwesomeIcons.signal.data,
                   label: context.l10n.signal,
                   value: latestRssi != null ? '$latestRssi dBm' : '--',
                   valueColor: latestRssi != null ? _rssiColor(latestRssi) : null,
@@ -282,7 +282,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         children: [
           Row(
             children: [
-              FaIcon(icon, color: const Color(0xFF8E8E93), size: 14),
+              Icon(icon, color: const Color(0xFF8E8E93), size: 14),
               const SizedBox(width: 8),
               Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
             ],
@@ -606,7 +606,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             child: Center(
               child: Column(
                 children: [
-                  FaIcon(FontAwesomeIcons.circleCheck, color: Colors.grey.shade600, size: 32),
+                  Icon(FontAwesomeIcons.circleCheck.data, color: Colors.grey.shade600, size: 32),
                   const SizedBox(height: 12),
                   Text(context.l10n.noDisconnectsRecorded, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
                 ],

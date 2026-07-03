@@ -577,7 +577,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   HapticFeedback.mediumImpact();
                   Navigator.pop(context);
                 },
-                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                icon: Icon(FontAwesomeIcons.arrowLeft.data, size: 16.0, color: Colors.white),
               ),
             ),
             actions: [
@@ -642,7 +642,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : const FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
+                        : Icon(FontAwesomeIcons.solidComments.data, size: 16.0, color: Colors.white),
                   ),
                 ),
               ],
@@ -654,7 +654,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: IconButton(
                     padding: EdgeInsets.zero,
-                    icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
+                    icon: Icon(FontAwesomeIcons.gear.data, size: 16.0, color: Colors.white),
                     onPressed: () {
                       HapticFeedback.mediumImpact();
                       Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
@@ -673,7 +673,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                            icon: Icon(FontAwesomeIcons.arrowUpFromBracket.data, size: 16.0, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
                               PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
@@ -709,7 +709,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                            icon: Icon(FontAwesomeIcons.edit.data, size: 16.0, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
                               await showModalBottomSheet(
@@ -756,7 +756,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ),
                         ),
                         placeholder: (context, url) => const CircularProgressIndicator(),
-                        errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
+                        errorWidget: (context, url, error) => Icon(FontAwesomeIcons.circleExclamation.data),
                       ),
                       const SizedBox(width: 20),
                       Expanded(
@@ -791,8 +791,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       ),
                                       if (app.official) ...[
                                         const SizedBox(width: 4),
-                                        const FaIcon(
-                                          FontAwesomeIcons.solidCircleCheck,
+                                        Icon(
+                                          FontAwesomeIcons.solidCircleCheck.data,
                                           size: 14,
                                           color: Colors.deepPurpleAccent,
                                         ),
@@ -814,7 +814,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     child: Row(
                                       children: [
                                         if (app.ratingCount > 0) ...[
-                                          const Icon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
+                                          Icon(FontAwesomeIcons.solidStar.data, size: 11, color: Color(0xFF8B5CF6)),
                                           const SizedBox(width: 4),
                                           Text(
                                             '${app.getRatingAvg()} (${app.ratingCount})',
@@ -986,7 +986,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                Icon(FontAwesomeIcons.circleInfo.data, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1007,7 +1007,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                Icon(FontAwesomeIcons.circleInfo.data, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1028,7 +1028,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(FontAwesomeIcons.circleExclamation, color: Colors.grey, size: 18),
+                                Icon(FontAwesomeIcons.circleExclamation.data, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1090,7 +1090,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                         ),
                                         child: Center(
                                           child: setupCompleted
-                                              ? const FaIcon(FontAwesomeIcons.check, size: 14, color: Colors.green)
+                                              ? Icon(FontAwesomeIcons.check.data, size: 14, color: Colors.green)
                                               : Text(
                                                   '${i + 1}',
                                                   style: TextStyle(
@@ -1124,8 +1124,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                           ],
                                         ),
                                       ),
-                                      FaIcon(
-                                        FontAwesomeIcons.arrowUpRightFromSquare,
+                                      Icon(
+                                        FontAwesomeIcons.arrowUpRightFromSquare.data,
                                         size: 16,
                                         color: Colors.grey.shade500,
                                       ),
@@ -1173,9 +1173,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             }
                             checkSetupCompleted();
                           },
-                          trailing: const Padding(
+                          trailing: Padding(
                             padding: EdgeInsets.only(right: 12.0),
-                            child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
+                            child: Icon(FontAwesomeIcons.chevronRight.data, size: 20, color: Colors.grey),
                           ),
                           title: const Text(
                             'Integration Instructions',
@@ -1246,7 +1246,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                           color: Colors.grey[900],
                                           borderRadius: BorderRadius.circular(12),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.circleExclamation),
+                                        child: Icon(FontAwesomeIcons.circleExclamation.data),
                                       ),
                                     ),
                                   ),
@@ -1604,7 +1604,7 @@ class RatingDistributionWidget extends StatelessWidget {
                 return Padding(
                   padding: EdgeInsets.only(right: index < 4 ? 4 : 0),
                   child: Icon(
-                    FontAwesomeIcons.solidStar,
+                    FontAwesomeIcons.solidStar.data,
                     size: 14,
                     color: index < ratingAvg.round() ? Colors.deepPurple : Colors.grey.shade700,
                   ),
@@ -1831,7 +1831,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                 child: Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Icon(
-                    FontAwesomeIcons.solidStar,
+                    FontAwesomeIcons.solidStar.data,
                     size: 24,
                     color: index < editRating ? Colors.deepPurple : Colors.grey.shade600,
                   ),
@@ -1942,7 +1942,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         return Padding(
                           padding: const EdgeInsets.only(right: 4),
                           child: Icon(
-                            FontAwesomeIcons.solidStar,
+                            FontAwesomeIcons.solidStar.data,
                             size: 14,
                             color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
                           ),

@@ -48,7 +48,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                child: Center(child: FaIcon(FontAwesomeIcons.book, color: Colors.grey.shade400, size: 16)),
+                child: Center(child: Icon(FontAwesomeIcons.book.data, color: Colors.grey.shade400, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -131,7 +131,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                             valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B6B6B)),
                           ),
                         )
-                      : const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
+                      : Icon(FontAwesomeIcons.plus.data, color: Colors.white, size: 16),
                 ),
               ),
             ],
@@ -270,7 +270,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
           backgroundColor: const Color(0xFF0D0D0D),
           elevation: 0,
           leading: IconButton(
-            icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+            icon: Icon(FontAwesomeIcons.chevronLeft.data, size: 18),
             onPressed: () => Navigator.of(context).pop(),
           ),
           title: Text(

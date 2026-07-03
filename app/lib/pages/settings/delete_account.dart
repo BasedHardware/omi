@@ -45,14 +45,14 @@ class _DeleteAccountState extends State<DeleteAccount> {
     super.dispose();
   }
 
-  static const _reasons = [
-    _Reason('privacy_concerns', FontAwesomeIcons.shield),
-    _Reason('not_using_enough', FontAwesomeIcons.clock),
-    _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
-    _Reason('technical_issues', FontAwesomeIcons.triangleExclamation),
-    _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft),
-    _Reason('taking_break', FontAwesomeIcons.mugHot),
-    _Reason('other', FontAwesomeIcons.ellipsis),
+  static final _reasons = [
+    _Reason('privacy_concerns', FontAwesomeIcons.shield.data),
+    _Reason('not_using_enough', FontAwesomeIcons.clock.data),
+    _Reason('missing_features', FontAwesomeIcons.puzzlePiece.data),
+    _Reason('technical_issues', FontAwesomeIcons.triangleExclamation.data),
+    _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft.data),
+    _Reason('taking_break', FontAwesomeIcons.mugHot.data),
+    _Reason('other', FontAwesomeIcons.ellipsis.data),
   ];
 
   String _label(String key) => switch (key) {
@@ -255,7 +255,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
-                child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600),
+                child: Icon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600),
               ),
             ),
             const SizedBox(width: 14),
@@ -407,7 +407,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: FaIcon(FontAwesomeIcons.triangleExclamation, size: 14, color: Colors.red.shade300),
+                  child: Icon(FontAwesomeIcons.triangleExclamation.data, size: 14, color: Colors.red.shade300),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -425,11 +425,11 @@ class _DeleteAccountState extends State<DeleteAccount> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             children: [
-              _featureRow(FontAwesomeIcons.solidCommentDots, context.l10n.allDataErased),
-              _featureRow(FontAwesomeIcons.puzzlePiece, context.l10n.appsDisconnected),
-              _featureRow(FontAwesomeIcons.creditCard, context.l10n.deleteConsequenceSubscription),
-              _featureRow(FontAwesomeIcons.fileArrowDown, context.l10n.exportBeforeDelete),
-              _featureRow(FontAwesomeIcons.ban, context.l10n.deleteConsequenceNoRecovery),
+              _featureRow(FontAwesomeIcons.solidCommentDots.data, context.l10n.allDataErased),
+              _featureRow(FontAwesomeIcons.puzzlePiece.data, context.l10n.appsDisconnected),
+              _featureRow(FontAwesomeIcons.creditCard.data, context.l10n.deleteConsequenceSubscription),
+              _featureRow(FontAwesomeIcons.fileArrowDown.data, context.l10n.exportBeforeDelete),
+              _featureRow(FontAwesomeIcons.ban.data, context.l10n.deleteConsequenceNoRecovery),
               const SizedBox(height: 16),
               Text(
                 context.l10n.deleteTypeToConfirm,
@@ -549,7 +549,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
                 color: Colors.grey.shade800.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Center(child: FaIcon(icon, size: 14, color: Colors.grey.shade500)),
+              child: Center(child: Icon(icon, size: 14, color: Colors.grey.shade500)),
             ),
             const SizedBox(width: 14),
             Expanded(

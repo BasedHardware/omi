@@ -362,8 +362,8 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Center(
-                                child: FaIcon(
-                                  _isPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
+                                child: Icon(
+                                  _isPublic ? FontAwesomeIcons.globe.data : FontAwesomeIcons.lock.data,
                                   color: Colors.grey.shade400,
                                   size: 16,
                                 ),

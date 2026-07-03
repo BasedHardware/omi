@@ -13,19 +13,19 @@ class CapabilitiesCard extends StatelessWidget {
   IconData _getCapabilityIcon(String id) {
     switch (id) {
       case 'chat':
-        return FontAwesomeIcons.solidComment;
+        return FontAwesomeIcons.solidComment.data;
       case 'memories':
-        return FontAwesomeIcons.solidFileLines;
+        return FontAwesomeIcons.solidFileLines.data;
       case 'external_integration':
-        return FontAwesomeIcons.puzzlePiece;
+        return FontAwesomeIcons.puzzlePiece.data;
       case 'persona':
-        return FontAwesomeIcons.userAstronaut;
+        return FontAwesomeIcons.userAstronaut.data;
       case 'proactive_notification':
-        return FontAwesomeIcons.solidBell;
+        return FontAwesomeIcons.solidBell.data;
       case 'push_to_talk':
-        return FontAwesomeIcons.walkieTalkie;
+        return FontAwesomeIcons.walkieTalkie.data;
       default:
-        return FontAwesomeIcons.cubes;
+        return FontAwesomeIcons.cubes.data;
     }
   }
 
@@ -71,7 +71,7 @@ class CapabilitiesCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FaIcon(_getCapabilityIcon(capability.id), size: 14, color: color),
+                    Icon(_getCapabilityIcon(capability.id), size: 14, color: color),
                     const SizedBox(width: 8),
                     Text(
                       capability.getLocalizedTitle(context),

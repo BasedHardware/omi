@@ -62,17 +62,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             title: Text(context.l10n.sync,
                 style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             leading: IconButton(
-              icon: const FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
+              icon: Icon(FontAwesomeIcons.chevronLeft.data, color: Colors.white, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
               IconButton(
-                icon: const FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
+                icon: Icon(FontAwesomeIcons.circleInfo.data, color: Color(0xFF8E8E93), size: 18),
                 onPressed: () => _showInfoSheet(context),
               ),
               if (pendingWals.isNotEmpty || syncedWals.isNotEmpty)
                 IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
+                  icon: Icon(FontAwesomeIcons.ellipsis.data, color: Color(0xFF8E8E93), size: 18),
                   onPressed: () => _showManageStorageSheet(context, syncProvider),
                 ),
             ],
@@ -265,7 +265,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
+              child: Center(child: Icon(FontAwesomeIcons.check.data, color: Colors.green, size: 14)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -274,7 +274,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
+            Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
@@ -295,7 +295,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       ),
       child: Row(
         children: [
-          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
+          Icon(FontAwesomeIcons.circleExclamation.data, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
             child: Text(syncState.errorMessage ?? context.l10n.syncFailed,
@@ -338,7 +338,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           child: Column(
             children: [
               _settingRow(
-                icon: FontAwesomeIcons.mobile,
+                icon: FontAwesomeIcons.mobile.data,
                 label: context.l10n.storeAudioOnPhone,
                 isOn: isPhoneOn,
                 onTap: () {
@@ -349,7 +349,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
               _settingRow(
-                icon: FontAwesomeIcons.cloud,
+                icon: FontAwesomeIcons.cloud.data,
                 label: context.l10n.storeAudioOnCloud,
                 isOn: isCloudOn,
                 onTap: () =>
@@ -375,7 +375,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           children: [
-            FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
+            Icon(icon, color: const Color(0xFF8E8E93), size: 18),
             const SizedBox(width: 14),
             Expanded(
               child:
@@ -386,7 +386,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w400),
             ),
             const SizedBox(width: 10),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
+            Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
@@ -634,7 +634,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         ),
       );
     }
-    return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
+    return Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12);
   }
 
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
@@ -880,7 +880,7 @@ class _ManageStorageSheet extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _StorageRow(
-                icon: FontAwesomeIcons.circleCheck,
+                icon: FontAwesomeIcons.circleCheck.data,
                 iconColor: Colors.green,
                 title: context.l10n.synced,
                 subtitle: context.l10n.safelyBackedUp,
@@ -890,7 +890,7 @@ class _ManageStorageSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _StorageRow(
-                icon: FontAwesomeIcons.clockRotateLeft,
+                icon: FontAwesomeIcons.clockRotateLeft.data,
                 iconColor: Colors.orange,
                 title: context.l10n.pending,
                 subtitle: context.l10n.notYetSynced,
@@ -962,7 +962,7 @@ class _StorageRow extends StatelessWidget {
               color: iconColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
+            child: Center(child: Icon(icon, size: 16, color: iconColor)),
           ),
           const SizedBox(width: 14),
           Expanded(

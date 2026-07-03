@@ -317,7 +317,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
                             ),
                             if (summary.stats.totalConversations > 0) ...[
                               const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
-                              const FaIcon(FontAwesomeIcons.solidComments, size: 10, color: Color(0xFF9A9BA1)),
+                              Icon(FontAwesomeIcons.solidComments.data, size: 10, color: Color(0xFF9A9BA1)),
                               const SizedBox(width: 4),
                               Text(
                                 '${summary.stats.totalConversations}',
@@ -327,7 +327,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
                             ],
                             if (summary.stats.actionItemsCount > 0) ...[
                               const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
-                              const FaIcon(FontAwesomeIcons.listCheck, size: 11, color: Color(0xFF9A9BA1)),
+                              Icon(FontAwesomeIcons.listCheck.data, size: 11, color: Color(0xFF9A9BA1)),
                               const SizedBox(width: 4),
                               Text(
                                 '${summary.stats.actionItemsCount}',

@@ -280,7 +280,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                           )
                                         else
-                                          const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                          Icon(FontAwesomeIcons.microphone.data, size: 12, color: Colors.white),
                                         const SizedBox(width: 6),
                                         Text(
                                           isRecording
@@ -391,7 +391,7 @@ class _RecordOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           _RecordOption(
-            icon: FontAwesomeIcons.microphone,
+            icon: FontAwesomeIcons.microphone.data,
             title: context.l10n.recordWithPhoneMic,
             subtitle: context.l10n.recordWithPhoneMicSubtitle,
             onTap: onPickPhoneMic,

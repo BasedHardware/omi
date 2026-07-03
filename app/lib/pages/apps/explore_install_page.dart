@@ -606,8 +606,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               }
                                               provider.applyFilters();
                                             },
-                                            icon: const Icon(
-                                              FontAwesomeIcons.magnifyingGlass,
+                                            icon: Icon(
+                                              FontAwesomeIcons.magnifyingGlass.data,
                                               color: Colors.white70,
                                               size: 14,
                                             ),
@@ -622,10 +622,10 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               height: 44,
                                               child: SearchBar(
                                                 hintText: context.l10n.searchAppsPlaceholder,
-                                                leading: const Padding(
+                                                leading: Padding(
                                                   padding: EdgeInsets.only(left: 6.0),
                                                   child: Icon(
-                                                    FontAwesomeIcons.magnifyingGlass,
+                                                    FontAwesomeIcons.magnifyingGlass.data,
                                                     color: Colors.white70,
                                                     size: 14,
                                                   ),
@@ -707,8 +707,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(
-                                            FontAwesomeIcons.solidUser,
+                                          icon: Icon(
+                                            FontAwesomeIcons.solidUser.data,
                                             size: 16,
                                             color: Colors.white,
                                           ),
@@ -748,8 +748,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(
-                                            FontAwesomeIcons.solidUser,
+                                          icon: Icon(
+                                            FontAwesomeIcons.solidUser.data,
                                             size: 16,
                                             color: Colors.white,
                                           ),
@@ -783,8 +783,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(
-                                            FontAwesomeIcons.download,
+                                          icon: Icon(
+                                            FontAwesomeIcons.download.data,
                                             size: 16,
                                             color: Colors.white,
                                           ),
@@ -826,8 +826,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(
-                                            FontAwesomeIcons.download,
+                                          icon: Icon(
+                                            FontAwesomeIcons.download.data,
                                             size: 16,
                                             color: Colors.white,
                                           ),
@@ -861,7 +861,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               builder: (context) => const FilterBottomSheet(),
                                             );
                                           },
-                                          icon: const Icon(FontAwesomeIcons.filter, size: 16, color: Colors.white),
+                                          icon: Icon(FontAwesomeIcons.filter.data, size: 16, color: Colors.white),
                                           label: Text(
                                             context.l10n.filters,
                                             style: const TextStyle(
@@ -903,8 +903,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                   builder: (context) => const FilterBottomSheet(),
                                                 );
                                               },
-                                              icon: const Icon(
-                                                FontAwesomeIcons.filter,
+                                              icon: Icon(
+                                                FontAwesomeIcons.filter.data,
                                                 size: 16,
                                                 color: Colors.white,
                                               ),

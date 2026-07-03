@@ -550,7 +550,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             else
             // Radio button for connected services
             if (isSelected)
-              const FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
+              Icon(FontAwesomeIcons.solidCircleCheck.data, color: Colors.green, size: 24)
             else
               Container(
                 width: 24,
@@ -628,7 +628,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
                 child: Row(
                   children: [
-                    FaIcon(FontAwesomeIcons.solidLightbulb, color: Colors.yellow.withValues(alpha: 0.5), size: 20),
+                    Icon(FontAwesomeIcons.solidLightbulb.data, color: Colors.yellow.withValues(alpha: 0.5), size: 20),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(

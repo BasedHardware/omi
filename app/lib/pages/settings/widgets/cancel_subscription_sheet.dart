@@ -34,14 +34,14 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
     PlatformManager.instance.analytics.subscriptionCancelFlowStarted();
   }
 
-  static const _reasons = [
-    _Reason('too_expensive', FontAwesomeIcons.wallet),
-    _Reason('not_using_enough', FontAwesomeIcons.clock),
-    _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
-    _Reason('audio_quality', FontAwesomeIcons.microphone),
-    _Reason('battery_drain', FontAwesomeIcons.batteryQuarter),
-    _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft),
-    _Reason('other', FontAwesomeIcons.ellipsis),
+  static final _reasons = [
+    _Reason('too_expensive', FontAwesomeIcons.wallet.data),
+    _Reason('not_using_enough', FontAwesomeIcons.clock.data),
+    _Reason('missing_features', FontAwesomeIcons.puzzlePiece.data),
+    _Reason('audio_quality', FontAwesomeIcons.microphone.data),
+    _Reason('battery_drain', FontAwesomeIcons.batteryQuarter.data),
+    _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft.data),
+    _Reason('other', FontAwesomeIcons.ellipsis.data),
   ];
 
   String _label(String key) => switch (key) {
@@ -238,7 +238,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
-                child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600),
+                child: Icon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600),
               ),
             ),
             const SizedBox(width: 14),
@@ -414,7 +414,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: FaIcon(FontAwesomeIcons.circleInfo, size: 14, color: Colors.orange.shade400),
+                  child: Icon(FontAwesomeIcons.circleInfo.data, size: 14, color: Colors.orange.shade400),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -432,12 +432,12 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             children: [
-              _featureRow(FontAwesomeIcons.infinity, context.l10n.cancelConsequenceNoAccess),
-              _featureRow(FontAwesomeIcons.bolt, context.l10n.cancelConsequenceBattery),
-              _featureRow(FontAwesomeIcons.solidComments, context.l10n.cancelConsequenceQuality),
-              _featureRow(FontAwesomeIcons.gaugeHigh, context.l10n.cancelConsequenceDelay),
-              _featureRow(FontAwesomeIcons.userGroup, context.l10n.cancelConsequenceSpeakers),
-              _featureRow(FontAwesomeIcons.phone, context.l10n.cancelConsequencePhoneCalls),
+              _featureRow(FontAwesomeIcons.infinity.data, context.l10n.cancelConsequenceNoAccess),
+              _featureRow(FontAwesomeIcons.bolt.data, context.l10n.cancelConsequenceBattery),
+              _featureRow(FontAwesomeIcons.solidComments.data, context.l10n.cancelConsequenceQuality),
+              _featureRow(FontAwesomeIcons.gaugeHigh.data, context.l10n.cancelConsequenceDelay),
+              _featureRow(FontAwesomeIcons.userGroup.data, context.l10n.cancelConsequenceSpeakers),
+              _featureRow(FontAwesomeIcons.phone.data, context.l10n.cancelConsequencePhoneCalls),
             ],
           ),
         ),
@@ -518,7 +518,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
                 color: Colors.grey.shade800.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Center(child: FaIcon(icon, size: 14, color: Colors.grey.shade500)),
+              child: Center(child: Icon(icon, size: 14, color: Colors.grey.shade500)),
             ),
             const SizedBox(width: 14),
             Expanded(

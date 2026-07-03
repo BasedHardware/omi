@@ -29,18 +29,18 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
 
   List<_SourceOption> _getSources(BuildContext context) {
     return [
-      _SourceOption(context.l10n.tiktok, FontAwesomeIcons.tiktok),
-      _SourceOption(context.l10n.youtube, FontAwesomeIcons.youtube),
-      _SourceOption(context.l10n.instagram, FontAwesomeIcons.instagram),
-      _SourceOption(context.l10n.xTwitter, FontAwesomeIcons.xTwitter),
-      _SourceOption(context.l10n.reddit, FontAwesomeIcons.reddit),
-      _SourceOption(context.l10n.linkedIn, FontAwesomeIcons.linkedin),
-      _SourceOption(context.l10n.friendWordOfMouth, FontAwesomeIcons.userGroup),
-      _SourceOption(context.l10n.coworker, FontAwesomeIcons.briefcase),
-      _SourceOption(context.l10n.event, FontAwesomeIcons.calendarDay),
-      _SourceOption(context.l10n.appStore, FontAwesomeIcons.appStore),
-      _SourceOption(context.l10n.googleSearch, FontAwesomeIcons.google),
-      _SourceOption(context.l10n.otherSource, FontAwesomeIcons.ellipsis),
+      _SourceOption(context.l10n.tiktok, FontAwesomeIcons.tiktok.data),
+      _SourceOption(context.l10n.youtube, FontAwesomeIcons.youtube.data),
+      _SourceOption(context.l10n.instagram, FontAwesomeIcons.instagram.data),
+      _SourceOption(context.l10n.xTwitter, FontAwesomeIcons.xTwitter.data),
+      _SourceOption(context.l10n.reddit, FontAwesomeIcons.reddit.data),
+      _SourceOption(context.l10n.linkedIn, FontAwesomeIcons.linkedin.data),
+      _SourceOption(context.l10n.friendWordOfMouth, FontAwesomeIcons.userGroup.data),
+      _SourceOption(context.l10n.coworker, FontAwesomeIcons.briefcase.data),
+      _SourceOption(context.l10n.event, FontAwesomeIcons.calendarDay.data),
+      _SourceOption(context.l10n.appStore, FontAwesomeIcons.appStore.data),
+      _SourceOption(context.l10n.googleSearch, FontAwesomeIcons.google.data),
+      _SourceOption(context.l10n.otherSource, FontAwesomeIcons.ellipsis.data),
     ];
   }
 
@@ -121,7 +121,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                           ),
                           child: Row(
                             children: [
-                              FaIcon(source.icon, size: 18, color: isSelected ? Colors.black : Colors.white),
+                              Icon(source.icon, size: 18, color: isSelected ? Colors.black : Colors.white),
                               const SizedBox(width: 14),
                               Text(
                                 source.label,

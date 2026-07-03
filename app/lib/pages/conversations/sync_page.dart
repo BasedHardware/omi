@@ -24,7 +24,7 @@ import 'wal_item_detail/wal_item_detail_page.dart';
 Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
     padding: const EdgeInsets.only(left: 2, top: 1),
-    child: FaIcon(icon, size: size, color: color),
+    child: Icon(icon, size: size, color: color),
   );
 }
 
@@ -102,7 +102,7 @@ class WalListItem extends StatelessWidget {
         ),
       );
     }
-    return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
+    return Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12);
   }
 
   @override
@@ -248,7 +248,7 @@ class _SyncPageState extends State<SyncPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           children: [
-            FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
+            Icon(icon, color: const Color(0xFF8E8E93), size: 18),
             const SizedBox(width: 14),
             Expanded(
               child:
@@ -256,7 +256,7 @@ class _SyncPageState extends State<SyncPage> {
             ),
             if (status != null) Text(status, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
             const SizedBox(width: 10),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
+            Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
@@ -278,7 +278,8 @@ class _SyncPageState extends State<SyncPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                SizedBox(width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleCheck, color: Colors.green)),
+                SizedBox(
+                    width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleCheck.data, color: Colors.green)),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
@@ -305,7 +306,7 @@ class _SyncPageState extends State<SyncPage> {
           Builder(
             builder: (context) {
               return _buildSettingsItem(
-                icon: FontAwesomeIcons.mobile,
+                icon: FontAwesomeIcons.mobile.data,
                 title: context.l10n.storeAudioOnPhone,
                 status: isPhoneStorageOn ? context.l10n.on : context.l10n.off,
                 onTap: () {
@@ -321,7 +322,7 @@ class _SyncPageState extends State<SyncPage> {
             builder: (context, userProvider, child) {
               final isCloudOn = userProvider.privateCloudSyncEnabled;
               return _buildSettingsItem(
-                icon: FontAwesomeIcons.cloud,
+                icon: FontAwesomeIcons.cloud.data,
                 title: context.l10n.storeAudioOnCloud,
                 status: isCloudOn ? context.l10n.on : context.l10n.off,
                 onTap: () {
@@ -451,7 +452,7 @@ class _SyncPageState extends State<SyncPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            _buildFaIcon(FontAwesomeIcons.sdCard, size: 20, color: Colors.deepPurpleAccent),
+            _buildFaIcon(FontAwesomeIcons.sdCard.data, size: 20, color: Colors.deepPurpleAccent),
             const SizedBox(width: 12),
             Text(context.l10n.sdCardProcessing, style: const TextStyle(color: Colors.white, fontSize: 18)),
           ],
@@ -627,7 +628,7 @@ class _SyncPageState extends State<SyncPage> {
       ),
       child: Row(
         children: [
-          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
+          Icon(FontAwesomeIcons.circleExclamation.data, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -693,7 +694,7 @@ class _SyncPageState extends State<SyncPage> {
       child: Column(
         children: [
           _buildFaIcon(
-            isPending ? FontAwesomeIcons.circleCheck : FontAwesomeIcons.clockRotateLeft,
+            isPending ? FontAwesomeIcons.circleCheck.data : FontAwesomeIcons.clockRotateLeft.data,
             size: 24,
             color: isPending ? Colors.green : Colors.grey,
           ),
@@ -743,12 +744,13 @@ class _SyncPageState extends State<SyncPage> {
       }
     }
 
-    if (phoneWals.isNotEmpty) addSection(context.l10n.phone, FontAwesomeIcons.mobileScreen, Colors.grey, phoneWals);
+    if (phoneWals.isNotEmpty)
+      addSection(context.l10n.phone, FontAwesomeIcons.mobileScreen.data, Colors.grey, phoneWals);
     if (sdCardWals.isNotEmpty) {
-      addSection(context.l10n.sdCard, FontAwesomeIcons.sdCard, Colors.deepPurpleAccent, sdCardWals);
+      addSection(context.l10n.sdCard, FontAwesomeIcons.sdCard.data, Colors.deepPurpleAccent, sdCardWals);
     }
     if (limitlessWals.isNotEmpty) {
-      addSection(context.l10n.limitless, FontAwesomeIcons.bolt, Colors.teal, limitlessWals);
+      addSection(context.l10n.limitless, FontAwesomeIcons.bolt.data, Colors.teal, limitlessWals);
     }
 
     return SliverList.builder(
@@ -795,7 +797,7 @@ class _SyncPageState extends State<SyncPage> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
-            child: Center(child: _buildFaIcon(FontAwesomeIcons.microphone, size: 24)),
+            child: Center(child: _buildFaIcon(FontAwesomeIcons.microphone.data, size: 24)),
           ),
           const SizedBox(height: 20),
           Text(
@@ -828,9 +830,9 @@ class _SyncPageState extends State<SyncPage> {
               backgroundColor: const Color(0xFF0D0D0D),
               elevation: 0,
               leading: IconButton(
-                icon: const Padding(
+                icon: Padding(
                   padding: EdgeInsets.only(left: 2, top: 1),
-                  child: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                  child: Icon(FontAwesomeIcons.chevronLeft.data, size: 18),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -851,7 +853,7 @@ class _SyncPageState extends State<SyncPage> {
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                     child: Center(
-                      child: _buildFaIcon(FontAwesomeIcons.ellipsisVertical, size: 16, color: Colors.white),
+                      child: _buildFaIcon(FontAwesomeIcons.ellipsisVertical.data, size: 16, color: Colors.white),
                     ),
                   ),
                 ),
@@ -1089,7 +1091,7 @@ class _ManageStorageSheet extends StatelessWidget {
               const SizedBox(height: 24),
               // Synced row
               _StorageRow(
-                icon: FontAwesomeIcons.circleCheck,
+                icon: FontAwesomeIcons.circleCheck.data,
                 iconColor: Colors.green,
                 title: context.l10n.synced,
                 subtitle: context.l10n.safelyBackedUp,
@@ -1100,7 +1102,7 @@ class _ManageStorageSheet extends StatelessWidget {
               const SizedBox(height: 12),
               // Pending row
               _StorageRow(
-                icon: FontAwesomeIcons.clockRotateLeft,
+                icon: FontAwesomeIcons.clockRotateLeft.data,
                 iconColor: Colors.orange,
                 title: context.l10n.pending,
                 subtitle: context.l10n.notYetSynced,
@@ -1172,7 +1174,7 @@ class _StorageRow extends StatelessWidget {
               color: iconColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
+            child: Center(child: Icon(icon, size: 16, color: iconColor)),
           ),
           const SizedBox(width: 14),
           Expanded(

@@ -107,7 +107,7 @@ class AppMetadataWidget extends StatelessWidget {
                                     child: Container(
                                       padding: const EdgeInsets.all(6.0),
                                       decoration: BoxDecoration(borderRadius: BorderRadius.circular(8.0)),
-                                      child: FaIcon(FontAwesomeIcons.copy, color: Colors.white, size: 16),
+                                      child: Icon(FontAwesomeIcons.copy.data, color: Colors.white, size: 16),
                                     ),
                                   ),
                                 ],
@@ -147,7 +147,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   : Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        const FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
+                                        Icon(FontAwesomeIcons.camera.data, color: Colors.grey, size: 24),
                                         const SizedBox(height: 6),
                                         Text(
                                           '${context.l10n.appIconLabel}*',
@@ -166,7 +166,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 child: Container(
                                   padding: const EdgeInsets.all(6.0),
                                   decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
-                                  child: const FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
+                                  child: Icon(FontAwesomeIcons.pen.data, color: Colors.white, size: 12),
                                 ),
                               ),
                             ),
@@ -308,7 +308,7 @@ class AppMetadataWidget extends StatelessWidget {
                                         ),
                                       ),
                                     ),
-                                    FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 14),
+                                    Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade400, size: 14),
                                   ],
                                 ),
                               ),
@@ -489,7 +489,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   ),
                                 ),
                                 const Spacer(),
-                                FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 14),
+                                Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade400, size: 14),
                                 const SizedBox(width: 12),
                               ],
                             ),

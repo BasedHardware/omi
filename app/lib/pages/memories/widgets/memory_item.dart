@@ -188,7 +188,7 @@ class MemoryItem extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
-        child: const Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
+        child: Center(child: Icon(FontAwesomeIcons.message.data, size: 16, color: Colors.white70)),
       ),
     );
   }

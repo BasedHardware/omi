@@ -252,7 +252,7 @@ class _FolderTab extends StatelessWidget {
             if (icon != null) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
-                child: FaIcon(folderIconToFa(icon), size: 12, color: isSelected ? effectiveColor : Colors.grey[400]),
+                child: Icon(folderIconToFa(icon), size: 12, color: isSelected ? effectiveColor : Colors.grey[400]),
               ),
               const SizedBox(width: 5),
             ],
@@ -371,7 +371,7 @@ class _FolderContextMenu extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue),
+                  Icon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue),
                   const SizedBox(width: 8),
                   Text(
                     folder.name,
@@ -450,7 +450,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(
-                        child: FaIcon(folderIconToFa(folder.icon), size: 20, color: Colors.red.withValues(alpha: 0.8)),
+                        child: Icon(folderIconToFa(folder.icon), size: 20, color: Colors.red.withValues(alpha: 0.8)),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -562,7 +562,7 @@ class _MoveOption extends StatelessWidget {
                     color: color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Center(child: FaIcon(folderIconToFa(icon), size: 18, color: color)),
+                  child: Center(child: Icon(folderIconToFa(icon), size: 18, color: color)),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -620,7 +620,7 @@ class FolderChip extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: FaIcon(folderIconToFa(folder.icon), size: 10, color: folder.colorValue),
+              child: Icon(folderIconToFa(folder.icon), size: 10, color: folder.colorValue),
             ),
             const SizedBox(width: 4),
             Text(

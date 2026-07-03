@@ -151,7 +151,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          FaIcon(FontAwesomeIcons.solidCalendar, size: 11, color: textColor),
+          Icon(FontAwesomeIcons.solidCalendar.data, size: 11, color: textColor),
           const SizedBox(width: 6),
           Padding(
             padding: const EdgeInsets.only(top: 1),

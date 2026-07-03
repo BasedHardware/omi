@@ -239,7 +239,7 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     onPressed: widget.onBack,
-                    icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                    icon: Icon(FontAwesomeIcons.arrowLeft.data, size: 16.0, color: Colors.white),
                   ),
                 ),
               ),

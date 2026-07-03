@@ -185,7 +185,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Row(
         children: [
-          SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
+          SizedBox(width: 24, height: 24, child: Icon(icon, color: const Color(0xFF8E8E93), size: 20)),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -257,7 +257,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Column(
         children: [
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.microchip,
+            icon: FontAwesomeIcons.microchip.data,
             title: context.l10n.deviceName,
             chipValue: deviceName,
             copyValue: deviceName,
@@ -265,7 +265,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.fingerprint,
+            icon: FontAwesomeIcons.fingerprint.data,
             title: context.l10n.deviceId,
             chipValue: truncateId(deviceId),
             copyValue: deviceId,
@@ -273,14 +273,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.download,
+            icon: FontAwesomeIcons.download.data,
             title: context.l10n.firmware,
             chipValue: device?.firmwareRevision ?? '1.0.2',
             onTap: () => routeToPage(context, FirmwareUpdate(device: device)),
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.sdCard,
+            icon: FontAwesomeIcons.sdCard.data,
             title: 'Offline Sync',
             onTap: () {
               if (!provider.isDeviceStorageSupport) {
@@ -306,7 +306,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           if (device?.type == DeviceType.omi) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
-              icon: FontAwesomeIcons.arrowsRotate,
+              icon: FontAwesomeIcons.arrowsRotate.data,
               title: context.l10n.autoSync,
               subtitle: context.l10n.autoSyncDescription,
               showChevron: false,
@@ -323,7 +323,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ],
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.stethoscope,
+            icon: FontAwesomeIcons.stethoscope.data,
             title: context.l10n.diagnostics,
             onTap: () => routeToPage(context, DeviceDiagnostics(deviceId: deviceId)),
           ),
@@ -342,7 +342,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Column(
         children: [
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.gears,
+            icon: FontAwesomeIcons.gears.data,
             title: context.l10n.hardwareRevision,
             chipValue: hardwareRevision,
             copyValue: hardwareRevision,
@@ -350,7 +350,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.hashtag,
+            icon: FontAwesomeIcons.hashtag.data,
             title: context.l10n.modelNumber,
             chipValue: modelNumber,
             copyValue: modelNumber,
@@ -358,7 +358,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.industry,
+            icon: FontAwesomeIcons.industry.data,
             title: context.l10n.manufacturer,
             chipValue: manufacturer,
             copyValue: manufacturer,
@@ -711,7 +711,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         children: [
           // Double Tap
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.handPointer,
+            icon: FontAwesomeIcons.handPointer.data,
             title: context.l10n.doubleTap,
             chipValue: _getDoubleTapActionLabel(doubleTapAction),
             onTap: _showDoubleTapActionSheet,
@@ -720,7 +720,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
-              icon: FontAwesomeIcons.lightbulb,
+              icon: FontAwesomeIcons.lightbulb.data,
               title: context.l10n.ledBrightness,
               chipValue: '${_dimRatio.round()}%',
               onTap: _showBrightnessSheet,
@@ -730,7 +730,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           if (_isMicGainLoaded && _hasMicGainFeature == true) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
-              icon: FontAwesomeIcons.microphone,
+              icon: FontAwesomeIcons.microphone.data,
               title: context.l10n.micGain,
               chipValue: _getMicGainLabel(_micGain.round()),
               onTap: _showMicGainSheet,
@@ -777,10 +777,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 24,
                       height: 24,
-                      child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.redAccent, size: 20),
+                      child: Icon(FontAwesomeIcons.linkSlash.data, color: Colors.redAccent, size: 20),
                     ),
                     const SizedBox(width: 16),
                     Text(
@@ -834,10 +834,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 24,
                       height: 24,
-                      child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
+                      child: Icon(FontAwesomeIcons.ban.data, color: Colors.orange, size: 20),
                     ),
                     const SizedBox(width: 16),
                     Text(
@@ -866,7 +866,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
-            child: Center(child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.grey.shade500, size: 24)),
+            child: Center(child: Icon(FontAwesomeIcons.linkSlash.data, color: Colors.grey.shade500, size: 24)),
           ),
           const SizedBox(height: 20),
           Text(
@@ -894,7 +894,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: Icon(FontAwesomeIcons.chevronLeft.data, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: Text(

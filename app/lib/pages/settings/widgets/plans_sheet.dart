@@ -917,7 +917,7 @@ class _PlansSheetState extends State<PlansSheet> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
+                            Icon(FontAwesomeIcons.crown.data, color: Colors.yellow, size: 20),
                             const SizedBox(width: 8),
                             Builder(
                               builder: (context) {
@@ -1012,17 +1012,19 @@ class _PlansSheetState extends State<PlansSheet> {
                         ...[
                           Column(
                             children: [
-                              _buildFeatureItem(faIcon: FontAwesomeIcons.infinity, text: 'Unlimited conversations'),
+                              _buildFeatureItem(
+                                  faIcon: FontAwesomeIcons.infinity.data, text: 'Unlimited conversations'),
                               const SizedBox(height: 16),
                               _buildFeatureItem(
-                                faIcon: FontAwesomeIcons.solidComments,
+                                faIcon: FontAwesomeIcons.solidComments.data,
                                 text: 'Ask Omi anything about your life',
                               ),
                               const SizedBox(height: 16),
-                              _buildFeatureItem(faIcon: FontAwesomeIcons.brain, text: 'Unlock Omi\'s infinite memory'),
+                              _buildFeatureItem(
+                                  faIcon: FontAwesomeIcons.brain.data, text: 'Unlock Omi\'s infinite memory'),
                               const SizedBox(height: 16),
                               _buildFeatureItem(
-                                faIcon: FontAwesomeIcons.globe,
+                                faIcon: FontAwesomeIcons.globe.data,
                                 text: 'Available on Mac, mobile, and web',
                               ),
                             ],
@@ -1732,7 +1734,7 @@ class _PlansSheetState extends State<PlansSheet> {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white, width: 1),
           ),
-          child: Center(child: FaIcon(faIcon, color: Colors.white, size: 16)),
+          child: Center(child: Icon(faIcon, color: Colors.white, size: 16)),
         ),
         const SizedBox(width: 12),
         Expanded(
