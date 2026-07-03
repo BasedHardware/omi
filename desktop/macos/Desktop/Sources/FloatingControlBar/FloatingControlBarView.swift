@@ -380,41 +380,37 @@ struct FloatingControlBarView: View {
         // It is intentionally subtle (transparent) to preserve the minimal
         // notch aesthetic.
         ZStack(alignment: .leading) {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onAskAI()
-                }
+            Button(action: onAskAI) {
+                Color.clear
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
             if notchSettingsHovering {
-                Button {
-                    openFloatingBarSettings()
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.86))
-                        .frame(width: 26, height: 24)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Floating Bar Settings")
-                .transition(.scale.combined(with: .opacity))
+                notchSettingsButton
+                    .zIndex(1)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.leading, 5)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(notchSettingsHovering ? "Floating Bar Settings" : "Ask Omi")
-        .accessibilityHint(notchSettingsHovering ? "Open settings" : "Open the conversation")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction {
-            if notchSettingsHovering {
-                openFloatingBarSettings()
-            } else {
-                onAskAI()
-            }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var notchSettingsButton: some View {
+        Button(action: openFloatingBarSettings) {
+            Image(systemName: "gearshape.fill")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.white.opacity(0.86))
+                .frame(width: 26, height: 24)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .help("Floating Bar Settings")
+        .accessibilityIdentifier("notch_floating_bar_settings")
+        .accessibilityLabel("Floating Bar Settings")
+        .accessibilityHint("Open settings")
     }
 
     private var notchOmiChatRow: some View {
