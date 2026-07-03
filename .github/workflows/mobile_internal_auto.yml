@@ -14,7 +14,7 @@ jobs:
   trigger-codemagic:
     runs-on: ubuntu-latest
     concurrency:
-      group: mobile-internal-auto-main
+      group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
@@ -26,17 +26,19 @@ jobs:
       CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
       CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
     steps:
-      - name: Debounce mobile internal deploys
-        if: github.event_name == 'push'
-        run: sleep 180
-
-      - name: Trigger Codemagic workflow
+      - name: Validate Codemagic API token
         run: |
           if [ -z "${CODEMAGIC_API_TOKEN:-}" ]; then
             echo "CODEMAGIC_API_TOKEN is required to trigger Codemagic builds." >&2
             exit 1
           fi
 
+      - name: Debounce mobile internal deploys
+        if: github.event_name == 'push'
+        run: sleep 180
+
+      - name: Trigger Codemagic workflow
+        run: |
           curl --fail --show-error --silent \
             -H "Content-Type: application/json" \
             -H "x-auth-token: ${CODEMAGIC_API_TOKEN}" \
