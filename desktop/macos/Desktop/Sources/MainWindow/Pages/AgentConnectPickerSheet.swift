@@ -88,7 +88,7 @@ private struct ConnectOptionCard: View {
   @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
 
   @State private var isRunning = false
-  @State private var resultMessage: String?
+  @State private var resultMessage: ConnectOptionResultMessage?
   @State private var mcpKey: String?
   @State private var showManual = false
   @State private var permissionRefreshID = 0
@@ -175,9 +175,9 @@ private struct ConnectOptionCard: View {
       }
 
       if let resultMessage {
-        Text(resultMessage)
+        Text(resultMessage.text)
           .scaledFont(size: 11, weight: .medium)
-          .foregroundColor(OmiColors.success)
+          .foregroundColor(resultMessage.foregroundColor)
       }
     }
     .padding(16)
@@ -217,7 +217,7 @@ private struct ConnectOptionCard: View {
     do {
       mcpKey = try await MemoryExportService.shared.ensureMCPKey()
     } catch {
-      resultMessage = error.localizedDescription
+      resultMessage = .failure("Couldn't prepare your Omi key. Try again.")
     }
   }
 
@@ -228,20 +228,20 @@ private struct ConnectOptionCard: View {
         let outcome = try await MemoryExportExecutor.run(destination)
         switch outcome.mode {
         case .autonomous:
-          resultMessage = "Omi is setting this up — follow along in the floating bar."
+          resultMessage = .success("Omi is setting this up — follow along in the floating bar.")
         case .assisted:
-          resultMessage = outcome.taskTitle
+          resultMessage = .success(outcome.taskTitle)
           // Assisted flow: the user pastes values by hand, so open the
           // step-by-step instructions instead of leaving them collapsed.
           if destination.assistedOverlayHint != nil {
             showManual = true
           }
         case .completed:
-          resultMessage = outcome.taskTitle
+          resultMessage = .success(outcome.taskTitle)
         }
         statuses[destination] = await MemoryExportService.shared.status(for: destination)
       } catch {
-        resultMessage = error.localizedDescription
+        resultMessage = .failure(error.localizedDescription)
       }
       isRunning = false
     }
@@ -268,7 +268,7 @@ private struct ConnectOptionCard: View {
       Button {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        resultMessage = "Copied."
+        resultMessage = .success("Copied.")
       } label: {
         Text("Copy")
           .scaledFont(size: 11, weight: .semibold)
@@ -283,5 +283,26 @@ private struct ConnectOptionCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OmiColors.backgroundTertiary))
+  }
+}
+
+private enum ConnectOptionResultMessage {
+  case success(String)
+  case failure(String)
+
+  var text: String {
+    switch self {
+    case .success(let text), .failure(let text):
+      return text
+    }
+  }
+
+  var foregroundColor: Color {
+    switch self {
+    case .success:
+      return OmiColors.success
+    case .failure:
+      return OmiColors.warning
+    }
   }
 }
