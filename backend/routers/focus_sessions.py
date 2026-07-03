@@ -1,9 +1,12 @@
 """Focus sessions — focus/distraction tracking and statistics."""
 
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 import database.focus_sessions as focus_sessions_db
+import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
 from utils.request_validation import validate_calendar_date
 
@@ -70,3 +73,25 @@ def get_focus_stats(
 ):
     date = validate_calendar_date(date)
     return focus_sessions_db.get_focus_stats(uid, date=date)
+
+
+@router.get('/v1/screen-activity', tags=['screen-activity'])
+def list_screen_activity(
+    date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    app_filter: str | None = Query(None, max_length=500),
+    limit: int = Query(500, ge=1, le=5000),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """List the user's captured screen-activity rows, optionally filtered to a single day and/or app.
+
+    The rows are captured by the desktop app and only ever read back internally (MCP); this
+    exposes them to the user's own first-party client. A bad date is rejected with 422.
+    """
+    date = validate_calendar_date(date)
+    start = end = None
+    if date:
+        start = datetime.strptime(date, '%Y-%m-%d')
+        end = start + timedelta(days=1)
+    return screen_activity_db.get_screen_activity(
+        uid, start_date=start, end_date=end, app_filter=app_filter, limit=limit
+    )
