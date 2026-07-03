@@ -1,6 +1,24 @@
 import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 
+// One provenance record on a memory. Written by the backend's Evidence model
+// (models/memories.py); every field below survives the legacy GET serializer
+// (memory_api_contract strips only internal + canonical-lifecycle fields).
+// Older Firestore docs predate evidence entirely, so everything is optional.
+export type MemoryEvidence = {
+  evidence_id?: string
+  source_id?: string | null
+  source_type?: string
+  source_signal?: string
+  extractor_id?: string
+  extractor_version?: string
+  capture_confidence?: number | null
+  independence_group?: string | null
+  redaction_status?: string
+  created_at?: string
+  client_device_id?: string | null
+}
+
 export type Memory = {
   id: string
   uid: string
@@ -12,6 +30,15 @@ export type Memory = {
   created_at: string
   updated_at: string
   conversation_id?: string | null
+  // Provenance fields (all served by GET /v3/memories today; optional because
+  // memories created before the evidence pipeline lack them).
+  manually_added?: boolean
+  app_id?: string | null
+  reviewed?: boolean
+  user_review?: boolean | null
+  capture_confidence?: number | null
+  uncertainty_reasons?: string[]
+  evidence?: MemoryEvidence[]
 }
 
 const cache = {

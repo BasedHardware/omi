@@ -28,11 +28,13 @@ export type BulkDeleteTally = { deleted: number; failed: number; firstError?: st
 // a time at ~1.1s, waiting out 429s (honoring Retry-After) and retrying the same
 // id rather than failing. 404 = already gone (idempotent). `onResult` fires after
 // each id so the UI can drop the row and show progress. `shouldStop` lets the
-// caller cancel between ids.
+// caller cancel between ids. `onWait` reports rate-limit pauses (seconds until
+// the next retry; 0 when the pause ends) so progress UI can show them honestly.
 export async function deleteMemoriesPaced(
   ids: string[],
   onResult: (id: string, ok: boolean, tally: { deleted: number; failed: number }) => void,
-  shouldStop?: () => boolean
+  shouldStop?: () => boolean,
+  onWait?: (seconds: number) => void
 ): Promise<BulkDeleteTally> {
   let deleted = 0
   let failed = 0
@@ -56,7 +58,11 @@ export async function deleteMemoriesPaced(
         }
         if (status === 429) {
           const ra = Number(resp?.headers?.['retry-after'])
-          await sleep(Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000))
+          const waitMs =
+            Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000)
+          onWait?.(Math.round(waitMs / 1000))
+          await sleep(waitMs)
+          onWait?.(0)
           continue
         }
         if (!firstError) firstError = status ? `HTTP ${status}` : (e as Error).message
