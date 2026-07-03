@@ -1,6 +1,6 @@
 // src/main/ipc/screenSynth.ts
 import { ipcMain } from 'electron'
-import { listRewindFrames } from './db'
+import { listRewindFramesWithOcrLayout } from './db'
 import {
   getScreenSynthState,
   updateScreenSynthState,
@@ -15,7 +15,7 @@ export function registerScreenSynthHandlers(): void {
   ipcMain.handle('screenSynth:framesSince', async (): Promise<ScreenFrameLite[]> => {
     const { watermarkTs } = getScreenSynthState()
     // +1 so we never re-emit the exact watermark frame.
-    const frames = listRewindFrames(watermarkTs + 1, Date.now())
+    const frames = listRewindFramesWithOcrLayout(watermarkTs + 1, Date.now())
     return frames.map((f) => ({
       ts: f.ts,
       app: f.app,

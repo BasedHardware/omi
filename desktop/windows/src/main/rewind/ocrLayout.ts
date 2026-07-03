@@ -25,6 +25,10 @@ function roundCoord(value: number): number {
   return Math.round(value)
 }
 
+function roundDimension(value: number): number {
+  return Math.max(1, Math.round(value))
+}
+
 export function normalizeOcrLines(lines: OcrLine[] | undefined): OcrLine[] {
   if (!Array.isArray(lines)) return []
   return lines
@@ -45,8 +49,8 @@ export function normalizeOcrLines(lines: OcrLine[] | undefined): OcrLine[] {
       text: line.text.trim(),
       x: roundCoord(line.x),
       y: roundCoord(line.y),
-      w: roundCoord(line.w),
-      h: roundCoord(line.h),
+      w: roundDimension(line.w),
+      h: roundDimension(line.h),
       confidence: finiteNumber(line.confidence) ? line.confidence : 0
     }))
 }
@@ -150,6 +154,17 @@ function rowLabel(row: OcrLayoutRow, size: FrameSize): string {
   return `top ${top}%, left ${left}%`
 }
 
+function normalizeTextForCoverage(text: string): string {
+  return text.trim().replace(/\s+/g, ' ')
+}
+
+function storedLinesCoverPlainText(lines: OcrLine[], plainText: string): boolean {
+  return (
+    normalizeTextForCoverage(lines.map((line) => line.text).join(' ')) ===
+    normalizeTextForCoverage(plainText)
+  )
+}
+
 export function serializeOcrLayoutMarkdown(lines: OcrLine[], size: FrameSize = {}): string {
   return clusterOcrRows(filterScreenChromeLines(lines, size))
     .map((row) => {
@@ -164,6 +179,10 @@ export function buildOcrContextText(
   ocrLinesJson: string | null | undefined,
   size: FrameSize = {}
 ): string {
-  const layout = serializeOcrLayoutMarkdown(parseStoredOcrLines(ocrLinesJson), size).trim()
-  return layout || ocrText.trim()
+  const plain = ocrText.trim()
+  const lines = parseStoredOcrLines(ocrLinesJson)
+  const layout = serializeOcrLayoutMarkdown(lines, size).trim()
+  if (!layout) return plain
+  if (!plain || storedLinesCoverPlainText(lines, plain)) return layout
+  return `${layout}\n\nFull OCR text:\n${plain}`
 }

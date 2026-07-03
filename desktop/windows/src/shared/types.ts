@@ -593,7 +593,6 @@ export type RewindFrame = {
   windowTitle: string
   processName: string
   ocrText: string
-  ocrLinesJson?: string | null
   imagePath: string
   width: number
   height: number

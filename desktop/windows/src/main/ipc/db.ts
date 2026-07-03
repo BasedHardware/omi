@@ -26,6 +26,8 @@ import type {
 import { perfMark } from '../../shared/perf'
 import { serializeOcrLinesForStorage } from '../rewind/ocrLayout'
 
+export type RewindFrameWithOcrLayout = RewindFrame & { ocrLinesJson: string | null }
+
 // Time a synchronous DB helper and emit a perf mark with its duration in ms.
 // Always-on (perfMark is a no-op unless OMI_PERF_LOG is set), so the bench can
 // measure DB read throughput without affecting normal runs.
@@ -722,6 +724,8 @@ export function clearLocalGraph(): void {
 // --- Rewind: screen-history timeline ---
 
 const REWIND_COLUMNS =
+  'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, image_path AS imagePath, width, height, indexed'
+const REWIND_INTERNAL_COLUMNS =
   'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, ocr_lines_json AS ocrLinesJson, image_path AS imagePath, width, height, indexed'
 
 export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
@@ -735,10 +739,27 @@ export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
 }
 
 export function listRewindFrames(from: number, to: number): RewindFrame[] {
-  return timed('listRewindFrames', () =>
-    get()
-      .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
-      .all(from, to) as RewindFrame[]
+  return timed(
+    'listRewindFrames',
+    () =>
+      get()
+        .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
+        .all(from, to) as RewindFrame[]
+  )
+}
+
+export function listRewindFramesWithOcrLayout(
+  from: number,
+  to: number
+): RewindFrameWithOcrLayout[] {
+  return timed(
+    'listRewindFramesWithOcrLayout',
+    () =>
+      get()
+        .prepare(
+          `SELECT ${REWIND_INTERNAL_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`
+        )
+        .all(from, to) as RewindFrameWithOcrLayout[]
   )
 }
 
