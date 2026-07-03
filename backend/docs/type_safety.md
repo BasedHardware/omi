@@ -38,6 +38,10 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `database/google_credentials.py`
   - `database/mem_db.py`
   - `database/tasks.py`
+  - `database/trends.py`
+  - `database/import_jobs.py`
+  - `database/daily_summaries.py`
+  - `database/x_posts.py`
   - `database/desktop_update_policy.py`
   - `database/memory_app_key_grants.py`
   - `database/memory_imports.py`
