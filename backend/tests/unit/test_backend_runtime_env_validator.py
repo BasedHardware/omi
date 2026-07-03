@@ -31,6 +31,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
+        {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "MEMORY_MODE", "value": "write"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},

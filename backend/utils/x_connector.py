@@ -519,7 +519,10 @@ async def sync_x_for_user(uid: str) -> Dict:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
         except Exception as cleanup_error:
             logger.warning(f'x_connector: failed to clear syncing after sync failure for uid={uid}: {cleanup_error}')
-        emit_sync_failed(sync_context, e)
+        emit_sync_failed(
+            IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid, sync_source=source),
+            e,
+        )
         raise
 
     emit_sync_succeeded(

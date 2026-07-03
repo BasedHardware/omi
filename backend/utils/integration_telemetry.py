@@ -1,12 +1,12 @@
 """Low-cardinality telemetry and structured logs for provider integrations."""
 
+import importlib
 import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import httpx
-from posthog import Posthog
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ AUTH_REFRESH_FAILED = 'Integration Auth Refresh Failed'
 GOOGLE_CALENDAR = 'Google Calendar'
 X = 'X'
 
-_POSTHOG_CLIENT: Optional[Posthog] = None
+_POSTHOG_CLIENT: Optional[Any] = None
 _POSTHOG_DISABLED = False
 
 
@@ -168,7 +168,7 @@ def _log_structured(event_name: str, uid: Optional[str], properties: Dict[str, A
     )
 
 
-def _get_posthog_client() -> Optional[Posthog]:
+def _get_posthog_client() -> Optional[Any]:
     global _POSTHOG_CLIENT, _POSTHOG_DISABLED
     if _POSTHOG_DISABLED:
         return None
@@ -181,7 +181,15 @@ def _get_posthog_client() -> Optional[Posthog]:
         return None
 
     host = os.getenv('POSTHOG_HOST', 'https://app.posthog.com')
-    _POSTHOG_CLIENT = Posthog(project_api_key=api_key, host=host)
+    try:
+        posthog_module = importlib.import_module('posthog')
+        posthog_client_cls = getattr(posthog_module, 'Posthog')
+    except Exception as exc:
+        logger.warning('integration telemetry posthog_import_failed error=%s', type(exc).__name__)
+        _POSTHOG_DISABLED = True
+        return None
+
+    _POSTHOG_CLIENT = posthog_client_cls(project_api_key=api_key, host=host)
     return _POSTHOG_CLIENT
 
 
@@ -250,7 +258,7 @@ def _bucket_count(value: int) -> str:
     return '1000_plus'
 
 
-def set_posthog_client_for_tests(client: Optional[Posthog]) -> None:
+def set_posthog_client_for_tests(client: Optional[Any]) -> None:
     global _POSTHOG_CLIENT, _POSTHOG_DISABLED
     _POSTHOG_CLIENT = client
     _POSTHOG_DISABLED = client is None
