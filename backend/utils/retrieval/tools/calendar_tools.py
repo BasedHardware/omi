@@ -545,12 +545,7 @@ async def get_calendar_events_tool(
     )
     if access_err:
         return access_err
-    telemetry_context = IntegrationTelemetryContext(
-        integration_name=GOOGLE_CALENDAR,
-        operation='fetch_events_tool',
-        uid=uid,
-    )
-    emit_sync_attempted(telemetry_context)
+    telemetry_context = None
 
     try:
         max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
@@ -600,6 +595,13 @@ async def get_calendar_events_tool(
                     logger.info(
                         f"📅 search_query provided, expanding date range to 1 year: {time_min.strftime('%Y-%m-%d')} to {time_max.strftime('%Y-%m-%d')}"
                     )
+
+        telemetry_context = IntegrationTelemetryContext(
+            integration_name=GOOGLE_CALENDAR,
+            operation='fetch_events_tool',
+            uid=uid,
+        )
+        emit_sync_attempted(telemetry_context)
 
         # Fetch events with smart date range handling
         try:
@@ -696,7 +698,6 @@ async def get_calendar_events_tool(
                     max_results=max_results,
                     search_query=search_query,
                 )
-            emit_sync_succeeded(telemetry_context, item_count=len(events))
         except GoogleAPIError as e:
             logger.error(f"❌ Google API error fetching calendar events: status={e.status_code}, msg={e.message}")
 
@@ -712,7 +713,6 @@ async def get_calendar_events_tool(
                             max_results=max_results,
                             search_query=search_query,
                         )
-                        emit_sync_succeeded(telemetry_context, item_count=len(events))
                     except Exception as retry_error:
                         logger.error(f"❌ Error after token refresh: {retry_error}")
                         emit_sync_failed(telemetry_context, retry_error)
@@ -749,6 +749,7 @@ async def get_calendar_events_tool(
             elif time_max:
                 date_info = f" before {time_max.strftime('%Y-%m-%d')}"
 
+            emit_sync_succeeded(telemetry_context, item_count=0)
             return f"No calendar events found{date_info}."
 
         # Format events
@@ -796,10 +797,12 @@ async def get_calendar_events_tool(
 
             result += "\n"
 
+        emit_sync_succeeded(telemetry_context, item_count=events_count)
         return result.strip()
     except Exception as e:
         logger.error(f"❌ Unexpected error in get_calendar_events_tool: {e}")
-        emit_sync_failed(telemetry_context, e)
+        if telemetry_context:
+            emit_sync_failed(telemetry_context, e)
         return f"Unexpected error fetching calendar events: {e}"
 
 

@@ -93,6 +93,9 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: write
               category: memory_rollout
@@ -120,6 +123,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-sync:
           env:
@@ -149,6 +155,9 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: write
               category: memory_rollout
@@ -176,6 +185,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-integration:
           env:
@@ -205,6 +217,9 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: write
               category: memory_rollout
@@ -232,6 +247,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
 
   prod:
@@ -294,6 +312,9 @@ environments:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
               provisional: true
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -321,6 +342,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-sync:
           env:
@@ -331,6 +355,9 @@ environments:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
               provisional: true
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -358,6 +385,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-integration:
           env:
@@ -368,6 +398,9 @@ environments:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
               provisional: true
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -395,4 +428,7 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest

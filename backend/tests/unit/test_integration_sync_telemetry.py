@@ -2,6 +2,7 @@ import ast
 from pathlib import Path
 
 import httpx
+import pytest
 from utils.integration_telemetry import (
     GOOGLE_CALENDAR,
     X,
@@ -20,6 +21,13 @@ class FakePosthog:
 
     def capture(self, *, distinct_id, event, properties):
         self.calls.append({'distinct_id': distinct_id, 'event': event, 'properties': properties})
+
+
+@pytest.fixture(autouse=True)
+def reset_posthog_client():
+    set_posthog_client_for_tests(None)
+    yield
+    set_posthog_client_for_tests(None)
 
 
 def _function_calls(path: str, function_name: str) -> set[str]:
@@ -71,7 +79,6 @@ def test_sync_success_telemetry_emits_bounded_posthog_payload(monkeypatch):
             },
         }
     ]
-    set_posthog_client_for_tests(None)
 
 
 def test_sync_failure_telemetry_buckets_provider_errors_without_raw_body():
@@ -94,7 +101,23 @@ def test_sync_failure_telemetry_buckets_provider_errors_without_raw_body():
     assert props['provider_status_code'] == 429
     assert props['retryable'] is True
     assert 'raw token' not in str(props)
-    set_posthog_client_for_tests(None)
+
+
+def test_failure_telemetry_ignores_non_integer_status_codes():
+    fake = FakePosthog()
+    set_posthog_client_for_tests(fake)
+
+    class WeirdProviderError(Exception):
+        status_code = 'not-a-status'
+
+    emit_sync_failed(
+        IntegrationTelemetryContext(integration_name=X, operation='fetch_tweets', uid='uid-789'),
+        WeirdProviderError('provider failed'),
+    )
+
+    props = fake.calls[0]['properties']
+    assert props['provider_status_code'] is None
+    assert props['error_bucket'] == 'unknown'
 
 
 def test_x_connector_sync_paths_keep_success_and_failure_telemetry_probe():

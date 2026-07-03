@@ -482,35 +482,46 @@ async def sync_x_for_user(uid: str) -> Dict:
             emit_sync_failed(sync_context, e)
             return {'success': False, 'error': 'fetch_failed', 'new_posts': 0, 'memories_created': 0}
 
-    written = await run_blocking(db_executor, x_posts_db.save_x_posts, uid, new_posts)
-    # Only mine memories from posts we hadn't seen before (the raw store dedupes,
-    # but extraction is the expensive part — restrict it to genuinely new text).
-    fresh = new_posts if written == len(new_posts) else new_posts[:written]
-    # Vector-index the raw posts so agents can semantically search the actual
-    # tweets (not just the extracted memories) via the MCP search_x_posts tool.
-    # Chunk to stay within Pinecone's per-upsert vector limit (~100).
-    items_to_index = [{'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh]
-    for i in range(0, len(items_to_index), 100):
-        try:
-            await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
-        except Exception as e:
-            logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
-    memories_created = await run_blocking(db_executor, _extract_and_index, uid, fresh)
-    post_count = await run_blocking(db_executor, x_posts_db.count_x_posts, uid)
+    try:
+        written = await run_blocking(db_executor, x_posts_db.save_x_posts, uid, new_posts)
+        # Only mine memories from posts we hadn't seen before (the raw store dedupes,
+        # but extraction is the expensive part — restrict it to genuinely new text).
+        fresh = new_posts if written == len(new_posts) else new_posts[:written]
+        # Vector-index the raw posts so agents can semantically search the actual
+        # tweets (not just the extracted memories) via the MCP search_x_posts tool.
+        # Chunk to stay within Pinecone's per-upsert vector limit (~100).
+        items_to_index = [
+            {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh
+        ]
+        for i in range(0, len(items_to_index), 100):
+            try:
+                await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
+            except Exception as e:
+                logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
+        memories_created = await run_blocking(db_executor, _extract_and_index, uid, fresh)
+        post_count = await run_blocking(db_executor, x_posts_db.count_x_posts, uid)
 
-    await run_blocking(
-        db_executor,
-        users_db.set_integration,
-        uid,
-        INTEGRATION_KEY,
-        {
-            'last_synced_at': datetime.now(timezone.utc).isoformat(),
-            'last_sync_source': source,
-            'post_count': post_count,
-            'memory_count': int(integ.get('memory_count', 0)) + memories_created,
-            'syncing': False,
-        },
-    )
+        await run_blocking(
+            db_executor,
+            users_db.set_integration,
+            uid,
+            INTEGRATION_KEY,
+            {
+                'last_synced_at': datetime.now(timezone.utc).isoformat(),
+                'last_sync_source': source,
+                'post_count': post_count,
+                'memory_count': int(integ.get('memory_count', 0)) + memories_created,
+                'syncing': False,
+            },
+        )
+    except Exception as e:
+        try:
+            await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+        except Exception as cleanup_error:
+            logger.warning(f'x_connector: failed to clear syncing after sync failure for uid={uid}: {cleanup_error}')
+        emit_sync_failed(sync_context, e)
+        raise
+
     emit_sync_succeeded(
         IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid, sync_source=source),
         item_count=written,

@@ -193,10 +193,17 @@ def _provider_status_code(error: Any, explicit_status_code: Any = None) -> Optio
             return None
     status_code = getattr(error, 'status_code', None)
     if status_code is not None:
-        return int(status_code)
+        try:
+            return int(status_code)
+        except (TypeError, ValueError):
+            return None
     response = getattr(error, 'response', None)
-    if response is not None and getattr(response, 'status_code', None) is not None:
-        return int(response.status_code)
+    response_status_code = getattr(response, 'status_code', None) if response is not None else None
+    if response_status_code is not None:
+        try:
+            return int(response_status_code)
+        except (TypeError, ValueError):
+            return None
     return None
 
 

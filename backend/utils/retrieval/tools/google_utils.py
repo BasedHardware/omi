@@ -55,7 +55,13 @@ class GoogleAPIError(Exception):
         return self.status_code in _RETRYABLE_STATUS_CODES
 
 
-async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
+async def refresh_google_token(
+    uid: str,
+    integration: dict,
+    *,
+    integration_name: str = GOOGLE_CALENDAR,
+    integration_key: str = 'google_calendar',
+) -> Optional[str]:
     """
     Refresh Google access token using refresh token.
     Works for both Calendar and Gmail since they use the same OAuth.
@@ -63,13 +69,15 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
     Args:
         uid: User ID
         integration: Integration dict containing refresh_token
+        integration_name: Product-visible provider name for telemetry.
+        integration_key: Stored integration key to update after refresh.
 
     Returns:
         New access token or None if refresh failed
     """
     refresh_token = integration.get('refresh_token')
     telemetry_context = IntegrationTelemetryContext(
-        integration_name=GOOGLE_CALENDAR,
+        integration_name=integration_name,
         operation='refresh_token',
         uid=uid,
     )
@@ -108,7 +116,7 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
                 # DB executor so it does not block the event loop during
                 # concurrent chat/tool streaming.
                 integration['access_token'] = new_access_token
-                await run_blocking(db_executor, users_db.set_integration, uid, 'google_calendar', integration)
+                await run_blocking(db_executor, users_db.set_integration, uid, integration_key, integration)
                 logger.info(f"🔄 Successfully refreshed Google token for uid={uid}")
                 emit_auth_refresh_succeeded(telemetry_context)
                 return new_access_token
