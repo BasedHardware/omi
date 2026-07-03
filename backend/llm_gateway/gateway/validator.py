@@ -48,11 +48,11 @@ def validate_chat_completion_request(
     if not isinstance(model, str) or not model.strip():
         raise GatewayInvalidRequestError('model is required', param='model')
 
-    if request.get('stream') is True:
+    if request.get('stream') is True and not lane.capabilities.streaming:
         raise GatewayCapabilityMismatchError('streaming is not supported for this lane', param='stream')
-    if 'tools' in request:
+    if 'tools' in request and not lane.capabilities.tools:
         raise GatewayCapabilityMismatchError('tools are not supported for this lane', param='tools')
-    if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none'):
+    if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none') and not lane.capabilities.tools:
         raise GatewayCapabilityMismatchError('tool_choice is not supported for this lane', param='tool_choice')
 
     messages = _validate_messages(request.get('messages'))
@@ -146,4 +146,8 @@ def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
             f'unsupported chat completion parameter: {unsupported[0]}',
             param=unsupported[0],
         )
-    return {key: request[key] for key in FORWARDED_CHAT_COMPLETION_PARAMS if key in request}
+    forwarded = {key: request[key] for key in FORWARDED_CHAT_COMPLETION_PARAMS if key in request}
+    for key in ('tools', 'tool_choice', 'stream'):
+        if key in request:
+            forwarded[key] = request[key]
+    return forwarded

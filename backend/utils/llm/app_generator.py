@@ -8,10 +8,10 @@ import base64
 import httpx
 from typing import Optional
 from pydantic import BaseModel
-from openai import OpenAI
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm.clients import get_llm
+from utils.llm.gateway_client import generate_image_via_gateway
 
 # App categories available in the system
 APP_CATEGORIES = [
@@ -153,8 +153,6 @@ async def generate_app_icon(app_name: str, app_description: str, category: str) 
     Returns:
         PNG image bytes of the generated icon
     """
-    client = OpenAI()
-
     # Create a prompt for icon generation
     icon_prompt = f"""Create a modern, minimal app icon for an AI app called "{app_name}".
 
@@ -171,12 +169,12 @@ Design requirements:
 - Vibrant but not overwhelming colors
 - Style: Similar to modern iOS/Android app icons"""
 
-    response = client.images.generate(
+    response = generate_image_via_gateway(
         model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
     )
 
     # Get the base64 image data and decode it
-    image_data = response.data[0].b64_json
+    image_data = response["data"][0]["b64_json"]
     return base64.b64decode(image_data)
 
 

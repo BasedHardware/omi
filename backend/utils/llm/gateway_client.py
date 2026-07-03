@@ -19,6 +19,7 @@ LLM_GATEWAY_URL_ENV_VAR = 'OMI_LLM_GATEWAY_URL'
 DEFAULT_LLM_GATEWAY_URL = 'http://127.0.0.1:9080'
 LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
+LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
 LLM_GATEWAY_CALLER = 'backend'
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
@@ -41,6 +42,14 @@ def get_llm_gateway_service_token() -> str | None:
 
 def is_auto_lane_id(model_or_lane: object) -> bool:
     return isinstance(model_or_lane, str) and model_or_lane.startswith(LLM_GATEWAY_AUTO_LANE_PREFIX)
+
+
+def feature_auto_lane_id(feature: str) -> str:
+    return f"{LLM_GATEWAY_AUTO_LANE_PREFIX}{feature.replace('_', '-')}"
+
+
+def should_route_features_through_gateway() -> bool:
+    return os.getenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes', 'gateway'}
 
 
 def invoke_chat_structured_gateway(
@@ -237,3 +246,35 @@ def _validate_output_model(
 ) -> StructuredOutput:
     validate_json_schema(instance=decoded, schema=_strict_model_json_schema(output_model))
     return output_model.model_validate(decoded)
+
+
+def generate_image_via_gateway(
+    *,
+    model: str,
+    prompt: str,
+    size: str,
+    quality: str,
+    n: int,
+    response_format: str,
+    timeout_seconds: float = 120.0,
+) -> Mapping[str, object]:
+    """Call the gateway-owned image generation surface."""
+
+    with httpx.Client(timeout=timeout_seconds) as client:
+        response = client.post(
+            f'{get_llm_gateway_base_url()}/v1/images/generations',
+            headers=_gateway_headers(),
+            json={
+                'model': model,
+                'prompt': prompt,
+                'size': size,
+                'quality': quality,
+                'n': n,
+                'response_format': response_format,
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+    if not isinstance(body, Mapping):
+        raise ValueError('gateway image response must be an object')
+    return body

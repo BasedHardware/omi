@@ -49,10 +49,12 @@ class OpenAICompatibleChatCompletionProvider:
         *,
         api_key_env: str = OPENAI_API_KEY_ENV_VAR,
         base_url: str | None = None,
+        default_headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._api_key_env = api_key_env
         self._base_url = (base_url or os.getenv(OPENAI_BASE_URL_ENV_VAR, DEFAULT_OPENAI_BASE_URL)).rstrip('/')
+        self._default_headers = dict(default_headers or {})
         self._http_client = http_client or httpx.AsyncClient()
         self._owns_http_client = http_client is None
 
@@ -79,6 +81,7 @@ class OpenAICompatibleChatCompletionProvider:
                 headers={
                     'Authorization': f'Bearer {api_key}',
                     'Content-Type': 'application/json',
+                    **self._default_headers,
                 },
                 timeout=timeout_ms / 1000.0,
             ) as response:
@@ -101,9 +104,174 @@ class OpenAICompatibleChatCompletionProvider:
         _validate_chat_completion_response_shape(parsed)
         return parsed
 
+    async def stream_chat_completion(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ):
+        if credentials.mode == CredentialMode.BYOK:
+            raise ProviderFailure(FailureClass.BYOK_UNSUPPORTED_PROVIDER)
+
+        api_key = os.getenv(self._api_key_env, '').strip()
+        if not api_key:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG)
+
+        try:
+            async with self._http_client.stream(
+                'POST',
+                f'{self._base_url}/chat/completions',
+                json=dict(request),
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json',
+                    **self._default_headers,
+                },
+                timeout=timeout_ms / 1000.0,
+            ) as response:
+                if response.status_code >= 400:
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    _raise_for_status(response.status_code, error_preview)
+                async for chunk in response.aiter_bytes():
+                    if chunk:
+                        yield chunk
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
     async def aclose(self) -> None:
         if self._owns_http_client:
             await self._http_client.aclose()
+
+
+class AnthropicMessagesProvider:
+    """Minimal Anthropic Messages adapter behind the gateway route boundary."""
+
+    def __init__(
+        self,
+        *,
+        api_key_env: str = 'ANTHROPIC_API_KEY',
+        base_url: str = 'https://api.anthropic.com/v1',
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._api_key_env = api_key_env
+        self._base_url = base_url.rstrip('/')
+        self._http_client = http_client or httpx.AsyncClient()
+        self._owns_http_client = http_client is None
+
+    async def create_chat_completion(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> Mapping[str, Any]:
+        if credentials.mode == CredentialMode.BYOK:
+            raise ProviderFailure(FailureClass.BYOK_UNSUPPORTED_PROVIDER)
+
+        api_key = os.getenv(self._api_key_env, '').strip()
+        if not api_key:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG)
+
+        anthropic_request = _anthropic_request(request, provider_ref)
+        try:
+            response = await self._http_client.post(
+                f'{self._base_url}/messages',
+                json=anthropic_request,
+                headers={
+                    'x-api-key': api_key,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-beta': 'token-efficient-tools-2025-02-19',
+                    'Content-Type': 'application/json',
+                },
+                timeout=timeout_ms / 1000.0,
+            )
+            if response.status_code >= 400:
+                _raise_for_status(response.status_code, response.content[:PROVIDER_ERROR_DETAIL_BYTES])
+            parsed = response.json()
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+        except ValueError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+        return _anthropic_to_openai_response(parsed, requested_model=str(request.get('model') or provider_ref.model))
+
+    async def aclose(self) -> None:
+        if self._owns_http_client:
+            await self._http_client.aclose()
+
+
+def _anthropic_request(request: Mapping[str, Any], provider_ref: ProviderRef) -> dict[str, Any]:
+    system_blocks: list[Any] = []
+    messages: list[Mapping[str, Any]] = []
+    for message in request.get('messages') or []:
+        if not isinstance(message, Mapping):
+            continue
+        if message.get('role') == 'system':
+            system_blocks.append(message.get('content') or '')
+        else:
+            messages.append(message)
+
+    payload: dict[str, Any] = {
+        'model': provider_ref.model,
+        'messages': messages,
+        'max_tokens': int(request.get('max_tokens') or request.get('max_completion_tokens') or 4096),
+    }
+    if system_blocks:
+        payload['system'] = '\n\n'.join(str(block) for block in system_blocks if block is not None)
+    if 'temperature' in request:
+        payload['temperature'] = request['temperature']
+    if 'tools' in request:
+        payload['tools'] = request['tools']
+    if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none'):
+        payload['tool_choice'] = request['tool_choice']
+    return payload
+
+
+def _anthropic_to_openai_response(response: Mapping[str, Any], *, requested_model: str) -> dict[str, Any]:
+    content_blocks = response.get('content')
+    text_parts: list[str] = []
+    tool_calls: list[dict[str, Any]] = []
+    if isinstance(content_blocks, list):
+        for block in content_blocks:
+            if not isinstance(block, Mapping):
+                continue
+            if block.get('type') == 'text' and isinstance(block.get('text'), str):
+                text_parts.append(block['text'])
+            elif block.get('type') == 'tool_use':
+                tool_calls.append(
+                    {
+                        'id': block.get('id') or '',
+                        'type': 'function',
+                        'function': {
+                            'name': block.get('name') or '',
+                            'arguments': json.dumps(block.get('input') or {}, separators=(',', ':')),
+                        },
+                    }
+                )
+
+    message: dict[str, Any] = {'role': 'assistant', 'content': ''.join(text_parts)}
+    if tool_calls:
+        message['tool_calls'] = tool_calls
+    return {
+        'id': str(response.get('id') or 'anthropic_gateway'),
+        'object': 'chat.completion',
+        'created': 1782522000,
+        'model': requested_model,
+        'choices': [
+            {
+                'index': 0,
+                'message': message,
+                'finish_reason': 'tool_calls' if tool_calls else response.get('stop_reason') or 'stop',
+            }
+        ],
+    }
 
 
 class FakeChatCompletionProvider:

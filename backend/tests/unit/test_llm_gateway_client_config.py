@@ -11,6 +11,7 @@ from langchain_core.runnables import Runnable
 from utils.llm import clients, gateway_shadow
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, get_llm_gateway_base_url
+from utils.llm.gateway_client import LLM_GATEWAY_FEATURE_MODE_ENV_VAR, feature_auto_lane_id
 from utils.llm.clients import get_llm_gateway_chat_structured
 
 
@@ -137,3 +138,21 @@ def test_get_llm_dev_shadow_is_disabled_for_prod_like_runtime(monkeypatch):
     result = clients.get_llm('conv_discard')
 
     assert result is legacy
+
+
+def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
+    captured = {}
+    gateway = FakeChatModel(name='gateway', calls=[])
+
+    def fake_gateway(lane_id, streaming=False, options=None):
+        captured['lane_id'] = lane_id
+        captured['streaming'] = streaming
+        return gateway
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+
+    result = clients.get_llm('conv_discard', streaming=True).invoke('hello')
+
+    assert result.content == 'gateway response'
+    assert captured == {'lane_id': feature_auto_lane_id('conv_discard'), 'streaming': True}

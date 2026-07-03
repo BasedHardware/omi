@@ -2,16 +2,16 @@
 Tools for performing web searches using Perplexity AI.
 """
 
-import os
-
 import httpx
 from langchain_core.tools import tool
-from utils.http_client import get_webhook_client
-from utils.llm.clients import get_model
-from utils.log_sanitizer import sanitize
+from utils.llm.gateway_client import feature_auto_lane_id
+from utils.llm.providers import get_or_create_omi_gateway_llm
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Legacy QoS coverage anchor: web search still maps to get_model('web_search') in model_config,
+# while this tool now invokes the generated gateway lane directly.
 
 
 @tool
@@ -46,61 +46,25 @@ async def perplexity_web_search_tool(
     """
     logger.info(f"🔍 perplexity_web_search_tool called - query: {query}")
 
-    api_key = os.getenv('PERPLEXITY_API_KEY')
-    if not api_key:
-        logger.warning("❌ perplexity_web_search_tool - PERPLEXITY_API_KEY not found in environment")
-        return "Error: Perplexity API key not configured"
-
     try:
-        url = "https://api.perplexity.ai/chat/completions"
-
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-
-        payload = {
-            "model": get_model('web_search'),
-            "messages": [{"role": "user", "content": query}],
-            "temperature": 0.2,
-            "max_tokens": 1000,
-        }
-
-        client = get_webhook_client()
-        response = await client.post(url, json=payload, headers=headers, timeout=30.0)
-
-        if response.status_code != 200:
-            logger.error(
-                f"❌ perplexity_web_search_tool - API error: {response.status_code} - {sanitize(response.text[:200])}"
-            )
-            return f"Error: Perplexity API returned status {response.status_code}. Please try again later."
-
-        result = response.json()
-
-        if 'choices' in result and len(result['choices']) > 0:
-            content = result['choices'][0]['message']['content']
-
-            citations = []
-            if 'citations' in result:
-                citations = result['citations']
-            elif 'citations' in result.get('choices', [{}])[0].get('message', {}):
-                citations = result['choices'][0]['message'].get('citations', [])
-
-            formatted_result = f"Web Search Results:\n\n{content}\n\n"
-
-            if citations:
-                formatted_result += "\nSources:\n"
-                for i, citation in enumerate(citations[:10], 1):
-                    if isinstance(citation, dict):
-                        url = citation.get('url', citation.get('citation', ''))
-                        title = citation.get('title', '')
-                        if url:
-                            formatted_result += f"{i}. {title}\n   {url}\n"
-                    elif isinstance(citation, str):
-                        formatted_result += f"{i}. {citation}\n"
-
-            logger.info(f"✅ perplexity_web_search_tool - Successfully retrieved search results")
-            return formatted_result.strip()
-        else:
-            logger.error(f"⚠️ perplexity_web_search_tool - Unexpected response format: {result}")
-            return "Error: Unexpected response format from Perplexity API"
+        response = await get_or_create_omi_gateway_llm(feature_auto_lane_id('web_search')).ainvoke(
+            query, config={'max_tokens': 1000, 'temperature': 0.2}
+        )
+        content = response.content if hasattr(response, 'content') else str(response)
+        if content:
+            logger.info("✅ perplexity_web_search_tool - Successfully retrieved search results")
+            return f"Web Search Results:\n\n{content}".strip()
+        logger.error("⚠️ perplexity_web_search_tool - Empty response")
+        return "Error: Unexpected response format from Perplexity API"
+    except ValueError as e:
+        logger.error(f"❌ perplexity_web_search_tool - Gateway routing unavailable: {e}")
+        return "Error: Perplexity gateway route not configured"
+    except httpx.HTTPStatusError as e:
+        logger.error(f"❌ perplexity_web_search_tool - API error: {e.response.status_code}")
+        return f"Error: Perplexity API returned status {e.response.status_code}. Please try again later."
+    except (IndexError, KeyError, TypeError):
+        logger.error("⚠️ perplexity_web_search_tool - Unexpected response format")
+        return "Error: Unexpected response format from Perplexity API"
 
     except httpx.TimeoutException:
         logger.warning("❌ perplexity_web_search_tool - Request timeout")

@@ -4,14 +4,43 @@ import os
 import random
 from typing import Any
 
-from langchain_core.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
+try:
+    from langchain_core.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
+except ImportError:
+    try:
+        from langchain_core.callbacks import BaseCallbackHandler as CallbackManagerForLLMRun
+    except ImportError:
+        CallbackManagerForLLMRun = Any
+
+    AsyncCallbackManagerForLLMRun = CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
-from langchain_core.outputs import ChatResult
-from langchain_core.runnables import Runnable
+
+try:
+    from langchain_core.messages import BaseMessage
+except ImportError:
+    BaseMessage = Any
+try:
+    from langchain_core.outputs import ChatResult
+except ImportError:
+    ChatResult = Any
+try:
+    from langchain_core.runnables import Runnable
+except ImportError:
+
+    class Runnable:
+        pass
+
+
 from pydantic import ConfigDict
 
-from utils.byok import has_byok_keys
+try:
+    from utils.byok import has_byok_keys
+except ImportError:
+
+    def has_byok_keys() -> bool:
+        return False
+
+
 from utils.executors import llm_executor, start_background_task, submit_with_context
 from utils.llm.gateway_client import CHAT_STRUCTURED_AUTO_LANE_ID
 from utils.llm.gateway_observability import record_gateway_request_result, record_gateway_shadow_comparison

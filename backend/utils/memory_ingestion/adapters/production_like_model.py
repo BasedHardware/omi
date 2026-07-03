@@ -8,9 +8,9 @@ import re
 from typing import Iterable, Literal, Any, Callable
 
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_openai import ChatOpenAI
 from models.transcript_segment import TranscriptSegment
 from pydantic import BaseModel, Field
+from utils.llm.clients import get_llm
 from utils.prompts import extract_memories_prompt
 from utils.memory_ingestion.adapters.typed_extraction_prompt import (
     TYPED_PREDICATES,
@@ -773,10 +773,9 @@ def _memory_llm(temperature: float = 0.0):
         url_preview = base_url or "(default OpenAI)"
         print(f"[pipeline-llm] model={model}  base_url={url_preview}")
         _memory_llm_logged = True
-    kwargs: dict = dict(model=model, temperature=temperature, request_timeout=120, max_retries=1)
-    if base_url:
-        kwargs["base_url"] = base_url
-    return ChatOpenAI(**kwargs)
+    if temperature:
+        return get_llm("memories").bind(temperature=temperature)
+    return get_llm("memories")
 
 
 def _language_instruction(language: str | None) -> str:

@@ -46,12 +46,42 @@ from utils.llm.providers import (
     GEMINI_OPENAI_BASE_URL,
     get_default_client,
     get_or_create_gemini_llm as _get_or_create_gemini_llm,
-    get_or_create_omi_gateway_llm,
     get_or_create_openai_compatible_llm,
     _llm_cache,
 )
-from utils.llm.gateway_client import CHAT_STRUCTURED_AUTO_LANE_ID
-from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
+
+try:
+    from utils.llm.providers import get_or_create_omi_gateway_llm
+except ImportError:
+
+    def get_or_create_omi_gateway_llm(*_args, **_kwargs):
+        raise RuntimeError('Omi gateway LangChain client is unavailable')
+
+
+try:
+    from utils.llm.gateway_client import (
+        CHAT_STRUCTURED_AUTO_LANE_ID,
+        feature_auto_lane_id,
+        should_route_features_through_gateway,
+    )
+except ImportError:
+    CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
+
+    def feature_auto_lane_id(feature: str) -> str:
+        return f"omi:auto:{feature.replace('_', '-')}"
+
+    def should_route_features_through_gateway() -> bool:
+        return False
+
+
+try:
+    from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
+except ImportError:
+
+    def maybe_wrap_dev_gateway_shadow(*, legacy_model, **_kwargs):
+        return legacy_model
+
+
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -273,22 +303,24 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     providers. Returns a BaseChatModel. For Anthropic/Perplexity, use
     get_model(feature) to get the model string and the provider-specific client.
     """
-    if is_anthropic_only_feature(feature):
+    gateway_feature_mode = should_route_features_through_gateway()
+
+    if is_anthropic_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
         )
-    if is_perplexity_only_feature(feature):
+    if is_perplexity_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
 
     model, provider = _get_model_config(feature)
 
-    if provider == 'anthropic':
+    if provider == 'anthropic' and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
         )
-    if provider == 'perplexity':
+    if provider == 'perplexity' and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
         )
@@ -321,6 +353,8 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             if byok_client is not None
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
+    elif gateway_feature_mode:
+        result = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming)
     else:
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
 

@@ -1,0 +1,138 @@
+schema_version: llm_model_endpoint_inventory.v1
+scope:
+  in_scope: backend chat/completion/generation/model calls, including streaming, tool calling, image generation, file chat, realtime relay, and provider web search
+  out_of_scope: embeddings/vector APIs only
+out_of_scope_surfaces:
+  - surface: openai_embeddings
+    code_path: backend/utils/llm/clients.py:OpenAIEmbeddings,generate_embedding
+    provider_model: openai/text-embedding-3-large
+    request_shape: embedding
+    reason: Embeddings are explicitly out of scope for this phase.
+  - surface: gemini_screen_activity_query_embedding
+    code_path: backend/utils/llm/clients.py:gemini_embed_query
+    provider_model: gemini/embedding-001
+    request_shape: embedding
+    reason: Embeddings are explicitly out of scope for this phase.
+model_config_features:
+  status: gateway_lane_generated_from_model_config
+  source_of_truth: backend/utils/llm/model_config.py
+  gateway_lane: omi:auto:<feature-with-underscores-as-hyphens>
+  code_paths:
+    - backend/utils/llm/clients.py:get_llm
+    - backend/llm_gateway/gateway/config_loader.py:_generated_feature_route_items
+  request_shapes:
+    plain_chat:
+      - conv_action_items
+      - conv_app_result
+      - conv_discard
+      - conv_folder
+      - conv_structure
+      - daily_summary
+      - daily_summary_simple
+      - followup
+      - goals
+      - goals_advice
+      - knowledge_graph
+      - learnings
+      - memories
+      - memory_category
+      - memory_conflict
+      - memory_l1
+      - notifications
+      - onboarding
+      - openglass
+      - persona_chat
+      - persona_chat_premium
+      - persona_clone
+      - session_titles
+      - smart_glasses
+      - wrapped_analysis
+      - app_generator
+      - app_integration
+    structured_output:
+      - chat_extraction
+      - conv_app_select
+      - external_structure
+      - proactive_notification
+      - trends
+    streaming:
+      - chat_responses
+      - chat_graph
+      - persona_chat
+      - persona_chat_premium
+    tool_calling:
+      - chat_agent
+      - memory_l2
+    provider_search:
+      - web_search
+    pinned:
+      - fair_use
+  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, gemini, openrouter, perplexity, and anthropic.
+  migration_status: get_llm can centrally switch Omi-managed feature traffic to the generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; BYOK remains direct user-key routing.
+  test_guardrail_coverage:
+    - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
+    - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
+surfaces:
+  - surface: langchain_feature_routing
+    code_path: backend/utils/llm/clients.py:get_llm
+    current_provider_model: utils.llm.model_config feature profile
+    request_shape: plain chat, structured output, parser chain, streaming, tool calling via LangChain
+    gateway_lane_capability_needed: generated feature lanes
+    migration_status: gateway_capable_central_flip
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: anthropic_agentic_chat
+    code_path: backend/utils/retrieval/agentic.py:_run_anthropic_agent_stream
+    current_provider_model: anthropic/chat_agent
+    request_shape: streaming, native tool calling, server-side web search
+    gateway_lane_capability_needed: anthropic provider adapter with tools enabled on omi:auto:chat-agent
+    migration_status: gateway_capability_implemented; legacy native stream remains serving until the dev gateway flip validates equivalent streaming behavior
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: perplexity_web_search_tool
+    code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
+    current_provider_model: perplexity/web_search
+    request_shape: provider search chat completion
+    gateway_lane_capability_needed: perplexity OpenAI-compatible provider adapter on omi:auto:web-search
+    migration_status: gateway_routed
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: app_icon_generation
+    code_path: backend/utils/llm/app_generator.py:generate_app_icon
+    current_provider_model: openai/dall-e-3
+    request_shape: image generation
+    gateway_lane_capability_needed: gateway-owned /v1/images/generations proxy
+    migration_status: gateway_routed
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: file_chat_vision
+    code_path: backend/utils/other/chat_file.py:_ask_vision_stream
+    current_provider_model: openai/gpt-4.1
+    request_shape: streaming vision chat completion
+    gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
+    migration_status: inventoried_explicit_direct_file_lifecycle_exception; not silently missed during dev flip
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: file_chat_assistants
+    code_path: backend/utils/other/chat_file.py:FileChatTool
+    current_provider_model: openai/gpt-4.1 with Assistants, Threads, Files, File Search
+    request_shape: file upload, assistants, file_search, streaming run deltas
+    gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
+    migration_status: inventoried_explicit_direct_file_lifecycle_exception; not silently missed during dev flip
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: omni_realtime_relay
+    code_path: backend/routers/omni_relay.py
+    current_provider_model: openai realtime or gemini live selected by client query
+    request_shape: realtime websocket relay
+    gateway_lane_capability_needed: gateway-owned realtime websocket relay
+    migration_status: inventoried_explicit_realtime_exception; prod behavior unchanged
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: fair_use_classifier
+    code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose
+    current_provider_model: openai/fair_use pinned feature
+    request_shape: async plain chat JSON
+    gateway_lane_capability_needed: generated omi:auto:fair-use lane
+    migration_status: get_llm_routed
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: production_like_memory_ingestion
+    code_path: backend/utils/memory_ingestion/adapters/production_like_model.py:_memory_llm
+    current_provider_model: openai/memories feature
+    request_shape: parser chain
+    gateway_lane_capability_needed: generated omi:auto:memories lane
+    migration_status: get_llm_routed
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py

@@ -127,6 +127,14 @@ def selected_serving_route_artifact_id(resolved_route: ResolvedRoute) -> str:
     return _select_serving_route(resolved_route).route_artifact_id
 
 
+def selected_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
+    return _select_serving_route(resolved_route)
+
+
+def provider_request_for(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
+    return _provider_request(resolved_route, provider_ref)
+
+
 def _is_route_eligible_to_serve(route: RouteArtifact, validated_request: ValidatedChatCompletionRequest) -> bool:
     """Whether a route should receive live traffic based on rollout stage and percent."""
     if route.rollout.stage in (RolloutStage.SHADOW, RolloutStage.DISABLED):

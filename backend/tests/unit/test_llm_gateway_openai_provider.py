@@ -47,6 +47,38 @@ async def test_openai_compatible_provider_posts_chat_completion(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_openai_compatible_provider_streams_chat_completion_bytes(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    seen_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(
+            200,
+            content=b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n',
+            headers={'content-type': 'text/event-stream'},
+        )
+
+    provider = OpenAICompatibleChatCompletionProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    chunks = [
+        chunk
+        async for chunk in provider.stream_chat_completion(
+            {'model': 'gpt-4.1-mini', 'messages': [], 'stream': True},
+            provider_ref=ProviderRef(provider='openai', model='gpt-4.1-mini'),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=8000,
+        )
+    ]
+
+    assert b''.join(chunks).startswith(b'data:')
+    assert seen_requests[0].url == 'https://api.openai.com/v1/chat/completions'
+    assert seen_requests[0].headers['authorization'] == 'Bearer test-key'
+
+
+@pytest.mark.asyncio
 async def test_openai_compatible_provider_closes_owned_http_client():
     provider = OpenAICompatibleChatCompletionProvider()
 

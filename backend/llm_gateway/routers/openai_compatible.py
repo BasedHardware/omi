@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+import httpx
+import os
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
@@ -13,7 +15,13 @@ from llm_gateway.gateway.errors import (
     GatewayErrorCode,
     GatewayInvalidRequestError,
 )
-from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
+from llm_gateway.gateway.executor import (
+    ProviderRegistry,
+    execute_chat_completion,
+    provider_request_for,
+    selected_serving_route,
+    selected_serving_route_artifact_id,
+)
 from llm_gateway.gateway.metrics import observe_error, observe_success, time_request
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
@@ -34,6 +42,8 @@ async def create_chat_completion(
         request_body = await _request_json(request)
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = build_omi_managed_credential_context(caller)
+        if resolved_route.validated_request.forwarded_params.get('stream') is True:
+            return _streaming_response(resolved_route, credentials, provider_registry)
         result = await execute_chat_completion(resolved_route, credentials, provider_registry)
         _safe_observe(lambda: observe_success(started_at, result))
         return JSONResponse(content=result.response)
@@ -117,3 +127,47 @@ def _status_code_for_error(exc: GatewayError) -> int:
     if exc.code == GatewayErrorCode.PROVIDER_FAILURE:
         return 502
     return 500
+
+
+@router.post('/v1/images/generations')
+async def create_image_generation(request: Request, caller: ServiceAuthDependency):
+    request_body = await _request_json(request)
+    api_key = os.getenv('OPENAI_API_KEY', '').strip()
+    if not api_key:
+        return JSONResponse(
+            status_code=503,
+            content={'error': {'message': 'provider request failed: invalid_config', 'type': 'api_error'}},
+        )
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                'https://api.openai.com/v1/images/generations',
+                headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+                json=request_body,
+            )
+        return JSONResponse(status_code=response.status_code, content=response.json())
+    except (httpx.HTTPError, ValueError):
+        return JSONResponse(
+            status_code=502,
+            content={'error': {'message': 'provider request failed', 'type': 'api_error'}},
+        )
+
+
+def _streaming_response(resolved_route, credentials, provider_registry: ProviderRegistry) -> StreamingResponse:
+    route = selected_serving_route(resolved_route)
+    provider_ref = route.primary
+    provider = provider_registry.provider_for(provider_ref.provider)
+    stream_chat_completion = getattr(provider, 'stream_chat_completion', None)
+    if stream_chat_completion is None:
+        raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
+
+    async def event_stream():
+        async for chunk in stream_chat_completion(
+            provider_request_for(resolved_route, provider_ref),
+            provider_ref=provider_ref,
+            credentials=credentials,
+            timeout_ms=route.timeouts.request_ms,
+        ):
+            yield chunk
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')

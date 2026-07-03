@@ -74,6 +74,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-nano', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4-mini', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -124,6 +126,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -173,6 +177,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
