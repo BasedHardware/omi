@@ -59,6 +59,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO schema_version (version) VALUES (7)", [])?;
     }
 
+    if current < 8 {
+        tracing::info!("Running migration v8: notification_history");
+        conn.execute_batch(MIGRATION_V8)?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (8)", [])?;
+    }
+
     Ok(())
 }
 
@@ -199,4 +205,16 @@ CREATE TABLE IF NOT EXISTS app_usage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_app_usage_date ON app_usage(date DESC);
+";
+
+const MIGRATION_V8: &str = "
+CREATE TABLE IF NOT EXISTS notification_history (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 50,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notif_created ON notification_history(created_at DESC);
 ";
