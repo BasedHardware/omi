@@ -142,7 +142,8 @@ actor APIClient {
     body: B,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    timeout: TimeInterval? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
@@ -151,6 +152,7 @@ actor APIClient {
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
     request.httpBody = try JSONEncoder().encode(body)
+    if let timeout { request.timeoutInterval = timeout }
 
     return try await performRequest(request)
   }
@@ -5619,7 +5621,7 @@ extension APIClient {
     -> IMessageDraftResponsePayload
   {
     let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
-    return try await post("v1/imessage/draft-reply", body: body)
+    return try await post("v1/imessage/draft-reply", body: body, timeout: 90)
   }
 
   func imessageSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
@@ -5678,7 +5680,7 @@ extension APIClient {
     -> TelegramDraftResponsePayload
   {
     let body = TelegramDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
-    return try await post("v1/telegram/draft-reply", body: body)
+    return try await post("v1/telegram/draft-reply", body: body, timeout: 90)
   }
 
   func telegramDisconnect() async throws {
@@ -5691,7 +5693,7 @@ extension APIClient {
     -> WhatsAppDraftResponsePayload
   {
     let body = WhatsAppDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
-    return try await post("v1/whatsapp/draft-reply", body: body)
+    return try await post("v1/whatsapp/draft-reply", body: body, timeout: 90)
   }
 
   /// Uploads local address-book contacts so the backend can resolve WhatsApp

@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -42,29 +43,19 @@ _FORMAL_SAMPLES = [
 _CASUAL_SAMPLES = ['bet', 'lmaooo', 'ye ill pull up', 'omw', 'idk lol', 'fr fr']
 
 
-class _FakeStructured:
-    def __init__(self, value):
-        self._value = value
-
-    def invoke(self, prompt):
-        return self._value
-
-
 class _FakeLLM:
-    """Stands in for get_llm('memories'): supports both the structured candidate/
-    selection calls and a plain .invoke fallback."""
+    """Stands in for get_llm('memories'): generation returns the candidates as a
+    JSON array (parsed by _generate_candidates); selection returns the index."""
 
     def __init__(self, candidates, best_index=0):
         self.candidates = candidates
         self.best_index = best_index
 
-    def with_structured_output(self, model):
-        if model is rd._DraftCandidates:
-            return _FakeStructured(model(candidates=self.candidates))
-        return _FakeStructured(model(best_index=self.best_index))
-
     def invoke(self, prompt):
-        return SimpleNamespace(content=self.candidates[0] if self.candidates else '')
+        # The selection call ends with a request for just the number.
+        if 'Reply with ONLY the number' in prompt:
+            return SimpleNamespace(content=str(self.best_index))
+        return SimpleNamespace(content=json.dumps(self.candidates))
 
 
 def test_draft_uses_profile_context_thread_and_intent():

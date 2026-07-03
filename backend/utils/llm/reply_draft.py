@@ -18,8 +18,6 @@ import logging
 import re
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
-
 import database.vector_db as vector_db
 from database import conversations as conversations_db
 from database import memories as memories_db
@@ -307,11 +305,12 @@ def build_reply_prompt(
 
     group_rules = (
         (
-            f"THIS IS A GROUP CHAT. Before replying, decide whether the latest message is actually "
-            f"directed at the user or clearly expects a reply from them. If it's aimed at someone else, "
-            f"or is general chatter that doesn't need the user's input, output every candidate as exactly "
-            f"{ABSTAIN_SENTINEL} and nothing else. Only draft a real reply when the user is genuinely being "
-            f"addressed or would naturally chime in.\n\n"
+            f"THIS IS A GROUP CHAT. Default to DRAFTING a reply the user might send — people chime into "
+            f"group chats freely. ONLY abstain in the clear case where the latest message is explicitly "
+            f"directed at a DIFFERENT named person (not the user), or is pure logistics/noise the user "
+            f"plainly wouldn't answer. When it's ambiguous, general, or the user could reasonably reply, "
+            f"DRAFT — do not abstain. To abstain (only in that clear case), output every candidate as "
+            f"exactly {ABSTAIN_SENTINEL} and nothing else.\n\n"
         )
         if is_group
         else ""
@@ -396,14 +395,6 @@ def _build_selection_prompt(name: str, style_block: str, thread_text: str, candi
     )
 
 
-class _DraftCandidates(BaseModel):
-    candidates: List[str] = Field(description="The distinct candidate reply messages, in order.")
-
-
-class _DraftSelection(BaseModel):
-    best_index: int = Field(description="Index of the best candidate reply.")
-
-
 def _normalize_draft(text: str) -> str:
     draft = (text or '').strip()
     # Strip a wrapping pair of quotes if the model added them.
@@ -439,22 +430,17 @@ def _parse_json_string_list(text: str) -> Optional[List[str]]:
 
 
 def _generate_candidates(prompt: str) -> List[str]:
-    """Generate candidate drafts. Prefers structured output; when the provider
-    can't do it, parses the JSON list out of the plain-text reply so we NEVER
-    return the raw ``["a", "b", ...]`` string as if it were one message."""
-    llm = get_llm('memories')
+    """Generate candidate drafts with a single plain call, then parse the JSON list
+    out of the reply. We intentionally do NOT use with_structured_output: several
+    providers (and OpenAI-compatible proxies) return a bare JSON array instead of
+    the wrapping object, which fails schema validation and costs a wasted round
+    trip before the plain retry. Parsing the list ourselves is one call and works
+    everywhere; the final guard in draft_reply catches any leaked list."""
     try:
-        result = llm.with_structured_output(_DraftCandidates).invoke(prompt)
-        cands = [_normalize_draft(c) for c in (result.candidates or []) if c and c.strip()]
-        if cands:
-            return cands
-    except Exception as e:
-        logger.warning(f"reply_draft: structured candidate generation failed, falling back: {e}")
-    try:
-        response = llm.invoke(prompt)
+        response = get_llm('memories').invoke(prompt)
         content = response.content if hasattr(response, 'content') else str(response)
     except Exception as e:
-        logger.warning(f"reply_draft: plain candidate generation failed uid: {e}")
+        logger.warning(f"reply_draft: candidate generation failed: {e}")
         return []
     parsed = _parse_json_string_list(content)
     if parsed:
@@ -465,23 +451,16 @@ def _generate_candidates(prompt: str) -> List[str]:
 
 
 def _select_best(name: str, style_block: str, thread_text: str, candidates: List[str]) -> str:
-    """Self-select the best candidate. With 0/1 candidate there's nothing to judge."""
+    """Self-select the best candidate with a single plain call (ask for the index).
+    With 0/1 candidate there's nothing to judge."""
     if not candidates:
         return ""
     if len(candidates) == 1:
         return candidates[0]
     prompt = _build_selection_prompt(name, style_block, thread_text, candidates)
-    llm = get_llm('memories')
+    prompt += "\n\nReply with ONLY the number of the best candidate, nothing else."
     try:
-        selection = llm.with_structured_output(_DraftSelection).invoke(prompt)
-        idx = selection.best_index
-        if isinstance(idx, int) and 0 <= idx < len(candidates):
-            return candidates[idx]
-    except Exception as e:
-        logger.warning(f"reply_draft: structured self-selection failed, trying plain index: {e}")
-    # Fallback for providers without structured output: ask for just the number.
-    try:
-        response = llm.invoke(prompt + "\n\nReply with ONLY the number of the best candidate, nothing else.")
+        response = get_llm('memories').invoke(prompt)
         content = response.content if hasattr(response, 'content') else str(response)
         m = re.search(r'\d+', content or '')
         if m:
@@ -489,7 +468,7 @@ def _select_best(name: str, style_block: str, thread_text: str, candidates: List
             if 0 <= idx < len(candidates):
                 return candidates[idx]
     except Exception as e:
-        logger.warning(f"reply_draft: plain self-selection failed, using first survivor: {e}")
+        logger.warning(f"reply_draft: self-selection failed, using first survivor: {e}")
     return candidates[0]
 
 

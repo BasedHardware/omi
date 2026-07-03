@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 _URL_RE = re.compile(r'https?://[^\s<>"\')\]]+')
 MAX_LINKS = 3
 MAX_IMAGES = 2
+# Hard budgets so a slow link or a vision call the provider can't handle never
+# hangs the draft request past the client timeout — we just draft without it.
+LINK_BUDGET_SECONDS = 8
+IMAGE_BUDGET_SECONDS = 12
 
 
 async def build_media_context(uid: str, thread: List[dict]) -> str:
@@ -39,9 +43,12 @@ async def build_media_context(uid: str, thread: List[dict]) -> str:
     urls = urls[:MAX_LINKS]
     if urls:
         try:
-            results = await asyncio.gather(*[fetch_url_summary(u) for u in urls], return_exceptions=True)
-        except Exception as e:
-            logger.warning(f"reply_media: link fetch failed uid={uid}: {e}")
+            results = await asyncio.wait_for(
+                asyncio.gather(*[fetch_url_summary(u) for u in urls], return_exceptions=True),
+                timeout=LINK_BUDGET_SECONDS,
+            )
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"reply_media: link fetch timed out/failed uid={uid}: {e}")
             results = []
         lines = []
         for u, r in zip(urls, results):
@@ -67,9 +74,12 @@ async def build_media_context(uid: str, thread: List[dict]) -> str:
             break
     if images:
         try:
-            descs = await asyncio.gather(*[describe_image(uid, b) for b in images], return_exceptions=True)
-        except Exception as e:
-            logger.warning(f"reply_media: image description failed uid={uid}: {e}")
+            descs = await asyncio.wait_for(
+                asyncio.gather(*[describe_image(uid, b) for b in images], return_exceptions=True),
+                timeout=IMAGE_BUDGET_SECONDS,
+            )
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"reply_media: image description timed out/failed uid={uid}: {e}")
             descs = []
         lines = [f"- {d.strip()}" for d in descs if isinstance(d, str) and d.strip()]
         if lines:
