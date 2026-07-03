@@ -13,7 +13,9 @@ the conversation, and obeys the grounding/commitment guardrails.
 """
 
 import html
+import json
 import logging
+import re
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -109,23 +111,45 @@ def _relevant_context(uid: str, thread: List[dict]) -> str:
     except Exception as e:
         logger.warning(f"reply_draft: relevant memory search failed uid={uid}: {e}")
 
-    # Things from the user's own captured days that relate to the topic.
+    # Conversations Omi captured — BOTH the topic-relevant ones (semantic) AND the
+    # most recent ones. Something referenced in the chat could be an audio
+    # transcript from minutes ago that isn't vector-indexed yet, so recency matters
+    # as much as relevance here.
     try:
+        seen_ids = set()
+        lines = []
+
+        def _add(c: dict) -> None:
+            cid = c.get('id')
+            if cid in seen_ids:
+                return
+            seen_ids.add(cid)
+            structured = c.get('structured') or {}
+            title = structured.get('title')
+            if not title:
+                return
+            overview = structured.get('overview') or ''
+            lines.append(f"- {title}" + (f": {overview}" if overview else ""))
+
+        # Most recent first (today / minutes ago), then topic-relevant matches.
+        try:
+            for c in conversations_db.get_conversations(uid, limit=6):
+                _add(c)
+        except Exception as e:
+            logger.warning(f"reply_draft: recent conversation lookup failed uid={uid}: {e}")
+
         cids = vector_db.query_vectors(query=query, uid=uid, k=4)
         if cids:
-            convos = conversations_db.get_conversations_by_id(uid, cids)
-            lines = []
-            for c in convos:
-                structured = c.get('structured') or {}
-                title = structured.get('title')
-                if not title:
-                    continue
-                overview = structured.get('overview') or ''
-                lines.append(f"- {title}" + (f": {overview}" if overview else ""))
-            if lines:
-                bits.append("WHAT YOU'VE BEEN DOING (relevant to this chat):\n" + "\n".join(lines))
+            for c in conversations_db.get_conversations_by_id(uid, cids):
+                _add(c)
+
+        if lines:
+            bits.append(
+                "YOUR RECENT & RELEVANT CONVERSATIONS (from what Omi captured — use ONLY if it relates to "
+                "what's being discussed; otherwise ignore):\n" + "\n".join(lines)
+            )
     except Exception as e:
-        logger.warning(f"reply_draft: relevant conversation search failed uid={uid}: {e}")
+        logger.warning(f"reply_draft: conversation context lookup failed uid={uid}: {e}")
 
     return "\n\n".join(bits)
 
@@ -365,9 +389,36 @@ def _normalize_draft(text: str) -> str:
     return draft
 
 
+def _parse_json_string_list(text: str) -> Optional[List[str]]:
+    """Extract a JSON array of strings from a model's text reply. Used when the
+    provider can't do structured output, so we still recover the individual
+    candidates instead of surfacing the raw ``["a", "b", ...]`` string as a
+    message."""
+    t = (text or '').strip()
+    if t.startswith('```'):
+        nl = t.find('\n')
+        if nl != -1:
+            t = t[nl + 1 :]
+        if t.endswith('```'):
+            t = t[:-3]
+    start = t.find('[')
+    end = t.rfind(']')
+    if start == -1 or end == -1 or end < start:
+        return None
+    try:
+        arr = json.loads(t[start : end + 1])
+    except Exception:
+        return None
+    if isinstance(arr, list) and all(isinstance(x, str) for x in arr):
+        cleaned = [x.strip() for x in arr if x and x.strip()]
+        return cleaned or None
+    return None
+
+
 def _generate_candidates(prompt: str) -> List[str]:
-    """Generate candidate drafts. Uses structured output; falls back to a single
-    plain-text draft if structured generation fails."""
+    """Generate candidate drafts. Prefers structured output; when the provider
+    can't do it, parses the JSON list out of the plain-text reply so we NEVER
+    return the raw ``["a", "b", ...]`` string as if it were one message."""
     llm = get_llm('memories')
     try:
         result = llm.with_structured_output(_DraftCandidates).invoke(prompt)
@@ -376,8 +427,17 @@ def _generate_candidates(prompt: str) -> List[str]:
             return cands
     except Exception as e:
         logger.warning(f"reply_draft: structured candidate generation failed, falling back: {e}")
-    response = llm.invoke(prompt)
-    single = _normalize_draft(response.content if hasattr(response, 'content') else str(response))
+    try:
+        response = llm.invoke(prompt)
+        content = response.content if hasattr(response, 'content') else str(response)
+    except Exception as e:
+        logger.warning(f"reply_draft: plain candidate generation failed uid: {e}")
+        return []
+    parsed = _parse_json_string_list(content)
+    if parsed:
+        return [_normalize_draft(c) for c in parsed]
+    # Not a list — a single message. Strip any stray wrapping quotes.
+    single = _normalize_draft(content)
     return [single] if single else []
 
 
@@ -388,13 +448,25 @@ def _select_best(name: str, style_block: str, thread_text: str, candidates: List
     if len(candidates) == 1:
         return candidates[0]
     prompt = _build_selection_prompt(name, style_block, thread_text, candidates)
+    llm = get_llm('memories')
     try:
-        selection = get_llm('memories').with_structured_output(_DraftSelection).invoke(prompt)
+        selection = llm.with_structured_output(_DraftSelection).invoke(prompt)
         idx = selection.best_index
         if isinstance(idx, int) and 0 <= idx < len(candidates):
             return candidates[idx]
     except Exception as e:
-        logger.warning(f"reply_draft: candidate self-selection failed, using first survivor: {e}")
+        logger.warning(f"reply_draft: structured self-selection failed, trying plain index: {e}")
+    # Fallback for providers without structured output: ask for just the number.
+    try:
+        response = llm.invoke(prompt + "\n\nReply with ONLY the number of the best candidate, nothing else.")
+        content = response.content if hasattr(response, 'content') else str(response)
+        m = re.search(r'\d+', content or '')
+        if m:
+            idx = int(m.group())
+            if 0 <= idx < len(candidates):
+                return candidates[idx]
+    except Exception as e:
+        logger.warning(f"reply_draft: plain self-selection failed, using first survivor: {e}")
     return candidates[0]
 
 
@@ -486,4 +558,8 @@ def draft_reply(
         survivors = sorted(real_candidates, key=lambda c: len(style_hard_fails(c, fingerprint)))[:1]
 
     draft = _select_best(name, style_block, thread_text, survivors)
+    # Last-resort guard: never surface a raw candidate list as the message.
+    leaked_list = _parse_json_string_list(draft)
+    if leaked_list:
+        draft = _normalize_draft(leaked_list[0])
     return {'draft': draft}

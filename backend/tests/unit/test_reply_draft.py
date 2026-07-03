@@ -320,6 +320,38 @@ def test_best_of_n_drops_style_violating_candidate():
     assert out['draft'] == 'Sure, I should be around.'
 
 
+def test_plain_text_json_list_is_parsed_not_leaked():
+    """When the provider can't do structured output, the model returns the JSON
+    list as plain text. We must parse it into candidates and select one — never
+    surface the raw '["a","b",...]' string as the message."""
+
+    class _NoStructuredLLM:
+        """Raises on with_structured_output (no tool/JSON-schema support), and its
+        plain .invoke returns a JSON array string like a real text-only model."""
+
+        def with_structured_output(self, model):
+            raise NotImplementedError("provider has no structured output")
+
+        def invoke(self, prompt):
+            if 'Reply with ONLY the number' in prompt:
+                return SimpleNamespace(content='0')
+            return SimpleNamespace(content='["Hahah no", "Lmaooo maybe", "She kinda is", "Nah just wondering"]')
+
+    thread = [{'text': t, 'is_from_me': True} for t in _CASUAL_SAMPLES]
+    thread.append({'text': 'is she your gf lol', 'is_from_me': False})
+
+    with patch.object(rd, 'resolve_person', return_value=None), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
+        rd, 'get_llm', return_value=_NoStructuredLLM()
+    ):
+        out = rd.draft_reply('uid', 'Sam', thread)
+
+    # A single real reply, not the bracketed list.
+    assert out['draft'] in {'Hahah no', 'Lmaooo maybe', 'She kinda is', 'Nah just wondering'}
+    assert not out['draft'].startswith('[')
+
+
 def test_group_message_not_for_user_abstains():
     thread = [
         {'text': 'hey everyone', 'is_from_me': False, 'sender': 'Alex'},
