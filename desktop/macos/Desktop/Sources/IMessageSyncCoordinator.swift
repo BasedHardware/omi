@@ -61,7 +61,16 @@ actor IMessageSyncCoordinator {
     }
 
     let response = try await APIClient.shared.imessageIngest(threads: threads, lastRowID: maxROWID)
-    await IMessageReaderService.shared.setLastProcessedROWID(maxROWID)
+    // Advance the cursor ONLY when the backend confirms every window persisted durably.
+    // On a partial failure the backend released those messages' ledger claims and did
+    // not advance its own cursor; if we advanced ours we'd skip them forever. Leaving
+    // the cursor put re-sends the batch next sync, and the durable ledger dedups the
+    // windows that already landed.
+    if response.allPersisted {
+      await IMessageReaderService.shared.setLastProcessedROWID(maxROWID)
+    } else {
+      NSLog("iMessage sync: backend reported partial persist failure; not advancing cursor (batch will retry)")
+    }
 
     return SyncOutcome(
       messagesIngested: response.messagesIngested,

@@ -437,6 +437,7 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
     conversations_created = 0
     messages_ingested = 0
     race_skipped = 0
+    failed_windows = 0
     created_conversations: List = []
     for conv_id, chat_guid, msgs, handle_to_person in windows:
         try:
@@ -444,7 +445,10 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
                 db_executor, _persist_window, uid, conv_id, chat_guid, msgs, handle_to_person, req.language
             )
         except Exception as e:
-            # Claims were released inside _persist_window; messages retry next sync.
+            # Claims were released inside _persist_window, so these messages must be
+            # resent. Record the failure so we do NOT advance the cursor past this
+            # batch below — otherwise the desktop would skip them and they'd be lost.
+            failed_windows += 1
             logger.error(f'imessage: window persist failed uid={uid} conv={conv_id}: {sanitize(str(e))}')
             continue
         messages_ingested += result.persisted
@@ -454,6 +458,8 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
             if result.conversation is not None:
                 created_conversations.append(result.conversation)
 
+    all_persisted = failed_windows == 0
+
     # Persist state: mark connected/consented, advance cursor, and bump the durable
     # created-conversation counter (all content above is already durable).
     patch = {
@@ -461,7 +467,10 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
         'enabled': True,  # clicking Connect + sending data is the consent signal
         'last_synced_at': datetime.now(timezone.utc).isoformat(),
     }
-    if req.last_rowid is not None:
+    # Advance the durable cursor ONLY when every window persisted. On any failure the
+    # batch is not durable, so leaving last_rowid where it was makes the desktop resend
+    # it next sync (the ledger dedups the windows that already landed).
+    if all_persisted and req.last_rowid is not None:
         patch['last_rowid'] = req.last_rowid
     if conversations_created:
         patch['conversations_ingested'] = int(doc.get('conversations_ingested', 0)) + conversations_created
@@ -477,7 +486,8 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
     skipped = legacy_skipped + ledger_skipped + race_skipped
     logger.info(
         f'imessage ingest uid={uid} threads={len(req.threads)} windows={len(windows)} '
-        f'people={len(people_ids)} msgs={messages_ingested} created={conversations_created} skipped={skipped}'
+        f'people={len(people_ids)} msgs={messages_ingested} created={conversations_created} '
+        f'skipped={skipped} failed_windows={failed_windows}'
     )
     return IMessageIngestResponse(
         success=True,
@@ -485,4 +495,5 @@ async def ingest_threads(uid: str, req: IMessageIngestRequest) -> IMessageIngest
         people_upserted=len(people_ids),
         messages_ingested=messages_ingested,
         skipped_duplicates=skipped,
+        all_persisted=all_persisted,
     )

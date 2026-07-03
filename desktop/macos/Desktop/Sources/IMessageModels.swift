@@ -88,6 +88,10 @@ struct IMessageIngestResponsePayload: Decodable {
   let peopleUpserted: Int
   let messagesIngested: Int
   let skippedDuplicates: Int
+  /// True only when every window persisted durably. When false, the sync coordinator
+  /// must NOT advance its ROWID cursor past this batch (the failed messages must be
+  /// resent). Defaults true so an older backend that omits the field keeps working.
+  let allPersisted: Bool
 
   enum CodingKeys: String, CodingKey {
     case success
@@ -95,6 +99,17 @@ struct IMessageIngestResponsePayload: Decodable {
     case peopleUpserted = "people_upserted"
     case messagesIngested = "messages_ingested"
     case skippedDuplicates = "skipped_duplicates"
+    case allPersisted = "all_persisted"
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    success = try c.decodeIfPresent(Bool.self, forKey: .success) ?? true
+    conversationsCreated = try c.decodeIfPresent(Int.self, forKey: .conversationsCreated) ?? 0
+    peopleUpserted = try c.decodeIfPresent(Int.self, forKey: .peopleUpserted) ?? 0
+    messagesIngested = try c.decodeIfPresent(Int.self, forKey: .messagesIngested) ?? 0
+    skippedDuplicates = try c.decodeIfPresent(Int.self, forKey: .skippedDuplicates) ?? 0
+    allPersisted = try c.decodeIfPresent(Bool.self, forKey: .allPersisted) ?? true
   }
 }
 

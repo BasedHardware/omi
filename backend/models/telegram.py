@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+from models.draft_common import validate_draft_images
 
 
 class TelegramMessage(BaseModel):
@@ -66,6 +68,11 @@ class TelegramDraftRequest(BaseModel):
     thread: List[TelegramDraftMessage] = []
     intent: Optional[str] = None  # optional steer, e.g. "politely decline"
     is_group: bool = False  # group thread → drafter attributes senders and may abstain
+
+    @model_validator(mode='after')
+    def _bound_inline_images(self):
+        validate_draft_images(self.thread)
+        return self
 
 
 class TelegramDraftResponse(BaseModel):

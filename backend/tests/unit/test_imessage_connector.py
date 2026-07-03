@@ -174,3 +174,65 @@ def test_ingest_dedup_windowing_and_people():
     # (Any legacy entries are preserved for back-compat but never appended to.)
     assert doc_state.get('processed_guids') == ['g_old']
     assert started  # background processing kicked off
+
+
+def test_ingest_partial_failure_does_not_advance_cursor():
+    """Durability contract: if a window fails to persist, its claims are released AND
+    last_rowid is NOT advanced (all_persisted=False), so the desktop resends the batch
+    instead of skipping the lost messages behind a 200."""
+    doc_state = {}
+
+    def fake_get_integration(uid, key):
+        return dict(doc_state)
+
+    def fake_set_integration(uid, key, data):
+        doc_state.clear()
+        doc_state.update(data)
+
+    def fake_get_or_create(uid, handle, name):
+        return {'id': f'p_{handle}', 'name': name or handle, 'handles': [handle]}
+
+    def fake_start_bg(coro, name=None):
+        coro.close()
+        return None
+
+    released = []
+
+    def fake_release(uid, key):
+        released.append(key)
+
+    req = IMessageIngestRequest(
+        threads=[
+            IMessageThread(
+                chat_guid='c1',
+                display_name='Alice',
+                messages=[_msg('g_new', 'brand new', False, 2, '+1')],
+            )
+        ],
+        language='en',
+        last_rowid=99,
+    )
+
+    with patch.object(ic, 'run_blocking', _fake_run_blocking), patch.object(
+        ic, 'start_background_task', fake_start_bg
+    ), patch.object(ic.users_db, 'get_integration', fake_get_integration), patch.object(
+        ic.users_db, 'set_integration', fake_set_integration
+    ), patch.object(
+        ic.users_db, 'get_or_create_person_by_handle', fake_get_or_create
+    ), patch.object(
+        ic.imessage_db, 'filter_claimed_keys', return_value=set()
+    ), patch.object(
+        ic.imessage_db, 'claim_message', return_value=True
+    ), patch.object(
+        ic.imessage_db, 'release_message', fake_release
+    ), patch.object(
+        # Force the durable write to fail so the window is not persisted.
+        ic.conversations_db,
+        'create_conversation_if_absent',
+        side_effect=RuntimeError('firestore unavailable'),
+    ):
+        resp = asyncio.run(ic.ingest_threads('uid', req))
+
+    assert resp.all_persisted is False  # explicit partial-failure signal to the desktop
+    assert 'last_rowid' not in doc_state  # cursor NOT advanced past the failed batch
+    assert released  # the failed window released its claims so the messages retry

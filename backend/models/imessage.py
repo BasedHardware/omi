@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+from models.draft_common import validate_draft_images
 
 
 class IMessageMessage(BaseModel):
@@ -32,6 +34,13 @@ class IMessageIngestResponse(BaseModel):
     people_upserted: int = 0
     messages_ingested: int = 0
     skipped_duplicates: int = 0
+    # Durability signal for the desktop cursor: True only when EVERY window persisted
+    # durably. On a partial failure the desktop must NOT advance its ROWID cursor past
+    # this batch — the failed messages released their ledger claims and would otherwise
+    # never be resent. The desktop retries the whole batch; the ledger dedups the
+    # windows that already landed. (The payload carries no per-message ROWID, so the
+    # safe unit of retry is the batch, not the individual message.)
+    all_persisted: bool = True
 
 
 class IMessageSettings(BaseModel):
@@ -67,6 +76,11 @@ class IMessageDraftRequest(BaseModel):
     thread: List[IMessageDraftMessage] = []
     intent: Optional[str] = None  # optional steer, e.g. "politely decline"
     is_group: bool = False  # group thread → drafter attributes senders and may abstain
+
+    @model_validator(mode='after')
+    def _bound_inline_images(self):
+        validate_draft_images(self.thread)
+        return self
 
 
 class IMessageDraftResponse(BaseModel):
