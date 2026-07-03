@@ -41,6 +41,14 @@ class FairUseUsagePctResponse(BaseModel):
     weekly: float
 
 
+class FairUseDailyGenerationsBudgetResponse(BaseModel):
+    daily_limit_ms: int
+    used_ms: int
+    remaining_ms: int
+    exhausted: bool
+    resets_at: Optional[str] = None
+
+
 class FairUseStatusResponse(BaseModel):
     stage: str
     case_ref: str
@@ -49,7 +57,7 @@ class FairUseStatusResponse(BaseModel):
     speech_hours_weekly: float
     limits: FairUseLimitsResponse
     usage_pct: FairUseUsagePctResponse
-    dg_budget: Dict[str, Any] = Field(default_factory=dict)
+    dg_budget: FairUseDailyGenerationsBudgetResponse = Field(default_factory=FairUseDailyGenerationsBudgetResponse)
     message: str
 
 

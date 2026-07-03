@@ -1236,6 +1236,14 @@ export interface ExternalIntegration {
 
 export type ExternalIntegrationConversationSource = "audio_transcript" | "message" | "other_text";
 
+export interface FairUseDailyGenerationsBudgetResponse {
+  daily_limit_ms: number;
+  exhausted: boolean;
+  remaining_ms: number;
+  resets_at?: string | null;
+  used_ms: number;
+}
+
 export interface FairUseLimitsResponse {
   daily_hours: number;
   three_day_hours: number;
@@ -1244,7 +1252,7 @@ export interface FairUseLimitsResponse {
 
 export interface FairUseStatusResponse {
   case_ref: string;
-  dg_budget?: Record<string, unknown>;
+  dg_budget?: FairUseDailyGenerationsBudgetResponse;
   limits: FairUseLimitsResponse;
   message: string;
   speech_hours_3day: number;
@@ -2901,6 +2909,7 @@ export interface OmiApiSchemas {
   "ExecuteToolResponse": ExecuteToolResponse;
   "ExternalIntegration": ExternalIntegration;
   "ExternalIntegrationConversationSource": ExternalIntegrationConversationSource;
+  "FairUseDailyGenerationsBudgetResponse": FairUseDailyGenerationsBudgetResponse;
   "FairUseLimitsResponse": FairUseLimitsResponse;
   "FairUseStatusResponse": FairUseStatusResponse;
   "FairUseUsagePctResponse": FairUseUsagePctResponse;

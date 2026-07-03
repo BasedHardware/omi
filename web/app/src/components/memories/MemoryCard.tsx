@@ -30,7 +30,9 @@ interface MemoryCardProps {
   onEnterSelectionMode?: (id: string) => void;
 }
 
-const categoryConfig: Record<MemoryCategory, { icon: React.ReactNode; label: string; color: string }> = {
+const categoryConfig: Partial<
+  Record<MemoryCategory, { icon: React.ReactNode; label: string; color: string }>
+> = {
   interesting: {
     icon: <Lightbulb className="w-4 h-4" />,
     label: 'Interesting',
@@ -46,6 +48,12 @@ const categoryConfig: Record<MemoryCategory, { icon: React.ReactNode; label: str
     label: 'System',
     color: 'text-text-quaternary',
   },
+};
+
+const DEFAULT_CATEGORY_CONFIG = {
+  icon: <FileText className="w-4 h-4" />,
+  label: 'Memory',
+  color: 'text-text-quaternary',
 };
 
 export const MemoryCard = memo(function MemoryCard({
@@ -70,7 +78,8 @@ export const MemoryCard = memo(function MemoryCard({
   // Check if content needs truncation (roughly 2 lines worth at ~120 chars/line)
   const needsTruncation = memory.content.length > 200;
 
-  const categoryInfo = categoryConfig[memory.category];
+  const categoryInfo =
+    (memory.category && categoryConfig[memory.category]) || DEFAULT_CATEGORY_CONFIG;
   const needsReview = !memory.reviewed && memory.user_review === null;
 
   useEffect(() => {
@@ -149,7 +158,7 @@ export const MemoryCard = memo(function MemoryCard({
         'hover:bg-white/[0.05] hover:border-purple-primary/30',
         needsReview && 'border-l-4 border-l-warning',
         isHighlighted && 'ring-2 ring-purple-primary bg-purple-primary/10 animate-pulse',
-        isSelected && 'bg-purple-primary/5 border-purple-primary/50'
+        isSelected && 'bg-purple-primary/5 border-purple-primary/50',
       )}
     >
       {/* Content */}
@@ -167,7 +176,7 @@ export const MemoryCard = memo(function MemoryCard({
               'flex items-center justify-center',
               isSelected
                 ? 'bg-purple-primary border-purple-primary'
-                : 'border-text-quaternary hover:border-purple-primary'
+                : 'border-text-quaternary hover:border-purple-primary',
             )}
             aria-label={isSelected ? 'Deselect memory' : 'Select memory'}
           >
@@ -216,7 +225,7 @@ export const MemoryCard = memo(function MemoryCard({
                 'w-full text-sm bg-bg-secondary border border-purple-primary/50',
                 'rounded px-2 py-1.5 resize-none overflow-hidden',
                 'text-text-primary outline-none leading-relaxed',
-                'focus:ring-1 focus:ring-purple-primary/30'
+                'focus:ring-1 focus:ring-purple-primary/30',
               )}
               placeholder="Enter memory content..."
               rows={1}
@@ -230,7 +239,7 @@ export const MemoryCard = memo(function MemoryCard({
                   'text-sm text-text-primary leading-relaxed',
                   'cursor-text select-none',
                   'hover:bg-bg-quaternary/30 rounded px-1 -mx-1 transition-colors',
-                  !isExpanded && needsTruncation && 'line-clamp-2'
+                  !isExpanded && needsTruncation && 'line-clamp-2',
                 )}
               >
                 {memory.content}
@@ -255,8 +264,9 @@ export const MemoryCard = memo(function MemoryCard({
                   <span
                     className={cn(
                       'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs',
-                      memory.category === 'interesting' && 'bg-purple-primary/10 text-purple-primary',
-                      memory.category === 'manual' && 'bg-blue-400/10 text-blue-400'
+                      memory.category === 'interesting' &&
+                        'bg-purple-primary/10 text-purple-primary',
+                      memory.category === 'manual' && 'bg-blue-400/10 text-blue-400',
                     )}
                   >
                     {categoryInfo.label}
@@ -296,7 +306,7 @@ export const MemoryCard = memo(function MemoryCard({
                     onClick={handleToggleVisibility}
                     className={cn(
                       'p-0.5 rounded transition-colors cursor-pointer',
-                      'text-text-quaternary hover:text-text-tertiary'
+                      'text-text-quaternary hover:text-text-tertiary',
                     )}
                     title="Private memory (click to make public)"
                   >
@@ -330,7 +340,7 @@ export const MemoryCard = memo(function MemoryCard({
                     className={cn(
                       'p-2 rounded-lg',
                       'text-error hover:bg-error/10',
-                      'transition-colors'
+                      'transition-colors',
                     )}
                     title="Reject memory"
                   >
@@ -341,7 +351,7 @@ export const MemoryCard = memo(function MemoryCard({
                     className={cn(
                       'p-2 rounded-lg',
                       'text-success hover:bg-success/10',
-                      'transition-colors'
+                      'transition-colors',
                     )}
                     title="Accept memory"
                   >
@@ -356,7 +366,7 @@ export const MemoryCard = memo(function MemoryCard({
                     className={cn(
                       'p-2 rounded-lg',
                       'text-text-tertiary hover:text-text-primary',
-                      'hover:bg-bg-tertiary transition-colors'
+                      'hover:bg-bg-tertiary transition-colors',
                     )}
                     title="Edit memory"
                   >
@@ -369,7 +379,7 @@ export const MemoryCard = memo(function MemoryCard({
                       'p-2 rounded-lg',
                       'text-text-tertiary hover:text-error',
                       'hover:bg-error/10 transition-colors',
-                      isDeleting && 'opacity-50 cursor-not-allowed'
+                      isDeleting && 'opacity-50 cursor-not-allowed',
                     )}
                     title="Delete memory"
                   >
