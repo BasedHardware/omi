@@ -184,11 +184,15 @@ async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> s
 
 
 # Scope-specific dependencies
-async def get_auth_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
+def _require_conversations_read_scope(auth: ApiKeyAuth):
     if not has_scope(auth.scopes, Scopes.CONVERSATIONS_READ):
         raise HTTPException(
             status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.CONVERSATIONS_READ}"
         )
+
+
+async def get_auth_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
+    _require_conversations_read_scope(auth)
     check_api_key_rate_limit(
         prefix="dev",
         uid=auth.uid,
@@ -197,6 +201,29 @@ async def get_auth_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_ke
         policy_name="dev:conversations_read",
     )
     return auth
+
+
+async def get_auth_with_conversation_detail_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
+    _require_conversations_read_scope(auth)
+    check_api_key_rate_limit(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:conversation_detail_read",
+    )
+    return auth
+
+
+def check_conversation_transcript_read_limit(auth: ApiKeyAuth):
+    _require_conversations_read_scope(auth)
+    check_api_key_rate_limit(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:conversation_transcript_read",
+    )
 
 
 async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
