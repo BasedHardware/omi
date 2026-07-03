@@ -87,6 +87,17 @@ describe('memorySource', () => {
       )
     ).toBe('manual')
   })
+  it('classifies from the active evidence, skipping a tombstoned first record', () => {
+    // A tombstoned evidence[0] must not drive the card's source: the active
+    // record classifies, matching what provenanceChain shows in the detail.
+    const m = mem('1', {
+      evidence: [
+        ev({ source_type: 'chat_exchange', source_signal: 'direct_user', redaction_status: 'tombstoned' }),
+        ev({ evidence_id: 'e2', source_type: 'conversation', source_signal: 'transcription' })
+      ]
+    })
+    expect(memorySource(m)).toBe('conversation')
+  })
 })
 
 describe('withinDateRange', () => {
@@ -240,6 +251,19 @@ describe('provenanceChain', () => {
       evidence: [ev(), ev({ evidence_id: 'e2', redaction_status: 'tombstoned' })]
     })
     expect(provenanceChain(m).some((s) => s.kind === 'corroboration')).toBe(false)
+  })
+  it('picks the chronologically latest corroboration timestamp, not the lexicographically last', () => {
+    // created_at values can carry timezone offsets, so a raw string sort can
+    // pick an earlier instant. Sort by parsed time so the true latest wins:
+    // 08:00Z is later than 09:00+05:00 (04:00Z) yet sorts earlier as a string.
+    const m = mem('1', {
+      evidence: [
+        ev({ created_at: '2026-07-01T08:00:00Z' }),
+        ev({ evidence_id: 'e2', created_at: '2026-07-01T09:00:00+05:00' })
+      ]
+    })
+    const step = provenanceChain(m).find((s) => s.kind === 'corroboration')
+    expect(step?.at).toBe('2026-07-01T08:00:00Z')
   })
 })
 

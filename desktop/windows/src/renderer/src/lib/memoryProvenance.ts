@@ -52,7 +52,7 @@ export function memorySource(m: Memory): MemorySourceKind {
   if (tags.some((t) => t.startsWith(GMAIL_TAG_PREFIX))) return 'gmail'
   if (tags.some((t) => t.startsWith(STICKY_TAG_PREFIX))) return 'sticky-notes'
   if (m.manually_added || m.category === 'manual') return 'manual'
-  const ev = m.evidence?.[0]
+  const ev = activeEvidence(m)[0]
   if (ev) {
     if (ev.source_signal === 'manual') return 'manual'
     if (ev.source_type === 'chat_exchange' || ev.source_signal === 'direct_user') return 'chat'
@@ -271,7 +271,8 @@ export function provenanceChain(m: Memory): ChainStep[] {
     const times = evidence
       .map((e) => e.created_at)
       .filter((t): t is string => !!t)
-      .sort()
+      .filter((t) => Number.isFinite(new Date(t).getTime()))
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     steps.push({
       kind: 'corroboration',
       title: `Confirmed ${evidence.length - 1} more time${evidence.length > 2 ? 's' : ''}`,
