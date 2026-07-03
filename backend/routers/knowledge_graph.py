@@ -88,7 +88,7 @@ def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
-    user_name = cast(str, get_user_name(uid) or "")
+    user_name = get_user_name(uid) or ""
 
     kg_db.delete_knowledge_graph(uid)
 
