@@ -113,12 +113,12 @@ enum WhatsAppSenderService {
   // Post-send DB proof.
   private static let confirmPollNanos: UInt64 = 400_000_000  // 0.4s
   private static let confirmMaxPolls = 20  // ~8.0s for WhatsApp to persist the outbound row
-  /// The `AXTextArea` for WhatsApp's compose box carries this in its `AXDescription`
-  /// (verified live 2026-07-03: the real value is "Compose message" with a leading LTR
-  /// mark, so match this substring rather than the whole string). Using the full phrase
-  /// — not just "Compose" — avoids matching some other text area if WhatsApp's hierarchy
-  /// ever exposes one.
-  private static let composeDescriptionMarker = "Compose message"
+  /// WhatsApp's compose box is the (single) `AXTextArea` in the chat view; when a chat is
+  /// open its `AXDescription` is "Compose message" (English). We identify it by role, not
+  /// that label, so the recipient guard also works on a localized WhatsApp. The English
+  /// description is only used as a tie-breaker if more than one `AXTextArea` is ever
+  /// present.
+  private static let composeDescriptionMarker = "Compose"
 
   private enum ReturnPress {
     case ok
@@ -327,23 +327,36 @@ enum WhatsAppSenderService {
       == reply.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  /// Reads WhatsApp's compose box value: the `AXTextArea` whose `AXDescription` contains
-  /// "Compose message". Returns nil when the element can't be found (no chat open); an
-  /// empty box reads back as nil or an empty string depending on WhatsApp — either way it
-  /// won't match a non-empty reply, so the recipient guard keeps polling.
+  /// Reads WhatsApp's compose box value: the `AXTextArea` in the open chat, identified by
+  /// role so it works regardless of WhatsApp's UI language. Returns nil when no text area
+  /// is found (no chat open); an empty box reads back as nil or an empty string depending
+  /// on WhatsApp — either way it won't match a non-empty reply, so the recipient guard
+  /// keeps polling. If more than one text area is ever present, the one whose English
+  /// `AXDescription` marks it as the composer is preferred; otherwise the first found.
   private static func composeBoxValue(pid: pid_t) -> String? {
-    findComposeValue(AXUIElementCreateApplication(pid), depth: 0)
+    var fallback: AXUIElement?
+    guard let element = findComposeElement(AXUIElementCreateApplication(pid), depth: 0, fallback: &fallback)
+    else {
+      return fallback.flatMap { axString($0, kAXValueAttribute) }
+    }
+    return axString(element, kAXValueAttribute)
   }
 
-  private static func findComposeValue(_ element: AXUIElement, depth: Int) -> String? {
+  /// DFS for the compose `AXTextArea`. Returns the one whose description marks it as the
+  /// composer (English fast path); otherwise records the first text area seen in
+  /// `fallback` so the caller can use it on a localized build.
+  private static func findComposeElement(
+    _ element: AXUIElement, depth: Int, fallback: inout AXUIElement?
+  ) -> AXUIElement? {
     if depth > 40 { return nil }
-    if axString(element, kAXRoleAttribute) == "AXTextArea",
-      let desc = axString(element, kAXDescriptionAttribute), desc.contains(composeDescriptionMarker)
-    {
-      return axString(element, kAXValueAttribute)
+    if axString(element, kAXRoleAttribute) == "AXTextArea" {
+      if let desc = axString(element, kAXDescriptionAttribute), desc.contains(composeDescriptionMarker) {
+        return element
+      }
+      if fallback == nil { fallback = element }
     }
     for child in axChildren(element) {
-      if let value = findComposeValue(child, depth: depth + 1) { return value }
+      if let found = findComposeElement(child, depth: depth + 1, fallback: &fallback) { return found }
     }
     return nil
   }
