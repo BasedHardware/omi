@@ -362,6 +362,7 @@ check_backend_typecheck_if_needed() {
     'backend/database/screen_activity.py' \
     'backend/database/wrapped.py' \
     'backend/database/phone_call_usage.py' \
+    'backend/database/dev_api_key.py' \
     'backend/database/auth.py' \
     'backend/database/cache_manager.py' \
     'backend/database/memory_vector_repair_outbox.py' \
