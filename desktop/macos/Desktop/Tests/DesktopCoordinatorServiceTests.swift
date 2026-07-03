@@ -197,10 +197,13 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   func testMainChatPersistsRuntimeSessionContinuity() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
 
+    XCTAssertTrue(source.contains("let resolvedMainChatRuntimeChatId = systemPromptStyle == .main && !isOnboarding"))
+    XCTAssertTrue(source.contains("AgentSurfaceReference.mainChat(chatId: $0)"))
     XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.sessionId("))
     XCTAssertTrue(source.contains("?? persistedMainChatSessionId"))
     XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.save("))
-    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.clear(ownerId: runtimeOwnerId"))
+    XCTAssertTrue(source.contains("if let ownerId = runtimeOwnerId"))
+    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.clear("))
     XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.clearAll()"))
     XCTAssertTrue(source.contains("if !isOnboarding,"))
   }
@@ -216,7 +219,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("surfaceKind: \"main_chat\""))
     XCTAssertTrue(source.contains("routeIntentJSONWithFailOpenTimeout("))
     XCTAssertTrue(source.contains("Task.sleep(nanoseconds: 750_000_000)"))
-    XCTAssertTrue(source.contains("# Desktop Coordinator Route Context"))
+    XCTAssertTrue(source.contains("[Desktop Coordinator Route Context]"))
     XCTAssertTrue(source.contains("# Desktop Completed Agent Delta"))
     XCTAssertTrue(source.contains("let queryResult = try await agentBridge.query("))
     XCTAssertFalse(source.contains("appendCoordinatorProjectionMessage("))
@@ -321,7 +324,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(managerSource.contains("Started background agent"))
     XCTAssertTrue(managerSource.contains("logLabel: \"voice_agent_handoff\""))
     XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceAgentHandoff("))
-    XCTAssertTrue(hubSource.contains("agentBrief: brief"))
+    XCTAssertTrue(hubSource.contains("pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)"))
+    XCTAssertTrue(hubSource.contains("agentBrief: handoff.brief"))
     XCTAssertTrue(hubSource.contains("turnRecorded = true"))
   }
 

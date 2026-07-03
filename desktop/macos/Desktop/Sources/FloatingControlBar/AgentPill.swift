@@ -768,15 +768,23 @@ final class AgentPillsManager: ObservableObject {
         pill.status = .running
         pill.completedAt = nil
         pill.suggestedFollowUps = []
-        pill.latestActivity = "Working on your follow-up…"
+        pill.latestActivity = "Interrupting current run…"
         pill.conversationMessages.append(ChatMessage(text: text, sender: .user))
         pill.markContentChanged()
         let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
+        let activeRunId = pill.canonicalRunId
         runTasksByPill[pill.id]?.cancel()
         let runTask = Task { @MainActor [weak self, weak pill] in
             guard let self, let pill else { return }
             guard !Task.isCancelled else { return }
             do {
+                if let activeRunId, !activeRunId.isEmpty, !pill.status.isFinished {
+                    await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill)
+                    guard !Task.isCancelled else { return }
+                    guard self.pills.contains(where: { $0.id == pill.id }) else { return }
+                }
+                pill.latestActivity = "Working on your follow-up…"
+                pill.markContentChanged()
                 let result = try await DesktopCoordinatorService.shared.continueAgent(
                     sessionId: sessionId,
                     prompt: text,
@@ -792,6 +800,25 @@ final class AgentPillsManager: ObservableObject {
             }
         }
         runTasksByPill[pill.id] = runTask
+    }
+
+    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async {
+        _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
+        for _ in 0..<20 {
+            if Task.isCancelled { return }
+            do {
+                let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
+                let status = inspection.status
+                if ["succeeded", "completed", "failed", "timed_out", "orphaned", "cancelled"].contains(status) {
+                    return
+                }
+                pill.latestActivity = status == "cancelling" ? "Stopping current run…" : "Waiting for current run to stop…"
+                pill.markContentChanged()
+            } catch {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
     }
 
     /// Force-dismiss a pill.

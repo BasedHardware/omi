@@ -3849,16 +3849,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 tracer.begin("ttft")
             }
 
+            let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
+            let resolvedMainChatRuntimeChatId = systemPromptStyle == .main && !isOnboarding
+                ? mainChatRuntimeChatId(sessionId: sessionId)
+                : nil
             let resolvedSurface =
                 surfaceRef
-                ?? (systemPromptStyle == .main && !isOnboarding ? AgentSurfaceReference.mainChat(chatId: sessionId) : nil)
-            let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
+                ?? resolvedMainChatRuntimeChatId.map { AgentSurfaceReference.mainChat(chatId: $0) }
             let persistedMainChatSessionId =
                 resolvedSurface?.surfaceKind == "main_chat"
                 ? (runtimeOwnerId.flatMap {
                     MainChatRuntimeSessionStore.sessionId(
                         ownerId: $0,
-                        chatId: mainChatRuntimeChatId(sessionId: sessionId)
+                        chatId: resolvedMainChatRuntimeChatId ?? MainChatRuntimeSessionStore.defaultChatId
                     )
                 })
                 : nil
@@ -4066,7 +4069,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 MainChatRuntimeSessionStore.save(
                     sessionId: queryResult.omiSessionId,
                     ownerId: ownerId,
-                    chatId: mainChatRuntimeChatId(sessionId: sessionId)
+                    chatId: resolvedMainChatRuntimeChatId ?? MainChatRuntimeSessionStore.defaultChatId
                 )
             }
 
