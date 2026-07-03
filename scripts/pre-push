@@ -367,6 +367,7 @@ check_backend_typecheck_if_needed() {
     'backend/database/redis_pubsub.py' \
     'backend/database/sync_jobs.py' \
     'backend/database/memory_vector_metadata.py' \
+    'backend/database/helpers.py' \
     'backend/database/auth.py' \
     'backend/database/cache_manager.py' \
     'backend/database/memory_vector_repair_outbox.py' \
