@@ -349,6 +349,11 @@ check_backend_typecheck_if_needed() {
     'backend/database/import_jobs.py' \
     'backend/database/daily_summaries.py' \
     'backend/database/x_posts.py' \
+    'backend/database/announcements.py' \
+    'backend/database/calendar_meetings.py' \
+    'backend/database/notifications.py' \
+    'backend/database/phone_call_config.py' \
+    'backend/database/phone_calls.py' \
     'backend/database/auth.py' \
     'backend/database/cache_manager.py' \
     'backend/database/memory_vector_repair_outbox.py' \
