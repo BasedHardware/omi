@@ -143,6 +143,7 @@ pub fn App() -> Element {
 
     let ptt_active = use_signal(|| false);
     let agent_query_pending = use_signal(|| false);
+    let notification_history: Signal<Vec<crate::notification_history::NotificationEntry>> = use_signal(Vec::new);
 
     // Provide all as global context
     use_context_provider(|| config);
@@ -160,6 +161,7 @@ pub fn App() -> Element {
     use_context_provider(|| continuous_voice_mode);
     use_context_provider(|| ptt_active);
     use_context_provider(|| voice_history);
+    use_context_provider(|| notification_history);
 
     // ── Hotkey + tray listeners (use_hook = called once on mount) ───────────────
     {
