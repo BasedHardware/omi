@@ -3132,8 +3132,10 @@ class FloatingControlBarManager {
            !history.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             sections.append(history)
         }
-        let floatingStatus = AgentPillsManager.shared.statusSummary()
-        if !floatingStatus.contains("No floating agent pills") {
+        // Use a stable signal (pills.isEmpty) rather than parsing a
+        // human-readable English substring from statusSummary().
+        if !AgentPillsManager.shared.pills.isEmpty {
+            let floatingStatus = AgentPillsManager.shared.statusSummary()
             sections.append("""
             Recent floating background agents:
             \(floatingStatus)

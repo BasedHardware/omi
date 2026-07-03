@@ -1361,12 +1361,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         cachedFloatingPillSystemPrompt = ""
     }
 
-    private var runtimeOwnerId: String {
-        AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+    private var runtimeOwnerId: String? {
+        AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId")
     }
 
     private func mainChatRuntimeChatId(sessionId: String?) -> String {
         guard let sessionId, !sessionId.isEmpty else {
+            // Default chat state is app-scoped on the backend, so namespace
+            // the runtime session store key by appId to avoid cross-app
+            // context leakage.
+            if let appId = selectedAppId, !appId.isEmpty {
+                return "\(MainChatRuntimeSessionStore.defaultChatId)|\(appId)"
+            }
             return MainChatRuntimeSessionStore.defaultChatId
         }
         return sessionId
@@ -1736,7 +1742,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         deletingSessionIds.insert(session.id)
         do {
             try await APIClient.shared.deleteChatSession(sessionId: session.id)
-            MainChatRuntimeSessionStore.clear(ownerId: runtimeOwnerId, chatId: session.id)
+            if let ownerId = runtimeOwnerId {
+                MainChatRuntimeSessionStore.clear(ownerId: ownerId, chatId: session.id)
+            }
             deletingSessionIds.remove(session.id)
             sessions.removeAll { $0.id == session.id }
 
@@ -2346,7 +2354,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 .replacingOccurrences(of: "\u{0000}", with: "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !sanitized.isEmpty else { continue }
-            let line = "\(role): \(String(sanitized.prefix(remaining)))"
+            let prefix = "\(role): "
+            // Budget the role prefix so the full line respects the cap.
+            let contentBudget = max(0, remaining - prefix.count)
+            let line = "\(prefix)\(String(sanitized.prefix(contentBudget)))"
             lines.append(line)
             remaining -= line.count + 1
         }
@@ -2390,7 +2401,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         ])
 
         let input: [String: Any] = [
-            "ownerId": AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown",
+            "ownerId": runtimeOwnerId ?? "unknown",
             "surfaceKind": "main_chat",
             "objective": userMessage,
             "retentionClass": "ephemeral",
@@ -3635,14 +3646,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if let suffix = systemPromptSuffix, !suffix.isEmpty {
                 systemPrompt += "\n\n" + suffix
             }
-            if let coordinatorRouteContext {
-                systemPrompt += """
-
-                # Desktop Coordinator Route Context
-
-                \(coordinatorRouteContext)
-                """
-            }
+            // Note: coordinatorRouteContext is intentionally NOT appended to
+            // the system prompt. It contains a per-turn UUID and is recomputed
+            // on every message; appending it would change systemPromptHash each
+            // turn, forcing a new native adapter binding and losing conversation
+            // history. It is passed via the user prompt instead (see below).
             if let coordinatorCompletionDeltaContext {
                 systemPrompt += """
 
@@ -3847,10 +3855,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
             let persistedMainChatSessionId =
                 resolvedSurface?.surfaceKind == "main_chat"
-                ? MainChatRuntimeSessionStore.sessionId(
-                    ownerId: runtimeOwnerId,
-                    chatId: mainChatRuntimeChatId(sessionId: sessionId)
-                )
+                ? (runtimeOwnerId.flatMap {
+                    MainChatRuntimeSessionStore.sessionId(
+                        ownerId: $0,
+                        chatId: mainChatRuntimeChatId(sessionId: sessionId)
+                    )
+                })
                 : nil
             let resolvedOmiSessionId =
                 omiSessionId
@@ -3861,12 +3871,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let resolvedLegacyClientScope =
                 legacyClientScope
                 ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(resolvedSessionKey)" : nil)
-            let promptForBridge = await buildMainChatContextPacketPrompt(
+            let basePromptForBridge = await buildMainChatContextPacketPrompt(
                 for: trimmedText,
                 bridge: agentBridge,
                 surface: resolvedSurface,
                 sessionKey: resolvedSessionKey
             ) ?? trimmedText
+            // Prepend the per-turn coordinator route context to the user prompt
+            // so the system prompt hash stays stable across turns.
+            let promptForBridge = coordinatorRouteContext.map { ctx in
+                "[Desktop Coordinator Route Context]\n\(ctx)\n\n\(basePromptForBridge)"
+            } ?? basePromptForBridge
 
             let queryResult = try await agentBridge.query(
                 prompt: promptForBridge,
@@ -4046,10 +4061,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             if !isOnboarding,
                resolvedSurface?.surfaceKind == "main_chat",
-               !queryResult.omiSessionId.isEmpty {
+               !queryResult.omiSessionId.isEmpty,
+               let ownerId = runtimeOwnerId {
                 MainChatRuntimeSessionStore.save(
                     sessionId: queryResult.omiSessionId,
-                    ownerId: runtimeOwnerId,
+                    ownerId: ownerId,
                     chatId: mainChatRuntimeChatId(sessionId: sessionId)
                 )
             }
@@ -4611,10 +4627,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Default chat mode: clear UI immediately, delete in background
             messages = []
             resetMessagesPagination()
-            MainChatRuntimeSessionStore.clear(
-                ownerId: runtimeOwnerId,
-                chatId: MainChatRuntimeSessionStore.defaultChatId
-            )
+            if let ownerId = runtimeOwnerId {
+                MainChatRuntimeSessionStore.clear(
+                    ownerId: ownerId,
+                    chatId: mainChatRuntimeChatId(sessionId: nil)
+                )
+            }
             log("Cleared default chat messages")
             Task {
                 do {
@@ -4626,8 +4644,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         } else {
             // Session mode: clear UI immediately, delete old session in background, create new
             let sessionToDelete = currentSession
-            if let session = sessionToDelete {
-                MainChatRuntimeSessionStore.clear(ownerId: runtimeOwnerId, chatId: session.id)
+            if let session = sessionToDelete, let ownerId = runtimeOwnerId {
+                MainChatRuntimeSessionStore.clear(ownerId: ownerId, chatId: session.id)
             }
 
             // Immediately clear UI state

@@ -389,7 +389,7 @@ final class DesktopCoordinatorService {
 
     for session in snapshot.sessions {
       let status = session.runStatus ?? session.status
-      let id = session.runId ?? session.sessionId ?? UUID().uuidString
+      let id = session.runId ?? session.sessionId ?? "\(session.title)_\(session.status)"
       if status == "waiting_approval" {
         items.append(queueItem(id: id, rank: 1, kind: "approval", session: session, status: status))
       } else if ["failed", "orphaned", "timed_out"].contains(status) {
@@ -476,7 +476,11 @@ final class DesktopCoordinatorService {
       guard isTerminal(status) else { return nil }
       let runId = stringValue(latestRun["runId"])
       let sessionId = stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"])
-      let id = runId ?? sessionId
+      let completedAtMs = intValue(latestRun["completedAtMs"])
+      // When runId is absent, include completedAtMs so that each distinct
+      // terminal run completion carries a unique id even if the same session
+      // produces multiple completions over time.
+      let id = runId ?? (sessionId.map { "\($0)_\(completedAtMs ?? 0)" })
       guard let id else { return nil }
 
       let surfaceKind = stringValue(session["surfaceKind"])
@@ -501,7 +505,7 @@ final class DesktopCoordinatorService {
         status: status,
         sessionId: sessionId,
         runId: runId,
-        completedAtMs: intValue(latestRun["completedAtMs"]),
+        completedAtMs: completedAtMs,
         finalText: sanitizePromptLine(finalText, maxLength: 1_200)
       )
     }

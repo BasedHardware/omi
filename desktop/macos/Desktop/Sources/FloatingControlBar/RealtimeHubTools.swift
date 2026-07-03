@@ -117,7 +117,12 @@ enum RealtimeHubTools {
   }
 
   static func systemInstruction(aboutUser: String, topLevelConversationContext: String = "") -> String {
-    let continuityContext = topLevelConversationContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    let rawContext = topLevelConversationContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Escape angle brackets so user-controlled transcript text cannot break
+    // out of the XML-like wrapper and inject instructions.
+    let continuityContext = rawContext
+      .replacingOccurrences(of: "<", with: "&lt;")
+      .replacingOccurrences(of: ">", with: "&gt;")
     let continuityBlock = continuityContext.isEmpty
       ? ""
       : """

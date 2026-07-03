@@ -146,6 +146,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// Guards against recording the same turn to chat history twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
+  /// Pending voice→agent handoff recorded during a tool call but persisted only
+  /// after the final transcript arrives in hubDidFinishTurn, so the user text is
+  /// complete (not a partial interim ASR result).
+  private var pendingVoiceAgentHandoff: (title: String, brief: String)?
   /// Provider turn-complete events can arrive after a tool-call-only response and
   /// before our async tool body has returned. Keep the voice turn open until every
   /// requested tool has been answered; otherwise the bar collapses after "I'll check"
@@ -591,6 +595,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     audioReceivedThisTurn = false
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
+    pendingVoiceAgentHandoff = nil
     pendingCompletedAgentDeltaAckIds.removeAll()
     clearRealtimeToolTracking()
     lastTurnAt = Date()
@@ -691,6 +696,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     realtimePlaybackEpoch += 1
     turnTranscript = ""
     assistantText = ""
+    pendingVoiceAgentHandoff = nil
     pendingCompletedAgentDeltaAckIds.removeAll()
     clearRealtimeToolTracking()
     clearBargeInReplacementState()
@@ -1133,11 +1139,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         barState?.isVoiceResponseActive = true
         speak(ack)
       }
-      FloatingControlBarManager.shared.recordVoiceAgentHandoff(
-        userText: turnTranscript,
-        agentTitle: pill.title,
-        agentBrief: brief)
-      turnRecorded = true
+      // Defer the handoff recording to hubDidFinishTurn so the final transcript
+      // (complete ASR) is used rather than a potentially partial interim result.
+      pendingVoiceAgentHandoff = (title: pill.title, brief: brief)
       suppressAssistantOutputForCurrentTurn = true
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
@@ -1183,7 +1187,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // fire-and-forget so it never stalls the warm socket or the next PTT press.
     if !turnRecorded {
       turnRecorded = true
-      FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
+      if let handoff = pendingVoiceAgentHandoff {
+        pendingVoiceAgentHandoff = nil
+        FloatingControlBarManager.shared.recordVoiceAgentHandoff(
+          userText: heard,
+          agentTitle: handoff.title,
+          agentBrief: handoff.brief)
+      } else {
+        FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
+      }
     }
     if !pendingCompletedAgentDeltaAckIds.isEmpty {
       DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(

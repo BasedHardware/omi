@@ -334,6 +334,7 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runDesktopCandidatesMigration(db, Date.now());
     runDesktopContextAccessLogMigration(db, Date.now());
     runDesktopAttentionOverridesMigration(db, Date.now());
+    runActiveAttemptAuthorityMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -895,6 +896,14 @@ export class SqliteAgentStore implements AgentStore {
       attemptId: input.sourceAttemptId ?? null,
       artifactId: input.sourceArtifactId ?? null,
     });
+    const createdAtMs = input.createdAtMs ?? this.nowMs();
+    if (
+      typeof input.expiresAtMs === "number" &&
+      Number.isFinite(input.expiresAtMs) &&
+      input.expiresAtMs <= createdAtMs
+    ) {
+      throw new Error("Desktop dispatch expiresAtMs must be a future timestamp");
+    }
     const dispatch: DesktopCoordinatorDispatch = {
       dispatchId: input.dispatchId ?? generateAgentId("dispatch"),
       ownerId: input.ownerId,
@@ -912,7 +921,7 @@ export class SqliteAgentStore implements AgentStore {
       operation: input.operation ?? null,
       resourceRef: input.resourceRef ?? null,
       payloadJson: input.payloadJson ?? "{}",
-      createdAtMs: input.createdAtMs ?? this.nowMs(),
+      createdAtMs,
       expiresAtMs: input.expiresAtMs ?? null,
       resolvedAtMs: input.resolvedAtMs ?? null,
       resolvedBy: input.resolvedBy ?? null,

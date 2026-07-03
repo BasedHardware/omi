@@ -2519,6 +2519,8 @@ export class AgentRuntimeKernel {
     return rows.map((row) => {
       const candidateTaskId = nullableString(row.external_ref_kind) === "task" ? nullableString(row.external_ref_id) : null;
       const runStatus = nullableString(row.run_status);
+      const runUpdatedAtMs = numberValue(row.run_updated_at_ms);
+      const staleAfterMs = 30 * 60 * 1000;
       const relevance =
         taskId && candidateTaskId === taskId
           ? 1
@@ -2531,7 +2533,7 @@ export class AgentRuntimeKernel {
         surfaceKind: stringValue(row.surface_kind),
         taskId: candidateTaskId,
         title: nullableString(row.title),
-        status: intentCandidateStatus(runStatus),
+        status: intentCandidateStatus(runStatus, runUpdatedAtMs, Date.now(), staleAfterMs),
         relevance,
         lastActivityAtMs: numberValue(row.last_activity_at_ms),
       };
@@ -2815,10 +2817,25 @@ function overrideToQueueInput(override: DesktopAttentionOverride): QueueOverride
   };
 }
 
-function intentCandidateStatus(status: string | null): DesktopIntentSessionCandidate["status"] {
+function intentCandidateStatus(
+  status: string | null,
+  runUpdatedAtMs?: number,
+  nowMs?: number,
+  staleAfterMs?: number,
+): DesktopIntentSessionCandidate["status"] {
   if (status === "failed" || status === "timed_out") return "failed";
   if (status === "orphaned") return "orphaned";
   if (status === "cancelled") return "closed";
+  // An active run that has not advanced within the stale threshold should be
+  // classified as stale so the router forks instead of resuming into a hung run.
+  if (
+    runUpdatedAtMs !== undefined &&
+    nowMs !== undefined &&
+    staleAfterMs !== undefined &&
+    ["queued", "starting", "running", "waiting_input", "waiting_approval"].includes(status ?? "")
+  ) {
+    if (nowMs - runUpdatedAtMs >= staleAfterMs) return "stale";
+  }
   return "healthy";
 }
 

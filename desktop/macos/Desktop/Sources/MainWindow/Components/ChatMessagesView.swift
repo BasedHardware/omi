@@ -232,10 +232,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             // --- New live messages arriving ---
             if scrollMode == .followingBottom {
                 scrollToBottom(proxy: proxy)
-            } else if scrollMode == .anchoringTurn {
-                // While anchored to the new turn, keep the prompt stable and
-                // surface that live activity is arriving below.
-                hasActivityBelow = true
             } else {
                 // freeScrolling — new content arrived below
                 hasActivityBelow = true
@@ -247,7 +243,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         switch scrollMode {
         case .followingBottom:
             throttledScrollToBottom(proxy: proxy)
-        case .freeScrolling, .anchoringTurn:
+        case .freeScrolling:
             hasActivityBelow = true
         }
     }
@@ -471,7 +467,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 // again; only atBottom == false is ambiguous (it can be a
                 // geometry/layout change, not user intent) and must NOT switch
                 // to .freeScrolling on its own.
-                if atBottom && (scrollMode == .freeScrolling || scrollMode == .anchoringTurn) {
+                if atBottom && scrollMode == .freeScrolling {
                     cancelAllPendingScrolls()
                     userIsScrolling = false
                     scrollMode = .followingBottom
@@ -479,14 +475,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 }
             }
             UserScrollDetector {
-                if scrollMode == .anchoringTurn {
-                    // If user scrolls during turn anchoring, cancel the anchor
-                    // and go to free-scrolling immediately.
-                    scrollMode = .freeScrolling
-                    cancelAllPendingScrolls()
-                } else {
-                    scrollMode = .freeScrolling
-                }
+                scrollMode = .freeScrolling
                 userIsScrolling = true
                 hasActivityBelow = false
                 cancelAllPendingScrolls()
@@ -501,10 +490,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     @ViewBuilder
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
-        // Show when: free-scrolled, OR anchoring turn (give user escape hatch),
-        // AND there are messages, AND either there's activity below or we're
-        // in a non-following mode.
-        if (scrollMode == .freeScrolling || scrollMode == .anchoringTurn) && !messages.isEmpty {
+        // Show when free-scrolled AND there are messages, AND either there's
+        // activity below or we're in a non-following mode.
+        if scrollMode == .freeScrolling && !messages.isEmpty {
             Button {
                 cancelAllPendingScrolls()
                 userIsScrolling = false

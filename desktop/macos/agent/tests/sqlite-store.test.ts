@@ -1143,8 +1143,8 @@ describe("SqliteAgentStore", () => {
       exec(sql: string): void {
         execStatements.push(sql);
       }
-      prepare(_sql: string): { run: (..._args: unknown[]) => void } {
-        return { run: () => {} };
+      prepare(_sql: string): { run: (..._args: unknown[]) => void; all: () => unknown[] } {
+        return { run: () => {}, all: () => [] };
       }
       close(): void {}
     }

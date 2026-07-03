@@ -172,7 +172,6 @@ struct UserScrollDetector: NSViewRepresentable {
 enum ChatScrollMode: Equatable {
   case followingBottom
   case freeScrolling
-  case anchoringTurn
 }
 
 /// First-class chat scroll container used by floating/notch transcripts.
