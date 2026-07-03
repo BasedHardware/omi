@@ -902,6 +902,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         case piMono = "piMono"
         case hermes = "hermes"
         case openClaw = "openclaw"
+        case codex = "codex"
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 

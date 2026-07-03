@@ -1388,11 +1388,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     switch providerName {
     case "openclaw": directedProvider = .openclaw
     case "hermes": directedProvider = .hermes
+    case "codex": directedProvider = .codex
     case "": directedProvider = nil
     default:
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
-        output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.",
+        output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.",
         expectedTurnEpoch: expectedTurnEpoch)
       return
     }
