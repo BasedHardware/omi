@@ -319,6 +319,8 @@ pub fn App() -> Element {
         let mut sug_sig = suggestions.clone();
         let mut rx = proactive_rx;
         let cfg_for_notif = config.clone();
+        let db_notif = db.clone();
+        let mut nh_sig = notification_history.clone();
         spawn(async move {
             loop {
                 match rx.recv().await {
@@ -327,6 +329,13 @@ pub fn App() -> Element {
                         let notif_cfg = cfg_for_notif.read().clone();
                         if notif_cfg.proactive_toast_notifications {
                             crate::notifications::send_suggestion(&s.text, s.priority);
+                        }
+                        // Record to notification history
+                        {
+                            let db_val = db_notif.read().clone();
+                            crate::notification_history::record_and_push(
+                                &db_val, nh_sig, "Omi Suggestion", &s.text, s.priority,
+                            );
                         }
 
                         let mut list = sug_sig.read().clone();
@@ -351,6 +360,16 @@ pub fn App() -> Element {
         });
 
     });
+
+    // Load notification history from DB
+    {
+        let mut nh = notification_history.clone();
+        let db_snap = db.clone();
+        use_effect(move || {
+            let db_val = db_snap.read().clone();
+            crate::notification_history::load_from_db(&db_val, nh);
+        });
+    }
 
     // Kick off the sidecar health poller once
     use_effect(move || {
