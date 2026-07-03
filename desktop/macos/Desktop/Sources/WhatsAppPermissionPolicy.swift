@@ -33,13 +33,18 @@ enum WhatsAppPermissionPolicy {
 
   /// Absolute file URL for a `ZMEDIALOCALPATH`, or nil when empty or when the path
   /// escapes the media directory. `ZMEDIALOCALPATH` comes straight from the WhatsApp
-  /// database; a tampered/corrupt row containing `../` segments must not be able to
-  /// resolve to a file outside `Message/` (this connector runs with Full Disk Access).
+  /// database; a tampered/corrupt row must not be able to resolve to a file outside
+  /// `Message/` (this connector runs with Full Disk Access).
   static func mediaFileURL(forLocalPath localPath: String?) -> URL? {
     guard let p = localPath?.trimmingCharacters(in: .whitespaces), !p.isEmpty else { return nil }
-    let base = messageMediaDirectoryURL.standardizedFileURL
-    let resolved = base.appendingPathComponent(p, isDirectory: false).standardizedFileURL
-    // Containment guard: the resolved path must stay within the media base directory.
+    // Resolve symlinks on disk, not just lexical `..`/`.` normalization: a tampered
+    // row could route through a symlink inside Message/ (e.g. `chat/link/secret`) whose
+    // lexical path still has the base prefix but whose real target is elsewhere.
+    // `standardizedFileURL` would not catch that; `resolvingSymlinksInPath` resolves
+    // the full chain (parents and final component) so the containment check sees the
+    // true target. Mirrors the pattern in DesktopAutomationBridge.
+    let base = messageMediaDirectoryURL.resolvingSymlinksInPath()
+    let resolved = base.appendingPathComponent(p, isDirectory: false).resolvingSymlinksInPath()
     let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
     guard resolved.path == base.path || resolved.path.hasPrefix(basePath) else { return nil }
     return resolved

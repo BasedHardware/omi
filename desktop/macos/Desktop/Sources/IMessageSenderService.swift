@@ -14,16 +14,35 @@ enum IMessageSenderError: LocalizedError {
   }
 }
 
+/// Thread-safe cancellation flag shared between the task-cancellation handler (which
+/// can fire on any thread) and the main-queue send block.
+private final class SendCancellationBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancelled = false
+  var isCancelled: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return cancelled
+  }
+  func cancel() {
+    lock.lock()
+    cancelled = true
+    lock.unlock()
+  }
+}
+
 /// Sends an approved reply through Messages.app via AppleScript.
 ///
 /// Targets the exact thread by its chat GUID (the durable path across macOS
 /// versions; `buddy` targeting is flaky). Only ever called after the user taps
-/// Send (or for opted-in auto-reply). The AppleScript is executed on a dedicated
-/// background queue via an async boundary so delivering the Apple event — which can
-/// block on TCC automation prompts or slow chat resolution — never freezes the UI.
+/// Send (or for opted-in auto-reply).
+///
+/// `NSAppleScript` is documented as main-thread-only and is not thread-safe, so the
+/// script is created and executed on the main queue. It runs there ASYNCHRONOUSLY
+/// (dispatched, not on the caller's actor synchronously) so the calling Task isn't
+/// blocked while the Apple event is delivered — the send no longer freezes the
+/// Replies inbox the way the previous synchronous `@MainActor` call did.
 enum IMessageSenderService {
-
-  private static let executionQueue = DispatchQueue(label: "com.omi.imessage.sender")
 
   static func send(text: String, toChatGUID chatGUID: String) async throws {
     let escapedText =
@@ -40,23 +59,37 @@ enum IMessageSenderService {
       end tell
       """
 
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      executionQueue.async {
-        guard let script = NSAppleScript(source: source) else {
-          continuation.resume(throwing: IMessageSenderError.scriptUnavailable)
-          return
-        }
-        var errorDict: NSDictionary?
-        script.executeAndReturnError(&errorDict)
-        if let errorDict {
-          let message =
-            (errorDict[NSAppleScript.errorMessage] as? String)
-            ?? "Messages couldn't send this reply. Open Messages and try manually."
-          continuation.resume(throwing: IMessageSenderError.sendFailed(message))
-        } else {
-          continuation.resume()
+    // Don't even enqueue if the task is already cancelled (e.g. auto-reply was
+    // toggled off while the draft was being generated).
+    try Task.checkCancellation()
+
+    let box = SendCancellationBox()
+    try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        DispatchQueue.main.async {
+          // Cancelled between enqueue and execution — don't send (sends are irreversible).
+          if box.isCancelled {
+            continuation.resume(throwing: CancellationError())
+            return
+          }
+          guard let script = NSAppleScript(source: source) else {
+            continuation.resume(throwing: IMessageSenderError.scriptUnavailable)
+            return
+          }
+          var errorDict: NSDictionary?
+          script.executeAndReturnError(&errorDict)
+          if let errorDict {
+            let message =
+              (errorDict[NSAppleScript.errorMessage] as? String)
+              ?? "Messages couldn't send this reply. Open Messages and try manually."
+            continuation.resume(throwing: IMessageSenderError.sendFailed(message))
+          } else {
+            continuation.resume()
+          }
         }
       }
+    } onCancel: {
+      box.cancel()
     }
   }
 }
