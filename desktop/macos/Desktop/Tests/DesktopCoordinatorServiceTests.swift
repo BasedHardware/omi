@@ -281,6 +281,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("desktopCoordinator.completedAgentDelta.highWaterMs"))
     XCTAssertTrue(source.contains("checkpointDefaults.set(nowMs, forKey: highWaterKey)"))
     XCTAssertTrue(source.contains("completedAtMs > highWaterMs"))
+    XCTAssertTrue(source.contains(".sorted { ($0.completedAtMs ?? 0) < ($1.completedAtMs ?? 0) }"))
     XCTAssertTrue(source.contains("completedAtHighWaterMs: items.compactMap(\\.completedAtMs).max()"))
     XCTAssertTrue(source.contains("checkpointCompletionDelta(surfaceKey: surface.key, ids: ids, completedAtHighWaterMs: completedAtHighWaterMs)"))
     XCTAssertTrue(source.contains("surfaceKind != \"main_chat\""))

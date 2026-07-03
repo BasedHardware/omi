@@ -360,6 +360,7 @@ final class DesktopCoordinatorService {
             && completedAtMs >= minCompletedAtMs
             && !seen.contains($0.id)
         }
+        .sorted { ($0.completedAtMs ?? 0) < ($1.completedAtMs ?? 0) }
         .prefix(limit)
         .map { $0 }
 

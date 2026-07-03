@@ -3035,7 +3035,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func stopAgent() {
         guard isSending else { return }
         isStopping = true
-        sendGeneration += 1
         let myGen = sendGeneration
         Task {
             await agentBridge.interrupt()
