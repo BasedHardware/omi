@@ -1,0 +1,3 @@
+{
+  "change": "Improved Gemini request timeout handling so stalled desktop AI requests fail faster with a retryable error"
+}
