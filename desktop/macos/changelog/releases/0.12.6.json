@@ -1,0 +1,12 @@
+{
+  "version": "0.12.6",
+  "date": "2026-07-03",
+  "changes": [
+    "Split desktop recording and reconciliation failures into dedicated PostHog events so phone mic reports no longer include desktop finalization errors",
+    "Fixed macOS notification permission registration after app updates",
+    "Voice assistant now knows which languages you speak — pick them in onboarding or Settings → Transcription, and push-to-talk identifies the language each turn instead of guessing (no more Russian questions transcribed as Italian)",
+    "Fixed Apple Sign-In for desktop beta builds.",
+    "Improved macOS updater failure diagnostics so nested Sparkle network errors are classified correctly.",
+    "Fixed Gemini realtime token minting and separated expected realtime idle closes from failure analytics."
+  ]
+}
