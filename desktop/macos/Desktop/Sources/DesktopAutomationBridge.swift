@@ -337,6 +337,7 @@ final class DesktopAutomationActionRegistry {
     didRegisterBuiltins = true
 
     AICloneHarness.register(on: self)
+    TelegramLoginHarness.register(on: self)
 
     register(
       name: "refresh_all_data",

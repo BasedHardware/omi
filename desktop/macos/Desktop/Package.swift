@@ -16,6 +16,10 @@ let package = Package(
     .package(
       url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
     .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.14.8"),
+    // Prebuilt TDLib (Telegram) client for macOS arm64. This tag bundles TDLib 1.8.65,
+    // recent enough to avoid Telegram's UPDATE_APP_TO_LOGIN rejection. Tags carry a
+    // -tdlib-<ver>-<sha> suffix (not plain semver), so pin the exact tag.
+    .package(url: "https://github.com/Swiftgram/TDLibKit", exact: "1.5.2-tdlib-1.8.65-a17f87c4"),
   ],
   targets: [
     .target(
@@ -45,6 +49,7 @@ let package = Package(
         .product(name: "MarkdownUI", package: "swift-markdown-ui"),
         .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
         .product(name: "FluidAudio", package: "FluidAudio"),
+        .product(name: "TDLibKit", package: "TDLibKit"),
       ],
       path: "Sources",
       resources: [

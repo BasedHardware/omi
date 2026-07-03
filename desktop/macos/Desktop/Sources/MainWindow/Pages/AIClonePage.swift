@@ -14,6 +14,11 @@ struct AIClonePage: View {
     case failed(String)
   }
 
+  /// Send-mode coordinator (per-contact mode, autonomous kill switch, drafts, sent log).
+  @ObservedObject private var sendMode = AICloneSendModeService.shared
+  /// Non-nil while the "Recent Sent Messages" sheet is open.
+  @State private var showSentLog = false
+
   @State private var state: LoadState = .loading
   @State private var contacts: [ImportedContact] = []
   @State private var selectedHandles: Set<String> = []
@@ -47,10 +52,16 @@ struct AIClonePage: View {
   private var hasWhatsAppContacts: Bool { contacts.contains { $0.platform == "whatsapp" } }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 24) {
+    VStack(alignment: .leading, spacing: 20) {
       header
 
+      autonomousBanner
+
       importControls
+
+      if !sendMode.pendingDrafts.isEmpty {
+        pendingDraftsSection
+      }
 
       content
     }
@@ -58,6 +69,10 @@ struct AIClonePage: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .background(OmiColors.backgroundPrimary)
     .task(id: reloadToken) { await load() }
+    .onDisappear { sendMode.stopListening() }
+    .sheet(isPresented: $showSentLog) {
+      AICloneSentLogSheet()
+    }
     .sheet(item: $chatTarget) { target in
       AIClonePreviewChatSheet(contact: target.contact, persona: target.persona)
     }
@@ -96,6 +111,98 @@ struct AIClonePage: View {
         .scaledFont(size: 15, weight: .regular)
         .foregroundColor(OmiColors.textSecondary)
     }
+  }
+
+  // MARK: - Autonomous kill switch banner
+
+  /// Always-visible global control for autonomous sending. Warning-colored (the one place
+  /// the AI Clone UI uses `OmiColors.warning` as an accent) because flipping it ACTIVE lets
+  /// the clone message real people on its own.
+  private var autonomousBanner: some View {
+    let active = !sendMode.isPaused
+    return HStack(spacing: 14) {
+      Image(systemName: active ? "bolt.fill" : "pause.circle.fill")
+        .font(.system(size: 18, weight: .semibold))
+        .foregroundColor(active ? OmiColors.warning : OmiColors.textSecondary)
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Autonomous Sending: \(active ? "ACTIVE" : "PAUSED")")
+          .scaledFont(size: 14, weight: .bold)
+          .foregroundColor(active ? OmiColors.warning : OmiColors.textPrimary)
+        Text(
+          active
+            ? "The clone can send replies to real people on its own. Turn this off to stop."
+            : "Autonomous replies are paused. Draft-Review and manual sending still work."
+        )
+        .scaledFont(size: 12, weight: .regular)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Spacer()
+
+      Button(action: { showSentLog = true }) {
+        HStack(spacing: 5) {
+          Image(systemName: "paperplane")
+            .font(.system(size: 11, weight: .semibold))
+          Text("Sent\(sendMode.sentLog.isEmpty ? "" : " (\(sendMode.sentLog.count))")")
+            .scaledFont(size: 12, weight: .semibold)
+        }
+        .foregroundColor(OmiColors.textSecondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+
+      Toggle(
+        "",
+        isOn: Binding(
+          get: { !sendMode.isPaused },
+          set: { sendMode.setPaused(!$0) }
+        )
+      )
+      .labelsHidden()
+      .toggleStyle(.switch)
+      .tint(OmiColors.warning)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
+    .background(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(active ? OmiColors.warning.opacity(0.12) : OmiColors.backgroundSecondary)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .stroke(active ? OmiColors.warning.opacity(0.5) : OmiColors.border, lineWidth: 1)
+    )
+  }
+
+  // MARK: - Pending drafts (Draft-Review approval queue)
+
+  private var pendingDraftsSection: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 6) {
+        Image(systemName: "tray.full")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundColor(OmiColors.textSecondary)
+        Text("Pending replies (\(sendMode.pendingDrafts.count))")
+          .scaledFont(size: 14, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+      }
+
+      VStack(spacing: 8) {
+        ForEach(sendMode.pendingDrafts) { draft in
+          AIClonePendingDraftRow(draft: draft)
+        }
+      }
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(OmiColors.backgroundSecondary)
+    )
   }
 
   // MARK: - Import controls (Telegram / WhatsApp)
@@ -229,6 +336,9 @@ struct AIClonePage: View {
               persona: personas[contact.id],
               errorMessage: trainingErrors[contact.id],
               backtest: backtestStates[contact.id],
+              sendMode: sendMode.mode(for: contact.id),
+              canSend: AIClonePlatform.of(contactId: contact.id).canSend,
+              onSetMode: { newMode in sendMode.setMode(newMode, for: contact.id) },
               onToggle: { toggleSelection(contact) },
               onTrain: { train(contact) },
               onPreviewChat: {
@@ -391,6 +501,18 @@ struct AIClonePage: View {
     autoSelectCount = min(5, contacts.count)
     applyTopXSelection()
     state = .loaded
+    refreshActiveContacts()
+    sendMode.startListening()
+  }
+
+  /// Push the current trained contacts (contact + persona) into the send-mode coordinator so
+  /// its live listeners can route incoming messages. Called on load and after each train.
+  private func refreshActiveContacts() {
+    let entries = contacts.compactMap { contact -> (contact: ImportedContact, persona: ContactPersona)? in
+      guard let persona = personas[contact.id] else { return nil }
+      return (contact, persona)
+    }
+    sendMode.updateActiveContacts(entries)
   }
 
   /// Select exactly the top-N contacts by rank. Called on load and whenever the user
@@ -437,6 +559,7 @@ struct AIClonePage: View {
         let persona = try await AIClonePersonaService.shared.generatePersona(
           for: contact, messages: messages)
         personas[contact.id] = persona
+        refreshActiveContacts()
       } catch {
         trainingErrors[contact.id] = error.localizedDescription
       }
@@ -507,6 +630,7 @@ struct AIClonePage: View {
         )
         // trainToTarget persisted the winning persona; refresh the row's cached copy.
         personas[contact.id] = persona
+        refreshActiveContacts()
         backtestStates[contact.id] = .done(result)
       } catch {
         backtestStates[contact.id] = .failed(error.localizedDescription)
@@ -741,6 +865,9 @@ private struct AICloneContactRow: View {
   let persona: ContactPersona?
   let errorMessage: String?
   let backtest: AICloneBacktestUIState?
+  let sendMode: SendMode
+  let canSend: Bool
+  let onSetMode: (SendMode) -> Void
   let onToggle: () -> Void
   let onTrain: () -> Void
   let onPreviewChat: () -> Void
@@ -862,6 +989,8 @@ private struct AICloneContactRow: View {
           }
         }
 
+        modePicker
+
         backtestControl
 
         // Manual sanity-check tool: chat against the persona.
@@ -879,6 +1008,58 @@ private struct AICloneContactRow: View {
       }
     } else {
       trainButton(title: errorMessage == nil ? "Train" : "Retry", filled: true)
+    }
+  }
+
+  // MARK: - Send-mode picker (Manual / Draft / Auto)
+
+  @ViewBuilder
+  private var modePicker: some View {
+    if canSend {
+      Menu {
+        ForEach(SendMode.allCases, id: \.self) { mode in
+          Button(action: { onSetMode(mode) }) {
+            if mode == sendMode {
+              Label(mode.fullLabel, systemImage: "checkmark")
+            } else {
+              Text(mode.fullLabel)
+            }
+          }
+        }
+      } label: {
+        HStack(spacing: 4) {
+          Image(systemName: modeIcon)
+            .font(.system(size: 10, weight: .semibold))
+          Text(sendMode.label)
+            .scaledFont(size: 12, weight: .semibold)
+          Image(systemName: "chevron.down")
+            .font(.system(size: 8, weight: .semibold))
+        }
+        .foregroundColor(sendMode == .autonomous ? OmiColors.warning : OmiColors.textSecondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+          RoundedRectangle(cornerRadius: 8).stroke(
+            sendMode == .autonomous ? OmiColors.warning.opacity(0.6) : OmiColors.border,
+            lineWidth: 1))
+      }
+      .menuStyle(.borderlessButton)
+      .menuIndicator(.hidden)
+      .fixedSize()
+      .help("How the clone handles new messages from \(contact.displayName)")
+    } else {
+      Text("import only")
+        .scaledFont(size: 11, weight: .medium)
+        .foregroundColor(OmiColors.textQuaternary)
+        .help("This platform can't send from Omi yet — training only.")
+    }
+  }
+
+  private var modeIcon: String {
+    switch sendMode {
+    case .manual: return "hand.point.up.left"
+    case .draftReview: return "tray.full"
+    case .autonomous: return "bolt.fill"
     }
   }
 
@@ -995,7 +1176,15 @@ private struct AIClonePreviewChatSheet: View {
   @State private var messages: [AIClonePreviewMessage] = []
   @State private var isResponding = false
   @State private var errorMessage: String?
+  /// Reply bubbles already dispatched to the real contact (manual send).
+  @State private var sentMessageIds: Set<UUID> = []
+  /// Reply bubbles with a send in flight.
+  @State private var sendingMessageIds: Set<UUID> = []
+  @State private var sendError: String?
   @FocusState private var inputFocused: Bool
+
+  /// Whether the clone can actually send on this contact's platform (WhatsApp can't).
+  private var platformCanSend: Bool { AIClonePlatform.of(contactId: contact.id).canSend }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -1079,6 +1268,13 @@ private struct AIClonePreviewChatSheet: View {
               .foregroundColor(OmiColors.warning)
               .frame(maxWidth: .infinity, alignment: .leading)
           }
+
+          if let sendError {
+            Text(sendError)
+              .scaledFont(size: 12, weight: .regular)
+              .foregroundColor(OmiColors.warning)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
         }
         .padding(16)
       }
@@ -1090,21 +1286,65 @@ private struct AIClonePreviewChatSheet: View {
   @ViewBuilder
   private func bubble(for message: AIClonePreviewMessage) -> some View {
     let isReply = message.kind == .reply
-    HStack {
-      if isReply { Spacer(minLength: 60) }
+    VStack(alignment: isReply ? .trailing : .leading, spacing: 4) {
+      HStack {
+        if isReply { Spacer(minLength: 60) }
 
-      Text(message.text)
-        .scaledFont(size: 14, weight: .regular)
-        .foregroundColor(isReply ? OmiColors.backgroundPrimary : OmiColors.textPrimary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(isReply ? OmiColors.textPrimary : OmiColors.backgroundSecondary)
-        )
-        .textSelection(.enabled)
+        Text(message.text)
+          .scaledFont(size: 14, weight: .regular)
+          .foregroundColor(isReply ? OmiColors.backgroundPrimary : OmiColors.textPrimary)
+          .padding(.horizontal, 14)
+          .padding(.vertical, 10)
+          .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .fill(isReply ? OmiColors.textPrimary : OmiColors.backgroundSecondary)
+          )
+          .textSelection(.enabled)
 
-      if !isReply { Spacer(minLength: 60) }
+        if !isReply { Spacer(minLength: 60) }
+      }
+
+      // Manual send: each predicted reply can be dispatched to the real contact.
+      if isReply && platformCanSend {
+        replySendControl(for: message)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func replySendControl(for message: AIClonePreviewMessage) -> some View {
+    if sentMessageIds.contains(message.id) {
+      HStack(spacing: 4) {
+        Image(systemName: "checkmark.circle.fill")
+          .font(.system(size: 10, weight: .semibold))
+        Text("Sent to \(contact.displayName)")
+          .scaledFont(size: 11, weight: .medium)
+      }
+      .foregroundColor(OmiColors.success)
+      .padding(.trailing, 4)
+    } else if sendingMessageIds.contains(message.id) {
+      HStack(spacing: 5) {
+        ProgressView().scaleEffect(0.5).tint(.white)
+        Text("Sending…")
+          .scaledFont(size: 11, weight: .medium)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+      .padding(.trailing, 4)
+    } else {
+      Button(action: { sendForReal(message) }) {
+        HStack(spacing: 4) {
+          Image(systemName: "paperplane.fill")
+            .font(.system(size: 9, weight: .semibold))
+          Text("Send for real")
+            .scaledFont(size: 11, weight: .semibold)
+        }
+        .foregroundColor(OmiColors.textSecondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 6).stroke(OmiColors.border, lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+      .padding(.trailing, 4)
     }
   }
 
@@ -1187,6 +1427,27 @@ private struct AIClonePreviewChatSheet: View {
         errorMessage = error.localizedDescription
       }
       isResponding = false
+    }
+  }
+
+  /// Manually dispatch one predicted reply bubble to the real contact via the platform send
+  /// service. This is the only send path in Manual mode — the user explicitly taps it.
+  private func sendForReal(_ message: AIClonePreviewMessage) {
+    guard message.kind == .reply, !sendingMessageIds.contains(message.id),
+      !sentMessageIds.contains(message.id)
+    else { return }
+    sendingMessageIds.insert(message.id)
+    sendError = nil
+    Task {
+      do {
+        try await AICloneSendModeService.shared.send(
+          contactId: contact.id, displayName: contact.displayName, text: message.text,
+          mode: .manual)
+        sentMessageIds.insert(message.id)
+      } catch {
+        sendError = error.localizedDescription
+      }
+      sendingMessageIds.remove(message.id)
     }
   }
 
@@ -1387,6 +1648,204 @@ private struct AICloneBacktestSheet: View {
         .textSelection(.enabled)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+// MARK: - Pending draft row (Approve / Edit / Reject)
+
+/// One Draft-Review suggestion: the incoming message, the clone's proposed reply (editable
+/// in place), and Approve / Reject actions. Approving sends for real via the send service.
+private struct AIClonePendingDraftRow: View {
+  let draft: AIClonePendingDraft
+  @ObservedObject private var sendMode = AICloneSendModeService.shared
+  @State private var editedText: String
+  @State private var isEditing = false
+
+  init(draft: AIClonePendingDraft) {
+    self.draft = draft
+    _editedText = State(initialValue: draft.draftText)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 6) {
+        Text(draft.contactDisplayName)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+          .lineLimit(1)
+        Spacer()
+        Text(draft.createdAt, style: .relative)
+          .scaledFont(size: 10, weight: .regular)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+
+      Text("They said: \(draft.incomingText)")
+        .scaledFont(size: 12, weight: .regular)
+        .foregroundColor(OmiColors.textTertiary)
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+
+      if isEditing {
+        TextField("Reply", text: $editedText, axis: .vertical)
+          .textFieldStyle(.plain)
+          .scaledFont(size: 13, weight: .regular)
+          .foregroundColor(OmiColors.textPrimary)
+          .lineLimit(1...5)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 8)
+          .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundTertiary))
+      } else {
+        Text(editedText)
+          .scaledFont(size: 13, weight: .regular)
+          .foregroundColor(OmiColors.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 8)
+          .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundTertiary))
+      }
+
+      HStack(spacing: 8) {
+        Spacer()
+        Button(action: { isEditing.toggle() }) {
+          Text(isEditing ? "Done" : "Edit")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).stroke(OmiColors.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+
+        Button(action: { sendMode.rejectDraft(draft) }) {
+          Text("Reject")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.warning)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).stroke(OmiColors.warning.opacity(0.5), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+
+        Button(action: { sendMode.approveDraft(draft, editedText: editedText) }) {
+          Text("Approve & Send")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.backgroundPrimary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).fill(OmiColors.textPrimary))
+        }
+        .buttonStyle(.plain)
+        .disabled(editedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(OmiColors.backgroundPrimary))
+    .overlay(
+      RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(OmiColors.border, lineWidth: 1))
+  }
+}
+
+// MARK: - Recent Sent Messages log
+
+private struct AICloneSentLogSheet: View {
+  @ObservedObject private var sendMode = AICloneSendModeService.shared
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack {
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Recent Sent Messages")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text("Everything the clone sent — manual, approved, or autonomous")
+            .scaledFont(size: 12, weight: .regular)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        Spacer()
+        if !sendMode.sentLog.isEmpty {
+          Button(action: { sendMode.clearSentLog() }) {
+            Text("Clear")
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          .buttonStyle(.plain)
+        }
+        Button(action: { dismiss() }) {
+          Image(systemName: "xmark")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(OmiColors.textSecondary)
+            .padding(8)
+            .background(Circle().fill(OmiColors.backgroundSecondary))
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(16)
+      Divider().overlay(OmiColors.border)
+
+      if sendMode.sentLog.isEmpty {
+        VStack(spacing: 10) {
+          Image(systemName: "paperplane")
+            .font(.system(size: 30, weight: .regular))
+            .foregroundColor(OmiColors.textQuaternary)
+          Text("Nothing sent yet")
+            .scaledFont(size: 14, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        ScrollView {
+          LazyVStack(spacing: 8) {
+            ForEach(sendMode.sentLog) { entry in
+              sentRow(entry)
+            }
+          }
+          .padding(16)
+        }
+      }
+    }
+    .frame(width: 480, height: 560)
+    .background(OmiColors.backgroundPrimary)
+  }
+
+  private func sentRow(_ entry: AICloneSentLogEntry) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 6) {
+        Text(entry.contactDisplayName)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+          .lineLimit(1)
+        modeTag(entry.mode)
+        Spacer()
+        Text(entry.timestamp, style: .relative)
+          .scaledFont(size: 10, weight: .regular)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+      Text(entry.text)
+        .scaledFont(size: 13, weight: .regular)
+        .foregroundColor(OmiColors.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(OmiColors.backgroundSecondary))
+  }
+
+  private func modeTag(_ mode: SendMode) -> some View {
+    Text(mode.fullLabel)
+      .scaledFont(size: 9, weight: .semibold)
+      .foregroundColor(mode == .autonomous ? OmiColors.warning : OmiColors.textTertiary)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 2)
+      .background(
+        Capsule().fill(
+          (mode == .autonomous ? OmiColors.warning : OmiColors.textTertiary).opacity(0.14)))
   }
 }
 

@@ -66,7 +66,11 @@ actor IMessageReaderService {
   /// Non-production builds honor the `aiCloneChatDbPathOverride` default so test
   /// harnesses (named `omi-*` bundles without Full Disk Access) can point the reader
   /// at a snapshot copy of chat.db. Never active on the production bundle.
-  private var chatDatabaseURL: URL {
+  private var chatDatabaseURL: URL { Self.chatDatabaseURL }
+
+  /// Resolved path to `chat.db`, honoring the non-production snapshot override. Static so
+  /// the live send/listen path can open the same store the reader does.
+  static var chatDatabaseURL: URL {
     if AppBuild.isNonProduction,
       let override = UserDefaults.standard.string(forKey: "aiCloneChatDbPathOverride"),
       !override.isEmpty
@@ -241,6 +245,23 @@ actor IMessageReaderService {
   }
 
   // MARK: Helpers
+
+  /// Best-effort plain text for a chat.db message row, preferring the `text` column and
+  /// falling back to the archived `attributedBody` blob — the same logic `messages(for:)`
+  /// uses inline. Exposed so the live send/listen path (`IMessageSendService`) decodes
+  /// incoming messages identically instead of duplicating the typedstream parser.
+  static func decodeMessageText(text: String?, attributedBody: Data?) -> String? {
+    let rawText: String?
+    if let raw = text, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      rawText = raw
+    } else if let attributedBody {
+      rawText = decodeAttributedBody(attributedBody)
+    } else {
+      rawText = nil
+    }
+    guard let rawText else { return nil }
+    return sanitizeBody(rawText)
+  }
 
   private func makeReadOnlyQueue() throws -> DatabaseQueue {
     guard FileManager.default.fileExists(atPath: chatDatabaseURL.path) else {
