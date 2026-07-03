@@ -34,6 +34,11 @@ extension SettingsContentView {
   }
 
   func updateNotificationSettings(enabled: Bool? = nil, frequency: Int? = nil) {
+    if let enabled {
+      // Mirror locally so NotificationService suppresses/resumes proactive notifications
+      // immediately when the master toggle flips, even before the backend round-trip completes.
+      UserDefaults.standard.set(enabled, forKey: NotificationService.masterEnabledDefaultsKey)
+    }
     if let frequency {
       // Mirror locally so NotificationService picks up the new throttle level immediately,
       // even before the backend round-trip completes.
