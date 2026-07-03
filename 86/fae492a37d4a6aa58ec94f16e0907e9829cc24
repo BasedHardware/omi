@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Sources/WhatsAppSenderService.swift
+  s_51e027d4890829::t_7f1984bf807f00 143-147,149-150,156-157
+  s_51e027d4890829::t_f984ffec9dc65c 206-209,211,216-218,229,233
+desktop/macos/Desktop/Sources/WhatsAppInboxStore.swift
+  s_51e027d4890829::t_5e05a03b490e6c 264-269,271-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "86fae492a37d4a6aa58ec94f16e0907e9829cc24",
+  "prompts": {},
+  "sessions": {
+    "s_51e027d4890829": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61e4d8cb-cb32-46e7-903c-106ed88e5fde",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
