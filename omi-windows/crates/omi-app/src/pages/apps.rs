@@ -23,6 +23,16 @@ enum KbStatus {
     Error(String),
 }
 
+async fn test_webhook(url: &str) -> Result<(), anyhow::Error> {
+    let client = reqwest::Client::new();
+    let res = client.get(url).timeout(std::time::Duration::from_secs(5)).send().await?;
+    if res.status().is_success() || res.status().is_redirection() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("HTTP {}", res.status()))
+    }
+}
+
 fn file_type_icon(ft: Option<&str>) -> &'static str {
     match ft {
         Some("pdf") => "📄",
@@ -37,7 +47,7 @@ fn file_type_icon(ft: Option<&str>) -> &'static str {
 
 #[component]
 pub fn AppsPage() -> Element {
-    let config = use_context::<Signal<AppConfig>>();
+    let mut config = use_context::<Signal<AppConfig>>();
     let db_opt = use_context::<Signal<Option<Db>>>();
     let mut sync_status = use_signal(|| SyncStatus::Idle);
     let mut kb_status = use_signal(|| KbStatus::Idle);
@@ -326,22 +336,153 @@ pub fn AppsPage() -> Element {
                         }
                     }
 
-                    div { class: "card",
-                        h3 { "Slack" }
-                        p { class: "text-muted", "Send conversation summaries to Slack channels." }
-                        span { class: "text-muted", style: "font-size: 11px;", "Coming soon" }
-                    }
+                    {
+                        let mut slack_url = use_signal(|| config.read().webhook_slack.clone());
+                        let mut github_url = use_signal(|| config.read().webhook_github.clone());
+                        let mut notion_url = use_signal(|| config.read().webhook_notion.clone());
+                        let mut slack_test = use_signal(|| Option::<String>::None);
+                        let mut github_test = use_signal(|| Option::<String>::None);
+                        let mut notion_test = use_signal(|| Option::<String>::None);
 
-                    div { class: "card",
-                        h3 { "GitHub" }
-                        p { class: "text-muted", "Create issues from action items." }
-                        span { class: "text-muted", style: "font-size: 11px;", "Coming soon" }
-                    }
+                        rsx! {
+                            div { class: "card",
+                                style: "display: flex; flex-direction: column; justify-content: space-between; min-height: 180px;",
+                                div {
+                                    h3 { "Slack" }
+                                    p { class: "text-muted", style: "margin-bottom: 8px;", "Send conversation summaries to Slack channels." }
+                                    input {
+                                        class: "settings-input",
+                                        style: "width: 100%; margin-bottom: 6px;",
+                                        r#type: "text",
+                                        placeholder: "https://hooks.slack.com/services/...",
+                                        value: "{slack_url}",
+                                        oninput: move |e| slack_url.set(e.value()),
+                                        onchange: move |e| {
+                                            config.write().webhook_slack = e.value();
+                                            let _ = config.read().save();
+                                        },
+                                    }
+                                }
+                                div { class: "webhook-actions",
+                                    button {
+                                        class: "btn btn-secondary btn-sm",
+                                        disabled: slack_url.read().trim().is_empty(),
+                                        onclick: move |_| {
+                                            let url = slack_url.read().trim().to_string();
+                                            spawn(async move {
+                                                match test_webhook(&url).await {
+                                                    Ok(_) => slack_test.set(Some("OK".into())),
+                                                    Err(e) => slack_test.set(Some(format!("{e}"))),
+                                                }
+                                            });
+                                        },
+                                        "Test"
+                                    }
+                                    if let Some(ref msg) = *slack_test.read() {
+                                        span {
+                                            class: if msg == "OK" { "text-success" } else { "text-error" },
+                                            style: "font-size: 11px; margin-left: 6px;",
+                                            "{msg}"
+                                        }
+                                    }
+                                    if slack_url.read().trim().is_empty() {
+                                        span { class: "text-muted", style: "font-size: 11px;", "Paste webhook URL to enable" }
+                                    }
+                                }
+                            }
 
-                    div { class: "card",
-                        h3 { "Notion" }
-                        p { class: "text-muted", "Export memories and notes to Notion." }
-                        span { class: "text-muted", style: "font-size: 11px;", "Coming soon" }
+                            div { class: "card",
+                                style: "display: flex; flex-direction: column; justify-content: space-between; min-height: 180px;",
+                                div {
+                                    h3 { "GitHub" }
+                                    p { class: "text-muted", style: "margin-bottom: 8px;", "Create issues from action items." }
+                                    input {
+                                        class: "settings-input",
+                                        style: "width: 100%; margin-bottom: 6px;",
+                                        r#type: "text",
+                                        placeholder: "https://api.github.com/repos/owner/repo (+ token in header)",
+                                        value: "{github_url}",
+                                        oninput: move |e| github_url.set(e.value()),
+                                        onchange: move |e| {
+                                            config.write().webhook_github = e.value();
+                                            let _ = config.read().save();
+                                        },
+                                    }
+                                }
+                                div { class: "webhook-actions",
+                                    button {
+                                        class: "btn btn-secondary btn-sm",
+                                        disabled: github_url.read().trim().is_empty(),
+                                        onclick: move |_| {
+                                            let url = github_url.read().trim().to_string();
+                                            spawn(async move {
+                                                match test_webhook(&url).await {
+                                                    Ok(_) => github_test.set(Some("OK".into())),
+                                                    Err(e) => github_test.set(Some(format!("{e}"))),
+                                                }
+                                            });
+                                        },
+                                        "Test"
+                                    }
+                                    if let Some(ref msg) = *github_test.read() {
+                                        span {
+                                            class: if msg == "OK" { "text-success" } else { "text-error" },
+                                            style: "font-size: 11px; margin-left: 6px;",
+                                            "{msg}"
+                                        }
+                                    }
+                                    if github_url.read().trim().is_empty() {
+                                        span { class: "text-muted", style: "font-size: 11px;", "Paste webhook URL to enable" }
+                                    }
+                                }
+                            }
+
+                            div { class: "card",
+                                style: "display: flex; flex-direction: column; justify-content: space-between; min-height: 180px;",
+                                div {
+                                    h3 { "Notion" }
+                                    p { class: "text-muted", style: "margin-bottom: 8px;", "Export memories and notes to Notion." }
+                                    input {
+                                        class: "settings-input",
+                                        style: "width: 100%; margin-bottom: 6px;",
+                                        r#type: "text",
+                                        placeholder: "https://api.notion.com/v1/pages (+ integration token)",
+                                        value: "{notion_url}",
+                                        oninput: move |e| notion_url.set(e.value()),
+                                        onchange: move |e| {
+                                            config.write().webhook_notion = e.value();
+                                            let _ = config.read().save();
+                                        },
+                                    }
+                                }
+                                div { class: "webhook-actions",
+                                    button {
+                                        class: "btn btn-secondary btn-sm",
+                                        disabled: notion_url.read().trim().is_empty(),
+                                        onclick: move |_| {
+                                            let url = notion_url.read().trim().to_string();
+                                            spawn(async move {
+                                                match test_webhook(&url).await {
+                                                    Ok(_) => notion_test.set(Some("OK".into())),
+                                                    Err(e) => notion_test.set(Some(format!("{e}"))),
+                                                }
+                                            });
+                                        },
+                                        "Test"
+                                    }
+                                    if let Some(ref msg) = *notion_test.read() {
+                                        span {
+                                            class: if msg == "OK" { "text-success" } else { "text-error" },
+                                            style: "font-size: 11px; margin-left: 6px;",
+                                            "{msg}"
+                                        }
+                                    }
+                                    if notion_url.read().trim().is_empty() {
+                                        span { class: "text-muted", style: "font-size: 11px;", "Paste webhook URL to enable" }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
