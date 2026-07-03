@@ -153,7 +153,7 @@ private struct ConnectOptionCard: View {
 
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
-          DisclosureGroup(isExpanded: $showManual) {
+          ManualInstallationDisclosure(isExpanded: $showManual, fontSize: 12) {
             VStack(alignment: .leading, spacing: 8) {
               ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
                 Text("\(idx + 1). \(step)")
@@ -165,12 +165,7 @@ private struct ConnectOptionCard: View {
               manualBlock(manualText(for: setup))
             }
             .padding(.top, 8)
-          } label: {
-            Text("Manual installation")
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
           }
-          .tint(OmiColors.textTertiary)
         }
       }
 

@@ -532,7 +532,7 @@ struct MemoryExportDestinationSheet: View {
 
   @ViewBuilder
   private var manualSetupDisclosure: some View {
-    DisclosureGroup(isExpanded: $showManualSetup) {
+    ManualInstallationDisclosure(isExpanded: $showManualSetup, fontSize: 13) {
       VStack(alignment: .leading, spacing: 18) {
         methodHeader(
           icon: "bolt.fill",
@@ -559,12 +559,7 @@ struct MemoryExportDestinationSheet: View {
         }
       }
       .padding(.top, 10)
-    } label: {
-      Text("Manual installation")
-        .scaledFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
     }
-    .tint(OmiColors.textTertiary)
   }
 
   private var agentSetupSection: some View {
