@@ -284,7 +284,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     /// The launch-disabled flag in LaunchServices prevents notification center registration.
     /// Unregistering and re-registering clears the flag, then retries authorization.
     static func repairNotificationRegistration() {
-        NotificationRegistrationRepair.repair(reason: "legacy_call_site", includeUnregister: true)
+        NotificationRegistrationRepair.repair(reason: "legacy_call_site", includeUnregister: true) { _ in
+            NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+                reason: "legacy_call_site_retry",
+                previousStatus: "post_repair"
+            ) { _ in }
+        }
     }
 
     private func continueStartMonitoring(completion: @escaping (Bool, String?) -> Void) {

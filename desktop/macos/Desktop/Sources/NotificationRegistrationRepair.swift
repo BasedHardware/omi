@@ -116,10 +116,19 @@ enum NotificationRegistrationRepair {
       Thread.sleep(forTimeInterval: 1.5)
 
       DispatchQueue.main.async {
+        var finalSuccess = success
         if let cfURL = bundleURL as CFURL? {
-          LSRegisterURL(cfURL, true)
+          let registerStatus = LSRegisterURL(cfURL, true)
+          let registerSucceeded = registerStatus == noErr
+          finalSuccess = registerSucceeded && finalSuccess
+          if !registerSucceeded {
+            log("LSRegisterURL failed during notification registration repair: \(registerStatus)")
+          }
+        } else {
+          finalSuccess = false
+          log("LSRegisterURL skipped during notification registration repair: missing bundle URL")
         }
-        finishRepair(success: success)
+        finishRepair(success: finalSuccess)
       }
     }
   }
