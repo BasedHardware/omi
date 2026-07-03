@@ -12,6 +12,7 @@ from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
+AUTO_RELEASE_QUIET_SECONDS = 10 * 60
 
 
 def run(args: list[str], *, check: bool = True) -> str:
@@ -67,6 +68,17 @@ def tag_sha(tag: str) -> str | None:
 def tag_age_seconds(tag: str) -> int | None:
     try:
         raw = git(["log", "-1", "--format=%ct", tag])
+        return int(time.time()) - int(raw)
+    except (subprocess.CalledProcessError, ValueError):
+        return None
+
+
+def latest_change_age_seconds(paths: list[str]) -> int | None:
+    if not paths:
+        return None
+
+    try:
+        raw = git(["log", "-1", "--format=%ct", "HEAD", "--", *paths])
         return int(time.time()) - int(raw)
     except (subprocess.CalledProcessError, ValueError):
         return None
@@ -153,6 +165,26 @@ def main() -> int:
         print("Releasable desktop app changes since latest tag:")
         for path in changes:
             print(f"  - {path}")
+
+    if args.mode == "auto":
+        latest_change_age = latest_change_age_seconds(changes)
+        if latest_change_age is None:
+            set_output("should_release", "false")
+            set_output(
+                "reason",
+                "Waiting for desktop release quiet window: could not determine latest releasable change age.",
+            )
+            return 0
+        if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
+            wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
+            set_output("should_release", "false")
+            set_output(
+                "reason",
+                f"Waiting for desktop release quiet window: latest releasable change is "
+                f"{latest_change_age}s old; need {AUTO_RELEASE_QUIET_SECONDS}s "
+                f"({wait_seconds}s remaining).",
+            )
+            return 0
 
     if args.mode != "force_release":
         active_reason = active_release_reason(args.repository, latest_tag)
