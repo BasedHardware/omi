@@ -13,13 +13,43 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 
-  func testSpawnAgentProvidesLocalAckWhenModelDidNotSpeakBeforeToolCall() throws {
+  func testSpawnAgentDoesNotSwitchVoicesWhenModelDidNotSpeakBeforeToolCall() throws {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("if !audioReceivedThisTurn {"))
+    XCTAssertTrue(source.contains("let shouldAllowNativePostSpawnAck = !audioReceivedThisTurn"))
     XCTAssertTrue(source.contains("let existingAck = assistantText.trimmingCharacters"))
-    XCTAssertTrue(source.contains("let ack = existingAck.isEmpty ? \"Starting a background agent.\" : existingAck"))
-    XCTAssertTrue(source.contains("speak(ack)"))
+    XCTAssertTrue(source.contains("let resolvedAck = resolution.ack?.trimmingCharacters"))
+    XCTAssertTrue(source.contains("resolvedAck?.isEmpty == false ? resolvedAck! : \"Starting a background agent.\""))
+    XCTAssertTrue(source.contains("pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)"))
+    XCTAssertTrue(source.contains("let assistantText = \"Started background agent \\\"\\(handoff.title)\\\" for: \\(handoff.brief)\""))
+    XCTAssertTrue(source.contains("rememberVoiceContinuityTurn(userText: heard, assistantText: assistantText, interrupted: false)"))
+    XCTAssertTrue(source.contains("Started background agent"))
+    XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck"))
+    XCTAssertFalse(source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
+    XCTAssertFalse(source.contains("speak(ack)"))
+  }
+
+  func testRealtimeHubBlocksModelInitiatedPillDismissalWithoutExplicitUserRequest() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("userExplicitlyRequestedPillManagement(action: action, transcript: turnTranscript)"))
+    XCTAssertTrue(source.contains("blocked manage_agent_pills action="))
+    XCTAssertTrue(source.contains("Dismissal blocked: only dismiss or clear floating agent pills when the user explicitly asks."))
+    XCTAssertTrue(source.contains("case \"dismiss\":"))
+    XCTAssertTrue(source.contains("case \"clear_completed\":"))
+  }
+
+  func testRealtimeHubUsesCanonicalVoicePlaybackServiceForLocalSpeechFallbacks() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertFalse(source.contains("AVSpeechSynthesizer"))
+    XCTAssertFalse(source.contains("AVSpeechUtterance"))
+    XCTAssertFalse(source.contains("AVSpeechSynthesisVoice"))
+    XCTAssertFalse(source.contains("private func speak(_ text: String)"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(reply)"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(directedProvider.setupNeededStatus)"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()"))
   }
 
   func testRealtimeToolTurnsStayOpenUntilToolResultReturns() throws {
@@ -39,6 +69,16 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(source.contains("session?.sendToolResult("))
   }
 
+  func testRealtimeDelegationResolutionCannotSpawnAfterStaleTurn() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("let userText = turnTranscript"))
+    XCTAssertTrue(source.contains("guard isCurrentToolTurn(source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch)"))
+    XCTAssertTrue(source.contains("dropping stale spawn_agent resolution before side effects"))
+    XCTAssertTrue(source.contains("private func isCurrentToolTurn("))
+    XCTAssertTrue(source.contains("return expectedTurnEpoch == realtimeToolTurnEpoch && pendingRealtimeToolCallIds.contains(key)"))
+  }
+
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
     let source = try realtimeHubControllerSource()
 
@@ -47,10 +87,11 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("assistantText = setupPrompt"))
     XCTAssertTrue(source.contains("output: availability.toolError"))
     XCTAssertTrue(source.contains("""
-          sendToolResultIfCurrent(
-            source: source, callId: callId, name: name,
-            output: availability.toolError)
-          return
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: availability.toolError,
+          expectedTurnEpoch: expectedTurnEpoch)
+        return
 """))
   }
 

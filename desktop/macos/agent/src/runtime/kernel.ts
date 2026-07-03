@@ -2549,6 +2549,7 @@ export class AgentRuntimeKernel {
         ownerId: stringValue(row.owner_id),
         status: stringValue(row.status) as RunStatus,
         title: nullableString(row.title),
+        goalText: queueRunGoalText(row),
         updatedAtMs: numberValue(row.updated_at_ms),
         createdAtMs: numberValue(row.created_at_ms),
         visibleUserGoal: true,
@@ -2674,6 +2675,12 @@ function placeholders(count: number): string {
 
 function isStaleBindingError(error: unknown): boolean {
   return error instanceof StaleAdapterBindingError || (error instanceof Error && error.name === "StaleAdapterBindingError");
+}
+
+function queueRunGoalText(row: Record<string, unknown>): string | null {
+  const input = parseJsonObject(nullableString(row.input_json));
+  const prompt = input.prompt;
+  return typeof prompt === "string" && prompt.trim() ? prompt : null;
 }
 
 function messageFrom(error: unknown): string {

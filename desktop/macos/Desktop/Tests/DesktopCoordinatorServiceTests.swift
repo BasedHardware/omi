@@ -288,7 +288,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(chatSource.contains("func recordVoiceTurn(userText: String, assistantText: String)"))
     XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)"))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
-    XCTAssertTrue(hubSource.contains("spawnFromUserQuery"))
+    XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
+    XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
     XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.spawnBackgroundAgent("))
     XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }

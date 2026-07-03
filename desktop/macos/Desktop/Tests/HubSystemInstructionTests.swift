@@ -63,7 +63,9 @@ final class HubSystemInstructionTests: XCTestCase {
         let manageTool = tools.first { ($0["name"] as? String) == HubTool.manageAgentPills.rawValue }
         XCTAssertNotNil(manageTool)
         XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("dismiss"))
-        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear completed"))
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear pills"))
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("explicitly asks"))
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("Never dismiss completed agents"))
     }
 
     func testRealtimeCreateCalendarEventToolIsExposedWithRequiredArguments() {

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed subagent status checks so stale orphaned background-agent runs stop prompting recovery after newer successful work covers the same visible goal."
+}

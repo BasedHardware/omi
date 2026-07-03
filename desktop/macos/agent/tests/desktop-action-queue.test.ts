@@ -159,6 +159,74 @@ describe("desktop action queue", () => {
     });
   });
 
+  it("does not keep recovering an older orphaned visible goal after a newer successful sibling covers it", () => {
+    const queue = buildDesktopActionQueue({
+      nowMs: 10_000,
+      runs: [
+        {
+          runId: "orphaned-story-run",
+          sessionId: "session-orphaned",
+          ownerId: "owner-1",
+          status: "orphaned",
+          title: "Create Memory Story",
+          goalText: "Search my recent memories and use them to construct a short story idea.",
+          createdAtMs: 1_000,
+          updatedAtMs: 2_000,
+          visibleUserGoal: true,
+        },
+        {
+          runId: "successful-story-run",
+          sessionId: "session-success",
+          ownerId: "owner-1",
+          status: "succeeded",
+          title: "Analyze Memories For Storyline",
+          goalText: "Get a subagent to look through recent memories and come up with a storyline.",
+          createdAtMs: 3_000,
+          updatedAtMs: 4_000,
+          visibleUserGoal: true,
+          reusable: true,
+        },
+      ],
+    });
+
+    expect(queue.map((item) => item.kind)).toEqual(["reusable_session"]);
+    expect(queue.some((item) => item.subjectId === "orphaned-story-run")).toBe(false);
+  });
+
+  it("still surfaces orphaned visible goals when newer successes are unrelated", () => {
+    const queue = buildDesktopActionQueue({
+      nowMs: 10_000,
+      runs: [
+        {
+          runId: "orphaned-story-run",
+          sessionId: "session-orphaned",
+          ownerId: "owner-1",
+          status: "orphaned",
+          title: "Create Memory Story",
+          goalText: "Search my recent memories and use them to construct a short story idea.",
+          createdAtMs: 1_000,
+          updatedAtMs: 2_000,
+          visibleUserGoal: true,
+        },
+        {
+          runId: "successful-calendar-run",
+          sessionId: "session-success",
+          ownerId: "owner-1",
+          status: "succeeded",
+          title: "Calendar Summary",
+          goalText: "Summarize today's calendar meetings.",
+          createdAtMs: 3_000,
+          updatedAtMs: 4_000,
+          visibleUserGoal: true,
+          reusable: true,
+        },
+      ],
+    });
+
+    expect(queue.map((item) => item.kind)).toEqual(["failed_run", "reusable_session"]);
+    expect(queue[0]).toMatchObject({ subjectId: "orphaned-story-run" });
+  });
+
   it("projects pending candidates and legacy pills into derived items", () => {
     const queue = buildDesktopActionQueue({
       nowMs: 10_000,

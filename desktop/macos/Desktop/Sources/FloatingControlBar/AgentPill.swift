@@ -661,12 +661,11 @@ final class AgentPillsManager: ObservableObject {
         }
         AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef, statusText: pill.latestActivity)
 
-        // For voice queries, speak the pre-fetched ack from the router (or a
-        // random instant ack) before the runtime accepts the run so the user
-        // always hears confirmation that we heard them.
+        // For voice queries, play a cached deterministic kickoff sample before
+        // the runtime accepts the run so the user always hears confirmation
+        // without falling back to a different system voice.
         if fromVoice {
-            let phrase = (preFetchedAck?.isEmpty == false) ? preFetchedAck! : AgentPillsManager.randomAck()
-            FloatingBarVoicePlaybackService.shared.speakOneShot(phrase)
+            FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
         }
 
         // If the router already returned a title we don't need a second

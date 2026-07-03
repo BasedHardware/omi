@@ -1,0 +1,3 @@
+{
+  "change": "Background-agent voice acknowledgements now use an approved phrase pack cached per selected OpenAI voice instead of falling back to arbitrary system speech."
+}

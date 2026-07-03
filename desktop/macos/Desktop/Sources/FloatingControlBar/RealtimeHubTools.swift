@@ -157,8 +157,9 @@ enum RealtimeHubTools {
     you can make simple task changes (create_action_item, update_action_item) and create a \
     straightforward calendar event (create_calendar_event). For anything else in their OTHER \
     apps (notes, emails, messages, files, reminders, browser, or multi-step calendar work) or any \
-    multi-step "do X for me" work, use spawn_agent — it hands the request to a background \
-    agent that has those tools and can act in the user's apps.
+    multi-step "do X for me" work, use spawn_agent — it requests delegation through Omi's \
+    resolver, which may start a background agent, continue an existing one, or ask the user \
+    for missing details before any child agent sees the task.
 
     Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up first so the \
     user knows you're on it and that it won't be instant — then call the tool and speak the \
@@ -171,7 +172,8 @@ enum RealtimeHubTools {
     check", "let me look that up") turn after turn — it's what makes you sound robotic. Keep it \
     to a few words, vary the wording each turn, and don't include any answer or data you don't \
     have yet. For a slower step (ask_higher_model, spawn_agent) it's fine to signal it'll take a \
-    moment. NEVER speak an answer — real or guessed — before the tool returns, NEVER skip the \
+    moment. If you accidentally call spawn_agent before speaking, say exactly one short same-voice \
+    acknowledgement after the tool result, then stop. NEVER speak an answer — real or guessed — before the tool returns, NEVER skip the \
     tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
     without calling a tool.
 
@@ -225,12 +227,12 @@ enum RealtimeHubTools {
     - DOING something else for the user in their OTHER apps (notes, emails, messages, \
     files, browser) or any multi-step work — create/send/open/edit/search/schedule/automate/ \
     "do X for me": you CANNOT do these yourself. You MUST actually EMIT the spawn_agent \
-    function call (with a clear, self-contained `brief` and a short `title`). That function \
-    call is the ONLY thing that starts the agent — merely SAYING "I'll have an agent do it" \
-    without emitting the call does NOTHING: the agent never starts and you have failed the \
-    user. So always emit the spawn_agent call. You may add one short natural sentence as you \
-    call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
-    with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
+    function call (with the user's raw delegation intent, any concrete details you have, and \
+    a short `title`). That function requests delegation; Omi's resolver decides whether to \
+    start a child agent, continue an existing one, or ask the user for missing details. Merely \
+    SAYING "I'll have an agent do it" without emitting the call does NOTHING. You may add one \
+    short natural sentence as you call it, but never instead of it. Do NOT wait for it, narrate \
+    its steps, refuse, or claim you can't.
     - \(localAgentProviderInstruction())
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
     and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \
@@ -270,7 +272,10 @@ enum RealtimeHubTools {
   private static func baseOpenAITools(providerProperty: [String: Any]?) -> [[String: Any]] {
     var spawnAgentProperties: [String: Any] = [
       "brief": [
-        "type": "string", "description": "A clear, self-contained brief of the task.",
+        "type": "string",
+        "description":
+          "The user's raw delegation intent or proposed task. Include concrete details you know; "
+          + "Omi's resolver will rewrite it before any child agent sees it.",
       ],
       "title": [
         "type": "string",
@@ -440,8 +445,9 @@ enum RealtimeHubTools {
         "type": "function",
         "name": HubTool.manageAgentPills.rawValue,
         "description":
-          "Manage the circular floating agent pills shown below the floating bar. Use to list pills, dismiss one by id, "
-          + "or clear completed pills after checking get_task_agent_status.",
+          "Manage the circular floating agent pills shown below the floating bar. Use list freely. "
+          + "Only dismiss or clear pills when the user explicitly asks to dismiss, close, remove, hide, or clear pills. "
+          + "Never dismiss completed agents just because you finished reading their status.",
         "parameters": [
           "type": "object",
           "properties": [
@@ -627,10 +633,9 @@ enum RealtimeHubTools {
         "type": "function",
         "name": HubTool.spawnAgent.rawValue,
         "description":
-          "Hand a task to a background agent that CAN access the user's Omi data (tasks, to-dos, "
-          + "calendar, notes, emails, messages, conversations, memories, files) and act in their apps "
-          + "and browser. Use for ANYTHING about the user's own data, or to create/send/open/edit/search/"
-          + "schedule/automate something for them, or any multi-step work. Returns immediately; the agent works on its own.",
+          "Request delegation to a background agent through Omi's resolver. The resolver may start "
+          + "a child agent, continue an existing one, or ask for missing details. Use for work in the "
+          + "user's apps/browser/files or multi-step work that you cannot do directly.",
         "parameters": [
           "type": "object",
           "properties": spawnAgentProperties,

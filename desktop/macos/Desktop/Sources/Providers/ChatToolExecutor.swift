@@ -559,13 +559,19 @@ class ChatToolExecutor {
     }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    let pill = AgentPillsManager.shared.spawnFromUserQuery(
-      brief,
+    guard let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+      .init(
+        originalUserText: brief,
+        brief: brief,
+        title: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+        spokenAck: nil,
+        directedProvider: directedProvider
+      ),
       model: model,
-      fromVoice: false,
-      preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
-      bridgeHarnessOverride: directedProvider?.harnessMode
-    )
+      fromVoice: false
+    ) else {
+      return "Error: Missing self-contained brief. Pass a clear task with enough context for a background agent to execute independently."
+    }
     return """
     Agent started as a floating agent pill.
     id: \(pill.id.uuidString)

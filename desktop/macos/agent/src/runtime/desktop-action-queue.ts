@@ -50,6 +50,7 @@ export interface QueueRunInput {
   ownerId: string;
   status: RunStatus;
   title?: string | null;
+  goalText?: string | null;
   updatedAtMs: number;
   createdAtMs: number;
   visibleUserGoal?: boolean;
@@ -126,6 +127,7 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
   const staleAfterMs = input.staleAfterMs ?? 30 * 60 * 1000;
   const items: DesktopActionQueueItem[] = [];
   const reusableSessions = new Map<string, QueueRunInput>();
+  const successfulVisibleRuns = (input.runs ?? []).filter((run) => run.status === "succeeded" && run.visibleUserGoal !== false);
 
   for (const dispatch of input.dispatches ?? []) {
     if (dispatch.status !== "pending") continue;
@@ -150,6 +152,7 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
 
   for (const run of input.runs ?? []) {
     if ((run.status === "failed" || run.status === "orphaned") && run.visibleUserGoal !== false) {
+      if (isCoveredByNewerSuccessfulRun(run, successfulVisibleRuns)) continue;
       items.push(
         item({
           kind: "failed_run",
@@ -266,3 +269,64 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
     .filter((queueItem) => !isSuppressed(queueItem, input.overrides ?? [], nowMs))
     .sort((left, right) => left.rank - right.rank || right.priority - left.priority || right.createdAtMs - left.createdAtMs);
 }
+
+function isCoveredByNewerSuccessfulRun(run: QueueRunInput, successfulRuns: readonly QueueRunInput[]): boolean {
+  return successfulRuns.some((candidate) => {
+    if (candidate.ownerId !== run.ownerId) return false;
+    if (candidate.updatedAtMs <= run.updatedAtMs) return false;
+    return visibleGoalsOverlap(run, candidate);
+  });
+}
+
+function visibleGoalsOverlap(left: QueueRunInput, right: QueueRunInput): boolean {
+  const leftTokens = visibleGoalTokens(left);
+  const rightTokens = visibleGoalTokens(right);
+  if (leftTokens.size === 0 || rightTokens.size === 0) return false;
+
+  let overlap = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) overlap += 1;
+  }
+  return overlap >= 2;
+}
+
+function visibleGoalTokens(run: QueueRunInput): Set<string> {
+  const text = `${run.title ?? ""} ${run.goalText ?? ""}`.toLowerCase();
+  const tokens = new Set<string>();
+  for (const raw of text.match(/[a-z0-9]+/g) ?? []) {
+    const token = normalizeGoalToken(raw);
+    if (token.length >= 4 && !STOPWORDS.has(token)) {
+      tokens.add(token);
+    }
+  }
+  return tokens;
+}
+
+function normalizeGoalToken(token: string): string {
+  if (token === "memories") return "memory";
+  if (token === "storyline" || token === "stories") return "story";
+  if (token.endsWith("ies") && token.length > 5) return `${token.slice(0, -3)}y`;
+  if (token.endsWith("ing") && token.length > 6) return token.slice(0, -3);
+  if (token.endsWith("ed") && token.length > 5) return token.slice(0, -2);
+  if (token.endsWith("s") && token.length > 5) return token.slice(0, -1);
+  return token;
+}
+
+const STOPWORDS = new Set([
+  "agent",
+  "background",
+  "based",
+  "come",
+  "create",
+  "from",
+  "have",
+  "look",
+  "once",
+  "recent",
+  "retry",
+  "search",
+  "short",
+  "subagent",
+  "through",
+  "with",
+]);
