@@ -651,11 +651,27 @@ set_app_env() {
     local key="$1"
     local value="$2"
     local env_file="$APP_BUNDLE/Contents/Resources/.env"
-    if grep -q "^$key=" "$env_file"; then
-        sed -i '' "s|^$key=.*|$key=$value|" "$env_file"
-    else
-        echo "$key=$value" >> "$env_file"
+    # Rewrite line-by-line with printf rather than sed: sed would interpret `&`, `\`,
+    # and the `|` delimiter in the replacement, silently corrupting values that contain
+    # them (this helper is reused for arbitrary secrets and filesystem paths). printf
+    # writes the value literally.
+    local tmp found=0
+    tmp="$(mktemp)"
+    if [ -f "$env_file" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+            "$key="*)
+                printf '%s=%s\n' "$key" "$value" >>"$tmp"
+                found=1
+                ;;
+            *) printf '%s\n' "$line" >>"$tmp" ;;
+            esac
+        done <"$env_file"
     fi
+    if [ "$found" -eq 0 ]; then
+        printf '%s=%s\n' "$key" "$value" >>"$tmp"
+    fi
+    mv "$tmp" "$env_file"
 }
 
 substep "Preparing Telegram helper"
