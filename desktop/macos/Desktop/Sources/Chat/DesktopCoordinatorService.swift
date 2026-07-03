@@ -644,8 +644,15 @@ final class DesktopCoordinatorService {
   }
 
   private func parseSpawnedAgent(from raw: String) throws -> DesktopCoordinatorSpawnedAgent {
-    guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else {
+    guard let object = jsonObject(from: raw) else {
       throw NSError(domain: "DesktopCoordinatorService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid background-agent spawn response"])
+    }
+    if object["ok"] as? Bool == false {
+      let error = object["error"] as? [String: Any]
+      let code = stringValue(error?["code"])
+      let message = stringValue(error?["message"]) ?? "Background-agent spawn was rejected by the runtime"
+      let detail = code.map { "\($0): \(message)" } ?? message
+      throw NSError(domain: "DesktopCoordinatorService", code: 1, userInfo: [NSLocalizedDescriptionKey: detail])
     }
     let session = object["session"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]

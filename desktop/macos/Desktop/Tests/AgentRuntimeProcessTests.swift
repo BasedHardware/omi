@@ -239,6 +239,19 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
   }
 
+  func testClientRegistrationWaitsForInitWhenProcessIsAlreadyRunning() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("if isRunning {\n      try await waitForInit(timeout: 30.0)\n      return\n    }"))
+    XCTAssertTrue(source.contains("try await waitForInit(timeout: 30.0)"))
+    XCTAssertTrue(source.contains("case .initMessage:"))
+    XCTAssertTrue(source.contains("resolveInitContinuations()"))
+  }
+
   func testAppSurfacesUseDirectControlToolOnly() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

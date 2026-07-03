@@ -13,6 +13,19 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("runtime.directControlTool"))
   }
 
+  func testBackgroundAgentSpawnSurfacesRuntimeRejectionDetails() throws {
+    let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
+    let start = source.range(of: "private func parseSpawnedAgent")?.lowerBound ?? source.startIndex
+    let end = source.range(of: "private func parseInspectedRun")?.lowerBound ?? source.endIndex
+    let functionSource = String(source[start..<end])
+
+    XCTAssertTrue(functionSource.contains(#"if object["ok"] as? Bool == false"#))
+    XCTAssertTrue(functionSource.contains(#"let error = object["error"] as? [String: Any]"#))
+    XCTAssertTrue(functionSource.contains(#"let code = stringValue(error?["code"])"#))
+    XCTAssertTrue(functionSource.contains(#"let detail = code.map { "\($0): \(message)" } ?? message"#))
+    XCTAssertFalse(functionSource.contains(#"guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else"#))
+  }
+
   func testCoordinatorServiceDoesNotOwnDispatchOrLifecycleAuthority() throws {
     let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
 
