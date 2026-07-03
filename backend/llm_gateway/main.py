@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
@@ -11,8 +11,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        await openai_compatible.close_image_generation_client()
-        await close_provider_registry()
+        with suppress(Exception):
+            await openai_compatible.close_image_generation_client()
+        with suppress(Exception):
+            await close_provider_registry()
 
 
 app = FastAPI(title='Omi LLM Gateway', lifespan=lifespan)
