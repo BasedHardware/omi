@@ -229,36 +229,10 @@ describe("desktop action queue", () => {
     expect(queue.some((item) => item.subjectId === "orphaned-story-run")).toBe(false);
   });
 
-  it("uses wider run context only for suppression, not extra visible failed-run items", () => {
+  it("uses wider run context for suppression while capping visible run-derived items", () => {
     const queue = buildDesktopActionQueue({
       nowMs: 20_000,
       runs: [
-        {
-          runId: "visible-orphan",
-          sessionId: "session-visible-orphan",
-          ownerId: "owner-1",
-          status: "orphaned",
-          title: "Create Memory Story",
-          goalText: "Search recent memories and write a short story idea.",
-          createdAtMs: 1_000,
-          completedAtMs: 2_000,
-          updatedAtMs: 19_000,
-          visibleUserGoal: true,
-        },
-      ],
-      runSuppressionContext: [
-        {
-          runId: "visible-orphan",
-          sessionId: "session-visible-orphan",
-          ownerId: "owner-1",
-          status: "orphaned",
-          title: "Create Memory Story",
-          goalText: "Search recent memories and write a short story idea.",
-          createdAtMs: 1_000,
-          completedAtMs: 2_000,
-          updatedAtMs: 19_000,
-          visibleUserGoal: true,
-        },
         {
           runId: "hidden-success",
           sessionId: "session-hidden-success",
@@ -273,12 +247,39 @@ describe("desktop action queue", () => {
           reusable: true,
         },
         {
-          runId: "hidden-failed-run",
-          sessionId: "session-hidden-failed",
+          runId: "visible-failed-run",
+          sessionId: "session-visible-failed",
           ownerId: "owner-1",
           status: "failed",
-          title: "Older hidden failed run",
-          goalText: "A different failed task outside the visible run window.",
+          title: "A visible failed task",
+          goalText: "A different failed task inside the widened run window.",
+          createdAtMs: 5_000,
+          completedAtMs: 6_000,
+          updatedAtMs: 6_000,
+          visibleUserGoal: true,
+        },
+      ],
+      runItemLimit: 1,
+      runSuppressionContext: [
+        {
+          runId: "visible-orphan",
+          sessionId: "session-visible-orphan",
+          ownerId: "owner-1",
+          status: "orphaned",
+          title: "Create Memory Story",
+          goalText: "Search recent memories and write a short story idea.",
+          createdAtMs: 1_000,
+          completedAtMs: 2_000,
+          updatedAtMs: 19_000,
+          visibleUserGoal: true,
+        },
+        {
+          runId: "visible-failed-run",
+          sessionId: "session-visible-failed",
+          ownerId: "owner-1",
+          status: "failed",
+          title: "A visible failed task",
+          goalText: "A different failed task inside the widened run window.",
           createdAtMs: 5_000,
           completedAtMs: 6_000,
           updatedAtMs: 6_000,
@@ -300,7 +301,7 @@ describe("desktop action queue", () => {
       ],
     });
 
-    expect(queue.map((item) => item.subjectId)).toEqual(["delivery-1"]);
+    expect(queue.map((item) => item.subjectId)).toEqual(["visible-failed-run", "delivery-1"]);
   });
 
   it("still surfaces orphaned visible goals when newer successes are unrelated", () => {

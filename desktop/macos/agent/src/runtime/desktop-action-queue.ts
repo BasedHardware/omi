@@ -103,6 +103,7 @@ export interface BuildDesktopActionQueueInput {
   staleAfterMs?: number;
   dispatches?: readonly QueueDispatchInput[];
   runs?: readonly QueueRunInput[];
+  runItemLimit?: number;
   runSuppressionContext?: readonly QueueRunInput[];
   artifactDeliveries?: readonly QueueArtifactDeliveryInput[];
   candidates?: readonly QueueCandidateInput[];
@@ -128,6 +129,7 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
   const nowMs = input.nowMs;
   const staleAfterMs = input.staleAfterMs ?? 30 * 60 * 1000;
   const items: DesktopActionQueueItem[] = [];
+  const runItems: DesktopActionQueueItem[] = [];
   const reusableSessions = new Map<string, QueueRunInput>();
   const suppressionRuns = input.runSuppressionContext ?? input.runs ?? [];
   const successfulVisibleRuns = suppressionRuns.filter((run) => run.status === "succeeded" && run.visibleUserGoal !== false);
@@ -156,7 +158,7 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
   for (const run of input.runs ?? []) {
     if ((run.status === "failed" || run.status === "orphaned") && run.visibleUserGoal !== false) {
       if (isCoveredByNewerSuccessfulRun(run, successfulVisibleRuns)) continue;
-      items.push(
+      runItems.push(
         item({
           kind: "failed_run",
           subjectKind: "run",
@@ -172,7 +174,7 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
         }),
       );
     } else if (["queued", "starting", "running", "waiting_input", "waiting_approval"].includes(run.status) && nowMs - run.updatedAtMs >= staleAfterMs) {
-      items.push(
+      runItems.push(
         item({
           kind: "stale_run",
           subjectKind: "run",
@@ -196,7 +198,7 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
   }
 
   for (const run of reusableSessions.values()) {
-    items.push(
+    runItems.push(
       item({
         kind: "reusable_session",
         subjectKind: "session",
@@ -212,6 +214,11 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
       }),
     );
   }
+  const visibleRunItems = runItems
+    .filter((queueItem) => !isSuppressed(queueItem, input.overrides ?? [], nowMs))
+    .sort(compareQueueItems)
+    .slice(0, input.runItemLimit ?? runItems.length);
+  items.push(...visibleRunItems);
 
   for (const delivery of input.artifactDeliveries ?? []) {
     if (!["pending", "failed", "retrying"].includes(delivery.deliveryStatus)) continue;
@@ -270,7 +277,11 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
 
   return items
     .filter((queueItem) => !isSuppressed(queueItem, input.overrides ?? [], nowMs))
-    .sort((left, right) => left.rank - right.rank || right.priority - left.priority || right.createdAtMs - left.createdAtMs);
+    .sort(compareQueueItems);
+}
+
+function compareQueueItems(left: DesktopActionQueueItem, right: DesktopActionQueueItem): number {
+  return left.rank - right.rank || right.priority - left.priority || right.createdAtMs - left.createdAtMs;
 }
 
 function isCoveredByNewerSuccessfulRun(run: QueueRunInput, successfulRuns: readonly QueueRunInput[]): boolean {

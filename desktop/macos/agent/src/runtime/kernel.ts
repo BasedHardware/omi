@@ -1005,14 +1005,14 @@ export class AgentRuntimeKernel {
     const ownerId = input.ownerId ?? "desktop-local-user";
     const limit = boundedLimit(input.limit, 50, 200);
     const nowMs = Date.now();
-    const visibleRuns = this.readDesktopQueueRuns(ownerId, limit);
-    const runSuppressionContext = this.readDesktopQueueRuns(ownerId, Math.max(limit * 5, 200));
+    const runWindow = this.readDesktopQueueRuns(ownerId, Math.max(limit * 5, 200));
     const queue = buildDesktopActionQueue({
       nowMs,
       staleAfterMs: input.staleAfterMs,
       dispatches: this.readDesktopDispatches(ownerId, limit).map(dispatchToQueueInput),
-      runs: visibleRuns,
-      runSuppressionContext,
+      runs: runWindow,
+      runItemLimit: limit,
+      runSuppressionContext: runWindow,
       artifactDeliveries: this.readDesktopArtifactDeliveries(ownerId, limit).map(deliveryToQueueInput),
       candidates: [
         ...this.readDesktopMemoryCandidates(ownerId, limit).map(memoryCandidateToQueueInput),
