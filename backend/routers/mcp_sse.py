@@ -819,12 +819,22 @@ def execute_tool(
     memory_system = pin_memory_system(user_id, db_client=db)
 
     if tool_name == "search":
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
         try:
             return mcp_search.search(user_id, arguments.get("query"), arguments.get("limit"))
         except mcp_search.SearchError as e:
             raise _search_tool_error(e)
 
     elif tool_name == "fetch":
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
         try:
             return mcp_search.fetch(user_id, arguments.get("id"))
         except mcp_search.SearchError as e:

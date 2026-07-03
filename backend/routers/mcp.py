@@ -214,7 +214,14 @@ def _search_http_error(error: mcp_search.SearchError) -> HTTPException:
 
 # POST (not GET) so the search query stays out of the URL and access logs.
 @router.post("/v1/mcp/search", tags=["mcp"])
-def mcp_search_endpoint(request: McpSearchRequest, uid: str = Depends(get_uid_from_mcp_api_key)):
+def mcp_search_endpoint(
+    request: McpSearchRequest,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
+):
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(status_code=app_key_grant.status_code, detail=app_key_grant.observability)
+    uid = auth_context.uid
     logger.info(f"mcp search {uid} query={sanitize_pii(request.query)}")
     try:
         return mcp_search.search(uid, request.query, request.limit)
@@ -223,7 +230,14 @@ def mcp_search_endpoint(request: McpSearchRequest, uid: str = Depends(get_uid_fr
 
 
 @router.get("/v1/mcp/fetch", tags=["mcp"])
-def mcp_fetch_endpoint(id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def mcp_fetch_endpoint(
+    id: str,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
+):
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(status_code=app_key_grant.status_code, detail=app_key_grant.observability)
+    uid = auth_context.uid
     try:
         return mcp_search.fetch(uid, id)
     except mcp_search.SearchError as e:

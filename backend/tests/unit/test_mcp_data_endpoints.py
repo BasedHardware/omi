@@ -149,6 +149,10 @@ from routers import mcp_sse as sse  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
+# A non-None app/key identity for the memory-read gate on search/fetch. The gate itself
+# (authorize_memory_external_default_memory_read) is patched to "allowed" per-test where a
+# successful read is expected; here we only need a context whose .uid the REST path can read.
+_MEM_AUTH = MagicMock(uid=UID)
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -505,6 +509,41 @@ class TestToolRegistry:
 class TestUnifiedSearchFetch:
     """#4862: ChatGPT/Claude connector contract (search + fetch) over the memory bank."""
 
+    @pytest.fixture(autouse=True)
+    def _allow_memory_read(self):
+        # search/fetch now enforce the same product-level memory-read gate as get_memories.
+        # Grant it by default so the data-path tests below exercise search/fetch behavior; the
+        # explicit reject tests re-patch it to denied.
+        allow = MagicMock(return_value=MagicMock(allowed=True))
+        with patch.object(sse, 'authorize_memory_external_default_memory_read', allow), patch.object(
+            rest, 'authorize_memory_external_default_memory_read', allow
+        ):
+            yield
+
+    def test_tool_search_fetch_require_app_key_identity(self):
+        # No app/key identity (auth_context=None) fails closed with -32009, matching get_memories,
+        # rather than silently reading the memory bank.
+        for tool, args in [('search', {'query': 'x'}), ('fetch', {'id': 'memory:m1'})]:
+            with pytest.raises(sse.ToolExecutionError) as ei:
+                sse.execute_tool(UID, tool, args)
+            assert ei.value.code == -32009
+
+    def test_tool_search_fetch_denied_grant_is_32009(self):
+        # A present-but-denied grant is also rejected (fail closed).
+        deny = MagicMock(return_value=MagicMock(allowed=False, observability='denied'))
+        with patch.object(sse, 'authorize_memory_external_default_memory_read', deny):
+            for tool, args in [('search', {'query': 'x'}), ('fetch', {'id': 'memory:m1'})]:
+                with pytest.raises(sse.ToolExecutionError) as ei:
+                    sse.execute_tool(UID, tool, args, auth_context=_MEM_AUTH)
+                assert ei.value.code == -32009
+
+    def test_rest_search_denied_grant_raises_http(self):
+        deny = MagicMock(return_value=MagicMock(allowed=False, status_code=403, observability='denied'))
+        with patch.object(rest, 'authorize_memory_external_default_memory_read', deny):
+            with pytest.raises(rest.HTTPException) as ei:
+                rest.mcp_search_endpoint(rest.McpSearchRequest(query='x'), auth_context=_MEM_AUTH)
+            assert ei.value.status_code == 403
+
     @patch('utils.mcp_search.conversations_db')
     @patch('utils.mcp_search.memories_db')
     @patch('utils.mcp_search.vector_db')
@@ -515,7 +554,7 @@ class TestUnifiedSearchFetch:
         mock_conv.get_conversations_by_id.return_value = [
             {'id': 'c1', 'structured': {'title': 'Standup', 'overview': 'Sprint sync'}}
         ]
-        result = sse.execute_tool(UID, 'search', {'query': 'hiking'})
+        result = sse.execute_tool(UID, 'search', {'query': 'hiking'}, auth_context=_MEM_AUTH)
         ids = [r['id'] for r in result['results']]
         assert 'memory:m1' in ids and 'conversation:c1' in ids
         r0 = result['results'][0]
@@ -525,7 +564,7 @@ class TestUnifiedSearchFetch:
     @patch('utils.mcp_search.vector_db')
     def test_tool_search_empty_query_is_invalid(self, mock_vec):
         with pytest.raises(sse.ToolExecutionError) as ei:
-            sse.execute_tool(UID, 'search', {'query': '   '})
+            sse.execute_tool(UID, 'search', {'query': '   '}, auth_context=_MEM_AUTH)
         assert ei.value.code == -32602
 
     @patch('utils.mcp_search.conversations_db')
@@ -544,7 +583,7 @@ class TestUnifiedSearchFetch:
         ]
         mock_vec.query_vectors.return_value = ['c1']
         mock_conv.get_conversations_by_id.return_value = [{'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}]
-        result = sse.execute_tool(UID, 'search', {'query': 'q'})
+        result = sse.execute_tool(UID, 'search', {'query': 'q'}, auth_context=_MEM_AUTH)
         # locked memory (m2), rejected memory (m3, user_review False), and locked conversation (c1) all dropped
         assert [r['id'] for r in result['results']] == ['memory:m1']
 
@@ -556,7 +595,7 @@ class TestUnifiedSearchFetch:
             'category': 'hobbies',
             'created_at': NOW,
         }
-        result = sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'})
+        result = sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'}, auth_context=_MEM_AUTH)
         assert result['id'] == 'memory:m1' and result['text'] == 'Loves hiking'
         assert result['metadata']['type'] == 'memory'
         assert result['url'] == 'https://h.omi.me/memories/m1'
@@ -569,7 +608,7 @@ class TestUnifiedSearchFetch:
             'transcript_segments': [{'text': 'Hello'}, {'text': 'World'}],
             'created_at': NOW,
         }
-        result = sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'})
+        result = sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'}, auth_context=_MEM_AUTH)
         assert result['title'] == 'Standup'
         assert 'Sprint sync' in result['text'] and 'Hello' in result['text']
         assert result['metadata']['type'] == 'conversation'
@@ -578,7 +617,7 @@ class TestUnifiedSearchFetch:
     def test_tool_fetch_not_found_is_32001(self, mock_mem):
         mock_mem.get_memory.return_value = None
         with pytest.raises(sse.ToolExecutionError) as ei:
-            sse.execute_tool(UID, 'fetch', {'id': 'memory:nope'})
+            sse.execute_tool(UID, 'fetch', {'id': 'memory:nope'}, auth_context=_MEM_AUTH)
         assert ei.value.code == -32001
 
     @patch('utils.mcp_search.memories_db')
@@ -591,21 +630,21 @@ class TestUnifiedSearchFetch:
         ):
             mock_mem.get_memory.return_value = hidden
             with pytest.raises(sse.ToolExecutionError) as ei:
-                sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'})
+                sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'}, auth_context=_MEM_AUTH)
             assert ei.value.code == -32001
 
     @patch('utils.mcp_search.conversations_db')
     def test_tool_fetch_locked_is_paywall(self, mock_conv):
         mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}
         with pytest.raises(sse.ToolExecutionError) as ei:
-            sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'})
+            sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'}, auth_context=_MEM_AUTH)
         assert ei.value.code == -32002
 
     def test_tool_fetch_bad_or_nonstring_id_is_invalid(self):
         # No prefix, non-string, and a valid prefix with an empty raw id are all invalid (not 404).
         for bad in ['garbage', 123, 'memory:', 'conversation:']:
             with pytest.raises(sse.ToolExecutionError) as ei:
-                sse.execute_tool(UID, 'fetch', {'id': bad})
+                sse.execute_tool(UID, 'fetch', {'id': bad}, auth_context=_MEM_AUTH)
             assert ei.value.code == -32602
 
     @patch('utils.mcp_search.conversations_db')
@@ -617,7 +656,7 @@ class TestUnifiedSearchFetch:
         mock_conv.get_conversations_by_id.return_value = [
             {'id': 'c1', 'structured': {'title': 'Call'}, 'transcript_segments': [{'text': 'Discussed the roadmap'}]}
         ]
-        result = sse.execute_tool(UID, 'search', {'query': 'roadmap'})
+        result = sse.execute_tool(UID, 'search', {'query': 'roadmap'}, auth_context=_MEM_AUTH)
         stub = next(r for r in result['results'] if r['id'] == 'conversation:c1')
         assert 'Discussed the roadmap' in stub['text']
 
@@ -627,13 +666,13 @@ class TestUnifiedSearchFetch:
     def test_rest_search_empty(self, mock_vec, mock_mem, mock_conv):
         mock_vec.find_similar_memories.return_value = []
         mock_vec.query_vectors.return_value = []
-        assert rest.mcp_search_endpoint(rest.McpSearchRequest(query='hi'), uid=UID) == {'results': []}
+        assert rest.mcp_search_endpoint(rest.McpSearchRequest(query='hi'), auth_context=_MEM_AUTH) == {'results': []}
 
     @patch('utils.mcp_search.memories_db')
     def test_rest_fetch_not_found_404(self, mock_mem):
         mock_mem.get_memory.return_value = None
         with pytest.raises(rest.HTTPException) as ei:
-            rest.mcp_fetch_endpoint(id='memory:nope', uid=UID)
+            rest.mcp_fetch_endpoint(id='memory:nope', auth_context=_MEM_AUTH)
         assert ei.value.status_code == 404
 
     def test_search_fetch_tools_registered(self):
@@ -647,7 +686,12 @@ class TestUnifiedSearchFetch:
         mock_vec.find_similar_memories.return_value = []
         mock_vec.query_vectors.return_value = []
         resp, _ = sse.handle_mcp_message(
-            sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read', 'conversations.read']),
+            sse.MCPAuthContext(
+                uid=UID,
+                auth_type='oauth',
+                scopes=['memories.read', 'conversations.read'],
+                memory_context=_MEM_AUTH,
+            ),
             {
                 'jsonrpc': '2.0',
                 'id': 1,
