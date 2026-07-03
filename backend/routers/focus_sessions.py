@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 import database.focus_sessions as focus_sessions_db
+import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
 from utils.request_validation import validate_calendar_date
 
@@ -70,3 +71,13 @@ def get_focus_stats(
 ):
     date = validate_calendar_date(date)
     return focus_sessions_db.get_focus_stats(uid, date=date)
+
+
+@router.get('/v1/screen-activity/ids', tags=['screen-activity'])
+def list_screen_activity_ids(uid: str = Depends(auth.get_current_user_uid)):
+    """Return all of the user's screen-activity document IDs (IDs only, no field reads).
+
+    A lightweight way for a client to reconcile which captured rows exist (for sync or bulk
+    operations) without paging the full activity list.
+    """
+    return {'ids': screen_activity_db.get_screen_activity_ids(uid)}
