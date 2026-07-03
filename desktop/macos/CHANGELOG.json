@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.5",
+      "date": "2026-07-03",
+      "changes": [
+        "Fixed a desktop chat build failure."
+      ]
+    },
+    {
       "version": "0.12.4",
       "date": "2026-07-03",
       "changes": [
