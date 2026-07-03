@@ -1,0 +1,8 @@
+{
+  "version": "0.12.1",
+  "date": "2026-07-03",
+  "changes": [
+    "Improved Gemini request timeout handling so stalled desktop AI requests fail faster with a retryable error",
+    "Fixed proactive notifications (and the floating bar popup) still appearing after turning the master Notifications toggle off in Settings"
+  ]
+}
