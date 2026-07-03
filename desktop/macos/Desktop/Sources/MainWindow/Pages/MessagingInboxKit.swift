@@ -9,6 +9,13 @@ enum MessagingInbox {
   /// Incoming (not-from-me) bubble fill — a neutral dark gray shared by all three.
   static let incomingBubbleFill = Color(red: 0.17, green: 0.17, blue: 0.19)
 
+  /// Greyish background for the left conversation list (the sidebar), a shade
+  /// lighter than the near-black content pane so the two columns read distinctly —
+  /// bringing back the look Telegram's native `List` gave.
+  static let sidebarBackground = OmiColors.backgroundSecondary
+  /// Selected-row fill in the list — lighter than the sidebar so selection stands out.
+  static let sidebarSelection = OmiColors.backgroundTertiary
+
   /// Stable, readable per-sender color so "who said what" is clear at a glance in
   /// group chats. Deterministic from the name so a sender keeps the same color.
   static func senderColor(for name: String) -> Color {
@@ -130,7 +137,7 @@ struct InboxConversationRow: View {
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 10)
-    .background(isSelected ? OmiColors.backgroundSecondary : Color.clear)
+    .background(isSelected ? MessagingInbox.sidebarSelection : Color.clear)
     .contentShape(Rectangle())
   }
 }

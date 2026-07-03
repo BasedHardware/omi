@@ -143,7 +143,7 @@ struct TelegramInboxPage: View {
         }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(MessagingInbox.sidebarBackground)
   }
 
   private var emptyDetail: some View {
