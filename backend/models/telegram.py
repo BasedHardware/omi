@@ -50,6 +50,10 @@ class TelegramStatus(BaseModel):
 class TelegramDraftMessage(BaseModel):
     text: str
     is_from_me: bool = False
+    # In a group chat, who sent this message (display name or handle). Lets the
+    # drafter attribute messages to real senders and judge whether the user is
+    # actually being addressed. Ignored for 1:1 threads.
+    sender: Optional[str] = None
     # Optional send time; when every message in a thread carries one, draft_reply
     # sorts by it so ordering is correct regardless of client-supplied order.
     timestamp: Optional[datetime] = None
@@ -59,6 +63,7 @@ class TelegramDraftRequest(BaseModel):
     person: str  # name, person id, or handle (e.g. 'tg:<user_id>')
     thread: List[TelegramDraftMessage] = []
     intent: Optional[str] = None  # optional steer, e.g. "politely decline"
+    is_group: bool = False  # group thread → drafter attributes senders and may abstain
 
 
 class TelegramDraftResponse(BaseModel):
@@ -67,3 +72,6 @@ class TelegramDraftResponse(BaseModel):
     # disambiguation ask, NOT a sendable reply. Clients must surface it and must
     # never auto-send it.
     ambiguous: bool = False
+    # True when the drafter judged the latest group message wasn't directed at the
+    # user: `draft` is empty and the client should show no draft.
+    abstain: bool = False

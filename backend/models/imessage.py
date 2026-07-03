@@ -51,6 +51,10 @@ class IMessageStatus(BaseModel):
 class IMessageDraftMessage(BaseModel):
     text: str
     is_from_me: bool = False
+    # In a group chat, who sent this message (display name or handle). Lets the
+    # drafter attribute messages to real senders and judge whether the user is
+    # actually being addressed. Ignored for 1:1 threads.
+    sender: Optional[str] = None
     # Optional send time; when every message in a thread carries one, draft_reply
     # sorts by it so ordering is correct regardless of client-supplied order.
     timestamp: Optional[datetime] = None
@@ -60,6 +64,7 @@ class IMessageDraftRequest(BaseModel):
     person: str  # name, person id, or handle
     thread: List[IMessageDraftMessage] = []
     intent: Optional[str] = None  # optional steer, e.g. "politely decline"
+    is_group: bool = False  # group thread → drafter attributes senders and may abstain
 
 
 class IMessageDraftResponse(BaseModel):
@@ -68,6 +73,9 @@ class IMessageDraftResponse(BaseModel):
     # disambiguation ask, NOT a sendable reply. Clients must surface it and must
     # never auto-send it.
     ambiguous: bool = False
+    # True when the drafter judged the latest group message wasn't directed at the
+    # user: `draft` is empty and the client should show no draft.
+    abstain: bool = False
 
 
 class IMessageContact(BaseModel):

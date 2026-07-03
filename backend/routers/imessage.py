@@ -64,8 +64,12 @@ def imessage_disconnect(uid: str = Depends(auth.get_current_user_uid)):
 @router.post('/v1/imessage/draft-reply', response_model=IMessageDraftResponse, tags=['imessage'])
 async def imessage_draft_reply(req: IMessageDraftRequest, uid: str = Depends(auth.get_current_user_uid)):
     thread = [m.dict() for m in req.thread]
-    result = await run_blocking(llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent)
-    return IMessageDraftResponse(draft=result['draft'], ambiguous=result.get('ambiguous', False))
+    result = await run_blocking(
+        llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent, req.is_group
+    )
+    return IMessageDraftResponse(
+        draft=result['draft'], ambiguous=result.get('ambiguous', False), abstain=result.get('abstain', False)
+    )
 
 
 @router.post('/v1/imessage/contacts/sync', response_model=IMessageContactsSyncResponse, tags=['imessage'])
