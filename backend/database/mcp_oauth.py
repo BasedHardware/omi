@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import re
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
 
@@ -35,7 +35,8 @@ AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
-PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod"}
+PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
+CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
 
 
 def hash_secret(secret: str) -> str:
@@ -89,6 +90,9 @@ def _client_from_config(config: dict) -> Optional[dict]:
         "name": config.get("name") or client_id,
         "registration_mode": config.get("registration_mode") or "env",
         "allowed_redirect_uris": _csv_values(config.get("allowed_redirect_uris") or config.get("redirect_uris")),
+        "allowed_redirect_uri_prefixes": _csv_values(
+            config.get("allowed_redirect_uri_prefixes") or config.get("redirect_uri_prefixes")
+        ),
         "allowed_resources": _csv_values(config.get("allowed_resources") or config.get("resources"))
         or [MCP_RESOURCE_URL],
         "allowed_scopes": _csv_values(config.get("allowed_scopes") or config.get("scopes")) or SUPPORTED_SCOPES,
@@ -138,6 +142,9 @@ def _legacy_chatgpt_client() -> dict:
         "name": DEFAULT_CLIENT_NAME,
         "registration_mode": "legacy_env",
         "allowed_redirect_uris": _csv_env("MCP_OAUTH_CHATGPT_REDIRECT_URIS"),
+        "allowed_redirect_uri_prefixes": (
+            [CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX] if DEFAULT_CLIENT_ID in PUBLIC_CHATGPT_CLIENT_IDS else []
+        ),
         "allowed_resources": [MCP_RESOURCE_URL],
         "allowed_scopes": SUPPORTED_SCOPES,
         "token_endpoint_auth_method": auth_method,
@@ -168,7 +175,20 @@ def _default_public_client() -> Optional[dict]:
     }
 
 
+def _finalize_client(client: Optional[dict]) -> Optional[dict]:
+    """Apply built-in provider defaults to configured and generated clients."""
+    if not client:
+        return None
+    if client.get("id") not in PUBLIC_CHATGPT_CLIENT_IDS:
+        return client
+    prefixes = list(client.get("allowed_redirect_uri_prefixes") or [])
+    if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
+        prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
+    return {**client, "allowed_redirect_uri_prefixes": prefixes}
+
+
 def get_client(client_id: str) -> Optional[dict]:
+    client = None
     doc = db.collection("mcp_oauth_clients").document(client_id).get()
     if doc.exists:
         data = doc.to_dict() or {}
@@ -176,15 +196,22 @@ def get_client(client_id: str) -> Optional[dict]:
         data.setdefault("allowed_resources", [MCP_RESOURCE_URL])
         data.setdefault("allowed_scopes", SUPPORTED_SCOPES)
         data.setdefault("token_endpoint_auth_method", "client_secret_post")
-        return data
-    env_client = _env_clients().get(client_id)
-    if env_client:
-        return env_client
-    if client_id == DEFAULT_CLIENT_ID:
-        return _legacy_chatgpt_client()
-    if client_id == DEFAULT_PUBLIC_CLIENT_ID:
-        return _default_public_client()
-    return None
+        data.setdefault("allowed_redirect_uri_prefixes", [])
+        client = data
+    else:
+        env_client = _env_clients().get(client_id)
+        if env_client:
+            client = env_client
+        elif client_id == DEFAULT_CLIENT_ID:
+            client = _legacy_chatgpt_client()
+        elif client_id in PUBLIC_CHATGPT_CLIENT_IDS:
+            client = _legacy_chatgpt_client()
+            client["id"] = client_id
+            client["token_endpoint_auth_method"] = "none"
+            client["client_secret_hash"] = ""
+        elif client_id == DEFAULT_PUBLIC_CLIENT_ID:
+            client = _default_public_client()
+    return _finalize_client(client)
 
 
 def verify_client_secret(client: dict, client_secret: Optional[str]) -> bool:
@@ -210,9 +237,26 @@ def token_endpoint_auth_methods_supported() -> list[str]:
 
 
 def validate_redirect_uri(client: dict, redirect_uri: str) -> bool:
-    if urlsplit(redirect_uri).fragment:
+    parsed = urlsplit(redirect_uri)
+    if parsed.fragment or parsed.query:
         return False
-    return redirect_uri in set(client.get("allowed_redirect_uris") or [])
+    if redirect_uri in set(client.get("allowed_redirect_uris") or []):
+        return True
+
+    for prefix in client.get("allowed_redirect_uri_prefixes") or []:
+        if not redirect_uri.startswith(prefix):
+            continue
+        prefix_parsed = urlsplit(prefix)
+        if parsed.scheme != "https" or parsed.scheme != prefix_parsed.scheme or parsed.netloc != prefix_parsed.netloc:
+            continue
+        if not parsed.path.startswith(prefix_parsed.path):
+            continue
+        segments = parsed.path.split("/")
+        decoded_segments = [unquote(segment) for segment in segments]
+        if any(segment in {".", ".."} for segment in segments + decoded_segments):
+            continue
+        return True
+    return False
 
 
 def validate_resource(client: dict, resource: str) -> bool:

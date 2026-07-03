@@ -215,6 +215,45 @@ def test_chatgpt_prod_client_uses_public_pkce_exchange(monkeypatch):
     assert token_pair['scope'] == ' '.join(scopes)
 
 
+def test_chatgpt_dynamic_connector_redirect_prefix_is_constrained(monkeypatch):
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi-chatgpt-prod')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_REDIRECT_URIS', 'https://chatgpt.com/connector_platform_oauth_redirect')
+    monkeypatch.delenv('MCP_OAUTH_CHATGPT_TOKEN_AUTH_METHOD', raising=False)
+    monkeypatch.setattr(mcp_oauth, 'DEFAULT_CLIENT_ID', 'omi-chatgpt-prod')
+
+    client = mcp_oauth.get_client('omi-chatgpt-prod')
+
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector_platform_oauth_redirect')
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback')
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/OUbdUMlL15Ct')
+    assert not mcp_oauth.validate_redirect_uri(
+        client, 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback?next=https://evil.test'
+    )
+    assert not mcp_oauth.validate_redirect_uri(
+        client, 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback#frag'
+    )
+    assert not mcp_oauth.validate_redirect_uri(client, 'http://chatgpt.com/connector/oauth/omi-review-smoke/callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://evil.test/connector/oauth/omi-review-smoke/callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth.evil/callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/../callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/%2e%2e/callback')
+
+
+def test_chatgpt_dev_client_uses_public_pkce_exchange(monkeypatch):
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_REDIRECT_URIS', 'https://chatgpt.com/connector_platform_oauth_redirect')
+    monkeypatch.delenv('MCP_OAUTH_CHATGPT_TOKEN_AUTH_METHOD', raising=False)
+    monkeypatch.setattr(mcp_oauth, 'DEFAULT_CLIENT_ID', 'omi')
+
+    client = mcp_oauth.get_client('omi-chatgpt-dev')
+
+    assert client['id'] == 'omi-chatgpt-dev'
+    assert client['token_endpoint_auth_method'] == 'none'
+    assert mcp_oauth.verify_client_auth(client, None)
+    assert not mcp_oauth.verify_client_auth(client, 'unexpected-secret')
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/dev-test/callback')
+
+
 def test_chatgpt_token_auth_method_env_can_force_confidential_client(monkeypatch):
     monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi-chatgpt-prod')
     monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_SECRET', 'client-secret')
