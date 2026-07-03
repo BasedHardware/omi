@@ -14,7 +14,7 @@ import asyncio
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
-from ._client import db
+from ._client import db, get_firestore_client
 from .cache import get_memory_cache
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
@@ -205,6 +205,79 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
     # Invalidate local cache so this instance sees the update immediately
     get_memory_cache().delete(f"mentor_frequency:{uid}")
     return True
+
+
+# Quiet hours (do-not-disturb) window for proactive notifications.
+# Defaults are only used for the displayed window; the feature is off unless enabled.
+DEFAULT_QUIET_HOURS_START = 22  # 10 PM local
+DEFAULT_QUIET_HOURS_END = 7  # 7 AM local
+
+
+def _get_db(firestore_client=None):
+    return firestore_client if firestore_client is not None else get_firestore_client()
+
+
+def get_quiet_hours(uid: str, *, firestore_client=None) -> dict:
+    """Get the user's quiet-hours (do-not-disturb) preference for proactive notifications.
+
+    Returns {'enabled', 'start_hour', 'end_hour', 'time_zone'}. Disabled by default so existing
+    users are unaffected until they opt in. Cached (30s TTL) with a field projection so the
+    per-conversation notification path does not read the full user doc on every stream.
+    """
+    cache = get_memory_cache()
+
+    def fetch():
+        database = _get_db(firestore_client)
+        doc = (
+            database.collection('users')
+            .document(uid)
+            .get(field_paths=['quiet_hours_enabled', 'quiet_hours_start_local', 'quiet_hours_end_local', 'time_zone'])
+        )
+        data = doc.to_dict() if doc.exists else {}
+        return {
+            'enabled': bool(data.get('quiet_hours_enabled', False)),
+            'start_hour': int(data.get('quiet_hours_start_local', DEFAULT_QUIET_HOURS_START)),
+            'end_hour': int(data.get('quiet_hours_end_local', DEFAULT_QUIET_HOURS_END)),
+            'time_zone': data.get('time_zone'),
+        }
+
+    return cache.get_or_fetch(f"quiet_hours:{uid}", fetch, ttl=30)
+
+
+def set_quiet_hours(uid: str, enabled: bool, start_hour: int, end_hour: int, *, firestore_client=None) -> bool:
+    """Set the user's quiet-hours preference. Hours are local 0-23.
+
+    Raises ValueError if a start/end hour is out of range.
+    """
+    for label, hour in (('start_hour', start_hour), ('end_hour', end_hour)):
+        if not (0 <= hour <= 23):
+            raise ValueError(f"Invalid {label}: {hour}. Must be 0-23.")
+
+    database = _get_db(firestore_client)
+    user_ref = database.collection('users').document(uid)
+    user_ref.set(
+        {
+            'quiet_hours_enabled': bool(enabled),
+            'quiet_hours_start_local': int(start_hour),
+            'quiet_hours_end_local': int(end_hour),
+        },
+        merge=True,
+    )
+    get_memory_cache().delete(f"quiet_hours:{uid}")
+    return True
+
+
+def is_within_quiet_hours(current_hour_local: int, start_hour: int, end_hour: int) -> bool:
+    """Whether current_hour_local falls in the quiet window [start_hour, end_hour).
+
+    Pure (no I/O). start == end means there is no window (never quiet). A window that wraps past
+    midnight (start > end, e.g. 22 -> 7) is handled explicitly.
+    """
+    if start_hour == end_hour:
+        return False
+    if start_hour < end_hour:
+        return start_hour <= current_hour_local < end_hour
+    return current_hour_local >= start_hour or current_hour_local < end_hour
 
 
 def get_all_tokens(uid: str) -> list[str]:

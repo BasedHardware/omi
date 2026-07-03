@@ -8,9 +8,12 @@ has accumulated to evaluate a proactive notification.
 import time
 import threading
 import logging
+from datetime import datetime
 from typing import List, Dict, Any
 
-from database.notifications import get_mentor_notification_frequency
+import pytz
+
+from database.notifications import get_mentor_notification_frequency, get_quiet_hours, is_within_quiet_hours
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +107,18 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Lis
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
         return None
+
+    # Respect the user's quiet-hours (do-not-disturb) window, if enabled, so proactive
+    # notifications don't fire in the middle of the night. Off by default (no-op unless opted in).
+    quiet = get_quiet_hours(uid)
+    if quiet.get('enabled'):
+        tz_name = quiet.get('time_zone')
+        try:
+            now_local = datetime.now(pytz.timezone(tz_name)) if tz_name else datetime.now(pytz.utc)
+        except pytz.UnknownTimeZoneError:
+            now_local = datetime.now(pytz.utc)
+        if is_within_quiet_hours(now_local.hour, quiet['start_hour'], quiet['end_hour']):
+            return None
 
     current_time = time.time()
     buffer_data = message_buffer.get_buffer(uid)
