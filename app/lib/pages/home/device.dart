@@ -105,7 +105,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     final device = provider.pairedDevice ?? provider.connectedDevice;
     if (device == null || device.id.isEmpty) return;
 
-    final controller = TextEditingController(text: device.name);
+    final currentDisplayName = provider.getDeviceDisplayName(device);
+    final controller = TextEditingController(text: currentDisplayName);
     final newName = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
@@ -144,9 +145,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     if (newName == null) return;
 
     final trimmedName = newName.trim();
-    if (trimmedName.isEmpty || trimmedName == device.name) return;
+    if (trimmedName.isEmpty || trimmedName == currentDisplayName) return;
 
-    await provider.updateCustomDeviceName(trimmedName);
+    await provider.updateCustomDeviceName(device.id, trimmedName);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.saved)));
   }
@@ -415,11 +416,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               // Save device ID before clearing prefs
               final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
 
-              // Clear stored device
-              await provider.clearCustomDeviceName(deviceId);
-              await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-              SharedPreferencesUtil().deviceName = '';
-
               // Fully tear down connection, transport, and native service
               if (deviceId.isNotEmpty) {
                 await ServiceManager.instance().device.forgetDevice(deviceId);
@@ -427,6 +423,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   BleHostApi().unmanageDevice(deviceId);
                 } catch (_) {}
               }
+
+              await provider.clearCustomDeviceName(deviceId);
+              await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+              SharedPreferencesUtil().deviceName = '';
 
               if (mounted) {
                 context.read<DeviceProvider>().setIsConnected(false);
@@ -472,15 +472,16 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     () => Navigator.of(context).pop(),
                     () async {
                       Navigator.of(context).pop();
-                      final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+                      final device = provider.connectedDevice;
+                      final deviceId = device?.id ?? SharedPreferencesUtil().btDevice.id;
+                      if (device != null) {
+                        await _bleUnpairDevice(device);
+                      }
                       await provider.clearCustomDeviceName(deviceId);
                       await SharedPreferencesUtil().btDeviceSet(
                         BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
                       );
                       SharedPreferencesUtil().deviceName = '';
-                      if (provider.connectedDevice != null) {
-                        await _bleUnpairDevice(provider.connectedDevice!);
-                      }
                       if (context.mounted) {
                         context.read<DeviceProvider>().setIsConnected(false);
                         context.read<DeviceProvider>().setConnectedDevice(null);
@@ -528,7 +529,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildDeviceInfoSection(DeviceProvider provider) {
-    final deviceName = provider.pairedDevice?.name ?? context.l10n.unknownDevice;
+    final deviceName = provider.pairedDevice == null
+        ? context.l10n.unknownDevice
+        : provider.getDeviceDisplayName(provider.pairedDevice);
     final modelNumber = provider.pairedDevice?.modelNumber ?? context.l10n.unknown;
     final manufacturer = provider.pairedDevice?.manufacturerName ?? context.l10n.unknown;
     final firmware = provider.pairedDevice?.firmwareRevision ?? context.l10n.unknown;

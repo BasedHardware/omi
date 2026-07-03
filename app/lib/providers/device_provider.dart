@@ -69,6 +69,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _discoveryTimer;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
+  int _connectionEventToken = 0;
 
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
@@ -77,34 +78,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ServiceManager.instance().device.subscribe(this, this);
   }
 
-  BtDevice _withCustomDisplayName(BtDevice device) {
+  String getDeviceDisplayName(BtDevice? device) {
+    if (device == null) return '';
     final customName = SharedPreferencesUtil().getCustomDeviceName(device.id);
-    if (customName.isEmpty) return device;
-    return device.copyWith(name: customName);
+    return customName.isEmpty ? device.name : customName;
   }
 
-  Future<void> updateCustomDeviceName(String name) async {
-    final deviceId = pairedDevice?.id ?? connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+  Future<void> updateCustomDeviceName(String deviceId, String name) async {
     if (deviceId.isEmpty) return;
 
     await SharedPreferencesUtil().saveCustomDeviceName(deviceId, name);
 
-    final rawDevice = pairedDevice ?? connectedDevice ?? SharedPreferencesUtil().btDevice;
-    final displayDevice = _withCustomDisplayName(rawDevice);
-
-    connectedDevice = connectedDevice?.id == deviceId ? displayDevice : connectedDevice;
-    pairedDevice = pairedDevice?.id == deviceId ? displayDevice : pairedDevice;
-    if (pairedDevice == null || pairedDevice!.id.isEmpty) {
-      pairedDevice = displayDevice;
-    }
-
-    SharedPreferencesUtil().btDevice = displayDevice;
-    SharedPreferencesUtil().deviceName = displayDevice.name;
+    final storedDevice = SharedPreferencesUtil().btDevice;
+    final rawDevice = pairedDevice?.id == deviceId
+        ? pairedDevice
+        : connectedDevice?.id == deviceId
+            ? connectedDevice
+            : storedDevice.id == deviceId
+                ? storedDevice
+                : null;
+    final displayName = rawDevice == null ? name.trim() : getDeviceDisplayName(rawDevice);
 
     BatteryWidgetService().updateBatteryInfo(
-      deviceName: displayDevice.name,
+      deviceName: displayName,
       batteryLevel: batteryLevel,
-      deviceType: displayDevice.type.name,
+      deviceType: rawDevice?.type.name ?? 'omi',
       isConnected: isConnected,
     );
     notifyListeners();
@@ -121,9 +119,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<void> setConnectedDevice(BtDevice? device) async {
-    final displayDevice = device == null ? null : _withCustomDisplayName(device);
-    connectedDevice = displayDevice;
-    pairedDevice = displayDevice;
+    connectedDevice = device;
+    pairedDevice = device;
     await getDeviceInfo();
     Logger.debug('setConnectedDevice: $device');
     notifyListeners();
@@ -136,14 +133,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         return;
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
-      final deviceInfo = await connectedDevice?.getDeviceInfo(connection);
-      pairedDevice = _withCustomDisplayName(deviceInfo ?? connectedDevice!);
+      pairedDevice = await connectedDevice?.getDeviceInfo(connection) ?? connectedDevice;
       SharedPreferencesUtil().btDevice = pairedDevice!;
     } else {
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         pairedDevice = BtDevice.empty();
       } else {
-        pairedDevice = _withCustomDisplayName(SharedPreferencesUtil().btDevice);
+        pairedDevice = SharedPreferencesUtil().btDevice;
       }
     }
     notifyListeners();
@@ -201,7 +197,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
         BatteryWidgetService().updateBatteryInfo(
-          deviceName: connectedDevice?.name ?? '',
+          deviceName: getDeviceDisplayName(connectedDevice),
           batteryLevel: value,
           deviceType: connectedDevice?.type.name ?? 'omi',
           isConnected: true,
@@ -378,7 +374,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (connection != null) {
         await setConnectedDevice(connection.device);
         setisDeviceStorageSupport();
-        SharedPreferencesUtil().deviceName = connectedDevice?.name ?? connection.device.name;
+        SharedPreferencesUtil().deviceName = connection.device.name;
         PlatformManager.instance.analytics.deviceConnected();
         setIsConnected(true);
       }
@@ -416,6 +412,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
+    _connectionEventToken++;
     _havingNewFirmware = false;
     _isFirmwareDialogShowing = false;
     _bleChargingStatusListener?.cancel();
@@ -480,7 +477,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
+    final connectionEventToken = ++_connectionEventToken;
     await setConnectedDevice(device);
+    if (_connectionEventToken != connectionEventToken || connectedDevice?.id != device.id) return;
 
     if (captureProvider != null) {
       captureProvider?.updateRecordingDevice(connectedDevice ?? device);
@@ -491,10 +490,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Read initial battery level
     int currentLevel = await _retrieveBatteryLevel(device.id);
+    if (_connectionEventToken != connectionEventToken || connectedDevice?.id != device.id) return;
     if (currentLevel != -1) {
       batteryLevel = currentLevel;
       BatteryWidgetService().updateBatteryInfo(
-        deviceName: connectedDevice?.name ?? device.name,
+        deviceName: getDeviceDisplayName(connectedDevice ?? device),
         batteryLevel: currentLevel,
         deviceType: (connectedDevice ?? device).type.name,
         isConnected: true,
@@ -504,26 +504,29 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Then set up listeners for battery changes and charging status
     await initiateBleBatteryListener();
     await initiateChargingStatusListener();
+    if (_connectionEventToken != connectionEventToken || connectedDevice?.id != device.id) return;
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
     await captureProvider?.streamDeviceRecording(device: device);
+    if (_connectionEventToken != connectionEventToken || connectedDevice?.id != device.id) return;
 
     await getDeviceInfo();
+    if (_connectionEventToken != connectionEventToken || connectedDevice?.id != device.id) return;
     SharedPreferencesUtil().deviceName = pairedDevice?.name ?? connectedDevice?.name ?? device.name;
 
     // Wals
     final syncs = ServiceManager.instance().wal.getSyncs();
-    final displayDevice = connectedDevice ?? device;
-    syncs.setDevice(displayDevice);
-    syncs.sdcard.setDevice(displayDevice);
-    syncs.flashPage.setDevice(displayDevice);
-    syncs.storage.setDevice(displayDevice);
-    syncs.ring.setDevice(displayDevice);
+    final syncDevice = connectedDevice ?? device;
+    syncs.setDevice(syncDevice);
+    syncs.sdcard.setDevice(syncDevice);
+    syncs.flashPage.setDevice(syncDevice);
+    syncs.storage.setDevice(syncDevice);
+    syncs.ring.setDevice(syncDevice);
 
     // Auto-sync: check if device has offline files
-    _checkAndStartAutoSync(displayDevice);
+    _checkAndStartAutoSync(syncDevice);
 
     notifyListeners();
 
