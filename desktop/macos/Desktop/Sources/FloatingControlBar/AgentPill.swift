@@ -783,7 +783,12 @@ final class AgentPillsManager: ObservableObject {
             guard !Task.isCancelled else { return }
             do {
                 if let activeRunId, !activeRunId.isEmpty, !pill.status.isFinished {
-                    guard await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) else {
+                    switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) {
+                    case .stopped:
+                        break
+                    case .cancelled:
+                        return
+                    case .failed:
                         pendingFollowUpsByPill[pill.id, default: []].append(text)
                         pill.latestActivity = "Queued follow-up until the current run stops…"
                         pill.markContentChanged()
@@ -817,30 +822,36 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pill.id] = runTask
     }
 
-    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> Bool {
+    private enum ActiveRunCancellationResult {
+        case stopped
+        case cancelled
+        case failed
+    }
+
+    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> ActiveRunCancellationResult {
         do {
             _ = try await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
         } catch {
             logError("AgentPills: failed to cancel active run before follow-up", error: error)
-            return false
+            return .failed
         }
         for _ in 0..<20 {
-            if Task.isCancelled { return false }
+            if Task.isCancelled { return .cancelled }
             do {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
                 let status = inspection.status
                 if ["succeeded", "completed", "failed", "timed_out", "orphaned", "cancelled"].contains(status) {
-                    return true
+                    return .stopped
                 }
                 pill.latestActivity = status == "cancelling" ? "Stopping current run…" : "Waiting for current run to stop…"
                 pill.markContentChanged()
             } catch {
                 logError("AgentPills: failed to inspect active run before follow-up", error: error)
-                return false
+                return .failed
             }
             try? await Task.sleep(nanoseconds: 250_000_000)
         }
-        return false
+        return .failed
     }
 
     /// Force-dismiss a pill.

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
 import { buildDesktopActionQueue } from "../src/runtime/desktop-action-queue.js";
 
 describe("desktop action queue", () => {
@@ -230,11 +229,78 @@ describe("desktop action queue", () => {
     expect(queue.some((item) => item.subjectId === "orphaned-story-run")).toBe(false);
   });
 
-  it("kernel reads a wider run window before queue suppression applies the final limit", () => {
-    const source = readFileSync(new URL("../src/runtime/kernel.ts", import.meta.url), "utf8");
+  it("uses wider run context only for suppression, not extra visible failed-run items", () => {
+    const queue = buildDesktopActionQueue({
+      nowMs: 20_000,
+      runs: [
+        {
+          runId: "visible-orphan",
+          sessionId: "session-visible-orphan",
+          ownerId: "owner-1",
+          status: "orphaned",
+          title: "Create Memory Story",
+          goalText: "Search recent memories and write a short story idea.",
+          createdAtMs: 1_000,
+          completedAtMs: 2_000,
+          updatedAtMs: 19_000,
+          visibleUserGoal: true,
+        },
+      ],
+      runSuppressionContext: [
+        {
+          runId: "visible-orphan",
+          sessionId: "session-visible-orphan",
+          ownerId: "owner-1",
+          status: "orphaned",
+          title: "Create Memory Story",
+          goalText: "Search recent memories and write a short story idea.",
+          createdAtMs: 1_000,
+          completedAtMs: 2_000,
+          updatedAtMs: 19_000,
+          visibleUserGoal: true,
+        },
+        {
+          runId: "hidden-success",
+          sessionId: "session-hidden-success",
+          ownerId: "owner-1",
+          status: "succeeded",
+          title: "Analyze Memories For Storyline",
+          goalText: "Search recent memories and write a short story idea.",
+          createdAtMs: 3_000,
+          completedAtMs: 4_000,
+          updatedAtMs: 4_000,
+          visibleUserGoal: true,
+          reusable: true,
+        },
+        {
+          runId: "hidden-failed-run",
+          sessionId: "session-hidden-failed",
+          ownerId: "owner-1",
+          status: "failed",
+          title: "Older hidden failed run",
+          goalText: "A different failed task outside the visible run window.",
+          createdAtMs: 5_000,
+          completedAtMs: 6_000,
+          updatedAtMs: 6_000,
+          visibleUserGoal: true,
+        },
+      ],
+      artifactDeliveries: [
+        {
+          deliveryId: "delivery-1",
+          artifactId: "artifact-1",
+          ownerId: "owner-1",
+          sourceSessionId: "session-delivery",
+          sourceRunId: "run-delivery",
+          deliveryStatus: "pending",
+          createdAtMs: 7_000,
+          updatedAtMs: 8_000,
+          targetKind: "task_chat",
+        },
+      ],
+    });
 
-    expect(source).toContain("runs: this.readDesktopQueueRuns(ownerId, Math.max(limit * 5, 200))");
-    expect(source).toContain("return queue.slice(0, limit)");
+    expect(queue.map((item) => item.subjectId)).toEqual(["delivery-1"]);
   });
 
   it("still surfaces orphaned visible goals when newer successes are unrelated", () => {

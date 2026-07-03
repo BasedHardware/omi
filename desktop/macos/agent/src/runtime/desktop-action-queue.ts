@@ -103,6 +103,7 @@ export interface BuildDesktopActionQueueInput {
   staleAfterMs?: number;
   dispatches?: readonly QueueDispatchInput[];
   runs?: readonly QueueRunInput[];
+  runSuppressionContext?: readonly QueueRunInput[];
   artifactDeliveries?: readonly QueueArtifactDeliveryInput[];
   candidates?: readonly QueueCandidateInput[];
   legacyPills?: readonly QueueLegacyPillInput[];
@@ -128,7 +129,8 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
   const staleAfterMs = input.staleAfterMs ?? 30 * 60 * 1000;
   const items: DesktopActionQueueItem[] = [];
   const reusableSessions = new Map<string, QueueRunInput>();
-  const successfulVisibleRuns = (input.runs ?? []).filter((run) => run.status === "succeeded" && run.visibleUserGoal !== false);
+  const suppressionRuns = input.runSuppressionContext ?? input.runs ?? [];
+  const successfulVisibleRuns = suppressionRuns.filter((run) => run.status === "succeeded" && run.visibleUserGoal !== false);
 
   for (const dispatch of input.dispatches ?? []) {
     if (dispatch.status !== "pending") continue;
