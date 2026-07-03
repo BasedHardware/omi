@@ -77,6 +77,17 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertEqual(StartupWarmupPolicy.floatingBarPlanFetchDelay, 0)
     }
 
+    func testMCPKeyWarmupRunsAfterInteractiveLoadButBeforeDeferredWarmup() {
+        XCTAssertGreaterThan(
+            StartupWarmupPolicy.mcpKeyWarmupDelay,
+            StartupWarmupPolicy.immediateWarmupDelay
+        )
+        XCTAssertLessThan(
+            StartupWarmupPolicy.mcpKeyWarmupDelay,
+            StartupWarmupPolicy.deferredWarmupDelay
+        )
+    }
+
     func testInitialSettingsSyncWaitsUntilAfterDeferredWarmupStarts() {
         XCTAssertGreaterThan(
             StartupWarmupPolicy.initialSettingsSyncDelay,
@@ -238,6 +249,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         XCTAssertTrue(source.contains("private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>]"))
+        XCTAssertTrue(source.contains("scheduleSessionWarmup(id: .mcpKeyWarmup"))
         XCTAssertTrue(source.contains("guard await self.isCurrentSession(scope) else"))
         XCTAssertTrue(source.contains("guard isCurrentSession(scope) else { return }"))
         XCTAssertTrue(source.contains("sessionTasks.values.forEach { $0.cancel() }"))
