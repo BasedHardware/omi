@@ -1,0 +1,3 @@
+{
+  "change": "Fixed direct-control background-agent spawning and added deterministic tests for floating-pill spawn wiring."
+}

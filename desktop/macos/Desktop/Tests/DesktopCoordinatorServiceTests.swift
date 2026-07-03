@@ -1,5 +1,7 @@
 import XCTest
 
+@testable import Omi_Computer
+
 final class DesktopCoordinatorServiceTests: XCTestCase {
   func testCoordinatorServiceUsesRuntimeControlToolsOnly() throws {
     let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
@@ -24,6 +26,61 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(functionSource.contains(#"let code = stringValue(error?["code"])"#))
     XCTAssertTrue(functionSource.contains(#"let detail = code.map { "\($0): \(message)" } ?? message"#))
     XCTAssertFalse(functionSource.contains(#"guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else"#))
+  }
+
+  @MainActor
+  func testBackgroundAgentSpawnUsesCanonicalDirectControlPayload() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: """
+      {
+        "ok": true,
+        "session": {"omiSessionId": "ses_pill", "title": "Create Memory Story"},
+        "run": {"runId": "run_pill"},
+        "attempt": {"attemptId": "att_pill"}
+      }
+      """
+    )
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.spawn")!
+    )
+    let pillId = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+
+    let accepted = try await service.spawnBackgroundAgent(
+      prompt: "Search my recent memories and write a short story.",
+      title: "Create Memory Story",
+      pillId: pillId,
+      model: "gpt-test",
+      harnessMode: .piMono,
+      cwd: "/tmp/omi-test"
+    )
+
+    XCTAssertEqual(accepted.sessionId, "ses_pill")
+    XCTAssertEqual(accepted.runId, "run_pill")
+    XCTAssertEqual(accepted.attemptId, "att_pill")
+    XCTAssertEqual(accepted.title, "Create Memory Story")
+    XCTAssertEqual(runtime.calls.count, 1)
+
+    let call = try XCTUnwrap(runtime.calls.first)
+    XCTAssertEqual(call.clientId, "test-desktop-coordinator")
+    XCTAssertEqual(call.harnessMode, AgentHarnessMode.piMono.rawValue)
+    XCTAssertEqual(call.name, "spawn_background_agent")
+    XCTAssertEqual(call.input["prompt"] as? String, "Search my recent memories and write a short story.")
+    XCTAssertEqual(call.input["title"] as? String, "Create Memory Story")
+    XCTAssertEqual(call.input["surfaceKind"] as? String, "background_agent")
+    XCTAssertEqual(call.input["externalRefKind"] as? String, "pill")
+    XCTAssertEqual(call.input["externalRefId"] as? String, pillId.uuidString)
+    XCTAssertEqual(call.input["clientId"] as? String, "desktop-floating-pill")
+    XCTAssertEqual(call.input["mode"] as? String, "act")
+    XCTAssertEqual(call.input["model"] as? String, "gpt-test")
+    XCTAssertEqual(call.input["adapterId"] as? String, "pi-mono")
+    XCTAssertEqual(call.input["cwd"] as? String, "/tmp/omi-test")
+
+    let metadata = try XCTUnwrap(call.input["metadata"] as? [String: String])
+    XCTAssertEqual(metadata["uiProjection"], "floating_pill")
+    XCTAssertEqual(metadata["pillId"], pillId.uuidString)
   }
 
   func testCoordinatorServiceDoesNotOwnDispatchOrLifecycleAuthority() throws {
@@ -204,5 +261,31 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       .deletingLastPathComponent()
     let url = root.appendingPathComponent("Sources").appendingPathComponent(relativePath)
     return try String(contentsOf: url, encoding: .utf8)
+  }
+}
+
+private final class RecordingCoordinatorRuntime: DesktopCoordinatorRuntimeControlling {
+  struct Call {
+    let clientId: String
+    let harnessMode: String
+    let name: String
+    let input: [String: Any]
+  }
+
+  private let response: String
+  private(set) var calls: [Call] = []
+
+  init(response: String) {
+    self.response = response
+  }
+
+  func directControlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    calls.append(Call(clientId: clientId, harnessMode: harnessMode, name: name, input: input))
+    return response
   }
 }

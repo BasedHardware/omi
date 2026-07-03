@@ -78,22 +78,6 @@ import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
-  "list_agent_sessions",
-  "get_agent_run",
-  "build_desktop_awareness_snapshot",
-  "list_desktop_action_queue",
-  "get_desktop_open_loops",
-  "build_desktop_context_packet",
-  "route_desktop_intent",
-  "evaluate_desktop_tool_policy",
-  "create_desktop_dispatch",
-  "resolve_desktop_dispatch",
-  "cancel_agent_run",
-  "inspect_agent_artifacts",
-  "update_agent_artifact_lifecycle",
-]);
-
 // Resolve paths to bundled tools
 const playwrightCli = join(
   __dirname,
@@ -1254,7 +1238,7 @@ async function main(): Promise<void> {
           break;
         }
         const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control);
-        if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
+        if (!isAgentControlToolName(control.name)) {
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,

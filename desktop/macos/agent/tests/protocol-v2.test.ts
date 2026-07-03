@@ -91,6 +91,18 @@ describe("protocol v2 compatibility", () => {
     expect(directBlock).toContain("releaseDirectControlOwner");
   });
 
+  it("routes direct app control through the canonical agent-control registry", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const directStart = source.indexOf('case "direct_control_tool"');
+    const directBlock = source.slice(directStart, source.indexOf('case "interrupt"'));
+
+    expect(directStart).toBeGreaterThanOrEqual(0);
+    expect(directBlock).toContain("if (!isAgentControlToolName(control.name))");
+    expect(directBlock).not.toContain("DIRECT_CONTROL_TOOL_NAMES");
+    expect(directBlock).toContain("handleAgentControlToolCall");
+  });
+
   it("treats top-level background-agent spawn as a long-lived correlated control run", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(join(here, "../src/index.ts"), "utf8");
