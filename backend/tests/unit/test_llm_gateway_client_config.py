@@ -222,6 +222,32 @@ def test_gateway_feature_mode_is_blocked_in_non_dev_cloud_stage_without_explicit
         raise AssertionError('expected non-dev gateway feature mode to require explicit allow env')
 
 
+def test_gateway_feature_mode_is_blocked_in_kubernetes_without_explicit_dev_stage(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('KUBERNETES_SERVICE_HOST', '10.0.0.1')
+    monkeypatch.delenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, raising=False)
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.delenv('ENVIRONMENT', raising=False)
+    monkeypatch.delenv('APP_ENV', raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    try:
+        should_route_features_through_gateway()
+    except RuntimeError as exc:
+        assert LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected unstaged Kubernetes gateway feature mode to require explicit allow env')
+
+
+def test_gateway_feature_mode_allows_kubernetes_with_explicit_dev_stage(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('KUBERNETES_SERVICE_HOST', '10.0.0.1')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, raising=False)
+
+    assert should_route_features_through_gateway() is True
+
+
 def test_gateway_feature_mode_in_prod_requires_gateway_url(monkeypatch):
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, 'true')
@@ -274,17 +300,37 @@ async def test_app_icon_generation_uses_legacy_provider_when_gateway_feature_mod
 
 @pytest.mark.asyncio
 async def test_perplexity_tool_uses_legacy_provider_when_gateway_feature_mode_off(monkeypatch):
-    module_path = Path(__file__).parents[2] / 'utils' / 'retrieval' / 'tools' / 'perplexity_tools.py'
-    spec = importlib.util.spec_from_file_location('perplexity_tools_under_test', module_path)
-    assert spec is not None and spec.loader is not None
-    perplexity_tools = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(perplexity_tools)
+    perplexity_tools = _load_perplexity_tools()
 
     monkeypatch.setattr(perplexity_tools, 'should_route_features_through_gateway', lambda: False)
     monkeypatch.setattr(perplexity_tools, '_perplexity_legacy_search', lambda _query: _async_return('legacy-search'))
     monkeypatch.setattr(perplexity_tools, '_perplexity_gateway_search', lambda _query: _raise_gateway_called())
 
     assert await perplexity_tools.perplexity_web_search_tool.coroutine('query') == 'legacy-search'
+
+
+def test_perplexity_gateway_response_preserves_top_level_citations():
+    perplexity_tools = _load_perplexity_tools()
+
+    formatted = perplexity_tools._format_perplexity_response(
+        {
+            'choices': [{'message': {'content': 'answer'}}],
+            'citations': [{'title': 'Source title', 'url': 'https://example.com/source'}],
+        }
+    )
+
+    assert 'answer' in formatted
+    assert 'Source title' in formatted
+    assert 'https://example.com/source' in formatted
+
+
+def _load_perplexity_tools():
+    module_path = Path(__file__).parents[2] / 'utils' / 'retrieval' / 'tools' / 'perplexity_tools.py'
+    spec = importlib.util.spec_from_file_location('perplexity_tools_under_test', module_path)
+    assert spec is not None and spec.loader is not None
+    perplexity_tools = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(perplexity_tools)
+    return perplexity_tools
 
 
 async def _async_return(value):

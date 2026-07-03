@@ -13,11 +13,13 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.errors import (
     GatewayError,
     GatewayErrorCode,
+    GatewayInvalidRouteConfigError,
     GatewayInvalidRequestError,
 )
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
+    _map_provider_failure,
     provider_request_for,
     selected_serving_route,
     selected_serving_route_artifact_id,
@@ -45,7 +47,7 @@ async def create_chat_completion(
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = build_omi_managed_credential_context(caller)
         if resolved_route.validated_request.forwarded_params.get('stream') is True:
-            return _streaming_response(resolved_route, credentials, provider_registry)
+            return await _streaming_response(resolved_route, credentials, provider_registry)
         result = await execute_chat_completion(resolved_route, credentials, provider_registry)
         _safe_observe(lambda: observe_success(started_at, result))
         return JSONResponse(content=result.response)
@@ -168,31 +170,50 @@ async def close_image_generation_client() -> None:
         _image_generation_client = None
 
 
-def _streaming_response(resolved_route, credentials, provider_registry: ProviderRegistry) -> StreamingResponse:
+async def _streaming_response(resolved_route, credentials, provider_registry: ProviderRegistry) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
 
-    async def event_stream():
-        last_error: ProviderFailure | None = None
-        for provider_ref in [route.primary, *route.fallbacks]:
-            provider = provider_registry.provider_for(provider_ref.provider)
-            stream_chat_completion = getattr(provider, 'stream_chat_completion', None)
-            if stream_chat_completion is None:
-                continue
-            try:
-                async for chunk in stream_chat_completion(
-                    provider_request_for(resolved_route, provider_ref),
-                    provider_ref=provider_ref,
-                    credentials=credentials,
-                    timeout_ms=route.timeouts.request_ms,
-                ):
-                    yield chunk
-                return
-            except ProviderFailure as exc:
-                last_error = exc
-                if not is_lkg_eligible(route, exc.failure_class):
-                    raise
-        if last_error is not None:
-            raise last_error
-        raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
+    async_iterator = await _prepared_streaming_iterator(resolved_route, credentials, provider_registry, route)
 
-    return StreamingResponse(event_stream(), media_type='text/event-stream')
+    return StreamingResponse(async_iterator, media_type='text/event-stream')
+
+
+async def _prepared_streaming_iterator(resolved_route, credentials, provider_registry: ProviderRegistry, route):
+    last_error: GatewayError | None = None
+    for provider_ref in [route.primary, *route.fallbacks]:
+        provider = provider_registry.provider_for(provider_ref.provider)
+        if provider is None:
+            raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
+        stream_chat_completion = getattr(provider, 'stream_chat_completion', None)
+        if stream_chat_completion is None:
+            continue
+        stream = stream_chat_completion(
+            provider_request_for(resolved_route, provider_ref),
+            provider_ref=provider_ref,
+            credentials=credentials,
+            timeout_ms=route.timeouts.request_ms,
+        )
+        try:
+            first_chunk = await anext(stream)
+        except StopAsyncIteration:
+            return _empty_stream()
+        except ProviderFailure as exc:
+            last_error = _map_provider_failure(exc, credentials)
+            if not is_lkg_eligible(route, exc.failure_class):
+                raise last_error
+            continue
+        return _stream_with_first_chunk(first_chunk, stream)
+    if last_error is not None:
+        raise last_error
+    raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
+
+
+async def _stream_with_first_chunk(first_chunk: bytes, stream):
+    yield first_chunk
+    async for chunk in stream:
+        yield chunk
+
+
+async def _empty_stream():
+    if False:
+        yield b''

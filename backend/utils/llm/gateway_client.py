@@ -84,7 +84,7 @@ def _is_local_or_dev_runtime() -> bool:
     explicit_stage = os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or os.getenv('APP_ENV')
     if explicit_stage:
         return explicit_stage.strip().lower() in {'dev', 'development', 'local', 'test'}
-    if os.getenv('K_SERVICE') and not explicit_stage:
+    if os.getenv('K_SERVICE') or os.getenv('KUBERNETES_SERVICE_HOST'):
         return False
     return True
 
@@ -159,6 +159,10 @@ def _gateway_headers() -> dict[str, str]:
     if service_token is not None:
         headers['Authorization'] = f'Bearer {service_token}'
     return headers
+
+
+def llm_gateway_headers() -> dict[str, str]:
+    return _gateway_headers()
 
 
 def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> dict:

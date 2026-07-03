@@ -12,6 +12,9 @@ environments:
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
+          OMI_ENV_STAGE:
+            value: dev
+            category: runtime_identity
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: "true"
             category: rollout
@@ -66,6 +69,9 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -119,6 +125,9 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -172,6 +181,9 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -233,6 +245,9 @@ environments:
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
             category: service_discovery
+          OMI_ENV_STAGE:
+            value: prod
+            category: runtime_identity
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
               name: prod-omi-backend-secrets
@@ -272,6 +287,9 @@ environments:
       services:
         backend:
           env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
@@ -306,6 +324,9 @@ environments:
               version: latest
         backend-sync:
           env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
@@ -340,6 +361,9 @@ environments:
               version: latest
         backend-integration:
           env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
