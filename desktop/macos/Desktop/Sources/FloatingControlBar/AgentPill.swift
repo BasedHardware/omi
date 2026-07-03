@@ -121,6 +121,7 @@ final class AgentPillsManager: ObservableObject {
 
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
+    private var pendingFollowUpsByPill: [UUID: [String]] = [:]
 
     /// Shared agent-noun pattern used by negation guard, intent detection, and
     /// task extraction. Kept word-boundary-free so callers can embed it inside
@@ -685,8 +686,8 @@ final class AgentPillsManager: ObservableObject {
         }
 
         let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
-        let modelOverride = bridgeHarnessOverride == nil
-            ? FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride
+        let modelForSpawn = bridgeHarnessOverride == nil
+            ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
             : nil
         let runTask = Task { @MainActor [weak self, weak pill] in
             guard !Task.isCancelled else { return }
@@ -696,7 +697,7 @@ final class AgentPillsManager: ObservableObject {
                     prompt: pill.query,
                     title: pill.title,
                     pillId: pill.id,
-                    model: modelOverride ?? pill.model,
+                    model: modelForSpawn,
                     harnessMode: bridgeHarnessOverride,
                     cwd: workingDirectory
                 )
@@ -718,6 +719,11 @@ final class AgentPillsManager: ObservableObject {
                     attemptId: accepted.attemptId,
                     statusText: "Working…"
                 )
+                let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+                if !queuedFollowUps.isEmpty {
+                    self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                    return
+                }
                 await self.pollCanonicalRun(for: pill)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -750,7 +756,9 @@ final class AgentPillsManager: ObservableObject {
     /// Send a follow-up to the same canonical background-agent session.
     func continueAgent(from pill: AgentPill, text: String) {
         guard let sessionId = pill.canonicalSessionId else {
-            spawnFromUserQuery(text, model: pill.model)
+            pendingFollowUpsByPill[pill.id, default: []].append(text)
+            pill.latestActivity = "Queued follow-up until the agent starts…"
+            pill.markContentChanged()
             return
         }
         pill.status = .running
@@ -940,11 +948,20 @@ final class AgentPillsManager: ObservableObject {
             recordingPillID = nil
             PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
         }
+        let pill = pills.first(where: { $0.id == pillID })
+        let shouldCancelRun = pill?.status.isFinished == false
+        let runId = pill?.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
+        pendingFollowUpsByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
+        if shouldCancelRun, let runId, !runId.isEmpty {
+            Task {
+                _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
+            }
+        }
     }
 
     /// Remove all completed (done or failed) pills.
@@ -1036,7 +1053,6 @@ final class AgentPillsManager: ObservableObject {
             guard let runId = pill.canonicalRunId else { return }
             do {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(
-                    sessionId: pill.canonicalSessionId,
                     runId: runId
                 )
                 apply(inspection: inspection, to: pill)

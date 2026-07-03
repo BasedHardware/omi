@@ -862,8 +862,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     let logoMarkSource = try agentProviderLogoMarkSource()
     let viewSource = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("let modelOverride = bridgeHarnessOverride == nil"))
-    XCTAssertTrue(source.contains("model: modelOverride ?? pill.model"))
+    XCTAssertTrue(source.contains("let modelForSpawn = bridgeHarnessOverride == nil"))
+    XCTAssertTrue(source.contains("model: modelForSpawn"))
+    XCTAssertTrue(source.contains("model: pill.bridgeHarnessOverride == nil ? pill.model : nil"))
     XCTAssertTrue(source.contains("harnessMode: bridgeHarnessOverride"))
     XCTAssertTrue(viewSource.contains("AgentProviderLogoMark("))
     XCTAssertTrue(viewSource.contains("provider: pill.bridgeHarnessOverride"))
@@ -881,6 +882,19 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(logoMarkSource.contains("} else if provider != nil {"))
     XCTAssertTrue(logoMarkSource.contains("Text(\"🤖\")"))
     XCTAssertTrue(logoMarkSource.contains("statusColor\n                    .mask("))
+  }
+
+  func testCanonicalPillLifecycleQueuesFollowUpsAndCancelsActiveDismissals() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("private var pendingFollowUpsByPill: [UUID: [String]] = [:]"))
+    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pill.id, default: []].append(text)"))
+    XCTAssertTrue(source.contains("Queued follow-up until the agent starts"))
+    XCTAssertTrue(source.contains("let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []"))
+    XCTAssertTrue(source.contains("self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: \"\\n\\n\"))"))
+    XCTAssertTrue(source.contains("let shouldCancelRun = pill?.status.isFinished == false"))
+    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pillID] = nil"))
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)"))
   }
 
   func testProviderMarkRoutingIsCentralized() throws {

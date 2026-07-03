@@ -252,11 +252,16 @@ final class DesktopCoordinatorService {
     return DesktopCoordinatorOpenLoops(generatedAt: nowString(), items: items)
   }
 
-  func inspectRun(sessionId: String?, runId: String?) async throws -> String {
-    var input: [String: Any] = [:]
-    if let sessionId, !sessionId.isEmpty { input["sessionId"] = sessionId }
-    if let runId, !runId.isEmpty { input["runId"] = runId }
-    return try await callRuntimeControlTool(ToolName.getAgentRun, input: input)
+  func inspectRun(runId: String) async throws -> String {
+    let trimmedRunId = runId.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedRunId.isEmpty else {
+      throw NSError(
+        domain: "DesktopCoordinatorService",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "runId is required to inspect an agent run"]
+      )
+    }
+    return try await callRuntimeControlTool(ToolName.getAgentRun, input: ["runId": trimmedRunId])
   }
 
   func cancelAgentRun(runId: String, reason: String = "Stopped by user") async throws -> String {
@@ -309,8 +314,8 @@ final class DesktopCoordinatorService {
     return parseInspectedRun(from: raw)
   }
 
-  func inspectAgentRun(sessionId: String?, runId: String?) async throws -> DesktopCoordinatorAgentRunInspection {
-    parseInspectedRun(from: try await inspectRun(sessionId: sessionId, runId: runId))
+  func inspectAgentRun(runId: String) async throws -> DesktopCoordinatorAgentRunInspection {
+    parseInspectedRun(from: try await inspectRun(runId: runId))
   }
 
   func completedAgentDeltaPrompt(surfaceKind: String, limit: Int = 5) async -> String? {

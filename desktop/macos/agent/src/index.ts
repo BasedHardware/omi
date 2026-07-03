@@ -62,6 +62,7 @@ import {
 } from "./runtime/adapter-selection.js";
 import {
   activeControlToolOwnerId,
+  AGENT_CONTROL_TOOL_NAMES,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
@@ -968,7 +969,7 @@ async function main(): Promise<void> {
   };
 
   // 3. Signal readiness
-  send({ type: "init", sessionId: "" });
+  send({ type: "init", sessionId: "", agentControlTools: AGENT_CONTROL_TOOL_NAMES });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift

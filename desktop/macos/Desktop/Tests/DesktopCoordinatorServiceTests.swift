@@ -83,6 +83,94 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertEqual(metadata["pillId"], pillId.uuidString)
   }
 
+  @MainActor
+  func testBackgroundAgentSpawnOmitsModelWhenCallerLeavesModelNil() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: """
+      {
+        "ok": true,
+        "session": {"omiSessionId": "ses_pill", "title": "Hermes Task"},
+        "run": {"runId": "run_pill"},
+        "attempt": {"attemptId": "att_pill"}
+      }
+      """
+    )
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.hermes.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.spawn.nilModel")!
+    )
+
+    _ = try await service.spawnBackgroundAgent(
+      prompt: "Use Hermes to work on this.",
+      title: "Hermes Task",
+      pillId: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+      model: nil,
+      harnessMode: .hermes,
+      cwd: nil
+    )
+
+    let call = try XCTUnwrap(runtime.calls.first)
+    XCTAssertEqual(call.name, "spawn_background_agent")
+    XCTAssertEqual(call.input["adapterId"] as? String, "hermes")
+    XCTAssertNil(call.input["model"])
+  }
+
+  @MainActor
+  func testInspectAgentRunUsesStrictGetAgentRunPayload() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: """
+      {
+        "ok": true,
+        "session": {"omiSessionId": "ses_pill"},
+        "run": {"runId": "run_pill", "status": "running"}
+      }
+      """
+    )
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.inspect")!
+    )
+
+    let inspection = try await service.inspectAgentRun(runId: " run_pill ")
+
+    XCTAssertEqual(inspection.runId, "run_pill")
+    let call = try XCTUnwrap(runtime.calls.first)
+    XCTAssertEqual(call.name, "get_agent_run")
+    XCTAssertEqual(Set(call.input.keys), ["runId"])
+    XCTAssertEqual(call.input["runId"] as? String, "run_pill")
+  }
+
+  @MainActor
+  func testCoordinatorRuntimeControlManifestIsBackedByNodeManifest() throws {
+    let nodeManifest = try repoFile("../agent/src/runtime/control-tool-manifest.ts")
+    let regex = try NSRegularExpression(pattern: #"name:\s*"([^"]+)""#)
+    let range = NSRange(nodeManifest.startIndex..., in: nodeManifest)
+    let nodeToolNames = Set(regex.matches(in: nodeManifest, range: range).compactMap { match -> String? in
+      guard let nameRange = Range(match.range(at: 1), in: nodeManifest) else { return nil }
+      return String(nodeManifest[nameRange])
+    })
+
+    XCTAssertFalse(nodeToolNames.isEmpty)
+    for toolName in DesktopCoordinatorService.shared.runtimeControlManifest() {
+      XCTAssertTrue(nodeToolNames.contains(toolName), "Missing Node control-tool manifest entry for \(toolName)")
+    }
+  }
+
+  func testAgentRuntimeInitAdvertisesControlManifestToSwift() throws {
+    let nodeSource = try repoFile("../agent/src/index.ts")
+    let protocolSource = try repoFile("../agent/src/protocol.ts")
+    let swiftSource = try sourceFile("Chat/AgentRuntimeProcess.swift")
+
+    XCTAssertTrue(protocolSource.contains("agentControlTools: string[]"))
+    XCTAssertTrue(nodeSource.contains("agentControlTools: AGENT_CONTROL_TOOL_NAMES"))
+    XCTAssertTrue(swiftSource.contains(#"message.payload["agentControlTools"] as? [String]"#))
+    XCTAssertTrue(swiftSource.contains("advertisedAgentControlTools = Set(tools)"))
+  }
+
   func testCoordinatorServiceDoesNotOwnDispatchOrLifecycleAuthority() throws {
     let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
 
@@ -260,6 +348,14 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
     let url = root.appendingPathComponent("Sources").appendingPathComponent(relativePath)
+    return try String(contentsOf: url, encoding: .utf8)
+  }
+
+  private func repoFile(_ relativePath: String) throws -> String {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let url = root.appendingPathComponent(relativePath).standardizedFileURL
     return try String(contentsOf: url, encoding: .utf8)
   }
 }

@@ -1,3 +1,3 @@
 {
-  "change": "Fixed direct-control background-agent spawning and added deterministic tests for floating-pill spawn wiring."
+  "change": "Hardened direct-control background-agent spawning with a runtime capability handshake, stricter payload contracts, and deterministic floating-pill lifecycle tests."
 }

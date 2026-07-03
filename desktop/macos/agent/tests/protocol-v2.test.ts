@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CancelAckMessage, InboundMessage, OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { requestIdFor } from "../src/protocol.js";
+import { AGENT_CONTROL_TOOL_NAMES } from "../src/runtime/control-tools.js";
 
 describe("protocol v2 compatibility", () => {
   it("continues to accept v1 query fields", () => {
@@ -56,6 +57,17 @@ describe("protocol v2 compatibility", () => {
 
     const outbound: OutboundMessage = message;
     expect(outbound.type).toBe("cancel_ack");
+  });
+
+  it("announces canonical agent-control tools in the init handshake", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const initSendStart = source.indexOf('send({ type: "init"');
+    const initSendBlock = source.slice(initSendStart, source.indexOf("// --- Process stdin messages ---"));
+
+    expect(initSendStart).toBeGreaterThanOrEqual(0);
+    expect(AGENT_CONTROL_TOOL_NAMES).toContain("spawn_background_agent");
+    expect(initSendBlock).toContain("agentControlTools: AGENT_CONTROL_TOOL_NAMES");
   });
 
   it("defines direct app control as an owner-guarded inbound message", () => {

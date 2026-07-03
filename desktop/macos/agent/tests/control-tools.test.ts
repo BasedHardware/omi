@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activeControlToolOwnerId,
+  AGENT_CONTROL_TOOL_NAMES,
   agentControlToolDefinitions,
+  agentControlToolSchemas,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
@@ -73,6 +75,36 @@ describe("agent control tools", () => {
         inputSchema: agentControlInputSchema(tool),
       })),
     );
+  });
+
+  it("keeps agent-control registry, manifest, and schemas in parity", () => {
+    expect(new Set(AGENT_CONTROL_TOOL_NAMES)).toEqual(new Set(Object.keys(agentControlToolSchemas)));
+    expect(new Set(agentControlCapabilityManifest.map((tool) => tool.name))).toEqual(new Set(AGENT_CONTROL_TOOL_NAMES));
+  });
+
+  it("validates the canonical Swift background-agent spawn payload", () => {
+    const parsed = agentControlToolSchemas.spawn_background_agent.safeParse({
+      prompt: "Search my recent memories and write a short story.",
+      title: "Create Memory Story",
+      surfaceKind: "background_agent",
+      externalRefKind: "pill",
+      externalRefId: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      clientId: "desktop-floating-pill",
+      mode: "act",
+      adapterId: "pi-mono",
+      cwd: "/tmp/omi-test",
+      metadata: {
+        uiProjection: "floating_pill",
+        pillId: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(agentControlToolSchemas.spawn_background_agent.safeParse({
+      prompt: "Do work",
+      surfaceKind: "floating_pill",
+      externalRefKind: "pill",
+    }).success).toBe(false);
   });
 
   it("declares coordinator policy metadata for every control tool", () => {
