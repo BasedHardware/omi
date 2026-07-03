@@ -63,6 +63,9 @@ enum HubTool: String {
   /// Create a Google Calendar event through the backend calendar tool.
   case createCalendarEvent = "create_calendar_event"
   /// Capture the user's screen so the model can see what they're looking at.
+  /// Install/repair a local agent provider (consent required), optionally
+  /// dispatching the user's original task to it once setup succeeds.
+  case setupAgentProvider = "setup_agent_provider"
   case screenshot = "screenshot"
   /// Click at on-screen coordinates (local).
   case pointClick = "point_click"
@@ -93,6 +96,8 @@ enum RealtimeHubTools {
       .map { "\($0.provider.displayName): \($0.setupPrompt)" }
       .joined(separator: " ")
     parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    parts.append(
+      "Then OFFER to set it up for them. If — and only if — the user agrees, call setup_agent_provider with that provider and their original task as brief; Omi installs it with live progress and runs the task once it's ready.")
     if !autoInstruction.isEmpty {
       parts.append(autoInstruction.trimmingCharacters(in: .whitespaces))
     }
@@ -624,6 +629,28 @@ enum RealtimeHubTools {
           "type": "object",
           "properties": spawnAgentProperties,
           "required": ["brief"],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.setupAgentProvider.rawValue,
+        "description":
+          "Install or repair a local agent provider (codex, openclaw, hermes) on the user's Mac, "
+          + "then optionally run their original task on it. ONLY call after the user explicitly "
+          + "agrees to install/set up the provider — never unprompted. Shows a setup pill with live progress.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "provider": [
+              "type": "string", "enum": ["codex", "openclaw", "hermes"],
+              "description": "The provider to install or repair.",
+            ],
+            "brief": [
+              "type": "string",
+              "description": "Optional: the user's original task, dispatched to the provider once setup succeeds.",
+            ],
+          ],
+          "required": ["provider"],
         ],
       ],
       [

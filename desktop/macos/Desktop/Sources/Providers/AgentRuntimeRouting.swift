@@ -142,12 +142,13 @@ enum LocalAgentProviderDetector {
         return value.isEmpty ? nil : value
     }
 
-    private static func firstExecutable(
+    static func firstExecutable(
         named name: String,
         fileManager: FileManager,
-        homeDirectory: String
+        homeDirectory: String,
+        searchDirectories: [String]? = nil
     ) -> String? {
-        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
+        for dir in searchDirectories ?? adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
             let path = (dir as NSString).appendingPathComponent(name)
             if fileManager.isExecutableFile(atPath: path) {
                 return path
@@ -156,7 +157,7 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
+    static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
         [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",

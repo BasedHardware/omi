@@ -700,6 +700,43 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "agent_providers_health",
+      summary: "Report ready/needs-setup/missing state for each local agent provider"
+    ) { _ in
+      var out: [String: String] = [:]
+      for report in AgentProviderHealth.reportsForAllProviders() {
+        out[report.provider.rawValue] =
+          report.detail.isEmpty ? report.readiness.rawValue : "\(report.readiness.rawValue): \(report.detail)"
+      }
+      return out
+    }
+
+    register(
+      name: "setup_agent_provider",
+      summary: "Run the deterministic install/repair recipe for a local agent provider as a setup pill; optionally dispatch a task to it after success",
+      params: ["provider", "brief"]
+    ) { params in
+      let providerName = (params["provider"] ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+      guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
+        throw DesktopAutomationActionError.invalidParams("unknown provider; expected codex|openclaw|hermes")
+      }
+      let brief = params["brief"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      return await MainActor.run {
+        let health = AgentProviderHealth.report(for: provider)
+        let steps = AgentProviderInstaller.plan(for: provider, health: health)
+        let pill = AgentPillsManager.shared.spawnProviderSetup(provider: provider, thenBrief: brief)
+        return [
+          "pillId": pill.id.uuidString,
+          "readiness": health.readiness.rawValue,
+          "detail": health.detail,
+          "steps": steps.map(\.title).joined(separator: " → "),
+        ]
+      }
+    }
+
+    register(
       name: "spatial_overlay_present_fixture",
       summary: "Present a deterministic spatial-overlay fixture for dogfood harnesses",
       params: ["fixture", "settleMs"]

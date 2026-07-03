@@ -29,12 +29,10 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("guard availability.isAvailable else"))
     XCTAssertTrue(source.contains("assistantText = setupPrompt"))
     XCTAssertTrue(source.contains("output: availability.toolError"))
-    XCTAssertTrue(source.contains("""
-          sendToolResultIfCurrent(
-            source: source, callId: callId, name: name,
-            output: availability.toolError)
-          return
-"""))
+    // The unavailable path must not dead-end: it instructs the model to offer
+    // a consent-gated setup_agent_provider call carrying the original task.
+    XCTAssertTrue(source.contains("call setup_agent_provider with provider="))
+    XCTAssertTrue(source.contains("and their original task as brief."))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {

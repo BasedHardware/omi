@@ -1224,6 +1224,82 @@ final class AgentPillsManager: ObservableObject {
         // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
     }
 
+    /// Spawn a manually-driven setup pill that installs/repairs a local agent
+    /// provider via AgentProviderInstaller's deterministic recipe, then — on a
+    /// verified-healthy result — dispatches the user's original task to the
+    /// freshly set-up provider. Consent must be collected upstream (voice
+    /// confirmation or an explicit tool/bridge call).
+    @discardableResult
+    func spawnProviderSetup(provider: DirectedProvider, thenBrief: String?) -> AgentPill {
+        let pill = AgentPill(query: "Set up \(provider.displayName)", model: ModelQoS.Claude.defaultSelection)
+        pill.title = "Setting up \(provider.displayName)"
+        pill.status = .running
+        pill.latestActivity = "Checking \(provider.displayName)…"
+        trimForNewPillIfNeeded()
+        pills.append(pill)
+
+        let steps = AgentProviderInstaller.plan(for: provider)
+        let dispatchBrief: @MainActor () -> Void = { [weak self, weak pill] in
+            guard let self else { return }
+            if let thenBrief, !thenBrief.isEmpty {
+                let task = self.spawn(
+                    query: thenBrief,
+                    model: pill?.model ?? ModelQoS.Claude.defaultSelection,
+                    fromVoice: false,
+                    preFetchedTitle: provider.displayName,
+                    bridgeHarnessOverride: provider.harnessMode
+                )
+                task.fallbackProviders = [nil]
+            }
+        }
+
+        guard !steps.isEmpty else {
+            pill.status = .done
+            pill.completedAt = Date()
+            pill.latestActivity = "\(provider.displayName) is already set up."
+            pill.markContentChanged()
+            dispatchBrief()
+            return pill
+        }
+
+        let pillID = pill.id
+        Task {
+            let result = await AgentProviderInstaller.run(steps: steps) { line in
+                Task { @MainActor in
+                    guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillID }) else { return }
+                    pill.latestActivity = String(line.prefix(140))
+                    pill.transcript.append(line)
+                    pill.markContentChanged()
+                }
+            }
+            await MainActor.run {
+                guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillID }) else { return }
+                switch result {
+                case .success:
+                    let health = AgentProviderHealth.report(for: provider)
+                    if health.readiness == .ready {
+                        pill.status = .done
+                        pill.completedAt = Date()
+                        pill.latestActivity = "\(provider.displayName) is ready."
+                        pill.markContentChanged()
+                        dispatchBrief()
+                    } else {
+                        pill.status = .failed(health.detail)
+                        pill.completedAt = Date()
+                        pill.latestActivity = "Setup finished but \(provider.displayName) is still not ready: \(health.detail)"
+                        pill.markContentChanged()
+                    }
+                case .failed(let step, let message):
+                    pill.status = .failed("\(step): \(message)")
+                    pill.completedAt = Date()
+                    pill.latestActivity = "Setup failed at \(step): \(message)"
+                    pill.markContentChanged()
+                }
+            }
+        }
+        return pill
+    }
+
     /// Consume the pill's auto-route fallback chain after a terminal failure:
     /// respawn the same task on the next installed provider (a `nil` hop is the
     /// default Omi orchestrator). Idempotent — the chain is consumed on first

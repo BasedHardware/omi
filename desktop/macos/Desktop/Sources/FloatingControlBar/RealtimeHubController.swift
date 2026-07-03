@@ -1045,7 +1045,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
           log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) unavailable")
           sendToolResultIfCurrent(
             source: source, callId: callId, name: name,
-            output: availability.toolError)
+            output: availability.toolError
+              + " Offer to set it up for the user; if they agree, call setup_agent_provider with provider=\"\(directedProvider.rawValue)\" and their original task as brief.")
           return
         }
       }
@@ -1072,6 +1073,47 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
         output: "Agent started.")
+    case .setupAgentProvider:
+      let setupProviderName = ((arguments["provider"] as? String) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      let setupBrief = (arguments["brief"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let setupProvider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Unknown provider '\(setupProviderName)'. Use 'codex', 'openclaw', or 'hermes'.")
+        return
+      }
+      let health = AgentProviderHealth.report(for: setupProvider)
+      if health.readiness == .ready {
+        if let setupBrief, !setupBrief.isEmpty {
+          let model = ShortcutSettings.shared.selectedModel.isEmpty
+            ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
+          let pill = AgentPillsManager.shared.spawnFromUserQuery(
+            setupBrief, model: model, fromVoice: false,
+            preFetchedTitle: setupProvider.displayName,
+            bridgeHarnessOverride: setupProvider.harnessMode)
+          pill.fallbackProviders = [nil]
+        }
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "\(setupProvider.displayName) is already set up. \(setupBrief?.isEmpty == false ? "Task started." : "")")
+        return
+      }
+      let setupPill = AgentPillsManager.shared.spawnProviderSetup(
+        provider: setupProvider, thenBrief: setupBrief)
+      log("RealtimeHub[\(providerTag)]: tool setup_agent_provider → \(setupProvider.rawValue) (\(health.detail)) pill=\(setupPill.id)")
+      if !audioReceivedThisTurn {
+        let ack = "Setting up \(setupProvider.displayName) now. I'll start your task once it's ready."
+        assistantText = ack
+        barState?.isVoiceResponseActive = true
+        speak(ack)
+      }
+      suppressAssistantOutputForCurrentTurn = true
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: "Setup started for \(setupProvider.displayName) (\(health.detail)) — progress shows as a pill. The original task will run automatically once setup succeeds.")
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
       // tool is just an ack — pushing another image here is the broken path (mid-tool-call
