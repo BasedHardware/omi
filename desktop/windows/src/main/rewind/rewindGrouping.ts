@@ -14,12 +14,12 @@ function includesQuery(text: string, query: string): boolean {
   return text.toLowerCase().includes(query.toLowerCase())
 }
 
-function frameMatchesQuery(f: RewindFrame, query: string): boolean {
-  return (
-    includesQuery(f.ocrText, query) ||
-    includesQuery(f.windowTitle, query) ||
-    includesQuery(f.app, query)
-  )
+function frameOcrMatchesQuery(f: RewindFrame, query: string): boolean {
+  return includesQuery(f.ocrText, query)
+}
+
+function frameMetadataMatchesQuery(f: RewindFrame, query: string): boolean {
+  return includesQuery(f.windowTitle, query) || includesQuery(f.app, query)
 }
 
 function buildMatchSnippet(f: RewindFrame, query: string): string {
@@ -43,7 +43,10 @@ export function groupFrames(frames: RewindFrame[], query: string): RewindSearchG
     if (current.length === 0) return
     const first = current[0]
     const last = current[current.length - 1]
-    const rep = current.find((f) => frameMatchesQuery(f, query)) ?? last
+    const rep =
+      current.find((f) => frameOcrMatchesQuery(f, query)) ??
+      current.find((f) => frameMetadataMatchesQuery(f, query)) ??
+      last
     groups.push({
       id: `${first.app}-${first.ts}`,
       app: first.app,
