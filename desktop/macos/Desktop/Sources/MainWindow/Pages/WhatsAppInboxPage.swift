@@ -5,7 +5,7 @@ import SwiftUI
 /// review, edit, and send. Per 1:1 chat, an opt-in "Auto-reply" switch lets Omi
 /// draft and send replies to new inbound messages automatically (off by default).
 struct WhatsAppInboxPage: View {
-  @StateObject private var store = WhatsAppInboxStore()
+  @ObservedObject private var store = WhatsAppInboxStore.shared
 
   // WhatsApp brand green (#25D366) — non-purple, on-brand accent.
   private static let whatsappGreen = Color(red: 0.145, green: 0.827, blue: 0.400)
@@ -34,7 +34,8 @@ struct WhatsAppInboxPage: View {
       await store.load()
       store.startWatching()
     }
-    .onDisappear { store.stopWatching() }
+    // NB: do NOT stopWatching() on disappear — the singleton store keeps its
+    // watcher (and auto-reply) alive app-wide even when this tab isn't visible.
   }
 
   // MARK: conversation list

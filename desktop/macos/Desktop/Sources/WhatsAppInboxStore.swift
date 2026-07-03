@@ -4,6 +4,11 @@ import SwiftUI
 /// Backing store for the WhatsApp tab: recent chats with their message history.
 @MainActor
 final class WhatsAppInboxStore: ObservableObject {
+  /// App-wide singleton so the incremental watcher (and therefore auto-reply)
+  /// keeps running even when the WhatsApp tab isn't on screen. A per-view
+  /// @StateObject would be torn down on navigation, silently killing auto-reply.
+  static let shared = WhatsAppInboxStore()
+
   @Published var chats: [WhatsAppChat] = []
   @Published var isLoading = false
   @Published var errorMessage: String?

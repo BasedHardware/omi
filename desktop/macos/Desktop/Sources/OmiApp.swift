@@ -603,6 +603,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     }
 
+    // Start the WhatsApp watcher app-wide so auto-reply fires on new messages even
+    // when the WhatsApp tab was never opened this session (the store is a singleton).
+    Task { @MainActor in WhatsAppInboxStore.shared.startWatching() }
+
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 
