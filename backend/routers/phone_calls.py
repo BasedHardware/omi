@@ -231,7 +231,7 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
 # ************************************************
 
 
-@router.post("/v1/phone/twiml", tags=['phone-calls'])
+@router.post("/v1/phone/twiml", tags=['phone-calls'], response_class=Response)
 async def twiml_voice_webhook(request: Request):
     """
     TwiML webhook called by Twilio when a VoIP call is initiated from the client SDK.

@@ -87,6 +87,10 @@ FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
 
 
+class DeveloperSuccessResponse(BaseModel):
+    success: bool
+
+
 # ******************************************************
 # ****************** API KEY MANAGEMENT ****************
 # ******************************************************
@@ -241,6 +245,29 @@ class DeveloperMemory(BaseModel):
         return str(value)
 
 
+class DeveloperMemoryVectorItem(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    id: str
+    content: str = ''
+    category: Optional[str] = None
+    relevance_score: Optional[float] = None
+
+
+class DeveloperMemoryVectorPolicy(BaseModel):
+    consumer: str
+    app_has_default_memory_grant: bool
+    archive_capability: bool
+    raw_provenance_capability: bool
+
+
+class DeveloperMemoryVectorSearchResponse(BaseModel):
+    items: List[DeveloperMemoryVectorItem] = Field(default_factory=list)
+    returned_count: int
+    archive_default_visible: bool
+    policy: DeveloperMemoryVectorPolicy
+
+
 # Backward-compatible name used by unit tests and older docs.
 CleanerMemory = DeveloperMemory
 
@@ -390,7 +417,11 @@ def get_memories(
     return valid_memories
 
 
-@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
+@router.get(
+    "/v1/dev/user/memories/vector/search",
+    tags=["developer"],
+    response_model=DeveloperMemoryVectorSearchResponse,
+)
 def search_memories_vector(
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
     query: str = Query(..., min_length=1),
@@ -666,7 +697,12 @@ def create_memories_batch(
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
-@router.delete("/v1/dev/user/memories/{memory_id}", tags=["Memories"], operation_id="deleteMemory")
+@router.delete(
+    "/v1/dev/user/memories/{memory_id}",
+    tags=["Memories"],
+    operation_id="deleteMemory",
+    response_model=DeveloperSuccessResponse,
+)
 def delete_memory(
     memory_id: str,
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
@@ -1009,6 +1045,7 @@ def create_action_items_batch(
     "/v1/dev/user/action-items/{action_item_id}",
     tags=["Action Items"],
     operation_id="deleteActionItem",
+    response_model=DeveloperSuccessResponse,
 )
 def delete_action_item(
     action_item_id: str,
@@ -1766,6 +1803,7 @@ def create_conversation_from_segments(
     "/v1/dev/user/conversations/{conversation_id}",
     tags=["Conversations"],
     operation_id="deleteConversation",
+    response_model=DeveloperSuccessResponse,
 )
 def delete_conversation_endpoint(
     conversation_id: str,
@@ -2041,7 +2079,12 @@ def get_goal_history(
     return history
 
 
-@router.delete("/v1/dev/user/goals/{goal_id}", tags=["Goals"], operation_id="deleteGoal")
+@router.delete(
+    "/v1/dev/user/goals/{goal_id}",
+    tags=["Goals"],
+    operation_id="deleteGoal",
+    response_model=DeveloperSuccessResponse,
+)
 def delete_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_write),

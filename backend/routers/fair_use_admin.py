@@ -53,6 +53,15 @@ class FairUseStatusResponse(BaseModel):
     message: str
 
 
+class PublicFairUseCaseStatusResponse(BaseModel):
+    case_ref: str
+    stage: str
+    message: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    support_email: str
+
+
 def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
     """Validate admin key from request header using constant-time comparison.
 
@@ -161,6 +170,7 @@ SUPPORT_EMAIL = 'team@basedhardware.com'
     '/v1/fair-use/case/{case_ref}/status',
     tags=['fair_use'],
     dependencies=[Depends(rate_limit_dependency('fair_use_case_status', requests_per_window=10, window_seconds=60))],
+    response_model=PublicFairUseCaseStatusResponse,
 )
 def get_public_case_status(case_ref: str):
     """Public unauthenticated endpoint: look up case status by reference.

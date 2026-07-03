@@ -142,6 +142,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
         '/v2/voice-messages',
         'create_voice_message_stream_v2_voice_messages_post',
     ) not in unmodeled_operations
+    assert report['unmodeled_success_response_count'] == 0
     assert report['app_used_unmodeled_success_response_count'] == 0
     assert report['remaining_manual_dart_json_schema_file_count'] == 0
     assert report['unmodeled_success_response_count'] == len(report['unmodeled_success_responses'])

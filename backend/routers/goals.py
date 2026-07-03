@@ -224,7 +224,21 @@ class ProgressExtractRequest(BaseModel):
     text: str
 
 
-@router.post('/v1/goals/extract-progress', tags=['goals'])
+class ProgressExtractUpdateResponse(BaseModel):
+    goal_id: str | None = None
+    goal_title: str | None = None
+    previous_value: float | int | str | None = None
+    new_value: float | int | str | None = None
+    reasoning: str = ''
+
+
+class ProgressExtractResponse(BaseModel):
+    updated: bool
+    reason: str | None = None
+    updates: List[ProgressExtractUpdateResponse] = Field(default_factory=list)
+
+
+@router.post('/v1/goals/extract-progress', tags=['goals'], response_model=ProgressExtractResponse)
 def extract_and_update_progress(
     request: ProgressExtractRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),

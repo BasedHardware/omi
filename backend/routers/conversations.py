@@ -129,6 +129,21 @@ class ConversationStatusResponse(BaseModel):
     status: str
 
 
+class ConversationsCountResponse(BaseModel):
+    count: int
+    sources: List[str] | None = None
+
+
+class ConversationRecordingResponse(BaseModel):
+    has_recording: bool
+
+
+class SharedConversationResponse(Conversation):
+    model_config = {"extra": "allow"}
+
+    people: List[Person] = []
+
+
 class ConversationSuggestedAppsResponse(BaseModel):
     suggested_apps: List[App]
     conversation_id: str
@@ -302,7 +317,7 @@ def get_conversations(
     return conversations
 
 
-@router.get('/v1/conversations/count', tags=['conversations'])
+@router.get('/v1/conversations/count', tags=['conversations'], response_model=ConversationsCountResponse)
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
@@ -613,13 +628,19 @@ def delete_conversation(
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/recording",
+    response_model=ConversationRecordingResponse,
+    tags=['conversations'],
+)
 def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
-@router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/events", response_model=ConversationStatusResponse, tags=['conversations']
+)
 def set_conversation_events_state(
     conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -998,7 +1019,9 @@ def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Dep
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/shared", tags=['conversations'], response_model=SharedConversationResponse
+)
 def get_shared_conversation_by_id(conversation_id: str):
     uid = redis_db.get_conversation_uid(conversation_id)
     if not uid:

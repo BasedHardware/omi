@@ -11,6 +11,7 @@ Endpoints:
 
 import asyncio
 import logging
+from typing import Any
 
 from utils.executors import db_executor, run_blocking
 
@@ -42,6 +43,16 @@ class AgentVmInfo(BaseModel):
 class AgentKeepaliveResponse(BaseModel):
     ok: bool
     reason: str | None = None
+
+
+class AgentToolSchema(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class AgentToolsResponse(BaseModel):
+    tools: list[AgentToolSchema]
 
 
 # --------------- GCE helpers ---------------
@@ -249,7 +260,7 @@ def _tool_schema(t) -> dict:
     }
 
 
-@router.get("/v1/agent/tools")
+@router.get("/v1/agent/tools", response_model=AgentToolsResponse)
 def list_tools(uid: str = Depends(get_current_user_uid)):
     """Return all available tool definitions for a user."""
     tools = []

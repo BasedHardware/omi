@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 from typing import List, Optional
 from urllib.parse import urlparse
-from pydantic import BaseModel as PydanticBaseModel, Field, ValidationError
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
@@ -180,6 +180,31 @@ class McpAddServerResponse(PydanticBaseModel):
     auth_url: Optional[str] = None
     tools_count: Optional[int] = None
     tool_names: List[str] = Field(default_factory=list)
+
+
+class McpRefreshToolsResponse(PydanticBaseModel):
+    tools_count: int
+    tool_names: List[str] = Field(default_factory=list)
+
+
+class AppTesterCheckResponse(PydanticBaseModel):
+    is_tester: bool
+
+
+class UnapprovedPublicAppResponse(PydanticBaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    id: Optional[str] = None
+    name: Optional[str] = None
+    uid: Optional[str] = None
+    private: Optional[bool] = None
+    approved: Optional[bool] = None
+    status: Optional[str] = None
+    category: Optional[str] = None
+    author: Optional[str] = None
+    description: Optional[str] = None
+    image: Optional[str] = None
+    capabilities: List[str] = Field(default_factory=list)
 
 
 class AppDescriptionGenerationResponse(PydanticBaseModel):
@@ -1744,7 +1769,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         }
 
 
-@router.get('/v1/apps/mcp/callback', tags=['v1'])
+@router.get('/v1/apps/mcp/callback', tags=['v1'], response_class=HTMLResponse)
 async def mcp_oauth_callback(code: str, state: str):
     """OAuth callback for MCP server authorization.
 
@@ -1834,7 +1859,7 @@ async def mcp_oauth_callback(code: str, state: str):
     """)
 
 
-@router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
+@router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'], response_model=McpRefreshToolsResponse)
 async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Re-discover tools from an MCP server and update the app."""
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
@@ -1955,7 +1980,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 # ******************************************************
 
 
-@router.post('/v1/apps/tester', tags=['v1'])
+@router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
 def add_new_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -1968,7 +1993,7 @@ def add_new_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/tester/access', tags=['v1'])
+@router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -1980,7 +2005,7 @@ def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/apps/tester/access', tags=['v1'])
+@router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -1992,14 +2017,14 @@ def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/tester/check', tags=['v1'])
+@router.get('/v1/apps/tester/check', tags=['v1'], response_model=AppTesterCheckResponse)
 def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
     if is_tester(uid):
         return {'is_tester': True}
     return {'is_tester': False}
 
 
-@router.get('/v1/apps/public/unapproved', tags=['v1'])
+@router.get('/v1/apps/public/unapproved', tags=['v1'], response_model=List[UnapprovedPublicAppResponse])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -2007,7 +2032,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
     return apps
 
 
-@router.patch('/v1/apps/{app_id}/popular', tags=['v1'])
+@router.patch('/v1/apps/{app_id}/popular', tags=['v1'], response_model=AppMutationResponse)
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -2017,7 +2042,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/approve', tags=['v1'])
+@router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -2033,7 +2058,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/reject', tags=['v1'])
+@router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

@@ -29,6 +29,10 @@ class FcmTokenResponse(BaseModel):
     status: str
 
 
+class NotificationStatusResponse(BaseModel):
+    status: str
+
+
 def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     """
     Check if the app has exceeded its rate limit for a specific user
@@ -97,7 +101,7 @@ def send_notification_to_user(data: dict, secret_key: str = Header(...)):
     return {'status': 'Ok'}
 
 
-@router.post('/v1/integrations/notification')
+@router.post('/v1/integrations/notification', response_model=NotificationStatusResponse)
 def send_app_notification_to_user(request: Request, data: dict, authorization: Optional[str] = Header(None)):
     # Check app-based auth
     if 'aid' not in data:

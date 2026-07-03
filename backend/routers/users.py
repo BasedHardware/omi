@@ -914,7 +914,11 @@ class BYOKActivateRequest(BaseModel):
     fingerprints: Dict[str, str]
 
 
-@router.post('/v1/users/me/byok-active', tags=['v1'])
+class BYOKActiveResponse(BaseModel):
+    active: bool
+
+
+@router.post('/v1/users/me/byok-active', tags=['v1'], response_model=BYOKActiveResponse)
 def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
     """Flip the user onto the BYOK free plan.
 
@@ -941,7 +945,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
     return {"active": True}
 
 
-@router.delete('/v1/users/me/byok-active', tags=['v1'])
+@router.delete('/v1/users/me/byok-active', tags=['v1'], response_model=BYOKActiveResponse)
 def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
@@ -1651,7 +1655,29 @@ def update_mentor_notification_settings(
 # LLM Usage Tracking Endpoints
 
 
-@router.get('/v1/users/me/llm-usage', tags=['users'])
+class LlmUsageFeatureResponse(BaseModel):
+    feature: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    call_count: int = 0
+
+
+class LlmUsageResponse(BaseModel):
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    top_features: List[LlmUsageFeatureResponse] = Field(default_factory=list)
+    period_days: int
+
+
+class LlmUsageRecordResponse(BaseModel):
+    status: str
+
+
+class LlmTotalCostResponse(BaseModel):
+    total_cost_usd: float
+
+
+@router.get('/v1/users/me/llm-usage', tags=['users'], response_model=LlmUsageResponse)
 def get_llm_usage(
     days: int = Query(default=30, ge=1, le=365),
     uid: str = Depends(auth.get_current_user_uid),
@@ -1671,7 +1697,7 @@ def get_llm_usage(
     }
 
 
-@router.get('/v1/users/me/llm-usage/top-features', tags=['users'])
+@router.get('/v1/users/me/llm-usage/top-features', tags=['users'], response_model=List[LlmUsageFeatureResponse])
 def get_llm_top_features(
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=3, ge=1, le=10),
@@ -1705,12 +1731,17 @@ class UpdateNotificationSettingsRequest(BaseModel):
     frequency: int | None = Field(None, ge=0, le=5)
 
 
-@router.get('/v1/users/notification-settings', tags=['users'])
+class NotificationSettingsResponse(BaseModel):
+    enabled: bool
+    frequency: int
+
+
+@router.get('/v1/users/notification-settings', tags=['users'], response_model=NotificationSettingsResponse)
 def get_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
     return users_db.get_notification_settings(uid)
 
 
-@router.patch('/v1/users/notification-settings', tags=['users'])
+@router.patch('/v1/users/notification-settings', tags=['users'], response_model=NotificationSettingsResponse)
 def update_notification_settings(
     request: UpdateNotificationSettingsRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1781,12 +1812,16 @@ class UpdateAssistantSettingsRequest(BaseModel):
     update_channel: str | None = Field(None, max_length=50)
 
 
-@router.get('/v1/users/assistant-settings', tags=['users'])
+class AssistantSettingsResponse(UpdateAssistantSettingsRequest):
+    model_config = ConfigDict(extra='allow')
+
+
+@router.get('/v1/users/assistant-settings', tags=['users'], response_model=AssistantSettingsResponse)
 def get_assistant_settings(uid: str = Depends(auth.get_current_user_uid)):
     return users_db.get_assistant_settings(uid)
 
 
-@router.patch('/v1/users/assistant-settings', tags=['users'])
+@router.patch('/v1/users/assistant-settings', tags=['users'], response_model=AssistantSettingsResponse)
 def update_assistant_settings(
     request: UpdateAssistantSettingsRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1806,12 +1841,18 @@ class UpdateAIUserProfileRequest(BaseModel):
     data_sources_used: int | None = Field(None, ge=0)
 
 
-@router.get('/v1/users/ai-profile', tags=['users'])
+class AIUserProfileResponse(BaseModel):
+    profile_text: str | None = None
+    generated_at: Optional[str] = None
+    data_sources_used: int | None = None
+
+
+@router.get('/v1/users/ai-profile', tags=['users'], response_model=AIUserProfileResponse | None)
 def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
     return users_db.get_ai_user_profile(uid)
 
 
-@router.patch('/v1/users/ai-profile', tags=['users'])
+@router.patch('/v1/users/ai-profile', tags=['users'], response_model=AIUserProfileResponse)
 def update_ai_profile(
     request: UpdateAIUserProfileRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1839,7 +1880,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     account: str = Field('omi', max_length=100)
 
 
-@router.post('/v1/users/me/llm-usage', tags=['users'])
+@router.post('/v1/users/me/llm-usage', tags=['users'], response_model=LlmUsageRecordResponse)
 def record_llm_usage_bucket(
     request: RecordLlmUsageBucketRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1857,7 +1898,7 @@ def record_llm_usage_bucket(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/me/llm-usage/total', tags=['users'])
+@router.get('/v1/users/me/llm-usage/total', tags=['users'], response_model=LlmTotalCostResponse)
 def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}

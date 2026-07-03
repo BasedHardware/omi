@@ -33,6 +33,45 @@
       }
     },
     "schemas": {
+      "AIUserProfileResponse": {
+        "properties": {
+          "data_sources_used": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Sources Used"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "profile_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Text"
+          }
+        },
+        "title": "AIUserProfileResponse",
+        "type": "object"
+      },
       "AcceptSharedActionItemsResponse": {
         "properties": {
           "count": {
@@ -463,6 +502,46 @@
         "title": "AgentKeepaliveResponse",
         "type": "object"
       },
+      "AgentToolSchema": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "title": "AgentToolSchema",
+        "type": "object"
+      },
+      "AgentToolsResponse": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolSchema"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AgentToolsResponse",
+        "type": "object"
+      },
       "AgentVmInfo": {
         "properties": {
           "has_vm": {
@@ -587,6 +666,24 @@
           "content"
         ],
         "title": "Announcement",
+        "type": "object"
+      },
+      "AnnouncementDeleteResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "AnnouncementDeleteResponse",
         "type": "object"
       },
       "AnnouncementType": {
@@ -2313,6 +2410,19 @@
         "title": "AppSubscriptionResponse",
         "type": "object"
       },
+      "AppTesterCheckResponse": {
+        "properties": {
+          "is_tester": {
+            "title": "Is Tester",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_tester"
+        ],
+        "title": "AppTesterCheckResponse",
+        "type": "object"
+      },
       "AppThumbnailUploadResponse": {
         "properties": {
           "thumbnail_id": {
@@ -2587,6 +2697,85 @@
         "title": "AsanaWorkspacesResponse",
         "type": "object"
       },
+      "AssistantSettingsResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "advice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdviceAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "floating_bar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FloatingBarSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FocusAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shared": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SharedAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "update_channel": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Update Channel"
+          }
+        },
+        "title": "AssistantSettingsResponse",
+        "type": "object"
+      },
       "AudioDownloadPendingResponse": {
         "properties": {
           "poll_after_ms": {
@@ -2820,6 +3009,19 @@
           "fingerprints"
         ],
         "title": "BYOKActivateRequest",
+        "type": "object"
+      },
+      "BYOKActiveResponse": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "title": "BYOKActiveResponse",
         "type": "object"
       },
       "BatchActionItemsRequest": {
@@ -3475,6 +3677,37 @@
         "title": "CalendarMeetingContext",
         "type": "object"
       },
+      "CalendarOnboardingSkipResponse": {
+        "properties": {
+          "skipped": {
+            "title": "Skipped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "skipped"
+        ],
+        "title": "CalendarOnboardingSkipResponse",
+        "type": "object"
+      },
+      "CalendarOnboardingStatusResponse": {
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "onboarding_completed": {
+            "title": "Onboarding Completed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connected",
+          "onboarding_completed"
+        ],
+        "title": "CalendarOnboardingStatusResponse",
+        "type": "object"
+      },
       "CancelSubscriptionRequest": {
         "properties": {
           "reason": {
@@ -3644,6 +3877,19 @@
         "title": "ChartDataset",
         "type": "object"
       },
+      "ChatMessageCountResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "ChatMessageCountResponse",
+        "type": "object"
+      },
       "ChatQuotaUnit": {
         "enum": [
           "questions",
@@ -3651,6 +3897,19 @@
         ],
         "title": "ChatQuotaUnit",
         "type": "string"
+      },
+      "ChatRatingResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ChatRatingResponse",
+        "type": "object"
       },
       "ChatTool": {
         "description": "Definition of a tool that an app provides for chat",
@@ -4362,6 +4621,19 @@
         "title": "ConversationPhoto",
         "type": "object"
       },
+      "ConversationRecordingResponse": {
+        "properties": {
+          "has_recording": {
+            "title": "Has Recording",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "has_recording"
+        ],
+        "title": "ConversationRecordingResponse",
+        "type": "object"
+      },
       "ConversationSource": {
         "enum": [
           "friend",
@@ -4453,6 +4725,33 @@
         ],
         "title": "ConversationVisibility",
         "type": "string"
+      },
+      "ConversationsCountResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "ConversationsCountResponse",
+        "type": "object"
       },
       "CreateActionItemRequest": {
         "properties": {
@@ -6565,6 +6864,117 @@
         "title": "DeveloperMemory",
         "type": "object"
       },
+      "DeveloperMemoryVectorItem": {
+        "additionalProperties": true,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DeveloperMemoryVectorItem",
+        "type": "object"
+      },
+      "DeveloperMemoryVectorPolicy": {
+        "properties": {
+          "app_has_default_memory_grant": {
+            "title": "App Has Default Memory Grant",
+            "type": "boolean"
+          },
+          "archive_capability": {
+            "title": "Archive Capability",
+            "type": "boolean"
+          },
+          "consumer": {
+            "title": "Consumer",
+            "type": "string"
+          },
+          "raw_provenance_capability": {
+            "title": "Raw Provenance Capability",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consumer",
+          "app_has_default_memory_grant",
+          "archive_capability",
+          "raw_provenance_capability"
+        ],
+        "title": "DeveloperMemoryVectorPolicy",
+        "type": "object"
+      },
+      "DeveloperMemoryVectorSearchResponse": {
+        "properties": {
+          "archive_default_visible": {
+            "title": "Archive Default Visible",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeveloperMemoryVectorItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/DeveloperMemoryVectorPolicy"
+          },
+          "returned_count": {
+            "title": "Returned Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "returned_count",
+          "archive_default_visible",
+          "policy"
+        ],
+        "title": "DeveloperMemoryVectorSearchResponse",
+        "type": "object"
+      },
+      "DeveloperSuccessResponse": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "DeveloperSuccessResponse",
+        "type": "object"
+      },
       "DeveloperTranscriptSegment": {
         "properties": {
           "end": {
@@ -8211,6 +8621,90 @@
         "title": "LinkCalendarEventRequest",
         "type": "object"
       },
+      "LlmTotalCostResponse": {
+        "properties": {
+          "total_cost_usd": {
+            "title": "Total Cost Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total_cost_usd"
+        ],
+        "title": "LlmTotalCostResponse",
+        "type": "object"
+      },
+      "LlmUsageFeatureResponse": {
+        "properties": {
+          "call_count": {
+            "default": 0,
+            "title": "Call Count",
+            "type": "integer"
+          },
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feature"
+        ],
+        "title": "LlmUsageFeatureResponse",
+        "type": "object"
+      },
+      "LlmUsageRecordResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "LlmUsageRecordResponse",
+        "type": "object"
+      },
+      "LlmUsageResponse": {
+        "properties": {
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          },
+          "top_features": {
+            "items": {
+              "$ref": "#/components/schemas/LlmUsageFeatureResponse"
+            },
+            "title": "Top Features",
+            "type": "array"
+          }
+        },
+        "required": [
+          "period_days"
+        ],
+        "title": "LlmUsageResponse",
+        "type": "object"
+      },
       "McpAddServerResponse": {
         "properties": {
           "app_id": {
@@ -8438,6 +8932,165 @@
         "title": "McpCreateActionItem",
         "type": "object"
       },
+      "McpOauthGrantsResponse": {
+        "properties": {
+          "grants": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Grants",
+            "type": "array"
+          }
+        },
+        "title": "McpOauthGrantsResponse",
+        "type": "object"
+      },
+      "McpRefreshToolsResponse": {
+        "properties": {
+          "tool_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tool Names",
+            "type": "array"
+          },
+          "tools_count": {
+            "title": "Tools Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tools_count"
+        ],
+        "title": "McpRefreshToolsResponse",
+        "type": "object"
+      },
+      "McpScreenActivityAppSummary": {
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "window_titles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Window Titles",
+            "type": "array"
+          }
+        },
+        "title": "McpScreenActivityAppSummary",
+        "type": "object"
+      },
+      "McpScreenActivityRow": {
+        "properties": {
+          "app_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Name"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "ocr_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Text"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "window_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Title"
+          }
+        },
+        "title": "McpScreenActivityRow",
+        "type": "object"
+      },
+      "McpScreenActivitySummaryResponse": {
+        "properties": {
+          "apps": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/McpScreenActivityAppSummary"
+            },
+            "default": {},
+            "title": "Apps",
+            "type": "object"
+          },
+          "total_screenshots": {
+            "default": 0,
+            "title": "Total Screenshots",
+            "type": "integer"
+          }
+        },
+        "title": "McpScreenActivitySummaryResponse",
+        "type": "object"
+      },
       "McpServerRequest": {
         "properties": {
           "description": {
@@ -8465,6 +9118,166 @@
           "mcp_server_url"
         ],
         "title": "McpServerRequest",
+        "type": "object"
+      },
+      "McpSseAuthMethodResponse": {
+        "properties": {
+          "authorization_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Endpoint"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource"
+          },
+          "scopes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "token_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Endpoint"
+          }
+        },
+        "title": "McpSseAuthMethodResponse",
+        "type": "object"
+      },
+      "McpSseAuthenticationResponse": {
+        "properties": {
+          "api_key": {
+            "$ref": "#/components/schemas/McpSseAuthMethodResponse"
+          },
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "oauth2": {
+            "$ref": "#/components/schemas/McpSseAuthMethodResponse"
+          }
+        },
+        "required": [
+          "methods",
+          "api_key",
+          "oauth2"
+        ],
+        "title": "McpSseAuthenticationResponse",
+        "type": "object"
+      },
+      "McpSseInfoResponse": {
+        "properties": {
+          "authentication": {
+            "$ref": "#/components/schemas/McpSseAuthenticationResponse"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "instructions": {
+            "$ref": "#/components/schemas/McpSseInstructionsResponse"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "transport": {
+            "title": "Transport",
+            "type": "string"
+          }
+        },
+        "required": [
+          "endpoint",
+          "transport",
+          "protocol_version",
+          "authentication",
+          "instructions"
+        ],
+        "title": "McpSseInfoResponse",
+        "type": "object"
+      },
+      "McpSseInstructionsResponse": {
+        "properties": {
+          "step1": {
+            "title": "Step1",
+            "type": "string"
+          },
+          "step2": {
+            "title": "Step2",
+            "type": "string"
+          },
+          "step3": {
+            "title": "Step3",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step1",
+          "step2",
+          "step3"
+        ],
+        "title": "McpSseInstructionsResponse",
+        "type": "object"
+      },
+      "McpStatusResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "McpStatusResponse",
         "type": "object"
       },
       "McpUpdateActionItem": {
@@ -9595,6 +10408,37 @@
         "title": "MoveConversationRequest",
         "type": "object"
       },
+      "NotificationSettingsResponse": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "frequency": {
+            "title": "Frequency",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "frequency"
+        ],
+        "title": "NotificationSettingsResponse",
+        "type": "object"
+      },
+      "NotificationStatusResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "NotificationStatusResponse",
+        "type": "object"
+      },
       "OAuthUrlResponse": {
         "description": "Response containing OAuth authorization URL",
         "properties": {
@@ -10490,6 +11334,154 @@
         "title": "ProgressExtractRequest",
         "type": "object"
       },
+      "ProgressExtractResponse": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "boolean"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressExtractUpdateResponse"
+            },
+            "title": "Updates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "updated"
+        ],
+        "title": "ProgressExtractResponse",
+        "type": "object"
+      },
+      "ProgressExtractUpdateResponse": {
+        "properties": {
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "goal_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Title"
+          },
+          "new_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Value"
+          },
+          "previous_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Value"
+          },
+          "reasoning": {
+            "default": "",
+            "title": "Reasoning",
+            "type": "string"
+          }
+        },
+        "title": "ProgressExtractUpdateResponse",
+        "type": "object"
+      },
+      "PublicFairUseCaseStatusResponse": {
+        "properties": {
+          "case_ref": {
+            "title": "Case Ref",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "support_email": {
+            "title": "Support Email",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "case_ref",
+          "stage",
+          "message",
+          "support_email"
+        ],
+        "title": "PublicFairUseCaseStatusResponse",
+        "type": "object"
+      },
       "RebuildResponse": {
         "properties": {
           "edges_count": {
@@ -10820,6 +11812,20 @@
           "decision"
         ],
         "title": "ReviewResolutionRequest",
+        "type": "object"
+      },
+      "ReviewResolutionResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ReviewResolutionResponse",
         "type": "object"
       },
       "SaveFcmTokenRequest": {
@@ -11172,6 +12178,24 @@
         "title": "ShareActionItemsResponse",
         "type": "object"
       },
+      "ShareChatMessagesResponse": {
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "token"
+        ],
+        "title": "ShareChatMessagesResponse",
+        "type": "object"
+      },
       "ShareTasksRequest": {
         "properties": {
           "task_ids": {
@@ -11290,6 +12314,368 @@
           }
         },
         "title": "SharedAssistantSettings",
+        "type": "object"
+      },
+      "SharedChatMessage": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "sender": {
+            "title": "Sender",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "sender"
+        ],
+        "title": "SharedChatMessage",
+        "type": "object"
+      },
+      "SharedChatMessagesResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "messages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SharedChatMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender_name",
+          "count"
+        ],
+        "title": "SharedChatMessagesResponse",
+        "type": "object"
+      },
+      "SharedConversationResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
+          "audio_files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AudioFile"
+            },
+            "title": "Audio Files",
+            "type": "array"
+          },
+          "calendar_event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarEventLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Twilio call SID for phone call conversations",
+            "title": "Call Id"
+          },
+          "client_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Device Id"
+          },
+          "client_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Platform"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_protection_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Protection Level"
+          },
+          "deferred": {
+            "default": false,
+            "title": "Deferred",
+            "type": "boolean"
+          },
+          "discarded": {
+            "default": false,
+            "title": "Discarded",
+            "type": "boolean"
+          },
+          "external_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Data"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ID of the folder this conversation belongs to",
+            "title": "Folder Id"
+          },
+          "geolocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Geolocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "people": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "photos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConversationPhoto"
+            },
+            "title": "Photos",
+            "type": "array"
+          },
+          "plugins_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PluginResult"
+            },
+            "title": "Plugins Results",
+            "type": "array"
+          },
+          "private_cloud_sync_enabled": {
+            "default": false,
+            "title": "Private Cloud Sync Enabled",
+            "type": "boolean"
+          },
+          "processing_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Conversation Id"
+          },
+          "processing_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Memory Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "omi"
+          },
+          "starred": {
+            "default": false,
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "completed"
+          },
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "suggested_summarization_apps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Summarization Apps",
+            "type": "array"
+          },
+          "transcript_segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "title": "Transcript Segments",
+            "type": "array"
+          },
+          "transcript_segments_compressed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Transcript Segments Compressed"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ConversationVisibility",
+            "default": "private"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "structured"
+        ],
+        "title": "SharedConversationResponse",
         "type": "object"
       },
       "SimpleActionItem": {
@@ -13092,6 +14478,130 @@
           }
         },
         "title": "TtsVoiceSettings",
+        "type": "object"
+      },
+      "UnapprovedPublicAppResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "approved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "private": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uid"
+          }
+        },
+        "title": "UnapprovedPublicAppResponse",
         "type": "object"
       },
       "UpdateAIUserProfileRequest": {
@@ -16355,7 +17865,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToolsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -17128,7 +18640,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementDeleteResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -18668,8 +20182,10 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "description": "Successful Response"
@@ -18883,7 +20399,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnapprovedPublicAppResponse"
+                  },
+                  "title": "Response Get Unapproved Public Apps V1 Apps Public Unapproved Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -19041,7 +20563,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19101,7 +20625,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19159,7 +20685,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19234,7 +20762,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppTesterCheckResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -19573,7 +21103,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -20031,7 +21563,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpRefreshToolsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -20097,7 +21631,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -20253,7 +21789,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AppMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -21216,7 +22754,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarOnboardingSkipResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -21292,7 +22832,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarOnboardingStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -21777,7 +23319,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationsCountResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -23088,9 +24632,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Set Conversation Events State V1 Conversations  Conversation Id  Events Patch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationStatusResponse"
                 }
               }
             },
@@ -23468,9 +25010,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Conversation Has Audio Recording V1 Conversations  Conversation Id  Recording Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationRecordingResponse"
                 }
               }
             },
@@ -23973,7 +25513,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SharedConversationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -25055,7 +26597,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -25426,7 +26970,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -25750,7 +27296,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -26244,7 +27792,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperMemoryVectorSearchResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -26293,7 +27843,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -26407,7 +27959,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PublicFairUseCaseStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -27674,9 +29228,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Extract And Update Progress V1 Goals Extract Progress Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProgressExtractResponse"
                 }
               }
             },
@@ -28753,7 +30305,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -29609,7 +31163,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30153,7 +31709,14 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Get Daily Summaries V1 Mcp Daily Summaries Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -30202,7 +31765,14 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Get Goals V1 Mcp Goals Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -30646,7 +32216,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30704,7 +32276,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30744,7 +32318,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpOauthGrantsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30952,7 +32528,20 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "anyOf": [
+                    {
+                      "items": {
+                        "$ref": "#/components/schemas/McpScreenActivityRow"
+                      },
+                      "type": "array"
+                    },
+                    {
+                      "$ref": "#/components/schemas/McpScreenActivitySummaryResponse"
+                    }
+                  ],
+                  "title": "Response Get Screen Activity V1 Mcp Screen Activity Get"
+                }
               }
             },
             "description": "Successful Response"
@@ -31022,11 +32611,6 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
             "description": "Successful Response"
           },
           "401": {
@@ -31092,11 +32676,6 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
             "description": "Successful Response"
           },
           "401": {
@@ -31145,11 +32724,6 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
             "description": "Successful Response"
           },
           "422": {
@@ -31223,11 +32797,6 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
             "description": "Successful Response"
           },
           "401": {
@@ -31263,7 +32832,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpSseInfoResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -32618,11 +34189,6 @@
         "operationId": "twiml_voice_webhook_v1_phone_twiml_post",
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
             "description": "Successful Response"
           },
           "401": {
@@ -32749,7 +34315,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -32915,7 +34483,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StripeConnectAccountResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -33041,7 +34611,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMutationResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -34484,7 +36056,17 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AIUserProfileResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Ai Profile V1 Users Ai Profile Get"
+                }
               }
             },
             "description": "Successful Response"
@@ -34567,7 +36149,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AIUserProfileResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -34926,7 +36510,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSettingsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -35009,7 +36595,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSettingsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36733,7 +38321,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BYOKActiveResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36817,7 +38407,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BYOKActiveResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36905,7 +38497,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LlmUsageResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -36988,7 +38582,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LlmUsageRecordResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -37088,7 +38684,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LlmUsageFeatureResponse"
+                  },
+                  "title": "Response Get Llm Top Features V1 Users Me Llm Usage Top Features Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -37163,7 +38765,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LlmTotalCostResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -38174,7 +39778,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -38257,7 +39863,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -39380,7 +40988,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageCountResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -41262,7 +42872,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ShareChatMessagesResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -41311,7 +42923,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SharedChatMessagesResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -41411,7 +43025,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRatingResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -42418,7 +44034,14 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Memory Review Queue V3 Memories Review Queue Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -42512,7 +44135,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewResolutionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -42790,7 +44415,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
               }
             },
             "description": "Successful Response"

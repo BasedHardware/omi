@@ -71,6 +71,10 @@ class GenerateTitleRequest(BaseModel):
     messages: List[TitleMessageInput] = Field(..., min_length=1, max_length=50)
 
 
+class ChatMessageCountResponse(BaseModel):
+    count: int
+
+
 # ============================================================================
 # CHAT SESSION ENDPOINTS
 # ============================================================================
@@ -242,7 +246,7 @@ def generate_session_title(
     return {'title': title}
 
 
-@router.get('/v1/users/stats/chat-messages', tags=['chat-sessions'])
+@router.get('/v1/users/stats/chat-messages', tags=['chat-sessions'], response_model=ChatMessageCountResponse)
 def get_chat_message_count(
     uid: str = Depends(auth.get_current_user_uid),
 ):

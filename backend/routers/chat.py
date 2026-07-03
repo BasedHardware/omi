@@ -96,6 +96,28 @@ class MessageReportResponse(BaseModel):
     message: str
 
 
+class ChatRatingResponse(BaseModel):
+    status: str
+
+
+class ShareChatMessagesResponse(BaseModel):
+    url: str
+    token: str
+
+
+class SharedChatMessage(BaseModel):
+    id: str
+    text: str
+    sender: str
+    created_at: Optional[str] = None
+
+
+class SharedChatMessagesResponse(BaseModel):
+    sender_name: str
+    messages: List[SharedChatMessage] = []
+    count: int
+
+
 def _parse_context_keywords(raw: Optional[str]) -> List[str]:
     if not raw:
         return []
@@ -1149,7 +1171,7 @@ def create_initial_message(
 # MARK: - Message Rating
 
 
-@router.patch('/v2/messages/{message_id}/rating', tags=['chat'])
+@router.patch('/v2/messages/{message_id}/rating', tags=['chat'], response_model=ChatRatingResponse)
 def rate_message(
     message_id: str,
     data: dict,
@@ -1190,7 +1212,7 @@ def rate_message(
 # MARK: - Chat Sharing
 
 
-@router.post('/v2/messages/share', tags=['chat'])
+@router.post('/v2/messages/share', tags=['chat'], response_model=ShareChatMessagesResponse)
 def share_chat_messages(
     data: dict,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1215,7 +1237,7 @@ def share_chat_messages(
     return {"url": f"https://h.omi.me/chat/{token}", "token": token}
 
 
-@router.get('/v2/messages/shared/{token}', tags=['chat'])
+@router.get('/v2/messages/shared/{token}', tags=['chat'], response_model=SharedChatMessagesResponse)
 def get_shared_chat_messages(token: str):
     """Public endpoint — get shared chat messages (no auth required)."""
     share_data = get_chat_share(token)

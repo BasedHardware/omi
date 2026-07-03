@@ -1342,6 +1342,117 @@
         "title": "DeveloperMemory",
         "type": "object"
       },
+      "DeveloperMemoryVectorItem": {
+        "additionalProperties": true,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DeveloperMemoryVectorItem",
+        "type": "object"
+      },
+      "DeveloperMemoryVectorPolicy": {
+        "properties": {
+          "app_has_default_memory_grant": {
+            "title": "App Has Default Memory Grant",
+            "type": "boolean"
+          },
+          "archive_capability": {
+            "title": "Archive Capability",
+            "type": "boolean"
+          },
+          "consumer": {
+            "title": "Consumer",
+            "type": "string"
+          },
+          "raw_provenance_capability": {
+            "title": "Raw Provenance Capability",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consumer",
+          "app_has_default_memory_grant",
+          "archive_capability",
+          "raw_provenance_capability"
+        ],
+        "title": "DeveloperMemoryVectorPolicy",
+        "type": "object"
+      },
+      "DeveloperMemoryVectorSearchResponse": {
+        "properties": {
+          "archive_default_visible": {
+            "title": "Archive Default Visible",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeveloperMemoryVectorItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/DeveloperMemoryVectorPolicy"
+          },
+          "returned_count": {
+            "title": "Returned Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "returned_count",
+          "archive_default_visible",
+          "policy"
+        ],
+        "title": "DeveloperMemoryVectorSearchResponse",
+        "type": "object"
+      },
+      "DeveloperSuccessResponse": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "DeveloperSuccessResponse",
+        "type": "object"
+      },
       "DeveloperTranscriptSegment": {
         "properties": {
           "end": {
@@ -2187,7 +2298,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -2573,7 +2686,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -2915,7 +3030,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -3433,7 +3550,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperMemoryVectorSearchResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -3485,7 +3604,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
