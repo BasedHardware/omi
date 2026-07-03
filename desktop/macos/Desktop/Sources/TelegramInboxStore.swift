@@ -45,6 +45,9 @@ final class TelegramInboxStore: ObservableObject {
   private static let autoReplyDefaultsKey = "telegramAutoReplyChats"
 
   private var lastLatestMessageID: [String: String] = [:]
+  /// In-flight auto-reply tasks keyed by chat id, so disabling auto-reply mid-draft
+  /// can cancel the pending send.
+  private var autoReplyTasks: [String: Task<Void, Never>] = [:]
   private var started = false
 
   init() {
@@ -65,10 +68,22 @@ final class TelegramInboxStore: ObservableObject {
       autoReplyChats.insert(chatID)
       // Flip on for a thread already awaiting a reply → reply now, as the user expects.
       if let chat = chats.first(where: { $0.chatID == chatID }), chat.awaitingReply {
-        Task { await autoReply(chat) }
+        scheduleAutoReply(chat)
       }
     } else {
       autoReplyChats.remove(chatID)
+      // Cancel any in-flight draft/send so a reply can't land after the toggle is off.
+      autoReplyTasks.removeValue(forKey: chatID)?.cancel()
+    }
+  }
+
+  /// Track the auto-reply Task per chat so disabling the toggle can cancel an
+  /// in-flight draft+send. A newer request for the same chat supersedes an older one.
+  private func scheduleAutoReply(_ chat: TelegramChat) {
+    autoReplyTasks[chat.chatID]?.cancel()
+    autoReplyTasks[chat.chatID] = Task { [weak self] in
+      await self?.autoReply(chat)
+      self?.autoReplyTasks[chat.chatID] = nil
     }
   }
 
@@ -199,7 +214,7 @@ final class TelegramInboxStore: ObservableObject {
     guard t.awaitingReply, known != t.latestMessageID else { return }
 
     if autoReplyChats.contains(chat.chatID) {
-      await autoReply(chat)
+      scheduleAutoReply(chat)
     } else {
       // A new inbound arrived → any earlier draft is stale. Drop it; we draft
       // on-demand when the user opens the chat (or right now if it's already open).
@@ -248,6 +263,12 @@ final class TelegramInboxStore: ObservableObject {
     guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    // Final guard: the draft round-trip is async, so re-check auto-reply is still on
+    // (and this task wasn't cancelled) right before the irreversible send.
+    guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {
+      NSLog("Telegram auto-reply cancelled for %@ before send (toggled off mid-draft)", chat.chatID)
+      return
+    }
     TelegramClientService.shared.send(chatID: chat.chatID, text: text)
     appendSent(text, to: chat.chatID)
   }

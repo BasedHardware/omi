@@ -43,14 +43,32 @@ final class IMessageInboxStore: ObservableObject {
       // instead of waiting for the contact's next new message — that's what a user
       // expects when they flip the toggle on for a waiting thread.
       if let chat = chats.first(where: { $0.chatGUID == chatGUID }), chat.awaitingReply {
-        Task { await autoReply(chat) }
+        scheduleAutoReply(chat)
       }
     } else {
       autoReplyChats.remove(chatGUID)
+      // Cancel any in-flight draft/send for this chat. A reply whose draft is still
+      // being generated must not land after the user toggled auto-reply off — sent
+      // iMessages can't be unsent. autoReply() also re-checks membership before send
+      // as a second guard against races the cancel can't win.
+      autoReplyTasks.removeValue(forKey: chatGUID)?.cancel()
+    }
+  }
+
+  /// Track the auto-reply Task per chat so disabling the toggle can cancel an
+  /// in-flight draft+send. A newer request for the same chat supersedes an older one.
+  private func scheduleAutoReply(_ chat: IMessageChat) {
+    autoReplyTasks[chat.chatGUID]?.cancel()
+    autoReplyTasks[chat.chatGUID] = Task { [weak self] in
+      await self?.autoReply(chat)
+      self?.autoReplyTasks[chat.chatGUID] = nil
     }
   }
 
   private var lastLatestMessageID: [String: String] = [:]
+  /// In-flight auto-reply tasks keyed by chat GUID, so disabling auto-reply mid-draft
+  /// can cancel the pending send.
+  private var autoReplyTasks: [String: Task<Void, Never>] = [:]
   private var baselined = false
   private var watchTask: Task<Void, Never>?
   private var dbWatcher: IMessageDBWatcher?
@@ -168,7 +186,7 @@ final class IMessageInboxStore: ObservableObject {
       // the backend for every existing unread thread on launch.
       if baselined, let known, known != latestID {
         if autoReplyChats.contains(chat.chatGUID) {
-          Task { await self.autoReply(chat) }
+          scheduleAutoReply(chat)
         } else {
           // A new inbound arrived → any earlier draft is stale. Drop it; we draft
           // on-demand when the user opens the chat (or right now if it's already open).
@@ -214,8 +232,15 @@ final class IMessageInboxStore: ObservableObject {
     guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    // Final guard: the draft round-trip is async, so re-check that auto-reply is
+    // still enabled (and this task wasn't cancelled) right before the irreversible
+    // send. The user may have toggled it off while the draft was being generated.
+    guard !Task.isCancelled, autoReplyChats.contains(chat.chatGUID) else {
+      NSLog("iMessage auto-reply cancelled for \(chat.chatGUID) before send (toggled off mid-draft)")
+      return
+    }
     do {
-      try IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
+      try await IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
       appendSent(text, to: chat.id)
     } catch {
       NSLog("iMessage auto-reply send failed for \(chat.chatGUID): \(error.localizedDescription)")
@@ -307,8 +332,14 @@ final class IMessageDBWatcher {
 
   deinit {
     // Cancel any live sources so their file descriptors are closed even if stop()
-    // was never called.
-    for source in sources { source.cancel() }
+    // was never called. `sources` is confined to `queue` (armed/cancelled there and
+    // mutated by the source event handlers), so cancel on `queue` too rather than
+    // touching it off-queue and racing an in-flight handler. Capture by value since
+    // self is being torn down; the block references neither self nor its stored state.
+    let sourcesToCancel = sources
+    queue.async {
+      for source in sourcesToCancel { source.cancel() }
+    }
   }
 
   /// Must run on `queue`.

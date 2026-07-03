@@ -61,14 +61,29 @@ final class WhatsAppInboxStore: ObservableObject {
       // If the chat already has an unanswered inbound message, reply to it now
       // instead of waiting for the contact's next new message.
       if let chat = chats.first(where: { $0.chatID == chatID }), chat.awaitingReply {
-        Task { await autoReply(chat) }
+        scheduleAutoReply(chat)
       }
     } else {
       autoReplyChats.remove(chatID)
+      // Cancel any in-flight draft/send so a reply can't land after the toggle is off.
+      autoReplyTasks.removeValue(forKey: chatID)?.cancel()
+    }
+  }
+
+  /// Track the auto-reply Task per chat so disabling the toggle can cancel an
+  /// in-flight draft+send. A newer request for the same chat supersedes an older one.
+  private func scheduleAutoReply(_ chat: WhatsAppChat) {
+    autoReplyTasks[chat.chatID]?.cancel()
+    autoReplyTasks[chat.chatID] = Task { [weak self] in
+      await self?.autoReply(chat)
+      self?.autoReplyTasks[chat.chatID] = nil
     }
   }
 
   private var lastLatestMessageID: [String: String] = [:]
+  /// In-flight auto-reply tasks keyed by chat id, so disabling auto-reply mid-draft
+  /// can cancel the pending send.
+  private var autoReplyTasks: [String: Task<Void, Never>] = [:]
   private var baselined = false
   private var watchTask: Task<Void, Never>?
   private var dbWatcher: WhatsAppDBWatcher?
@@ -172,7 +187,7 @@ final class WhatsAppInboxStore: ObservableObject {
       // the backend for every existing unread thread on launch.
       if baselined, let known, known != latestID {
         if autoReplyChats.contains(chat.chatID) {
-          Task { await self.autoReply(chat) }
+          scheduleAutoReply(chat)
         } else {
           // A new inbound arrived → any earlier draft is stale. Drop it; we draft
           // on-demand when the user opens the chat (or right now if it's already open).
@@ -222,6 +237,12 @@ final class WhatsAppInboxStore: ObservableObject {
     guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    // Final guard: the draft round-trip is async, so re-check auto-reply is still on
+    // (and this task wasn't cancelled) right before the irreversible send.
+    guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {
+      NSLog("WhatsApp auto-reply cancelled for \(chat.chatID) before send (toggled off mid-draft)")
+      return
+    }
     do {
       try await WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: phone)
       appendSent(text, to: chat.id)
@@ -316,7 +337,12 @@ final class WhatsAppDBWatcher {
   }
 
   deinit {
-    for source in sources { source.cancel() }
+    // `sources` is confined to `queue`; cancel there too rather than racing an
+    // in-flight handler off-queue. Capture by value since self is being torn down.
+    let sourcesToCancel = sources
+    queue.async {
+      for source in sourcesToCancel { source.cancel() }
+    }
   }
 
   /// Must run on `queue`.
