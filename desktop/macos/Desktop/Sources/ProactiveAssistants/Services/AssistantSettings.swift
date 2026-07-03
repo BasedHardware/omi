@@ -149,13 +149,28 @@ class AssistantSettings {
         set {
             let normalized = Self.dedupedNormalizedLanguageCodes(newValue)
             UserDefaults.standard.set(normalized, forKey: voiceLanguagesKey)
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+            // Dedicated notification: posting transcriptionSettingsDidChange here would
+            // restart the AMBIENT transcription pipeline, which this setting must never touch.
+            NotificationCenter.default.post(name: .voiceLanguagesDidChange, object: nil)
         }
+    }
+
+    /// True only when the user has explicitly picked voice languages (onboarding or
+    /// Settings). Everything the feature does — system-instruction language pinning,
+    /// whisper hints, per-turn language ID — is gated on this, so default-config users
+    /// keep exactly today's provider auto-detect behavior (forcing "speaks ONLY English"
+    /// on someone who merely never opened the setting would be a regression).
+    var hasExplicitVoiceLanguages: Bool {
+        !Self.dedupedNormalizedLanguageCodes(
+            UserDefaults.standard.stringArray(forKey: voiceLanguagesKey) ?? []
+        ).isEmpty
     }
 
     /// Base ISO-639-1 codes of `voiceLanguages` (region stripped: "en-US" → "en"),
     /// order-preserving and deduped. This is the candidate set for PTT language ID.
+    /// EMPTY unless the user explicitly configured voice languages.
     var voiceBaseLanguages: [String] {
+        guard hasExplicitVoiceLanguages else { return [] }
         var seen = Set<String>()
         return voiceLanguages.map { Self.baseLanguageCode($0) }.filter { seen.insert($0).inserted }
     }
@@ -467,6 +482,7 @@ extension Notification.Name {
     static let assistantMonitoringToggleRequested = Notification.Name("assistantMonitoringToggleRequested")
     static let transcriptionSettingsDidChange = Notification.Name("transcriptionSettingsDidChange")
     static let systemAudioCaptureModeDidChange = Notification.Name("systemAudioCaptureModeDidChange")
+    static let voiceLanguagesDidChange = Notification.Name("voiceLanguagesDidChange")
 }
 
 // MARK: - Backward Compatibility

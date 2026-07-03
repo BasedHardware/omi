@@ -423,14 +423,19 @@ final class RealtimeHubSession: NSObject {
 
   /// Set (or clear, with nil) the input transcription language for this turn. Sends a
   /// full idempotent session.update — partial nested updates have murkier merge
-  /// semantics, and the payload is deterministic anyway. Must be called BEFORE
-  /// commitInputTurn(); messages are ordered on the socket, so the update lands first.
+  /// semantics, and the payload is deterministic anyway. Call BEFORE commitInputTurn();
+  /// both hop to `q`, so FIFO ordering guarantees the update lands first. All state
+  /// mutation happens on `q` (same discipline as every other send-path member).
   func setInputTranscriptionLanguage(_ code: String?) {
     guard provider == .openai else { return }
-    guard code != inputTranscriptionLanguage else { return }
-    inputTranscriptionLanguage = code
-    log("\(tag): input transcription language → \(code ?? "auto")")
-    send(json: openAISessionPayload())
+    q.async { [weak self] in
+      guard let self else { return }
+      guard code != self.inputTranscriptionLanguage else { return }
+      self.inputTranscriptionLanguage = code
+      log("\(self.tag): input transcription language → \(code ?? "auto")")
+      guard self.isOpen else { return }  // pre-open: sendSessionSetup includes it
+      self.send(json: self.openAISessionPayload())
+    }
   }
 
   private func openAISessionPayload() -> [String: Any] {

@@ -441,7 +441,7 @@ private struct VoiceAssistantLanguagesCard: View {
     }
     AssistantSettings.shared.voiceLanguages = selection
     selection = AssistantSettings.shared.voiceLanguages
-    // Re-warm the hub session so the languages line lands in the system instruction now.
-    NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
+    // The voiceLanguages setter posts .voiceLanguagesDidChange; the hub controller
+    // observes it to prewarm the LID model and re-warm the session's instructions.
   }
 }

@@ -109,7 +109,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     preferredName = initialName
     draftName = initialName
 
-    selectedLanguageCodes = AssistantSettings.shared.voiceLanguages
+    // Fresh installs start EMPTY so the user's first pick genuinely defines the
+    // primary — pre-selecting the "en" fallback would make English primary for everyone.
+    selectedLanguageCodes =
+      AssistantSettings.shared.hasExplicitVoiceLanguages
+      ? AssistantSettings.shared.voiceLanguages : []
 
     let defaults = UserDefaults.standard
     chatGPTImportedMemoriesCount = defaults.integer(forKey: chatGPTImportedMemoriesKey)

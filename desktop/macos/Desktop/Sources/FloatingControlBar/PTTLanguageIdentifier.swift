@@ -81,7 +81,12 @@ actor PTTLanguageIdentifier {
       var ds = try TdtDecoderState()
       let started = Date()
       let result = try await manager.transcribe(samples, decoderState: &ds, language: nil)
-      let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+      // The TDT decoder emits literal "<unk>" for out-of-vocabulary tokens (slangy
+      // vowels etc.) — never show that in a chat bubble.
+      let text = result.text
+        .replacingOccurrences(of: "<unk>", with: "")
+        .replacingOccurrences(of: "  ", with: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
       guard text.contains(where: { $0.isLetter }) else {
         return Verdict(languageCode: nil, transcript: nil)
       }
@@ -101,19 +106,40 @@ actor PTTLanguageIdentifier {
   /// Returns the base code only when the dominant language IS one of the candidates —
   /// anything else means "no match" and the caller leaves the provider on auto-detect.
   nonisolated static func detectLanguage(of text: String, candidates: [String]) -> String? {
+    guard let base = dominantLanguage(of: text, hints: candidates) else { return nil }
+    guard candidates.isEmpty || candidates.contains(base) else { return nil }
+    return base
+  }
+
+  /// Ungated dominant-language detection, biased toward `hints`. Used to classify the
+  /// PROVIDER transcript at turn-done: the bias keeps code-switched utterances ("play
+  /// Despacito") classified into the user's set, so a correct provider transcript isn't
+  /// swapped for a lower-quality local one.
+  nonisolated static func dominantLanguage(of text: String, hints: [String]) -> String? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard trimmed.count >= 3 else { return nil }
     let recognizer = NLLanguageRecognizer()
-    if !candidates.isEmpty {
-      var hints: [NLLanguage: Double] = [:]
-      for code in candidates { hints[NLLanguage(rawValue: code)] = 0.3 }
-      recognizer.languageHints = hints
+    if !hints.isEmpty {
+      var weights: [NLLanguage: Double] = [:]
+      for code in hints { weights[NLLanguage(rawValue: nlCode(for: code))] = 0.3 }
+      recognizer.languageHints = weights
     }
     recognizer.processString(trimmed)
     guard let dominant = recognizer.dominantLanguage else { return nil }
-    let base = AssistantSettings.baseLanguageCode(dominant.rawValue)
-    guard candidates.isEmpty || candidates.contains(base) else { return nil }
-    return base
+    return normalizedBaseCode(dominant.rawValue)
+  }
+
+  /// NLLanguage's ISO codes differ from our settings codes in places ("nb" vs "no").
+  private nonisolated static let nlToSettingsCode: [String: String] = ["nb": "no"]
+  private nonisolated static let settingsToNLCode: [String: String] = ["no": "nb"]
+
+  nonisolated static func normalizedBaseCode(_ raw: String) -> String {
+    let base = AssistantSettings.baseLanguageCode(raw)
+    return nlToSettingsCode[base] ?? base
+  }
+
+  private nonisolated static func nlCode(for settingsCode: String) -> String {
+    settingsToNLCode[settingsCode] ?? settingsCode
   }
 
   private nonisolated static func int16ToFloat32(_ data: Data) -> [Float] {
