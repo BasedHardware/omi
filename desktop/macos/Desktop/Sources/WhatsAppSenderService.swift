@@ -10,12 +10,16 @@ enum WhatsAppSenderError: LocalizedError {
   /// box (recipient guard) or press Return. The reply is prefilled; the user grants the
   /// one-time permission and Omi sends automatically thereafter.
   case permissionRequired
-  /// Omi could not prove — before the keystroke (compose box holds exactly our reply in
-  /// the target chat) or after it (an outbound row for this chat in WhatsApp's database)
-  /// — that the reply went to the intended person. The send was NOT performed / not
-  /// confirmed; the draft is kept and retried. This is the fail-closed guard that makes
-  /// "never send to the wrong person" hold even when WhatsApp's UI misbehaves.
+  /// Omi could not verify — before pressing Return — that WhatsApp had the target chat
+  /// open with our reply in the compose box, so it never pressed Return. Nothing was
+  /// sent; the draft is kept and it is safe to try again. This is the fail-closed guard
+  /// that makes "never send to the wrong person" hold even when WhatsApp's UI misbehaves.
   case notConfirmed
+  /// Return WAS pressed against the verified target chat, but the outbound row didn't
+  /// appear in WhatsApp's database within the confirmation window. The reply was very
+  /// likely delivered; Omi just can't prove it. The draft is kept and the user is asked
+  /// to check WhatsApp before resending, so a genuine delivery isn't duplicated.
+  case sendUnconfirmed
   case sendFailed(String)
 
   var errorDescription: String? {
@@ -26,7 +30,10 @@ enum WhatsAppSenderError: LocalizedError {
       return
         "Omi needs Accessibility & Automation access to send in WhatsApp. Grant it in System Settings — then Omi sends for you automatically."
     case .notConfirmed:
-      return "Couldn't confirm the reply was sent to the right chat — Omi kept the draft and will retry."
+      return "Couldn't reach the right chat to send — Omi kept the draft. Try again."
+    case .sendUnconfirmed:
+      return
+        "Reply sent to WhatsApp, but Omi couldn't confirm it landed — open WhatsApp to check before resending."
     case .sendFailed(let message):
       return message
     }
@@ -44,23 +51,24 @@ enum WhatsAppSenderError: LocalizedError {
 ///  2. **Recipient guard (prevention)** — poll the Accessibility tree until WhatsApp's
 ///     compose box (`AXTextArea` "Compose message") holds exactly `Y`. Because WhatsApp
 ///     placed our unique reply into the target chat's box, `compose == Y` proves the open
-///     chat *is* the intended recipient. Then activate WhatsApp and re-verify `compose ==
-///     Y` immediately before pressing Return, so nothing can slip in between (minimal
-///     check→act gap). If we can't verify, we **never press** — fail closed.
-///  3. **Send** — press Return via a System Events keystroke (WhatsApp's Catalyst app
-///     ignores raw `CGEvent`; System Events works). WhatsApp is already frontmost and
-///     verified, so the keystroke lands in the target chat's compose box.
+///     chat *is* the intended recipient. Re-verify `compose == Y` once more right before
+///     sending. If we can't verify, we **never press Return** — fail closed.
+///  3. **Send** — one osascript that atomically activates WhatsApp and *then* keys Return
+///     (WhatsApp's Catalyst app ignores raw `CGEvent`; System Events works). Activating
+///     inside the same script guarantees Return is delivered to WhatsApp — not to some
+///     app that stole focus after the guard — and the compose content is per-chat, so
+///     activating can't change which chat the verified `Y` belongs to.
 ///  4. **Proof (detection + "actually sent")** — poll WhatsApp's own `ChatStorage.sqlite`
-///     for an outbound row in the target chat's JID matching `Y`. Only then is the send
-///     reported successful; otherwise `.notConfirmed` (kept as a draft, retried).
+///     for an outbound row matching `Y` in the target chat, created after a pre-send
+///     row-id baseline. Confirmed → success. Pressed-but-unconfirmed → `.sendUnconfirmed`
+///     (kept as a draft; the user is asked to check before resending, so a real delivery
+///     isn't duplicated). Never verified → `.notConfirmed` (safe to retry; nothing sent).
 ///  5. **Restore focus** — reactivate whatever app was frontmost before, so sending
 ///     doesn't hijack the user's window.
 ///
-/// Residual (documented, not hidden): between the final compose re-verify and the
-/// keystroke there is a sub-100ms fully-automated window in which no user interaction is
-/// possible. In the astronomically unlikely event a wrong chat were nonetheless targeted,
-/// the `ChatStorage.sqlite` proof (keyed by the target JID) fails and we report the send
-/// unconfirmed rather than falsely "sent".
+/// The recipient guard prevents a wrong send; the row-id `ChatStorage.sqlite` proof both
+/// confirms delivery and, keyed to the target chat, is the backstop that surfaces any
+/// unexpected outcome as unconfirmed rather than falsely "sent".
 enum WhatsAppSenderService {
 
   // Recipient-guard / settle timing.
@@ -71,14 +79,7 @@ enum WhatsAppSenderService {
   private static let activateMaxPolls = 10  // ~1.0s for WhatsApp to come frontmost
   // Post-send DB proof.
   private static let confirmPollNanos: UInt64 = 400_000_000  // 0.4s
-  private static let confirmMaxPolls = 15  // ~6.0s for WhatsApp to persist the outbound row
-  /// Idempotency lookback window. If this exact reply already reached the chat within
-  /// this many seconds — e.g. a prior attempt's keystroke landed but its database row
-  /// was slow to appear and we reported it unconfirmed — we skip re-sending so a retry
-  /// can't deliver a duplicate. Comfortably covers a user pressing Send again after the
-  /// ~6s confirm timeout, while staying short enough not to swallow a genuinely intended
-  /// resend of identical text.
-  private static let dedupWindowSeconds: Double = 60.0
+  private static let confirmMaxPolls = 20  // ~8.0s for WhatsApp to persist the outbound row
   /// The `AXTextArea` for WhatsApp's compose box carries this in its `AXDescription`
   /// (verified live 2026-07-03; the real value has a leading LTR mark, so match a
   /// substring rather than the whole string).
@@ -141,31 +142,18 @@ enum WhatsAppSenderService {
     let priorFront = NSWorkspace.shared.frontmostApplication
     defer { restoreFrontmost(priorFront) }
 
-    // Idempotency: if this exact reply already reached this chat within the dedup window
-    // (e.g. a prior attempt's keystroke landed but its database row was slow to appear,
-    // so we reported it unconfirmed and the user/caller retried), it's already delivered
-    // — report success without sending again.
-    let dedupSince = Date().timeIntervalSinceReferenceDate - dedupWindowSeconds
-    if (try? await WhatsAppReaderService.shared.alreadySent(
-      text: reply, chatID: chatID, sinceReferenceSeconds: dedupSince)) == true
-    {
-      return
-    }
-
     // Row-id baseline for the post-send proof: only a message created after this counts
     // as the one we're about to send (so the proof can't match a pre-existing message).
     let baselineRowID = (try? await WhatsAppReaderService.shared.maxMessageRowID()) ?? 0
 
     try prefill(text: reply, phone: phone)
 
-    // Recipient guard: wait for WhatsApp to navigate + prefill, proven by compose == reply.
-    guard await waitForComposeMatch(reply: reply, phone: phone, pid: app.processIdentifier) else {
-      throw WhatsAppSenderError.notConfirmed
-    }
-
-    // Bring WhatsApp frontmost and re-verify compose == reply the instant before the
-    // keystroke, closing the check→act gap.
-    guard await activateAndReverify(reply: reply, pid: app.processIdentifier) else {
+    // Recipient guard: wait for WhatsApp to navigate + prefill, proven by compose == reply,
+    // then re-verify once more right before sending. If either can't be verified we never
+    // press Return — nothing is sent, and it's safe to retry (.notConfirmed).
+    guard await waitForComposeMatch(reply: reply, phone: phone, pid: app.processIdentifier),
+      await activateAndReverify(reply: reply, pid: app.processIdentifier)
+    else {
       throw WhatsAppSenderError.notConfirmed
     }
 
@@ -178,14 +166,18 @@ enum WhatsAppSenderService {
       throw WhatsAppSenderError.sendFailed(message)
     }
 
-    // Ground-truth proof the reply landed in the target chat's JID (a row created after
-    // our baseline). Until it does, we do NOT report success.
+    // Return was pressed against the verified target. Ground-truth proof it landed: an
+    // outbound row matching the reply in this chat (by `@lid` JID or phone session),
+    // created after our baseline. If it doesn't appear in the window the send probably
+    // still succeeded, so report `.sendUnconfirmed` (draft kept, user asked to check) —
+    // never a silent false "sent", and never an auto-retry that could duplicate it.
+    let phoneJID = "\(phone)@s.whatsapp.net"
     guard
       await WhatsAppReaderService.shared.confirmSent(
-        text: reply, chatID: chatID, afterRowID: baselineRowID, pollNanos: confirmPollNanos,
-        maxPolls: confirmMaxPolls)
+        text: reply, chatID: chatID, phoneJID: phoneJID, afterRowID: baselineRowID,
+        pollNanos: confirmPollNanos, maxPolls: confirmMaxPolls)
     else {
-      throw WhatsAppSenderError.notConfirmed
+      throw WhatsAppSenderError.sendUnconfirmed
     }
   }
 
@@ -304,14 +296,19 @@ enum WhatsAppSenderService {
     app.activate(options: [.activateIgnoringOtherApps])
   }
 
-  /// Presses Return in WhatsApp to send the prefilled, recipient-verified reply. WhatsApp
-  /// is already frontmost; System Events keys Return into it (Catalyst ignores raw
-  /// `CGEvent`). Requires Automation permission to control System Events. Runs off the
-  /// main run loop so the UI stays responsive.
+  /// Presses Return in WhatsApp to send the prefilled, recipient-verified reply. One
+  /// osascript atomically activates WhatsApp and *then* keys Return, so the keystroke is
+  /// bound to WhatsApp even if focus shifted after the guard (Catalyst ignores raw
+  /// `CGEvent`, so System Events is required). Requires Automation permission to control
+  /// System Events / WhatsApp. Runs off the main run loop so the UI stays responsive.
   private static func pressReturnInWhatsApp() async -> ReturnPress {
     await withCheckedContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
-        let script = "tell application \"System Events\" to key code 36"
+        let script = """
+          tell application "WhatsApp" to activate
+          delay 0.15
+          tell application "System Events" to key code 36
+          """
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         proc.arguments = ["-e", script]

@@ -154,29 +154,35 @@ actor WhatsAppReaderService {
   /// Ground-truth proof that the just-sent reply actually landed in the intended chat.
   ///
   /// Polls (on a single read connection) until WhatsApp's own database contains an
-  /// outbound (`ZISFROMME = 1`) text row whose body equals `text`, in the chat
-  /// identified by `chatID` (its `ZCONTACTJID`), with `Z_PK > afterRowID` — i.e. a row
-  /// created *after* the pre-send baseline. Row-identity (not a time window) means it
-  /// can never match a pre-existing identical message, and `Z_PK > ?` uses the primary
-  /// key index so each poll is a narrow range scan rather than a full-table scan.
-  /// Because the row is keyed by the chat's JID, a match proves both that the message
-  /// physically left AND that it landed in the correct conversation — independent of the
-  /// UI keystroke path that fired it.
+  /// outbound (`ZISFROMME = 1`) text row whose body equals `text`, in the target chat,
+  /// with `Z_PK > afterRowID` — i.e. a row created *after* the pre-send baseline.
+  /// Row-identity (not a time window) means it can never match a pre-existing identical
+  /// message, and `Z_PK > ?` uses the primary key index so each poll is a narrow range
+  /// scan rather than a full-table scan.
+  ///
+  /// The chat is matched by its `ZCONTACTJID` being `chatID` OR `<phone>@s.whatsapp.net`
+  /// (`phoneJID`): a new-contact `@lid` reply is dialed by phone, and WhatsApp may record
+  /// the outbound row under either the `@lid` session or the phone session — accepting
+  /// both means the proof holds regardless of which one it used, while still pinning the
+  /// confirmation to the intended person (both JIDs are that same number's chat).
   func confirmSent(
-    text: String, chatID: String, afterRowID: Int64, pollNanos: UInt64, maxPolls: Int
+    text: String, chatID: String, phoneJID: String?, afterRowID: Int64, pollNanos: UInt64,
+    maxPolls: Int
   ) async -> Bool {
     let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !needle.isEmpty, !chatID.isEmpty, let dbQueue = try? openDatabase() else { return false }
+    let altJID = phoneJID ?? chatID
     let sql = """
         SELECT COUNT(*)
         \(SQL.from)
         WHERE m.ZISFROMME = 1
           AND m.Z_PK > ?
-          AND s.ZCONTACTJID = ?
+          AND (s.ZCONTACTJID = ? OR s.ZCONTACTJID = ?)
           AND TRIM(m.ZTEXT) = ?
       """
     for _ in 0..<maxPolls {
-      if (try? Self.outboundExists(dbQueue, sql: sql, afterRowID: afterRowID, chatID: chatID, needle: needle))
+      if (try? Self.outboundExists(
+        dbQueue, sql: sql, afterRowID: afterRowID, chatID: chatID, altJID: altJID, needle: needle))
         == true
       {
         return true
@@ -189,34 +195,11 @@ actor WhatsAppReaderService {
   /// One synchronous read on `dbQueue` for the `confirmSent` poll loop (kept non-async
   /// so it reuses the single connection rather than opening one per poll).
   private static func outboundExists(
-    _ dbQueue: DatabaseQueue, sql: String, afterRowID: Int64, chatID: String, needle: String
+    _ dbQueue: DatabaseQueue, sql: String, afterRowID: Int64, chatID: String, altJID: String,
+    needle: String
   ) throws -> Bool {
     try dbQueue.read { db in
-      (try Int.fetchOne(db, sql: sql, arguments: [afterRowID, chatID, needle]) ?? 0) > 0
-    }
-  }
-
-  /// Idempotency lookback: true if `text` was already sent to `chatID` at/after
-  /// `sinceReferenceSeconds` (seconds since the 2001 reference date, matching
-  /// `ZMESSAGEDATE`). Checked *before* sending so that a retry — after a real send
-  /// whose confirmation was slow/failed — doesn't deliver the same reply twice.
-  func alreadySent(text: String, chatID: String, sinceReferenceSeconds: Double) throws -> Bool {
-    let dbQueue = try openDatabase()
-    let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !needle.isEmpty, !chatID.isEmpty else { return false }
-    return try dbQueue.read { db -> Bool in
-      let sql = """
-          SELECT COUNT(*)
-          \(SQL.from)
-          WHERE m.ZISFROMME = 1
-            AND m.ZMESSAGEDATE >= ?
-            AND s.ZCONTACTJID = ?
-            AND TRIM(m.ZTEXT) = ?
-        """
-      let count =
-        try Int.fetchOne(
-          db, sql: sql, arguments: [sinceReferenceSeconds, chatID, needle]) ?? 0
-      return count > 0
+      (try Int.fetchOne(db, sql: sql, arguments: [afterRowID, chatID, altJID, needle]) ?? 0) > 0
     }
   }
 

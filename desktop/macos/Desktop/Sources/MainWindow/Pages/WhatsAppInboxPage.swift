@@ -277,12 +277,13 @@ private struct ChatDetailView: View {
       draft = ""
     } catch let error as WhatsAppSenderError {
       switch error {
-      case .invalidTarget, .permissionRequired:
-        // Not a failure — the reply is prefilled in WhatsApp; guide the user to finish
-        // (open the chat / grant the one-time permission). Keep the draft.
+      case .invalidTarget, .permissionRequired, .sendUnconfirmed:
+        // Not a hard failure — the reply is prefilled/likely sent; guide the user (open
+        // the chat, grant the one-time permission, or check WhatsApp before resending).
+        // Keep the draft so nothing is lost and no duplicate is forced.
         infoText = error.errorDescription
       case .notConfirmed, .sendFailed:
-        // The send wasn't confirmed — keep the draft so nothing is lost.
+        // Nothing was sent — keep the draft so the user can try again.
         errorText = error.errorDescription
       }
     } catch {
