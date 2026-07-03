@@ -642,6 +642,42 @@ class GeneratedDailySummariesResponse {
   }
 }
 
+class GeneratedFairUseDailyGenerationsBudgetResponse {
+  final int dailyLimitMs;
+  final bool exhausted;
+  final int remainingMs;
+  final String? resetsAt;
+  final int usedMs;
+
+  const GeneratedFairUseDailyGenerationsBudgetResponse({
+    required this.dailyLimitMs,
+    required this.exhausted,
+    required this.remainingMs,
+    this.resetsAt,
+    required this.usedMs,
+  });
+
+  factory GeneratedFairUseDailyGenerationsBudgetResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedFairUseDailyGenerationsBudgetResponse(
+      dailyLimitMs: _required(_readFieldValue<int>(_readField(json, const ["daily_limit_ms"]), "daily_limit_ms", _readInt, requiredField: true, nullable: false), "daily_limit_ms"),
+      exhausted: _required(_readFieldValue<bool>(_readField(json, const ["exhausted"]), "exhausted", _readBool, requiredField: true, nullable: false), "exhausted"),
+      remainingMs: _required(_readFieldValue<int>(_readField(json, const ["remaining_ms"]), "remaining_ms", _readInt, requiredField: true, nullable: false), "remaining_ms"),
+      resetsAt: _readFieldValue<String>(_readField(json, const ["resets_at"]), "resets_at", _readString, requiredField: false, nullable: true),
+      usedMs: _required(_readFieldValue<int>(_readField(json, const ["used_ms"]), "used_ms", _readInt, requiredField: true, nullable: false), "used_ms"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'daily_limit_ms': dailyLimitMs,
+      'exhausted': exhausted,
+      'remaining_ms': remainingMs,
+      'resets_at': resetsAt,
+      'used_ms': usedMs,
+    };
+  }
+}
+
 class GeneratedFairUseLimitsResponse {
   final double dailyHours;
   final double threeDayHours;
@@ -700,7 +736,7 @@ class GeneratedFairUseUsagePctResponse {
 
 class GeneratedFairUseStatusResponse {
   final String caseRef;
-  final Map<String, dynamic>? dgBudget;
+  final GeneratedFairUseDailyGenerationsBudgetResponse? dgBudget;
   final GeneratedFairUseLimitsResponse limits;
   final String message;
   final double speechHours3day;
@@ -724,7 +760,7 @@ class GeneratedFairUseStatusResponse {
   factory GeneratedFairUseStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFairUseStatusResponse(
       caseRef: _required(_readFieldValue<String>(_readField(json, const ["case_ref"]), "case_ref", _readString, requiredField: true, nullable: false), "case_ref"),
-      dgBudget: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["dg_budget"]), "dg_budget", _readMap, requiredField: false, nullable: true),
+      dgBudget: _readFieldValue<GeneratedFairUseDailyGenerationsBudgetResponse>(_readField(json, const ["dg_budget"]), "dg_budget", (value) => _readObject(value, GeneratedFairUseDailyGenerationsBudgetResponse.fromJson), requiredField: false, nullable: true),
       limits: _required(_readFieldValue<GeneratedFairUseLimitsResponse>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedFairUseLimitsResponse.fromJson), requiredField: true, nullable: false), "limits"),
       message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
       speechHours3day: _required(_readFieldValue<double>(_readField(json, const ["speech_hours_3day"]), "speech_hours_3day", _readDouble, requiredField: true, nullable: false), "speech_hours_3day"),
@@ -738,7 +774,7 @@ class GeneratedFairUseStatusResponse {
   Map<String, dynamic> toJson() {
     return {
       'case_ref': caseRef,
-      'dg_budget': dgBudget,
+      'dg_budget': dgBudget?.toJson(),
       'limits': limits.toJson(),
       'message': message,
       'speech_hours_3day': speechHours3day,
