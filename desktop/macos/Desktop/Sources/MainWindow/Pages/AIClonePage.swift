@@ -47,6 +47,14 @@ struct AIClonePage: View {
   @State private var telegramImportError: String?
   @State private var whatsAppImportError: String?
 
+  /// WhatsApp live-link state (QR scanning / linked), mirrored from the sidecar.
+  @ObservedObject private var whatsAppLink = WhatsAppLinkModel.shared
+  /// True while the WhatsApp QR-linking sheet is open.
+  @State private var showWhatsAppLinkSheet = false
+  /// Non-nil while the one-time "WhatsApp Autonomous is risky" confirmation is up: the
+  /// contact whose switch to Autonomous awaits explicit acknowledgment.
+  @State private var whatsAppAutonomousCandidate: ImportedContact?
+
   private var maxSelectable: Int { contacts.count }
   private var hasTelegramContacts: Bool { contacts.contains { $0.platform == "telegram" } }
   private var hasWhatsAppContacts: Bool { contacts.contains { $0.platform == "whatsapp" } }
@@ -97,6 +105,49 @@ struct AIClonePage: View {
         }
       }
     }
+    .sheet(isPresented: $showWhatsAppLinkSheet) {
+      WhatsAppLinkSheet()
+    }
+    .alert(
+      "Enable Autonomous for WhatsApp?",
+      isPresented: Binding(
+        get: { whatsAppAutonomousCandidate != nil },
+        set: { if !$0 { whatsAppAutonomousCandidate = nil } }
+      ),
+      presenting: whatsAppAutonomousCandidate
+    ) { contact in
+      Button("I Understand the Risk — Enable", role: .destructive) {
+        sendMode.acknowledgeWhatsAppAutonomousRisk()
+        sendMode.setMode(.autonomous, for: contact.id)
+        whatsAppAutonomousCandidate = nil
+      }
+      Button("Cancel", role: .cancel) {
+        whatsAppAutonomousCandidate = nil
+      }
+    } message: { _ in
+      Text(
+        "Omi connects to WhatsApp through Linked Devices using an unofficial method — "
+          + "WhatsApp has no official API for personal accounts. Automated sending is "
+          + "against WhatsApp's terms and carries some risk of your account being "
+          + "flagged or banned. This one-time confirmation is required before any "
+          + "WhatsApp contact can be set to Autonomous. Nothing sends while the global "
+          + "Autonomous switch stays paused."
+      )
+    }
+  }
+
+  /// Route a mode-picker selection through the WhatsApp-autonomous safety gate: the first
+  /// time any WhatsApp contact is switched to Autonomous, the explicit unofficial-connection
+  /// risk confirmation must be accepted before the mode applies.
+  private func requestModeChange(_ newMode: SendMode, for contact: ImportedContact) {
+    if AICloneSendModeService.requiresWhatsAppAutonomousAcknowledgment(
+      mode: newMode, contactId: contact.id,
+      acknowledged: sendMode.whatsAppAutonomousAcknowledged)
+    {
+      whatsAppAutonomousCandidate = contact
+      return
+    }
+    sendMode.setMode(newMode, for: contact.id)
   }
 
   // MARK: - Header
@@ -221,6 +272,8 @@ struct AIClonePage: View {
           changeButton(action: changeWhatsAppSelf)
         }
 
+        whatsAppLinkButton
+
         Spacer()
       }
 
@@ -253,6 +306,27 @@ struct AIClonePage: View {
       .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
     }
     .buttonStyle(.plain)
+  }
+
+  /// Opens the QR linking sheet. Label reflects the live link state so "Linked" is visible
+  /// at a glance without opening the sheet.
+  private var whatsAppLinkButton: some View {
+    Button(action: { showWhatsAppLinkSheet = true }) {
+      HStack(spacing: 6) {
+        Image(
+          systemName: whatsAppLink.state.isLinked ? "checkmark.circle.fill" : "qrcode")
+          .font(.system(size: 12, weight: .semibold))
+        Text(whatsAppLink.state.isLinked ? "WhatsApp Linked" : "Link WhatsApp")
+          .scaledFont(size: 13, weight: .semibold)
+      }
+      .foregroundColor(
+        whatsAppLink.state.isLinked ? OmiColors.success : OmiColors.textPrimary)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 8)
+      .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
+    }
+    .buttonStyle(.plain)
+    .help("Connect your WhatsApp account (Linked Devices) so the clone can send and receive")
   }
 
   private func changeButton(action: @escaping () -> Void) -> some View {
@@ -337,8 +411,7 @@ struct AIClonePage: View {
               errorMessage: trainingErrors[contact.id],
               backtest: backtestStates[contact.id],
               sendMode: sendMode.mode(for: contact.id),
-              canSend: AIClonePlatform.of(contactId: contact.id).canSend,
-              onSetMode: { newMode in sendMode.setMode(newMode, for: contact.id) },
+              onSetMode: { newMode in requestModeChange(newMode, for: contact) },
               onToggle: { toggleSelection(contact) },
               onTrain: { train(contact) },
               onPreviewChat: {
@@ -866,7 +939,6 @@ private struct AICloneContactRow: View {
   let errorMessage: String?
   let backtest: AICloneBacktestUIState?
   let sendMode: SendMode
-  let canSend: Bool
   let onSetMode: (SendMode) -> Void
   let onToggle: () -> Void
   let onTrain: () -> Void
@@ -1013,49 +1085,41 @@ private struct AICloneContactRow: View {
 
   // MARK: - Send-mode picker (Manual / Draft / Auto)
 
-  @ViewBuilder
   private var modePicker: some View {
-    if canSend {
-      Menu {
-        ForEach(SendMode.allCases, id: \.self) { mode in
-          Button(action: { onSetMode(mode) }) {
-            if mode == sendMode {
-              Label(mode.fullLabel, systemImage: "checkmark")
-            } else {
-              Text(mode.fullLabel)
-            }
+    Menu {
+      ForEach(SendMode.allCases, id: \.self) { mode in
+        Button(action: { onSetMode(mode) }) {
+          if mode == sendMode {
+            Label(mode.fullLabel, systemImage: "checkmark")
+          } else {
+            Text(mode.fullLabel)
           }
         }
-      } label: {
-        HStack(spacing: 4) {
-          Image(systemName: modeIcon)
-            .font(.system(size: 10, weight: .semibold))
-          Text(sendMode.label)
-            .scaledFont(size: 12, weight: .semibold)
-          Image(systemName: "chevron.down")
-            .font(.system(size: 8, weight: .semibold))
-        }
-        // Force an explicit neutral/warning fill so the Menu never picks up the system
-        // accent color (which can be purple) — see AGENTS.md "Never use purple".
-        .foregroundStyle(modeTint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(
-          RoundedRectangle(cornerRadius: 8).stroke(
-            sendMode == .autonomous ? OmiColors.warning.opacity(0.6) : OmiColors.border,
-            lineWidth: 1))
       }
-      .menuStyle(.borderlessButton)
-      .menuIndicator(.hidden)
-      .tint(modeTint)
-      .fixedSize()
-      .help("How the clone handles new messages from \(contact.displayName)")
-    } else {
-      Text("import only")
-        .scaledFont(size: 11, weight: .medium)
-        .foregroundColor(OmiColors.textQuaternary)
-        .help("This platform can't send from Omi yet — training only.")
+    } label: {
+      HStack(spacing: 4) {
+        Image(systemName: modeIcon)
+          .font(.system(size: 10, weight: .semibold))
+        Text(sendMode.label)
+          .scaledFont(size: 12, weight: .semibold)
+        Image(systemName: "chevron.down")
+          .font(.system(size: 8, weight: .semibold))
+      }
+      // Force an explicit neutral/warning fill so the Menu never picks up the system
+      // accent color (which can be purple) — see AGENTS.md "Never use purple".
+      .foregroundStyle(modeTint)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 7)
+      .background(
+        RoundedRectangle(cornerRadius: 8).stroke(
+          sendMode == .autonomous ? OmiColors.warning.opacity(0.6) : OmiColors.border,
+          lineWidth: 1))
     }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .tint(modeTint)
+    .fixedSize()
+    .help("How the clone handles new messages from \(contact.displayName)")
   }
 
   private var modeIcon: String {
@@ -1854,6 +1918,216 @@ private struct AICloneSentLogSheet: View {
       .background(
         Capsule().fill(
           (mode == .autonomous ? OmiColors.warning : OmiColors.textTertiary).opacity(0.14)))
+  }
+}
+
+// MARK: - WhatsApp linking sheet (QR scan via Linked Devices)
+
+/// Drives the WhatsApp linking flow against the local Baileys sidecar: starts the sidecar,
+/// shows the QR to scan from the phone (WhatsApp → Settings → Linked Devices → Link a
+/// Device), polls until linked, then shows the linked number. Session persists on disk, so
+/// this is one-time unless the user unlinks.
+private struct WhatsAppLinkSheet: View {
+  @ObservedObject private var link = WhatsAppLinkModel.shared
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    VStack(spacing: 0) {
+      header
+      Divider().overlay(OmiColors.border)
+      content
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      Divider().overlay(OmiColors.border)
+      footer
+    }
+    .frame(width: 420, height: 560)
+    .background(OmiColors.backgroundPrimary)
+    .task {
+      // Kick off (or resume) linking, then poll while the sheet is open. The poll drives
+      // QR refreshes (WhatsApp rotates codes every ~20s) and the linked transition.
+      _ = await WhatsAppSendService.shared.startLinking()
+      while !Task.isCancelled {
+        let state = await WhatsAppSendService.shared.refreshStatus()
+        if state.isLinked {
+          // Live listener can attach now that a linked session exists.
+          AICloneSendModeService.shared.startWhatsAppListenerIfLinked()
+        }
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+      }
+    }
+  }
+
+  private var header: some View {
+    HStack(alignment: .top, spacing: 12) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text("Link WhatsApp")
+          .scaledFont(size: 16, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text("Connects this Mac as a linked device, like WhatsApp Web")
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+      Spacer()
+      Button(action: { dismiss() }) {
+        Image(systemName: "xmark")
+          .font(.system(size: 13, weight: .semibold))
+          .foregroundColor(OmiColors.textSecondary)
+          .padding(8)
+          .background(Circle().fill(OmiColors.backgroundSecondary))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(16)
+  }
+
+  @ViewBuilder
+  private var content: some View {
+    switch link.state {
+    case .stopped, .starting:
+      statusStack(spinner: true, title: "Starting the WhatsApp connector…", detail: nil)
+
+    case .connecting:
+      statusStack(
+        spinner: true, title: "Contacting WhatsApp…",
+        detail: "Generating a QR code (or resuming your saved session).")
+
+    case .unlinked, .loggedOut:
+      VStack(spacing: 14) {
+        Image(systemName: "qrcode")
+          .font(.system(size: 34, weight: .regular))
+          .foregroundColor(OmiColors.textQuaternary)
+        Text(
+          link.state == .loggedOut
+            ? "This device was unlinked from your phone."
+            : "Not linked yet.")
+          .scaledFont(size: 13, weight: .regular)
+          .foregroundColor(OmiColors.textTertiary)
+        Button(action: { Task { await WhatsAppSendService.shared.startLinking() } }) {
+          Text("Generate QR Code")
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(OmiColors.backgroundPrimary)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.textPrimary))
+        }
+        .buttonStyle(.plain)
+      }
+
+    case .waitingScan(let qrDataUrl):
+      VStack(spacing: 14) {
+        if let image = Self.image(fromDataUrl: qrDataUrl) {
+          Image(nsImage: image)
+            .interpolation(.none)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 240, height: 240)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.white))
+        } else {
+          statusStack(spinner: true, title: "Preparing QR code…", detail: nil)
+        }
+        VStack(spacing: 4) {
+          Text("Scan with your phone")
+            .scaledFont(size: 14, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text("WhatsApp → Settings → Linked Devices → Link a Device")
+            .scaledFont(size: 12, weight: .regular)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+
+    case .linked(let phone):
+      VStack(spacing: 12) {
+        Image(systemName: "checkmark.circle.fill")
+          .font(.system(size: 36, weight: .regular))
+          .foregroundColor(OmiColors.success)
+        Text("Linked as \(phone.isEmpty ? "your account" : "+\(phone)")")
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text("The clone can now send and receive WhatsApp messages on this Mac.")
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.textTertiary)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: 300)
+        Button(action: { Task { await WhatsAppSendService.shared.logout() } }) {
+          Text("Unlink")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.warning)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+              RoundedRectangle(cornerRadius: 8).stroke(
+                OmiColors.warning.opacity(0.5), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 6)
+      }
+
+    case .error(let message):
+      VStack(spacing: 12) {
+        Image(systemName: "exclamationmark.triangle")
+          .font(.system(size: 30, weight: .regular))
+          .foregroundColor(OmiColors.warning)
+        Text(message)
+          .scaledFont(size: 13, weight: .regular)
+          .foregroundColor(OmiColors.textSecondary)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: 320)
+        Button(action: { Task { await WhatsAppSendService.shared.startLinking() } }) {
+          Text("Try Again")
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+      }
+    }
+  }
+
+  private var footer: some View {
+    HStack(alignment: .top, spacing: 8) {
+      Image(systemName: "exclamationmark.shield")
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundColor(OmiColors.textQuaternary)
+        .padding(.top, 1)
+      Text(
+        "WhatsApp has no official API for personal accounts — this uses an unofficial "
+          + "connection through Linked Devices. Automated messaging can put an account "
+          + "at risk of being flagged; keep automated replies conservative."
+      )
+      .scaledFont(size: 11, weight: .regular)
+      .foregroundColor(OmiColors.textQuaternary)
+      .fixedSize(horizontal: false, vertical: true)
+    }
+    .padding(14)
+  }
+
+  private func statusStack(spinner: Bool, title: String, detail: String?) -> some View {
+    VStack(spacing: 12) {
+      if spinner {
+        ProgressView().scaleEffect(1.1).tint(.white)
+      }
+      Text(title)
+        .scaledFont(size: 14, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+      if let detail {
+        Text(detail)
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.textTertiary)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: 300)
+      }
+    }
+  }
+
+  /// Decode a `data:image/png;base64,…` URL (the sidecar's QR payload) into an NSImage.
+  static func image(fromDataUrl dataUrl: String) -> NSImage? {
+    guard let comma = dataUrl.firstIndex(of: ","),
+      let data = Data(base64Encoded: String(dataUrl[dataUrl.index(after: comma)...]))
+    else { return nil }
+    return NSImage(data: data)
   }
 }
 
