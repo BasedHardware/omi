@@ -301,8 +301,35 @@ def _apply_provider_options(provider_request: dict[str, Any], provider_options: 
     if isinstance(extra_body, Mapping):
         provider_request.update(dict(extra_body))
     for key, value in provider_options.items():
-        if key != 'extra_body':
-            provider_request[key] = value
+        if key == 'extra_body':
+            continue
+        if key == 'thinking_budget':
+            _apply_gemini_thinking_budget(provider_request, value)
+            continue
+        provider_request[key] = value
+
+
+def _apply_gemini_thinking_budget(provider_request: dict[str, Any], thinking_budget: Any) -> None:
+    if thinking_budget == 0:
+        provider_request['reasoning_effort'] = 'none'
+        return
+
+    extra_body = provider_request.get('extra_body')
+    if not isinstance(extra_body, dict):
+        extra_body = {}
+        provider_request['extra_body'] = extra_body
+
+    google_options = extra_body.get('google')
+    if not isinstance(google_options, dict):
+        google_options = {}
+        extra_body['google'] = google_options
+
+    thinking_config = google_options.get('thinking_config')
+    if not isinstance(thinking_config, dict):
+        thinking_config = {}
+        google_options['thinking_config'] = thinking_config
+
+    thinking_config['thinking_budget'] = thinking_budget
 
 
 def _executor_result(

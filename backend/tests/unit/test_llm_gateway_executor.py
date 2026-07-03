@@ -91,6 +91,23 @@ async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
 
 
 @pytest.mark.asyncio
+async def test_executor_maps_gemini_thinking_budget_before_provider_call():
+    active_route = active_route_with_fallbacks([]).model_copy(update={'provider_options': {'thinking_budget': 0}})
+    config = config_with_active_route(active_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['reasoning_effort'] == 'none'
+    assert 'thinking_budget' not in provider.calls[0].request
+
+
+@pytest.mark.asyncio
 async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
     config = config_with_active_route(active_route_with_fallbacks([fallback_ref]))
