@@ -1492,15 +1492,7 @@ struct ImportConnectorSheet: View {
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 8) {
-                    DismissButton(action: onDismiss)
-
-                    Text("Press Esc or click × to close. Imports keep running in the background.")
-                        .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 180, alignment: .trailing)
-                }
+                DismissButton(action: onDismiss)
             }
 
             if connector.id == "chatgpt" || connector.id == "claude" {
@@ -1698,7 +1690,7 @@ struct ImportConnectorSheet: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        Text("You can close this popup now. The import will keep running in the background.")
+                        Text("You can close this window now. Omi keeps importing in the background.")
                             .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1734,7 +1726,7 @@ struct ImportConnectorSheet: View {
                 }
             }
         } else {
-            Text("Start the import here. You can close this popup any time with Esc or ×, and once started the import will keep running in the background.")
+            Text("Start the import here. Once it starts, you can close this window and Omi keeps importing in the background.")
                 .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
         }
