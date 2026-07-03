@@ -1018,3 +1018,173 @@ class TestDurationPassthroughInGPUWorker:
 
             worker._get_audio_duration_sec.assert_called()
             worker.stop()
+
+
+class TestGPUWorkerStreamWorkTypes:
+
+    def test_stream_work_types_exist(self):
+        assert hasattr(WorkType, 'STREAM_OPEN')
+        assert hasattr(WorkType, 'STREAM_CHUNK')
+        assert hasattr(WorkType, 'STREAM_CLOSE')
+        assert WorkType.STREAM_OPEN.value == "stream_open"
+        assert WorkType.STREAM_CHUNK.value == "stream_chunk"
+        assert WorkType.STREAM_CLOSE.value == "stream_close"
+
+
+class TestGPUWorkerHasStream:
+
+    def test_has_stream_false_by_default(self):
+        worker = GPUWorker()
+        assert worker.has_stream is False
+        assert worker._stream_pipeline is None
+
+    def test_has_stream_true_when_pipeline_set(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        assert worker.has_stream is True
+
+
+class TestGPUWorkerStreamSubmit:
+
+    def test_stream_open_not_ready_raises(self):
+        worker = GPUWorker()
+        worker._running = True
+        loop = asyncio.new_event_loop()
+        try:
+            fut = worker.stream_open({"stream_id": "s1"}, loop)
+            with pytest.raises(RuntimeError, match="not ready"):
+                loop.run_until_complete(fut)
+        finally:
+            loop.close()
+
+    def test_stream_chunk_not_ready_raises(self):
+        worker = GPUWorker()
+        worker._running = True
+        loop = asyncio.new_event_loop()
+        try:
+            fut = worker.stream_chunk({"stream_id": "s1", "audio_chunk": b""}, loop)
+            with pytest.raises(RuntimeError, match="not ready"):
+                loop.run_until_complete(fut)
+        finally:
+            loop.close()
+
+    def test_stream_close_not_ready_raises(self):
+        worker = GPUWorker()
+        worker._running = True
+        loop = asyncio.new_event_loop()
+        try:
+            fut = worker.stream_close({"stream_id": "s1"}, loop)
+            with pytest.raises(RuntimeError, match="not ready"):
+                loop.run_until_complete(fut)
+        finally:
+            loop.close()
+
+    def test_stream_open_shutting_down_raises(self):
+        worker = GPUWorker()
+        worker._ready.set()
+        worker._running = False
+        loop = asyncio.new_event_loop()
+        try:
+            fut = worker.stream_open({"stream_id": "s1"}, loop)
+            with pytest.raises(RuntimeError, match="shutting down"):
+                loop.run_until_complete(fut)
+        finally:
+            loop.close()
+
+    def test_stream_submit_queues_to_stream_queue(self):
+        worker = GPUWorker()
+        worker._running = True
+        worker._ready.set()
+        loop = asyncio.new_event_loop()
+        try:
+            fut = worker.stream_open({"stream_id": "s1"}, loop)
+            assert not worker._stream_queue.empty()
+            item = worker._stream_queue.get_nowait()
+            assert item.work_type == WorkType.STREAM_OPEN
+            assert item.payload == {"stream_id": "s1"}
+            assert item.future is fut
+        finally:
+            loop.close()
+
+    def test_stream_submit_does_not_use_batch_queue(self):
+        worker = GPUWorker()
+        worker._running = True
+        worker._ready.set()
+        loop = asyncio.new_event_loop()
+        try:
+            batch_qsize_before = worker._queue.qsize()
+            worker.stream_open({"stream_id": "s1"}, loop)
+            assert worker._queue.qsize() == batch_qsize_before
+        finally:
+            while not worker._stream_queue.empty():
+                try:
+                    worker._stream_queue.get_nowait()
+                except queue.Empty:
+                    break
+            loop.close()
+
+    def test_stream_queue_full_raises(self):
+        worker = GPUWorker()
+        worker._running = True
+        worker._ready.set()
+        worker._stream_queue = MagicMock()
+        worker._stream_queue.put_nowait.side_effect = queue.Full
+
+        loop = asyncio.new_event_loop()
+        try:
+            fut = worker.stream_open({"stream_id": "s1"}, loop)
+            with pytest.raises(RuntimeError, match="GPU stream queue full"):
+                loop.run_until_complete(fut)
+        finally:
+            loop.close()
+
+    def test_stream_chunk_correct_work_type(self):
+        worker = GPUWorker()
+        worker._running = True
+        worker._ready.set()
+        loop = asyncio.new_event_loop()
+        try:
+            worker.stream_chunk({"stream_id": "s1", "audio_chunk": b"\x00"}, loop)
+            item = worker._stream_queue.get_nowait()
+            assert item.work_type == WorkType.STREAM_CHUNK
+        finally:
+            loop.close()
+
+    def test_stream_close_correct_work_type(self):
+        worker = GPUWorker()
+        worker._running = True
+        worker._ready.set()
+        loop = asyncio.new_event_loop()
+        try:
+            worker.stream_close({"stream_id": "s1"}, loop)
+            item = worker._stream_queue.get_nowait()
+            assert item.work_type == WorkType.STREAM_CLOSE
+        finally:
+            loop.close()
+
+
+class TestDrainStreamQueue:
+
+    def test_drain_stream_rejects_pending_items(self):
+        worker = GPUWorker()
+        loop = asyncio.new_event_loop()
+        try:
+            fut = loop.create_future()
+            item = WorkItem(WorkType.STREAM_OPEN, {}, future=fut, loop=loop)
+            worker._stream_queue.put_nowait(item)
+
+            worker._drain_stream_queue()
+            loop.run_until_complete(asyncio.sleep(0))
+
+            assert fut.done()
+            with pytest.raises(RuntimeError, match="shutting down"):
+                loop.run_until_complete(fut)
+        finally:
+            loop.close()
+
+    def test_drain_stream_ignores_shutdown(self):
+        worker = GPUWorker()
+        item = WorkItem(WorkType.SHUTDOWN, None)
+        worker._stream_queue.put_nowait(item)
+        worker._drain_stream_queue()
+        assert worker._stream_queue.empty()
