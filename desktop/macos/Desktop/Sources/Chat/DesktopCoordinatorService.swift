@@ -327,9 +327,17 @@ final class DesktopCoordinatorService {
   }
 
   func peekCompletedAgentDelta(surfaceKind: String, limit: Int = 5) async -> DesktopCoordinatorCompletionDelta? {
+    await peekCompletedAgentDelta(surfaceKey: surfaceKind, surfaceLabel: surfaceKind, limit: limit)
+  }
+
+  func peekCompletedAgentDelta(surface: AgentSurfaceReference, limit: Int = 5) async -> DesktopCoordinatorCompletionDelta? {
+    await peekCompletedAgentDelta(surfaceKey: surface.key, surfaceLabel: surface.surfaceKind, limit: limit)
+  }
+
+  private func peekCompletedAgentDelta(surfaceKey: String, surfaceLabel: String, limit: Int) async -> DesktopCoordinatorCompletionDelta? {
     do {
       let raw = try await callRuntimeControlTool(ToolName.listAgentSessions, input: ["limit": 50])
-      let seen = Set(checkpointDefaults.stringArray(forKey: completionCheckpointKey(surfaceKind: surfaceKind)) ?? [])
+      let seen = Set(checkpointDefaults.stringArray(forKey: completionCheckpointKey(surfaceKey: surfaceKey)) ?? [])
       let items = parseCompletionDeltaItems(from: raw)
         .filter { !seen.contains($0.id) }
         .prefix(limit)
@@ -338,7 +346,7 @@ final class DesktopCoordinatorService {
       guard !items.isEmpty else { return nil }
       return DesktopCoordinatorCompletionDelta(
         ids: items.map(\.id),
-        prompt: formatCompletionDeltaPrompt(surfaceKind: surfaceKind, items: items)
+        prompt: formatCompletionDeltaPrompt(surfaceKind: surfaceLabel, items: items)
       )
     } catch {
       logError("DesktopCoordinatorService: completed agent delta unavailable", error: error)
@@ -349,6 +357,11 @@ final class DesktopCoordinatorService {
   func acknowledgeCompletedAgentDelta(surfaceKind: String, ids: [String]) {
     guard !ids.isEmpty else { return }
     checkpointCompletionDelta(surfaceKind: surfaceKind, ids: ids)
+  }
+
+  func acknowledgeCompletedAgentDelta(surface: AgentSurfaceReference, ids: [String]) {
+    guard !ids.isEmpty else { return }
+    checkpointCompletionDelta(surfaceKey: surface.key, ids: ids)
   }
 
   func routeIntent(intent: String, surfaceKind: String? = nil, taskId: String? = nil) async -> DesktopCoordinatorRouteDecision {
@@ -590,14 +603,22 @@ final class DesktopCoordinatorService {
   }
 
   private func checkpointCompletionDelta(surfaceKind: String, ids: [String]) {
-    let key = completionCheckpointKey(surfaceKind: surfaceKind)
+    checkpointCompletionDelta(surfaceKey: surfaceKind, ids: ids)
+  }
+
+  private func checkpointCompletionDelta(surfaceKey: String, ids: [String]) {
+    let key = completionCheckpointKey(surfaceKey: surfaceKey)
     var seen = checkpointDefaults.stringArray(forKey: key) ?? []
     seen.append(contentsOf: ids)
     checkpointDefaults.set(Array(seen.suffix(100)), forKey: key)
   }
 
   private func completionCheckpointKey(surfaceKind: String) -> String {
-    "\(completionCheckpointPrefix).\(surfaceKind.isEmpty ? "unknown" : surfaceKind)"
+    completionCheckpointKey(surfaceKey: surfaceKind)
+  }
+
+  private func completionCheckpointKey(surfaceKey: String) -> String {
+    "\(completionCheckpointPrefix).\(surfaceKey.isEmpty ? "unknown" : surfaceKey)"
   }
 
   private func formatCompletionDeltaPrompt(surfaceKind: String, items: [DesktopCoordinatorCompletionDeltaItem]) -> String {

@@ -2482,6 +2482,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         systemPromptStyle: ChatSystemPromptStyle,
         surfaceRef: AgentSurfaceReference?,
         sessionKey: String?,
+        sessionId: String?,
         legacyClientScope: String?,
         imageData: Data?,
         attachmentMetadataJSON: String?
@@ -2495,7 +2496,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
               attachmentMetadataJSON == nil
         else { return nil }
 
-        return await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surfaceKind: "main_chat")
+        let consumerSurface = AgentSurfaceReference.mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+        return await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)
     }
 
     private func routeIntentJSONWithFailOpenTimeout(intent: String, surfaceKind: String) async throws -> String? {
@@ -3571,6 +3573,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             systemPromptStyle: systemPromptStyle,
             surfaceRef: surfaceRef,
             sessionKey: sessionKey,
+            sessionId: sessionId,
             legacyClientScope: legacyClientScope,
             imageData: imageData,
             attachmentMetadataJSON: attachmentMetadataJSON
@@ -3651,14 +3654,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // on every message; appending it would change systemPromptHash each
             // turn, forcing a new native adapter binding and losing conversation
             // history. It is passed via the user prompt instead (see below).
-            if let coordinatorCompletionDeltaContext {
-                systemPrompt += """
-
-                # Desktop Completed Agent Delta
-
-                \(coordinatorCompletionDeltaContext.prompt)
-                """
-            }
 
             // Auto-inject notification context: if the most recent AI message before
             // the user's new message is a proactive notification, tell Claude about it
@@ -3880,11 +3875,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 surface: resolvedSurface,
                 sessionKey: resolvedSessionKey
             ) ?? trimmedText
-            // Prepend the per-turn coordinator route context to the user prompt
-            // so the system prompt hash stays stable across turns.
-            let promptForBridge = coordinatorRouteContext.map { ctx in
-                "[Desktop Coordinator Route Context]\n\(ctx)\n\n\(basePromptForBridge)"
-            } ?? basePromptForBridge
+            // Prepend per-turn coordinator context to the user prompt so the
+            // system prompt hash stays stable across turns.
+            var bridgePromptContexts: [String] = []
+            if let coordinatorRouteContext {
+                bridgePromptContexts.append("[Desktop Coordinator Route Context]\n\(coordinatorRouteContext)")
+            }
+            if let coordinatorCompletionDeltaContext {
+                bridgePromptContexts.append("[Desktop Completed Agent Delta]\n\(coordinatorCompletionDeltaContext.prompt)")
+            }
+            let promptForBridge = bridgePromptContexts.isEmpty
+                ? basePromptForBridge
+                : "\(bridgePromptContexts.joined(separator: "\n\n"))\n\n\(basePromptForBridge)"
 
             let queryResult = try await agentBridge.query(
                 prompt: promptForBridge,
@@ -3920,8 +3922,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             )
             if let coordinatorCompletionDeltaContext {
+                let consumerSurface = resolvedSurface ?? AgentSurfaceReference.mainChat(chatId: resolvedMainChatRuntimeChatId)
                 DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
-                    surfaceKind: "main_chat",
+                    surface: consumerSurface,
                     ids: coordinatorCompletionDeltaContext.ids
                 )
             }

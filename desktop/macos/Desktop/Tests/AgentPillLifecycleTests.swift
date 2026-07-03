@@ -934,13 +934,15 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("private var pendingFollowUpsByPill: [UUID: [String]] = [:]"))
     XCTAssertTrue(source.contains("pendingFollowUpsByPill[pill.id, default: []].append(text)"))
     XCTAssertTrue(source.contains("Queued follow-up until the agent starts"))
+    XCTAssertTrue(source.contains("Queued follow-up until the current run stops"))
     XCTAssertTrue(source.contains("let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []"))
     XCTAssertTrue(source.contains("self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: \"\\n\\n\"))"))
-    XCTAssertTrue(source.contains("await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill)"))
-    XCTAssertTrue(source.contains("private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async"))
+    XCTAssertTrue(source.contains("guard await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) else"))
+    XCTAssertTrue(source.contains("private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> Bool"))
     XCTAssertTrue(source.contains("let shouldCancelRun = pill?.status.isFinished == false"))
     XCTAssertTrue(source.contains("pendingFollowUpsByPill[pillID] = nil"))
     XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)"))
+    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordLocalFailure("))
   }
 
   func testProviderMarkRoutingIsCentralized() throws {

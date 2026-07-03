@@ -731,6 +731,10 @@ final class AgentPillsManager: ObservableObject {
                 await self.pollCanonicalRun(for: pill)
             } catch {
                 guard !Task.isCancelled else { return }
+                AgentRuntimeStatusStore.shared.recordLocalFailure(
+                    surface: surfaceRef,
+                    error: error.localizedDescription
+                )
                 self.fail(pill: pill, errorText: error.localizedDescription)
             }
         }
@@ -779,7 +783,18 @@ final class AgentPillsManager: ObservableObject {
             guard !Task.isCancelled else { return }
             do {
                 if let activeRunId, !activeRunId.isEmpty, !pill.status.isFinished {
-                    await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill)
+                    guard await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) else {
+                        pendingFollowUpsByPill[pill.id, default: []].append(text)
+                        pill.latestActivity = "Queued follow-up until the current run stops…"
+                        pill.markContentChanged()
+                        await self.pollCanonicalRun(for: pill)
+                        guard self.pills.contains(where: { $0.id == pill.id }) else { return }
+                        let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+                        if !queuedFollowUps.isEmpty {
+                            self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                        }
+                        return
+                    }
                     guard !Task.isCancelled else { return }
                     guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                 }
@@ -802,23 +817,30 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pill.id] = runTask
     }
 
-    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async {
-        _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
+    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> Bool {
+        do {
+            _ = try await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
+        } catch {
+            logError("AgentPills: failed to cancel active run before follow-up", error: error)
+            return false
+        }
         for _ in 0..<20 {
-            if Task.isCancelled { return }
+            if Task.isCancelled { return false }
             do {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
                 let status = inspection.status
                 if ["succeeded", "completed", "failed", "timed_out", "orphaned", "cancelled"].contains(status) {
-                    return
+                    return true
                 }
                 pill.latestActivity = status == "cancelling" ? "Stopping current run…" : "Waiting for current run to stop…"
                 pill.markContentChanged()
             } catch {
-                return
+                logError("AgentPills: failed to inspect active run before follow-up", error: error)
+                return false
             }
             try? await Task.sleep(nanoseconds: 250_000_000)
         }
+        return false
     }
 
     /// Force-dismiss a pill.

@@ -209,15 +209,6 @@ class ChatToolExecutor {
       }
       return .allow
 
-    case "complete_task", "delete_task", "create_action_item", "update_action_item":
-      return .deny(
-        policyDeniedMessage(
-          toolName: toolName,
-          code: "approval_required",
-          capability: "desktop.tasks.readwrite",
-          message: "Task changes from an agent require explicit approval before Omi can update your tasks."
-        ))
-
     case "capture_screen", "get_screenshot":
       return .deny(
         policyDeniedMessage(

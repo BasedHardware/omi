@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { buildDesktopActionQueue } from "../src/runtime/desktop-action-queue.js";
 
 describe("desktop action queue", () => {
@@ -227,6 +228,13 @@ describe("desktop action queue", () => {
 
     expect(queue.map((item) => item.kind)).toEqual(["reusable_session"]);
     expect(queue.some((item) => item.subjectId === "orphaned-story-run")).toBe(false);
+  });
+
+  it("kernel reads a wider run window before queue suppression applies the final limit", () => {
+    const source = readFileSync(new URL("../src/runtime/kernel.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("runs: this.readDesktopQueueRuns(ownerId, Math.max(limit * 5, 200))");
+    expect(source).toContain("return queue.slice(0, limit)");
   });
 
   it("still surfaces orphaned visible goals when newer successes are unrelated", () => {

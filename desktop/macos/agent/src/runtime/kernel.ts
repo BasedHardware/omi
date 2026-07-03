@@ -1009,7 +1009,7 @@ export class AgentRuntimeKernel {
       nowMs,
       staleAfterMs: input.staleAfterMs,
       dispatches: this.readDesktopDispatches(ownerId, limit).map(dispatchToQueueInput),
-      runs: this.readDesktopQueueRuns(ownerId, limit),
+      runs: this.readDesktopQueueRuns(ownerId, Math.max(limit * 5, 200)),
       artifactDeliveries: this.readDesktopArtifactDeliveries(ownerId, limit).map(deliveryToQueueInput),
       candidates: [
         ...this.readDesktopMemoryCandidates(ownerId, limit).map(memoryCandidateToQueueInput),
