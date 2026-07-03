@@ -1035,7 +1035,9 @@ private struct AICloneContactRow: View {
           Image(systemName: "chevron.down")
             .font(.system(size: 8, weight: .semibold))
         }
-        .foregroundColor(sendMode == .autonomous ? OmiColors.warning : OmiColors.textSecondary)
+        // Force an explicit neutral/warning fill so the Menu never picks up the system
+        // accent color (which can be purple) — see AGENTS.md "Never use purple".
+        .foregroundStyle(modeTint)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(
@@ -1045,6 +1047,7 @@ private struct AICloneContactRow: View {
       }
       .menuStyle(.borderlessButton)
       .menuIndicator(.hidden)
+      .tint(modeTint)
       .fixedSize()
       .help("How the clone handles new messages from \(contact.displayName)")
     } else {
@@ -1061,6 +1064,11 @@ private struct AICloneContactRow: View {
     case .draftReview: return "tray.full"
     case .autonomous: return "bolt.fill"
     }
+  }
+
+  /// Neutral by default, warning-amber only for Autonomous. Never accent/purple.
+  private var modeTint: Color {
+    sendMode == .autonomous ? OmiColors.warning : OmiColors.textSecondary
   }
 
   // MARK: - Backtest control (Run Backtest / progress / score badge)
