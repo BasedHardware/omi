@@ -13,10 +13,21 @@ from typing import Any, Optional
 import soundfile as sf
 import torch
 
+import numpy as np
+
 try:
     import nemo.collections.asr as nemo_asr
 except ImportError:
     nemo_asr = None
+
+try:
+    from nemo.collections.asr.inference.factory.pipeline_builder import PipelineBuilder
+    from nemo.collections.asr.inference.streaming.framing.request import Frame
+    from nemo.collections.asr.inference.streaming.framing.request_options import ASRRequestOptions
+except ImportError:
+    PipelineBuilder = None
+    Frame = None
+    ASRRequestOptions = None
 
 try:
     import pyannote.audio.core.model as pam
@@ -41,6 +52,9 @@ class AudioDurationExceededError(Exception):
 class WorkType(Enum):
     BATCH_TRANSCRIBE = "batch_transcribe"
     EMBEDDING = "embedding"
+    STREAM_OPEN = "stream_open"
+    STREAM_CHUNK = "stream_chunk"
+    STREAM_CLOSE = "stream_close"
     SHUTDOWN = "shutdown"
 
 
@@ -58,11 +72,26 @@ class WorkItem:
 
 
 class GPUWorker:
+    _LATENCY_MODE_TO_RIGHT_CONTEXT = {
+        "80ms": 0,
+        "160ms": 1,
+        "480ms": 6,
+        "1040ms": 13,
+    }
+    _MAX_BUFFER_SAMPLES = 5120 * 10
+
     def __init__(self):
         self._queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
+        self._stream_queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
         self._thread: Optional[threading.Thread] = None
         self._model = None
         self._embedding_model = None
+        self._stream_pipeline = None
+        self._stream_sessions: dict[str, dict] = {}
+        self._next_stream_int_id = 1
+        self._source_language = "English"
+        self._stream_chunk_samples = 5120
+        self._max_stream_drain = int(os.getenv("PARAKEET_MAX_STREAM_DRAIN", "16"))
         self._poll_timeout = float(os.getenv("PARAKEET_GPU_POLL_TIMEOUT", "0.05"))
         self._gc_interval = int(os.getenv("PARAKEET_GC_INTERVAL", "50"))
         self._gc_counter = 0
@@ -85,6 +114,10 @@ class GPUWorker:
     @property
     def is_ready(self) -> bool:
         return self._ready.is_set() and self._load_error is None
+
+    @property
+    def has_stream(self) -> bool:
+        return self._stream_pipeline is not None
 
     @property
     def vram_info(self) -> dict:
@@ -111,11 +144,17 @@ class GPUWorker:
             if not self._running:
                 return
             self._running = False
-        evt = threading.Event()
+        shutdown_item = WorkItem(WorkType.SHUTDOWN, None, sync_event=threading.Event())
         try:
-            self._queue.put(WorkItem(WorkType.SHUTDOWN, None, sync_event=evt), timeout=5)
+            self._queue.put(shutdown_item, timeout=5)
         except queue.Full:
             pass
+        if self.has_stream:
+            shutdown_item2 = WorkItem(WorkType.SHUTDOWN, None, sync_event=threading.Event())
+            try:
+                self._stream_queue.put(shutdown_item2, timeout=5)
+            except queue.Full:
+                pass
         if self._thread:
             self._thread.join(timeout=30)
 
@@ -173,6 +212,33 @@ class GPUWorker:
             raise item.sync_error
         return item.sync_result
 
+    def _submit_stream(self, work_type: WorkType, payload: dict, loop: asyncio.AbstractEventLoop) -> asyncio.Future:
+        with self._submit_lock:
+            if not self._running:
+                fut = loop.create_future()
+                fut.set_exception(RuntimeError("GPU worker shutting down"))
+                return fut
+            if not self.is_ready:
+                fut = loop.create_future()
+                fut.set_exception(RuntimeError("GPU worker not ready"))
+                return fut
+            fut = loop.create_future()
+            item = WorkItem(work_type, payload, future=fut, loop=loop)
+            try:
+                self._stream_queue.put_nowait(item)
+            except queue.Full:
+                fut.set_exception(RuntimeError("GPU stream queue full"))
+        return fut
+
+    def stream_open(self, payload: dict, loop: asyncio.AbstractEventLoop) -> asyncio.Future:
+        return self._submit_stream(WorkType.STREAM_OPEN, payload, loop)
+
+    def stream_chunk(self, payload: dict, loop: asyncio.AbstractEventLoop) -> asyncio.Future:
+        return self._submit_stream(WorkType.STREAM_CHUNK, payload, loop)
+
+    def stream_close(self, payload: dict, loop: asyncio.AbstractEventLoop) -> asyncio.Future:
+        return self._submit_stream(WorkType.STREAM_CLOSE, payload, loop)
+
     def _maybe_gc(self) -> None:
         gc.collect(0)
         self._gc_counter += 1
@@ -185,6 +251,7 @@ class GPUWorker:
         gc.disable()
         try:
             self._load_model()
+            self._build_stream_pipeline()
             self._ready.set()
         except Exception as exc:
             logger.error(f"Model loading failed: {exc}")
@@ -192,30 +259,86 @@ class GPUWorker:
             self._ready.set()
             return
 
+        if self.has_stream:
+            self._run_combined_mode()
+        else:
+            self._run_batch_only_mode()
+
+        self._drain_queue()
+        self._drain_stream_queue()
+        logger.info("GPU worker thread stopped")
+
+    def _run_batch_only_mode(self) -> None:
+        logger.info("Running in batch-only mode")
         while self._running:
             try:
                 item = self._queue.get(timeout=self._poll_timeout)
             except queue.Empty:
                 continue
-
             if item.work_type == WorkType.SHUTDOWN:
                 break
+            self._process_batch_item(item)
+
+    def _run_combined_mode(self) -> None:
+        logger.info(f"Running in combined mode (max_stream_drain={self._max_stream_drain})")
+        while self._running:
+            processed_stream = 0
+            while processed_stream < self._max_stream_drain:
+                try:
+                    item = self._stream_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if item.work_type == WorkType.SHUTDOWN:
+                    self._running = False
+                    return
+                self._process_stream_item(item)
+                processed_stream += 1
 
             try:
-                t_infer = time.monotonic()
-                if item.work_type == WorkType.EMBEDDING:
-                    result = self._compute_embedding(item.payload)
-                else:
-                    result = self._batch_transcribe(item.payload)
-                item.inference_seconds = time.monotonic() - t_infer
-                self._deliver_result(item, result)
-            except Exception as exc:
-                self._deliver_error(item, exc)
-            finally:
-                self._maybe_gc()
+                item = self._queue.get(timeout=self._poll_timeout)
+            except queue.Empty:
+                if processed_stream == 0:
+                    try:
+                        item = self._stream_queue.get(timeout=self._poll_timeout)
+                    except queue.Empty:
+                        continue
+                    if item.work_type == WorkType.SHUTDOWN:
+                        break
+                    self._process_stream_item(item)
+                continue
+            if item.work_type == WorkType.SHUTDOWN:
+                break
+            self._process_batch_item(item)
 
-        self._drain_queue()
-        logger.info("GPU worker thread stopped")
+    def _process_batch_item(self, item: WorkItem) -> None:
+        try:
+            t_infer = time.monotonic()
+            if item.work_type == WorkType.EMBEDDING:
+                result = self._compute_embedding(item.payload)
+            else:
+                result = self._batch_transcribe(item.payload)
+            item.inference_seconds = time.monotonic() - t_infer
+            self._deliver_result(item, result)
+        except Exception as exc:
+            self._deliver_error(item, exc)
+        finally:
+            self._maybe_gc()
+
+    def _process_stream_item(self, item: WorkItem) -> None:
+        try:
+            if item.work_type == WorkType.STREAM_OPEN:
+                result = self._stream_open(item.payload)
+            elif item.work_type == WorkType.STREAM_CHUNK:
+                result = self._stream_chunk(item.payload)
+            elif item.work_type == WorkType.STREAM_CLOSE:
+                result = self._stream_close(item.payload)
+            else:
+                result = None
+            self._deliver_result(item, result)
+        except Exception as exc:
+            self._deliver_error(item, exc)
+        finally:
+            self._maybe_gc()
 
     @staticmethod
     def _deliver_result(item: WorkItem, result: Any) -> None:
@@ -435,10 +558,226 @@ class GPUWorker:
                 out.append({"text": str(r)})
         return out
 
+    def _build_stream_pipeline(self) -> None:
+        stream_model = os.getenv("PARAKEET_STREAM_MODEL", "")
+        if not stream_model:
+            logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
+            return
+        if PipelineBuilder is None:
+            logger.warning("NeMo streaming inference API not available — streaming disabled")
+            return
+
+        from omegaconf import OmegaConf
+
+        device = os.getenv("PARAKEET_DEVICE", "cuda:0")
+        device_parts = device.split(":")
+        device_name = device_parts[0]
+        device_id = int(device_parts[1]) if len(device_parts) > 1 else 0
+
+        config_path = os.path.join(os.path.dirname(__file__), "config", "cache_aware_rnnt.yaml")
+        if not os.path.exists(config_path):
+            logger.warning(f"Streaming config not found at {config_path} — streaming disabled")
+            return
+
+        base_cfg = OmegaConf.load(config_path)
+        overrides = OmegaConf.create(
+            {
+                "asr": {
+                    "model_name": stream_model,
+                    "device": device_name,
+                    "device_id": device_id,
+                    "compute_dtype": "float16",
+                    "use_amp": True,
+                },
+                "enable_itn": False,
+                "enable_nmt": False,
+            }
+        )
+        source_lang = os.getenv("PARAKEET_STREAM_LANGUAGE", "English")
+        overrides["source_language"] = source_lang
+        self._source_language = source_lang
+        overrides["streaming"] = {"att_context_size": None}
+        cfg = OmegaConf.merge(base_cfg, overrides)
+
+        logger.info(f"Building streaming pipeline: {stream_model}")
+        self._stream_pipeline = PipelineBuilder.build_pipeline(cfg)
+
+        try:
+            self._stream_chunk_samples = int(
+                self._stream_pipeline.chunk_size_in_secs * self._stream_pipeline.sample_rate
+            )
+        except AttributeError:
+            self._stream_chunk_samples = int(os.getenv("PARAKEET_STREAM_CHUNK_SAMPLES", "5120"))
+
+        logger.info(
+            f"Stream chunk target: {self._stream_chunk_samples} samples "
+            f"({self._stream_chunk_samples / 16000 * 1000:.0f}ms)"
+        )
+
+        latency_mode = os.getenv("PARAKEET_STREAM_LATENCY_MODE", "480ms")
+        right_ctx = self._LATENCY_MODE_TO_RIGHT_CONTEXT.get(latency_mode)
+        if right_ctx is not None:
+            left_ctx = self._stream_pipeline.asr_model.get_att_context_size()[0]
+            att_context = [left_ctx, right_ctx]
+            self._stream_pipeline.asr_model.set_default_att_context_size(att_context)
+            logger.info(f"Streaming latency mode: {latency_mode} (att_context_size={att_context})")
+
+        self._stream_pipeline.open_session()
+
+        if torch.cuda.is_available():
+            vram_after = torch.cuda.memory_allocated() / (1024 * 1024)
+            logger.info(f"VRAM after stream model load: {vram_after:.0f}MiB")
+
+        logger.info("Streaming pipeline built and session opened")
+
+    @torch.inference_mode()
+    def _stream_open(self, payload: dict) -> dict:
+        if self._stream_pipeline is None:
+            raise RuntimeError("Streaming pipeline not available")
+        stream_id = payload["stream_id"]
+        stream_int_id = self._next_stream_int_id
+        self._next_stream_int_id += 1
+        self._stream_sessions[stream_id] = {
+            "int_id": stream_int_id,
+            "chunk_index": 0,
+            "created_at": time.monotonic(),
+            "committed_text": "",
+            "last_partial": "",
+            "audio_buffer": bytearray(),
+            "buffer_samples": 0,
+            "frames_sent": 0,
+        }
+        return {"stream_id": stream_id, "status": "opened"}
+
+    @torch.inference_mode()
+    def _stream_chunk(self, payload: dict) -> dict:
+        stream_id = payload["stream_id"]
+        audio_chunk = payload["audio_chunk"]
+        session = self._stream_sessions.get(stream_id)
+        if session is None:
+            raise ValueError(f"Unknown stream: {stream_id}")
+
+        session["chunk_index"] += 1
+        session["audio_buffer"].extend(audio_chunk.astype(np.float32).tobytes())
+        session["buffer_samples"] += len(audio_chunk)
+
+        if session["buffer_samples"] > self._MAX_BUFFER_SAMPLES:
+            excess = session["buffer_samples"] - self._MAX_BUFFER_SAMPLES
+            session["audio_buffer"] = session["audio_buffer"][excess * 4 :]
+            session["buffer_samples"] = self._MAX_BUFFER_SAMPLES
+
+        partial = ""
+        final = ""
+        chunk_bytes = self._stream_chunk_samples * 4
+
+        while session["buffer_samples"] >= self._stream_chunk_samples:
+            raw = bytes(session["audio_buffer"][:chunk_bytes])
+            session["audio_buffer"] = session["audio_buffer"][chunk_bytes:]
+            session["buffer_samples"] -= self._stream_chunk_samples
+
+            is_first = session["frames_sent"] == 0
+            session["frames_sent"] += 1
+
+            samples = torch.frombuffer(raw, dtype=torch.float32).clone()
+            options = (
+                ASRRequestOptions(enable_itn=False, enable_nmt=False, source_language=self._source_language)
+                if is_first
+                else None
+            )
+            frame = Frame(
+                samples=samples,
+                stream_id=session["int_id"],
+                is_first=is_first,
+                is_last=False,
+                options=options,
+            )
+            outputs = self._stream_pipeline.transcribe_step([frame])
+            if outputs:
+                out = outputs[0]
+                partial = out.partial_transcript or ''
+                step_final = out.final_transcript or ''
+                if step_final:
+                    final = (final + " " + step_final).strip() if final else step_final
+                    session["committed_text"] += " " + step_final
+                if partial:
+                    session["last_partial"] = partial
+
+        return {
+            "stream_id": stream_id,
+            "partial_transcript": partial,
+            "final_transcript": final,
+            "is_final": bool(final),
+        }
+
+    @torch.inference_mode()
+    def _stream_close(self, payload: dict) -> dict:
+        stream_id = payload["stream_id"]
+        session = self._stream_sessions.pop(stream_id, None)
+        if session is None:
+            return {"stream_id": stream_id, "status": "not_found"}
+
+        final_text = session.get("committed_text", "").strip()
+        last_partial = session.get("last_partial", "").strip()
+
+        if session["buffer_samples"] > 0:
+            raw = bytes(session["audio_buffer"][: session["buffer_samples"] * 4])
+            is_first = session["frames_sent"] == 0
+            samples = torch.frombuffer(raw, dtype=torch.float32).clone()
+            options = (
+                ASRRequestOptions(enable_itn=False, enable_nmt=False, source_language=self._source_language)
+                if is_first
+                else None
+            )
+            frame = Frame(
+                samples=samples,
+                stream_id=session["int_id"],
+                is_first=is_first,
+                is_last=False,
+                options=options,
+            )
+            outputs = self._stream_pipeline.transcribe_step([frame])
+            session["frames_sent"] += 1
+            if outputs:
+                flushed = outputs[0].final_transcript or ''
+                if flushed:
+                    final_text = (final_text + " " + flushed).strip()
+
+        if session["frames_sent"] > 0:
+            frame = Frame(
+                samples=torch.zeros(1, dtype=torch.float32),
+                stream_id=session["int_id"],
+                is_first=False,
+                is_last=True,
+                options=ASRRequestOptions(enable_itn=False, enable_nmt=False),
+            )
+            outputs = self._stream_pipeline.transcribe_step([frame])
+            if outputs:
+                remaining_final = outputs[0].final_transcript or ''
+                remaining_partial = outputs[0].partial_transcript or ''
+                if remaining_final:
+                    final_text = (final_text + " " + remaining_final).strip()
+                elif remaining_partial and not final_text:
+                    final_text = remaining_partial.strip()
+
+        if not final_text and last_partial:
+            final_text = last_partial
+
+        return {"stream_id": stream_id, "final_text": final_text, "status": "closed"}
+
     def _drain_queue(self) -> None:
         while not self._queue.empty():
             try:
                 item = self._queue.get_nowait()
+                if item.work_type != WorkType.SHUTDOWN:
+                    err = RuntimeError("GPU worker shutting down")
+                    self._deliver_error(item, err)
+            except queue.Empty:
+                break
+
+    def _drain_stream_queue(self) -> None:
+        while not self._stream_queue.empty():
+            try:
+                item = self._stream_queue.get_nowait()
                 if item.work_type != WorkType.SHUTDOWN:
                     err = RuntimeError("GPU worker shutting down")
                     self._deliver_error(item, err)
