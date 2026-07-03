@@ -60,12 +60,7 @@ export interface ActionItemsSearchResponse {
   action_items: Array<ActionItemResponse>;
 }
 
-export type ActionType =
-  | 'create_conversation'
-  | 'create_facts'
-  | 'read_memories'
-  | 'read_conversations'
-  | 'read_tasks';
+export type ActionType = "create_conversation" | "create_facts" | "read_memories" | "read_conversations" | "read_tasks";
 
 export interface AdviceAssistantSettings {
   analysis_prompt?: string | null;
@@ -119,7 +114,7 @@ export interface AnnouncementDeleteResponse {
   success: boolean;
 }
 
-export type AnnouncementType = 'changelog' | 'feature' | 'announcement';
+export type AnnouncementType = "changelog" | "feature" | "announcement";
 
 export interface App {
   approved?: boolean;
@@ -628,43 +623,10 @@ export interface CancelSubscriptionRequest {
   reason_details?: string | null;
 }
 
-export type CategoryEnum =
-  | 'personal'
-  | 'education'
-  | 'health'
-  | 'finance'
-  | 'legal'
-  | 'philosophy'
-  | 'spiritual'
-  | 'science'
-  | 'entrepreneurship'
-  | 'parenting'
-  | 'romantic'
-  | 'travel'
-  | 'inspiration'
-  | 'technology'
-  | 'business'
-  | 'social'
-  | 'work'
-  | 'sports'
-  | 'politics'
-  | 'literature'
-  | 'history'
-  | 'architecture'
-  | 'music'
-  | 'weather'
-  | 'news'
-  | 'entertainment'
-  | 'psychology'
-  | 'real'
-  | 'design'
-  | 'family'
-  | 'economics'
-  | 'environment'
-  | 'other';
+export type CategoryEnum = "personal" | "education" | "health" | "finance" | "legal" | "philosophy" | "spiritual" | "science" | "entrepreneurship" | "parenting" | "romantic" | "travel" | "inspiration" | "technology" | "business" | "social" | "work" | "sports" | "politics" | "literature" | "history" | "architecture" | "music" | "weather" | "news" | "entertainment" | "psychology" | "real" | "design" | "family" | "economics" | "environment" | "other";
 
 export interface ChartData {
-  chart_type: 'line' | 'bar';
+  chart_type: "line" | "bar";
   datasets: Array<ChartDataset>;
   title: string;
   x_label?: string | null;
@@ -686,7 +648,7 @@ export interface ChatMessageCountResponse {
   count: number;
 }
 
-export type ChatQuotaUnit = 'questions' | 'cost_usd';
+export type ChatQuotaUnit = "questions" | "cost_usd";
 
 export interface ChatRatingResponse {
   status: string;
@@ -809,29 +771,9 @@ export interface ConversationRecordingResponse {
   has_recording: boolean;
 }
 
-export type ConversationSource =
-  | 'friend'
-  | 'omi'
-  | 'fieldy'
-  | 'bee'
-  | 'plaud'
-  | 'frame'
-  | 'friend_com'
-  | 'apple_watch'
-  | 'phone'
-  | 'phone_call'
-  | 'desktop'
-  | 'openglass'
-  | 'screenpipe'
-  | 'workflow'
-  | 'sdcard'
-  | 'external_integration'
-  | 'limitless'
-  | 'onboarding'
-  | 'unknown';
+export type ConversationSource = "friend" | "omi" | "fieldy" | "bee" | "plaud" | "frame" | "friend_com" | "apple_watch" | "phone" | "phone_call" | "desktop" | "openglass" | "screenpipe" | "workflow" | "sdcard" | "external_integration" | "limitless" | "onboarding" | "unknown";
 
-export type ConversationStatus =
-  'in_progress' | 'processing' | 'merging' | 'completed' | 'failed';
+export type ConversationStatus = "in_progress" | "processing" | "merging" | "completed" | "failed";
 
 export interface ConversationStatusResponse {
   status: string;
@@ -846,7 +788,7 @@ export interface ConversationTestPromptResponse {
   summary: string;
 }
 
-export type ConversationVisibility = 'private' | 'shared' | 'public';
+export type ConversationVisibility = "private" | "shared" | "public";
 
 export interface ConversationsCountResponse {
   count: number;
@@ -1281,7 +1223,7 @@ export interface ExternalIntegration {
   auth_steps?: Array<AuthStep> | null;
   chat_messages_enabled?: boolean;
   chat_messages_notify?: boolean;
-  chat_messages_target?: 'main' | 'app';
+  chat_messages_target?: "main" | "app";
   chat_tools_manifest_url?: string | null;
   is_instructions_url?: boolean;
   mcp_oauth_tokens?: Record<string, unknown> | null;
@@ -1292,8 +1234,7 @@ export interface ExternalIntegration {
   webhook_url?: string | null;
 }
 
-export type ExternalIntegrationConversationSource =
-  'audio_transcript' | 'message' | 'other_text';
+export type ExternalIntegrationConversationSource = "audio_transcript" | "message" | "other_text";
 
 export interface FairUseLimitsResponse {
   daily_hours: number;
@@ -1444,7 +1385,7 @@ export interface GoalSuggestionResponse {
   suggested_type: string;
 }
 
-export type GoalType = 'boolean' | 'scale' | 'numeric';
+export type GoalType = "boolean" | "scale" | "numeric";
 
 export interface GoalUpdate {
   current_value?: number | null;
@@ -1483,7 +1424,7 @@ export interface ImportJobResponse {
   total_files?: number | null;
 }
 
-export type ImportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ImportJobStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface IntegrationData {
   access_token?: string | null;
@@ -1676,21 +1617,7 @@ export interface MemoryAssistantSettings {
   notifications_enabled?: boolean | null;
 }
 
-export type MemoryCategory =
-  | 'interesting'
-  | 'system'
-  | 'manual'
-  | 'workflow'
-  | 'core'
-  | 'hobbies'
-  | 'lifestyle'
-  | 'interests'
-  | 'habits'
-  | 'work'
-  | 'skills'
-  | 'learnings'
-  | 'other'
-  | 'auto';
+export type MemoryCategory = "interesting" | "system" | "manual" | "workflow" | "core" | "hobbies" | "lifestyle" | "interests" | "habits" | "work" | "skills" | "learnings" | "other" | "auto";
 
 export interface MemoryDB {
   app_id?: string | null;
@@ -1733,7 +1660,7 @@ export interface MemoryDB {
   visibility?: string | null;
 }
 
-export type MemoryLayer = 'short_term' | 'long_term' | 'archive';
+export type MemoryLayer = "short_term" | "long_term" | "archive";
 
 export interface MemoryMutationResponse {
   status: string;
@@ -1803,9 +1730,9 @@ export interface MessageReportResponse {
   message: string;
 }
 
-export type MessageSender = 'ai' | 'human';
+export type MessageSender = "ai" | "human";
 
-export type MessageType = 'text' | 'day_summary';
+export type MessageType = "text" | "day_summary";
 
 export interface MigrationRequest {
   id: string;
@@ -1871,7 +1798,7 @@ export interface OverageInfoResponse {
 export interface PageContext {
   id?: string | null;
   title?: string | null;
-  type: 'conversation' | 'task' | 'memory' | 'recap';
+  type: "conversation" | "task" | "memory" | "recap";
 }
 
 export interface PayPalPaymentDetailsResponse {
@@ -1978,7 +1905,7 @@ export interface PlanLimits {
   words_transcribed?: number | null;
 }
 
-export type PlanType = 'basic' | 'unlimited' | 'architect' | 'operator';
+export type PlanType = "basic" | "unlimited" | "architect" | "operator";
 
 export interface PluginResult {
   content: string;
@@ -2328,7 +2255,7 @@ export interface Structured {
   title?: string;
 }
 
-export type SubjectAttribution = 'user' | 'third_party' | 'unknown' | 'legacy_assumed';
+export type SubjectAttribution = "user" | "third_party" | "unknown" | "legacy_assumed";
 
 export interface Subscription {
   cancel_at_period_end?: boolean;
@@ -2355,7 +2282,7 @@ export interface SubscriptionPlan {
   title: string;
 }
 
-export type SubscriptionStatus = 'active' | 'inactive';
+export type SubscriptionStatus = "active" | "inactive";
 
 export interface SyncBatchItem {
   apple_reminder_id?: string | null;
@@ -2510,7 +2437,7 @@ export interface TrialMetadata {
   trial_started_at?: number | null;
 }
 
-export type TriggerType = 'immediate' | 'version_upgrade' | 'firmware_upgrade';
+export type TriggerType = "immediate" | "version_upgrade" | "firmware_upgrade";
 
 export interface TtsSynthesizeRequest {
   model_id?: string;
@@ -2644,7 +2571,7 @@ export interface UsageHistoryPoint {
   words_transcribed?: number;
 }
 
-export type UsagePeriod = 'today' | 'monthly' | 'yearly' | 'all_time';
+export type UsagePeriod = "today" | "monthly" | "yearly" | "all_time";
 
 export interface UsageStats {
   insights_gained?: number;
@@ -2753,12 +2680,7 @@ export interface VoiceMessageTranscriptionResponse {
   transcript: string;
 }
 
-export type WebhookType =
-  | 'audio_bytes'
-  | 'audio_bytes_websocket'
-  | 'realtime_transcript'
-  | 'memory_created'
-  | 'day_summary';
+export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary";
 
 export interface WrappedStatusResponse {
   error?: string | null;
@@ -2780,7 +2702,7 @@ export interface routers__developer__UpdateActionItemRequest {
   due_at?: string | null;
 }
 
-export type routers__goals__GoalType = 'boolean' | 'scale' | 'numeric';
+export type routers__goals__GoalType = "boolean" | "scale" | "numeric";
 
 export interface routers__memories__BatchMemoriesRequest {
   memories: Array<Memory>;
@@ -2805,3780 +2727,3780 @@ export interface routers__payment__PricingOption {
 }
 
 export interface OmiApiSchemas {
-  AIUserProfileResponse: AIUserProfileResponse;
-  AcceptSharedActionItemsResponse: AcceptSharedActionItemsResponse;
-  AcceptSharedTasksRequest: AcceptSharedTasksRequest;
-  Action: Action;
-  ActionItem: ActionItem;
-  ActionItemResponse: ActionItemResponse;
-  ActionItemsResponse: ActionItemsResponse;
-  ActionItemsSearchResponse: ActionItemsSearchResponse;
-  ActionType: ActionType;
-  AdviceAssistantSettings: AdviceAssistantSettings;
-  AdviceResponse: AdviceResponse;
-  AgentKeepaliveResponse: AgentKeepaliveResponse;
-  AgentToolSchema: AgentToolSchema;
-  AgentToolsResponse: AgentToolsResponse;
-  AgentVmInfo: AgentVmInfo;
-  Announcement: Announcement;
-  AnnouncementDeleteResponse: AnnouncementDeleteResponse;
-  AnnouncementType: AnnouncementType;
-  App: App;
-  AppApiKeyResponse: AppApiKeyResponse;
-  AppBaseModel: AppBaseModel;
-  AppCapabilityAction: AppCapabilityAction;
-  AppCapabilityResponse: AppCapabilityResponse;
-  AppCatalogGroup: AppCatalogGroup;
-  AppCatalogMeta: AppCatalogMeta;
-  AppCatalogResponse: AppCatalogResponse;
-  AppCreateResponse: AppCreateResponse;
-  AppDescriptionEmojiGenerationResponse: AppDescriptionEmojiGenerationResponse;
-  AppDescriptionGenerationResponse: AppDescriptionGenerationResponse;
-  AppDraftGenerationResponse: AppDraftGenerationResponse;
-  AppGenerationResponse: AppGenerationResponse;
-  AppIconGenerationResponse: AppIconGenerationResponse;
-  AppManifestRefreshResponse: AppManifestRefreshResponse;
-  AppMigrationResponse: AppMigrationResponse;
-  AppMutationResponse: AppMutationResponse;
-  AppPagination: AppPagination;
-  AppPaginationLinks: AppPaginationLinks;
-  AppPromptsGenerationResponse: AppPromptsGenerationResponse;
-  AppResult: AppResult;
-  AppReview: AppReview;
-  AppSearchFilters: AppSearchFilters;
-  AppSearchResponse: AppSearchResponse;
-  AppSelectOption: AppSelectOption;
-  AppSubscriptionCancelResponse: AppSubscriptionCancelResponse;
-  AppSubscriptionDetails: AppSubscriptionDetails;
-  AppSubscriptionResponse: AppSubscriptionResponse;
-  AppTesterCheckResponse: AppTesterCheckResponse;
-  AppThumbnailUploadResponse: AppThumbnailUploadResponse;
-  AppleHealthSyncData: AppleHealthSyncData;
-  AppleHealthSyncResponse: AppleHealthSyncResponse;
-  AsanaProjectsResponse: AsanaProjectsResponse;
-  AsanaWorkspacesResponse: AsanaWorkspacesResponse;
-  AssistantSettingsResponse: AssistantSettingsResponse;
-  AudioDownloadPendingResponse: AudioDownloadPendingResponse;
-  AudioFile: AudioFile;
-  AudioFileUrlInfo: AudioFileUrlInfo;
-  AudioPrecacheResponse: AudioPrecacheResponse;
-  AudioUrlsResponse: AudioUrlsResponse;
-  AuthStep: AuthStep;
-  AvailablePlansResponse: AvailablePlansResponse;
-  BYOKActivateRequest: BYOKActivateRequest;
-  BYOKActiveResponse: BYOKActiveResponse;
-  BatchActionItemsRequest: BatchActionItemsRequest;
-  BatchActionItemsResponse: BatchActionItemsResponse;
-  BatchCreateActionItemsResponse: BatchCreateActionItemsResponse;
-  BatchDeleteActionItemsRequest: BatchDeleteActionItemsRequest;
-  BatchDeleteActionItemsResponse: BatchDeleteActionItemsResponse;
-  BatchMemoriesRequest: BatchMemoriesRequest;
-  BatchMemoriesResponse: BatchMemoriesResponse;
-  BatchMigrationRequest: BatchMigrationRequest;
-  BatchMutationResponse: BatchMutationResponse;
-  BatchUpdateActionItemEntry: BatchUpdateActionItemEntry;
-  BatchUpdateActionItemsRequest: BatchUpdateActionItemsRequest;
-  Body_create_app_v1_apps_post: Body_create_app_v1_apps_post;
-  Body_create_voice_message_stream_v2_voice_messages_post: Body_create_voice_message_stream_v2_voice_messages_post;
-  Body_import_limitless_data_v1_import_limitless_post: Body_import_limitless_data_v1_import_limitless_post;
-  Body_sync_local_files_v2_v2_sync_local_files_post: Body_sync_local_files_v2_v2_sync_local_files_post;
-  Body_update_app_v1_apps__app_id__patch: Body_update_app_v1_apps__app_id__patch;
-  Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post: Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post;
-  Body_upload_file_chat_v2_files_post: Body_upload_file_chat_v2_files_post;
-  Body_upload_profile_v3_upload_audio_post: Body_upload_profile_v3_upload_audio_post;
-  BulkAssignSegmentsRequest: BulkAssignSegmentsRequest;
-  BulkMoveConversationsRequest: BulkMoveConversationsRequest;
-  BulkMoveConversationsResponse: BulkMoveConversationsResponse;
-  CalendarEventLink: CalendarEventLink;
-  CalendarMeetingContext: CalendarMeetingContext;
-  CalendarOnboardingSkipResponse: CalendarOnboardingSkipResponse;
-  CalendarOnboardingStatusResponse: CalendarOnboardingStatusResponse;
-  CancelSubscriptionRequest: CancelSubscriptionRequest;
-  CategoryEnum: CategoryEnum;
-  ChartData: ChartData;
-  ChartDataPoint: ChartDataPoint;
-  ChartDataset: ChartDataset;
-  ChatMessageCountResponse: ChatMessageCountResponse;
-  ChatQuotaUnit: ChatQuotaUnit;
-  ChatRatingResponse: ChatRatingResponse;
-  ChatTool: ChatTool;
-  ChatUsageQuota: ChatUsageQuota;
-  CheckVerificationRequest: CheckVerificationRequest;
-  CheckVerificationResponse: CheckVerificationResponse;
-  CleanerMemory: CleanerMemory;
-  ClickUpListsResponse: ClickUpListsResponse;
-  ClickUpSpacesResponse: ClickUpSpacesResponse;
-  ClickUpTeamsResponse: ClickUpTeamsResponse;
-  Conversation: Conversation;
-  ConversationActionItemsResponse: ConversationActionItemsResponse;
-  ConversationCreateResponse: ConversationCreateResponse;
-  ConversationPhoto: ConversationPhoto;
-  ConversationRecordingResponse: ConversationRecordingResponse;
-  ConversationSource: ConversationSource;
-  ConversationStatus: ConversationStatus;
-  ConversationStatusResponse: ConversationStatusResponse;
-  ConversationSuggestedAppsResponse: ConversationSuggestedAppsResponse;
-  ConversationTestPromptResponse: ConversationTestPromptResponse;
-  ConversationVisibility: ConversationVisibility;
-  ConversationsCountResponse: ConversationsCountResponse;
-  CreateActionItemRequest: CreateActionItemRequest;
-  CreateAnnouncementRequest: CreateAnnouncementRequest;
-  CreateCheckoutRequest: CreateCheckoutRequest;
-  CreateConversationFromTranscriptRequest: CreateConversationFromTranscriptRequest;
-  CreateConversationRequest: CreateConversationRequest;
-  CreateConversationResponse: CreateConversationResponse;
-  CreateConversationTranscriptSegment: CreateConversationTranscriptSegment;
-  CreateFolderRequest: CreateFolderRequest;
-  CreateGoalRequest: CreateGoalRequest;
-  CreateMemoryRequest: CreateMemoryRequest;
-  CreatePerson: CreatePerson;
-  CreateTaskRequest: CreateTaskRequest;
-  CreateTaskResponse: CreateTaskResponse;
-  CustomerPortalSessionResponse: CustomerPortalSessionResponse;
-  DailySummariesResponse: DailySummariesResponse;
-  DailySummaryActionItem: DailySummaryActionItem;
-  DailySummaryDayStats: DailySummaryDayStats;
-  DailySummaryDecisionMade: DailySummaryDecisionMade;
-  DailySummaryKnowledgeNugget: DailySummaryKnowledgeNugget;
-  DailySummaryLocationPin: DailySummaryLocationPin;
-  DailySummaryResponse: DailySummaryResponse;
-  DailySummarySettingsResponse: DailySummarySettingsResponse;
-  DailySummarySettingsUpdate: DailySummarySettingsUpdate;
-  DailySummaryTestResponse: DailySummaryTestResponse;
-  DailySummaryTopicHighlight: DailySummaryTopicHighlight;
-  DailySummaryUnresolvedQuestion: DailySummaryUnresolvedQuestion;
-  DefaultTaskIntegrationRequest: DefaultTaskIntegrationRequest;
-  DefaultTaskIntegrationResponse: DefaultTaskIntegrationResponse;
-  DeleteAccountRequest: DeleteAccountRequest;
-  DeleteActionItemRequest: DeleteActionItemRequest;
-  DeleteKnowledgeGraphResponse: DeleteKnowledgeGraphResponse;
-  DeleteLimitlessConversationsResponse: DeleteLimitlessConversationsResponse;
-  DevApiKey: DevApiKey;
-  DevApiKeyCreate: DevApiKeyCreate;
-  DevApiKeyCreated: DevApiKeyCreated;
-  DeveloperActionItem: DeveloperActionItem;
-  DeveloperConversation: DeveloperConversation;
-  DeveloperConversationActionItem: DeveloperConversationActionItem;
-  DeveloperConversationEvent: DeveloperConversationEvent;
-  DeveloperConversationStructured: DeveloperConversationStructured;
-  DeveloperFolder: DeveloperFolder;
-  DeveloperGoal: DeveloperGoal;
-  DeveloperMemory: DeveloperMemory;
-  DeveloperMemoryVectorItem: DeveloperMemoryVectorItem;
-  DeveloperMemoryVectorPolicy: DeveloperMemoryVectorPolicy;
-  DeveloperMemoryVectorSearchResponse: DeveloperMemoryVectorSearchResponse;
-  DeveloperSuccessResponse: DeveloperSuccessResponse;
-  DeveloperTranscriptSegment: DeveloperTranscriptSegment;
-  DismissAnnouncementRequest: DismissAnnouncementRequest;
-  DismissAnnouncementResponse: DismissAnnouncementResponse;
-  Display: Display;
-  ErrorResponse: ErrorResponse;
-  Event: Event;
-  Evidence: Evidence;
-  ExecuteToolRequest: ExecuteToolRequest;
-  ExecuteToolResponse: ExecuteToolResponse;
-  ExternalIntegration: ExternalIntegration;
-  ExternalIntegrationConversationSource: ExternalIntegrationConversationSource;
-  FairUseLimitsResponse: FairUseLimitsResponse;
-  FairUseStatusResponse: FairUseStatusResponse;
-  FairUseUsagePctResponse: FairUseUsagePctResponse;
-  FcmTokenResponse: FcmTokenResponse;
-  FileChat: FileChat;
-  FirmwareVersionResponse: FirmwareVersionResponse;
-  FloatingBarSettings: FloatingBarSettings;
-  FocusAssistantSettings: FocusAssistantSettings;
-  Folder: Folder;
-  FolderMutationResponse: FolderMutationResponse;
-  FullConversation: FullConversation;
-  GenerateWrappedResponse: GenerateWrappedResponse;
-  Geolocation: Geolocation;
-  GoalCreate: GoalCreate;
-  GoalDeleteResponse: GoalDeleteResponse;
-  GoalHistoryEntryResponse: GoalHistoryEntryResponse;
-  GoalResponse: GoalResponse;
-  GoalSuggestionResponse: GoalSuggestionResponse;
-  GoalType: GoalType;
-  GoalUpdate: GoalUpdate;
-  GoogleCalendarEvent: GoogleCalendarEvent;
-  HTTPValidationError: HTTPValidationError;
-  HasSpeechProfileResponse: HasSpeechProfileResponse;
-  ImportJobResponse: ImportJobResponse;
-  ImportJobStatus: ImportJobStatus;
-  IntegrationData: IntegrationData;
-  IntegrationMutationResponse: IntegrationMutationResponse;
-  IntegrationResponse: IntegrationResponse;
-  KnowledgeGraphResponse: KnowledgeGraphResponse;
-  LinkCalendarEventRequest: LinkCalendarEventRequest;
-  LlmTotalCostResponse: LlmTotalCostResponse;
-  LlmUsageFeatureResponse: LlmUsageFeatureResponse;
-  LlmUsageRecordResponse: LlmUsageRecordResponse;
-  LlmUsageResponse: LlmUsageResponse;
-  McpAddServerResponse: McpAddServerResponse;
-  McpApiKey: McpApiKey;
-  McpApiKeyCreate: McpApiKeyCreate;
-  McpApiKeyCreated: McpApiKeyCreated;
-  McpCreateActionItem: McpCreateActionItem;
-  McpOauthGrantsResponse: McpOauthGrantsResponse;
-  McpRefreshToolsResponse: McpRefreshToolsResponse;
-  McpScreenActivityAppSummary: McpScreenActivityAppSummary;
-  McpScreenActivityRow: McpScreenActivityRow;
-  McpScreenActivitySummaryResponse: McpScreenActivitySummaryResponse;
-  McpServerRequest: McpServerRequest;
-  McpSseAuthMethodResponse: McpSseAuthMethodResponse;
-  McpSseAuthenticationResponse: McpSseAuthenticationResponse;
-  McpSseInfoResponse: McpSseInfoResponse;
-  McpSseInstructionsResponse: McpSseInstructionsResponse;
-  McpStatusResponse: McpStatusResponse;
-  McpUpdateActionItem: McpUpdateActionItem;
-  MeetingParticipant: MeetingParticipant;
-  Memory: Memory;
-  MemoryAssistantSettings: MemoryAssistantSettings;
-  MemoryCategory: MemoryCategory;
-  MemoryDB: MemoryDB;
-  MemoryLayer: MemoryLayer;
-  MemoryMutationResponse: MemoryMutationResponse;
-  MemorySummaryRatingResponse: MemorySummaryRatingResponse;
-  MentorNotificationSettingsResponse: MentorNotificationSettingsResponse;
-  MentorNotificationSettingsUpdate: MentorNotificationSettingsUpdate;
-  MergeConversationsRequest: MergeConversationsRequest;
-  MergeConversationsResponse: MergeConversationsResponse;
-  Message: Message;
-  MessageConversation: MessageConversation;
-  MessageConversationStructured: MessageConversationStructured;
-  MessageReportResponse: MessageReportResponse;
-  MessageSender: MessageSender;
-  MessageType: MessageType;
-  MigrationRequest: MigrationRequest;
-  MigrationRequestsResponse: MigrationRequestsResponse;
-  MigrationStatusResponse: MigrationStatusResponse;
-  MigrationTargetRequest: MigrationTargetRequest;
-  MoveConversationRequest: MoveConversationRequest;
-  NotificationSettingsResponse: NotificationSettingsResponse;
-  NotificationStatusResponse: NotificationStatusResponse;
-  OAuthUrlResponse: OAuthUrlResponse;
-  OnboardingStateResponse: OnboardingStateResponse;
-  OverageInfoResponse: OverageInfoResponse;
-  PageContext: PageContext;
-  PayPalPaymentDetailsResponse: PayPalPaymentDetailsResponse;
-  PaymentCheckoutSessionResponse: PaymentCheckoutSessionResponse;
-  PaymentMethodStatusResponse: PaymentMethodStatusResponse;
-  PaymentMutationResponse: PaymentMutationResponse;
-  PaymentStatusMessageResponse: PaymentStatusMessageResponse;
-  PaymentSubscriptionResponse: PaymentSubscriptionResponse;
-  PaymentUpgradeSubscriptionResponse: PaymentUpgradeSubscriptionResponse;
-  PaywallStatusResponse: PaywallStatusResponse;
-  PendingSyncResponse: PendingSyncResponse;
-  Person: Person;
-  PhoneCallQuota: PhoneCallQuota;
-  PhoneMutationResponse: PhoneMutationResponse;
-  PhoneNumberResponse: PhoneNumberResponse;
-  PhoneNumbersResponse: PhoneNumbersResponse;
-  PlanLimits: PlanLimits;
-  PlanType: PlanType;
-  PluginResult: PluginResult;
-  PricingOption: PricingOption;
-  PrivateCloudSyncResponse: PrivateCloudSyncResponse;
-  ProactiveNotification: ProactiveNotification;
-  ProcessConversationRequest: ProcessConversationRequest;
-  ProgressExtractRequest: ProgressExtractRequest;
-  ProgressExtractResponse: ProgressExtractResponse;
-  ProgressExtractUpdateResponse: ProgressExtractUpdateResponse;
-  PublicFairUseCaseStatusResponse: PublicFairUseCaseStatusResponse;
-  RebuildResponse: RebuildResponse;
-  RecordLlmUsageBucketRequest: RecordLlmUsageBucketRequest;
-  ReorderFoldersRequest: ReorderFoldersRequest;
-  ResponseMessage: ResponseMessage;
-  ReviewResolutionRequest: ReviewResolutionRequest;
-  ReviewResolutionResponse: ReviewResolutionResponse;
-  SaveFcmTokenRequest: SaveFcmTokenRequest;
-  SearchConversationsResponse: SearchConversationsResponse;
-  SearchRequest: SearchRequest;
-  SearchedMemory: SearchedMemory;
-  SendMessageRequest: SendMessageRequest;
-  SetConversationActionItemsStateRequest: SetConversationActionItemsStateRequest;
-  SetConversationEventsStateRequest: SetConversationEventsStateRequest;
-  ShareActionItemsResponse: ShareActionItemsResponse;
-  ShareChatMessagesResponse: ShareChatMessagesResponse;
-  ShareTasksRequest: ShareTasksRequest;
-  SharedActionItemPreview: SharedActionItemPreview;
-  SharedActionItemsResponse: SharedActionItemsResponse;
-  SharedAssistantSettings: SharedAssistantSettings;
-  SharedChatMessage: SharedChatMessage;
-  SharedChatMessagesResponse: SharedChatMessagesResponse;
-  SharedConversationResponse: SharedConversationResponse;
-  SimpleActionItem: SimpleActionItem;
-  SimpleChatMessage: SimpleChatMessage;
-  SimpleConversation: SimpleConversation;
-  SimplePerson: SimplePerson;
-  SimpleStructured: SimpleStructured;
-  SimpleTranscriptSegment: SimpleTranscriptSegment;
-  SpeechProfileMutationResponse: SpeechProfileMutationResponse;
-  SpeechProfileResponse: SpeechProfileResponse;
-  SpeechProfileUploadResponse: SpeechProfileUploadResponse;
-  StoreMeetingRequest: StoreMeetingRequest;
-  StoreMeetingResponse: StoreMeetingResponse;
-  StoreRecordingPermissionResponse: StoreRecordingPermissionResponse;
-  StripeConnectAccountResponse: StripeConnectAccountResponse;
-  StripeOnboardingStatusResponse: StripeOnboardingStatusResponse;
-  StripeSupportedCountryResponse: StripeSupportedCountryResponse;
-  Structured: Structured;
-  SubjectAttribution: SubjectAttribution;
-  Subscription: Subscription;
-  SubscriptionPlan: SubscriptionPlan;
-  SubscriptionStatus: SubscriptionStatus;
-  SyncBatchItem: SyncBatchItem;
-  SyncBatchRequest: SyncBatchRequest;
-  SyncJobStartResponse: SyncJobStartResponse;
-  SyncJobStatusResponse: SyncJobStatusResponse;
-  SyncLocalFilesResultResponse: SyncLocalFilesResultResponse;
-  Targeting: Targeting;
-  TaskAssistantSettings: TaskAssistantSettings;
-  TaskIntegrationData: TaskIntegrationData;
-  TaskIntegrationMutationResponse: TaskIntegrationMutationResponse;
-  TaskIntegrationsResponse: TaskIntegrationsResponse;
-  TestDailySummaryRequest: TestDailySummaryRequest;
-  TestPromptRequest: TestPromptRequest;
-  TokenResponse: TokenResponse;
-  TrainingDataOptInResponse: TrainingDataOptInResponse;
-  TranscriptSegment: TranscriptSegment;
-  TranscriptionPreferencesResponse: TranscriptionPreferencesResponse;
-  TranscriptionPreferencesUpdate: TranscriptionPreferencesUpdate;
-  Translation: Translation;
-  TrialMetadata: TrialMetadata;
-  TriggerType: TriggerType;
-  TtsSynthesizeRequest: TtsSynthesizeRequest;
-  TtsVoiceSettings: TtsVoiceSettings;
-  UnapprovedPublicAppResponse: UnapprovedPublicAppResponse;
-  UpdateAIUserProfileRequest: UpdateAIUserProfileRequest;
-  UpdateActionItemDescriptionRequest: UpdateActionItemDescriptionRequest;
-  UpdateActionItemRequest: UpdateActionItemRequest;
-  UpdateAnnouncementRequest: UpdateAnnouncementRequest;
-  UpdateAssistantSettingsRequest: UpdateAssistantSettingsRequest;
-  UpdateConversationRequest: UpdateConversationRequest;
-  UpdateFolderRequest: UpdateFolderRequest;
-  UpdateGoalRequest: UpdateGoalRequest;
-  UpdateMemoryRequest: UpdateMemoryRequest;
-  UpdateNotificationSettingsRequest: UpdateNotificationSettingsRequest;
-  UpdateSegmentTextRequest: UpdateSegmentTextRequest;
-  UpdateSummaryRequest: UpdateSummaryRequest;
-  UpgradeSubscriptionRequest: UpgradeSubscriptionRequest;
-  UsageHistoryPoint: UsageHistoryPoint;
-  UsagePeriod: UsagePeriod;
-  UsageStats: UsageStats;
-  UserDataExportResponse: UserDataExportResponse;
-  UserLanguageResponse: UserLanguageResponse;
-  UserLanguageUpdateResponse: UserLanguageUpdateResponse;
-  UserProfile: UserProfile;
-  UserProfileResponse: UserProfileResponse;
-  UserStatusResponse: UserStatusResponse;
-  UserSubscriptionResponse: UserSubscriptionResponse;
-  UserUsageResponse: UserUsageResponse;
-  UserWebhookUrlResponse: UserWebhookUrlResponse;
-  UserWebhooksStatusResponse: UserWebhooksStatusResponse;
-  ValidationError: ValidationError;
-  VerifyPhoneNumberRequest: VerifyPhoneNumberRequest;
-  VerifyPhoneNumberResponse: VerifyPhoneNumberResponse;
-  VoiceMessageTranscriptionResponse: VoiceMessageTranscriptionResponse;
-  WebhookType: WebhookType;
-  WrappedStatusResponse: WrappedStatusResponse;
-  routers__developer__CreateActionItemRequest: routers__developer__CreateActionItemRequest;
-  routers__developer__UpdateActionItemRequest: routers__developer__UpdateActionItemRequest;
-  routers__goals__GoalType: routers__goals__GoalType;
-  routers__memories__BatchMemoriesRequest: routers__memories__BatchMemoriesRequest;
-  routers__memories__BatchMemoriesResponse: routers__memories__BatchMemoriesResponse;
-  routers__payment__PricingOption: routers__payment__PricingOption;
+  "AIUserProfileResponse": AIUserProfileResponse;
+  "AcceptSharedActionItemsResponse": AcceptSharedActionItemsResponse;
+  "AcceptSharedTasksRequest": AcceptSharedTasksRequest;
+  "Action": Action;
+  "ActionItem": ActionItem;
+  "ActionItemResponse": ActionItemResponse;
+  "ActionItemsResponse": ActionItemsResponse;
+  "ActionItemsSearchResponse": ActionItemsSearchResponse;
+  "ActionType": ActionType;
+  "AdviceAssistantSettings": AdviceAssistantSettings;
+  "AdviceResponse": AdviceResponse;
+  "AgentKeepaliveResponse": AgentKeepaliveResponse;
+  "AgentToolSchema": AgentToolSchema;
+  "AgentToolsResponse": AgentToolsResponse;
+  "AgentVmInfo": AgentVmInfo;
+  "Announcement": Announcement;
+  "AnnouncementDeleteResponse": AnnouncementDeleteResponse;
+  "AnnouncementType": AnnouncementType;
+  "App": App;
+  "AppApiKeyResponse": AppApiKeyResponse;
+  "AppBaseModel": AppBaseModel;
+  "AppCapabilityAction": AppCapabilityAction;
+  "AppCapabilityResponse": AppCapabilityResponse;
+  "AppCatalogGroup": AppCatalogGroup;
+  "AppCatalogMeta": AppCatalogMeta;
+  "AppCatalogResponse": AppCatalogResponse;
+  "AppCreateResponse": AppCreateResponse;
+  "AppDescriptionEmojiGenerationResponse": AppDescriptionEmojiGenerationResponse;
+  "AppDescriptionGenerationResponse": AppDescriptionGenerationResponse;
+  "AppDraftGenerationResponse": AppDraftGenerationResponse;
+  "AppGenerationResponse": AppGenerationResponse;
+  "AppIconGenerationResponse": AppIconGenerationResponse;
+  "AppManifestRefreshResponse": AppManifestRefreshResponse;
+  "AppMigrationResponse": AppMigrationResponse;
+  "AppMutationResponse": AppMutationResponse;
+  "AppPagination": AppPagination;
+  "AppPaginationLinks": AppPaginationLinks;
+  "AppPromptsGenerationResponse": AppPromptsGenerationResponse;
+  "AppResult": AppResult;
+  "AppReview": AppReview;
+  "AppSearchFilters": AppSearchFilters;
+  "AppSearchResponse": AppSearchResponse;
+  "AppSelectOption": AppSelectOption;
+  "AppSubscriptionCancelResponse": AppSubscriptionCancelResponse;
+  "AppSubscriptionDetails": AppSubscriptionDetails;
+  "AppSubscriptionResponse": AppSubscriptionResponse;
+  "AppTesterCheckResponse": AppTesterCheckResponse;
+  "AppThumbnailUploadResponse": AppThumbnailUploadResponse;
+  "AppleHealthSyncData": AppleHealthSyncData;
+  "AppleHealthSyncResponse": AppleHealthSyncResponse;
+  "AsanaProjectsResponse": AsanaProjectsResponse;
+  "AsanaWorkspacesResponse": AsanaWorkspacesResponse;
+  "AssistantSettingsResponse": AssistantSettingsResponse;
+  "AudioDownloadPendingResponse": AudioDownloadPendingResponse;
+  "AudioFile": AudioFile;
+  "AudioFileUrlInfo": AudioFileUrlInfo;
+  "AudioPrecacheResponse": AudioPrecacheResponse;
+  "AudioUrlsResponse": AudioUrlsResponse;
+  "AuthStep": AuthStep;
+  "AvailablePlansResponse": AvailablePlansResponse;
+  "BYOKActivateRequest": BYOKActivateRequest;
+  "BYOKActiveResponse": BYOKActiveResponse;
+  "BatchActionItemsRequest": BatchActionItemsRequest;
+  "BatchActionItemsResponse": BatchActionItemsResponse;
+  "BatchCreateActionItemsResponse": BatchCreateActionItemsResponse;
+  "BatchDeleteActionItemsRequest": BatchDeleteActionItemsRequest;
+  "BatchDeleteActionItemsResponse": BatchDeleteActionItemsResponse;
+  "BatchMemoriesRequest": BatchMemoriesRequest;
+  "BatchMemoriesResponse": BatchMemoriesResponse;
+  "BatchMigrationRequest": BatchMigrationRequest;
+  "BatchMutationResponse": BatchMutationResponse;
+  "BatchUpdateActionItemEntry": BatchUpdateActionItemEntry;
+  "BatchUpdateActionItemsRequest": BatchUpdateActionItemsRequest;
+  "Body_create_app_v1_apps_post": Body_create_app_v1_apps_post;
+  "Body_create_voice_message_stream_v2_voice_messages_post": Body_create_voice_message_stream_v2_voice_messages_post;
+  "Body_import_limitless_data_v1_import_limitless_post": Body_import_limitless_data_v1_import_limitless_post;
+  "Body_sync_local_files_v2_v2_sync_local_files_post": Body_sync_local_files_v2_v2_sync_local_files_post;
+  "Body_update_app_v1_apps__app_id__patch": Body_update_app_v1_apps__app_id__patch;
+  "Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post": Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post;
+  "Body_upload_file_chat_v2_files_post": Body_upload_file_chat_v2_files_post;
+  "Body_upload_profile_v3_upload_audio_post": Body_upload_profile_v3_upload_audio_post;
+  "BulkAssignSegmentsRequest": BulkAssignSegmentsRequest;
+  "BulkMoveConversationsRequest": BulkMoveConversationsRequest;
+  "BulkMoveConversationsResponse": BulkMoveConversationsResponse;
+  "CalendarEventLink": CalendarEventLink;
+  "CalendarMeetingContext": CalendarMeetingContext;
+  "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
+  "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
+  "CancelSubscriptionRequest": CancelSubscriptionRequest;
+  "CategoryEnum": CategoryEnum;
+  "ChartData": ChartData;
+  "ChartDataPoint": ChartDataPoint;
+  "ChartDataset": ChartDataset;
+  "ChatMessageCountResponse": ChatMessageCountResponse;
+  "ChatQuotaUnit": ChatQuotaUnit;
+  "ChatRatingResponse": ChatRatingResponse;
+  "ChatTool": ChatTool;
+  "ChatUsageQuota": ChatUsageQuota;
+  "CheckVerificationRequest": CheckVerificationRequest;
+  "CheckVerificationResponse": CheckVerificationResponse;
+  "CleanerMemory": CleanerMemory;
+  "ClickUpListsResponse": ClickUpListsResponse;
+  "ClickUpSpacesResponse": ClickUpSpacesResponse;
+  "ClickUpTeamsResponse": ClickUpTeamsResponse;
+  "Conversation": Conversation;
+  "ConversationActionItemsResponse": ConversationActionItemsResponse;
+  "ConversationCreateResponse": ConversationCreateResponse;
+  "ConversationPhoto": ConversationPhoto;
+  "ConversationRecordingResponse": ConversationRecordingResponse;
+  "ConversationSource": ConversationSource;
+  "ConversationStatus": ConversationStatus;
+  "ConversationStatusResponse": ConversationStatusResponse;
+  "ConversationSuggestedAppsResponse": ConversationSuggestedAppsResponse;
+  "ConversationTestPromptResponse": ConversationTestPromptResponse;
+  "ConversationVisibility": ConversationVisibility;
+  "ConversationsCountResponse": ConversationsCountResponse;
+  "CreateActionItemRequest": CreateActionItemRequest;
+  "CreateAnnouncementRequest": CreateAnnouncementRequest;
+  "CreateCheckoutRequest": CreateCheckoutRequest;
+  "CreateConversationFromTranscriptRequest": CreateConversationFromTranscriptRequest;
+  "CreateConversationRequest": CreateConversationRequest;
+  "CreateConversationResponse": CreateConversationResponse;
+  "CreateConversationTranscriptSegment": CreateConversationTranscriptSegment;
+  "CreateFolderRequest": CreateFolderRequest;
+  "CreateGoalRequest": CreateGoalRequest;
+  "CreateMemoryRequest": CreateMemoryRequest;
+  "CreatePerson": CreatePerson;
+  "CreateTaskRequest": CreateTaskRequest;
+  "CreateTaskResponse": CreateTaskResponse;
+  "CustomerPortalSessionResponse": CustomerPortalSessionResponse;
+  "DailySummariesResponse": DailySummariesResponse;
+  "DailySummaryActionItem": DailySummaryActionItem;
+  "DailySummaryDayStats": DailySummaryDayStats;
+  "DailySummaryDecisionMade": DailySummaryDecisionMade;
+  "DailySummaryKnowledgeNugget": DailySummaryKnowledgeNugget;
+  "DailySummaryLocationPin": DailySummaryLocationPin;
+  "DailySummaryResponse": DailySummaryResponse;
+  "DailySummarySettingsResponse": DailySummarySettingsResponse;
+  "DailySummarySettingsUpdate": DailySummarySettingsUpdate;
+  "DailySummaryTestResponse": DailySummaryTestResponse;
+  "DailySummaryTopicHighlight": DailySummaryTopicHighlight;
+  "DailySummaryUnresolvedQuestion": DailySummaryUnresolvedQuestion;
+  "DefaultTaskIntegrationRequest": DefaultTaskIntegrationRequest;
+  "DefaultTaskIntegrationResponse": DefaultTaskIntegrationResponse;
+  "DeleteAccountRequest": DeleteAccountRequest;
+  "DeleteActionItemRequest": DeleteActionItemRequest;
+  "DeleteKnowledgeGraphResponse": DeleteKnowledgeGraphResponse;
+  "DeleteLimitlessConversationsResponse": DeleteLimitlessConversationsResponse;
+  "DevApiKey": DevApiKey;
+  "DevApiKeyCreate": DevApiKeyCreate;
+  "DevApiKeyCreated": DevApiKeyCreated;
+  "DeveloperActionItem": DeveloperActionItem;
+  "DeveloperConversation": DeveloperConversation;
+  "DeveloperConversationActionItem": DeveloperConversationActionItem;
+  "DeveloperConversationEvent": DeveloperConversationEvent;
+  "DeveloperConversationStructured": DeveloperConversationStructured;
+  "DeveloperFolder": DeveloperFolder;
+  "DeveloperGoal": DeveloperGoal;
+  "DeveloperMemory": DeveloperMemory;
+  "DeveloperMemoryVectorItem": DeveloperMemoryVectorItem;
+  "DeveloperMemoryVectorPolicy": DeveloperMemoryVectorPolicy;
+  "DeveloperMemoryVectorSearchResponse": DeveloperMemoryVectorSearchResponse;
+  "DeveloperSuccessResponse": DeveloperSuccessResponse;
+  "DeveloperTranscriptSegment": DeveloperTranscriptSegment;
+  "DismissAnnouncementRequest": DismissAnnouncementRequest;
+  "DismissAnnouncementResponse": DismissAnnouncementResponse;
+  "Display": Display;
+  "ErrorResponse": ErrorResponse;
+  "Event": Event;
+  "Evidence": Evidence;
+  "ExecuteToolRequest": ExecuteToolRequest;
+  "ExecuteToolResponse": ExecuteToolResponse;
+  "ExternalIntegration": ExternalIntegration;
+  "ExternalIntegrationConversationSource": ExternalIntegrationConversationSource;
+  "FairUseLimitsResponse": FairUseLimitsResponse;
+  "FairUseStatusResponse": FairUseStatusResponse;
+  "FairUseUsagePctResponse": FairUseUsagePctResponse;
+  "FcmTokenResponse": FcmTokenResponse;
+  "FileChat": FileChat;
+  "FirmwareVersionResponse": FirmwareVersionResponse;
+  "FloatingBarSettings": FloatingBarSettings;
+  "FocusAssistantSettings": FocusAssistantSettings;
+  "Folder": Folder;
+  "FolderMutationResponse": FolderMutationResponse;
+  "FullConversation": FullConversation;
+  "GenerateWrappedResponse": GenerateWrappedResponse;
+  "Geolocation": Geolocation;
+  "GoalCreate": GoalCreate;
+  "GoalDeleteResponse": GoalDeleteResponse;
+  "GoalHistoryEntryResponse": GoalHistoryEntryResponse;
+  "GoalResponse": GoalResponse;
+  "GoalSuggestionResponse": GoalSuggestionResponse;
+  "GoalType": GoalType;
+  "GoalUpdate": GoalUpdate;
+  "GoogleCalendarEvent": GoogleCalendarEvent;
+  "HTTPValidationError": HTTPValidationError;
+  "HasSpeechProfileResponse": HasSpeechProfileResponse;
+  "ImportJobResponse": ImportJobResponse;
+  "ImportJobStatus": ImportJobStatus;
+  "IntegrationData": IntegrationData;
+  "IntegrationMutationResponse": IntegrationMutationResponse;
+  "IntegrationResponse": IntegrationResponse;
+  "KnowledgeGraphResponse": KnowledgeGraphResponse;
+  "LinkCalendarEventRequest": LinkCalendarEventRequest;
+  "LlmTotalCostResponse": LlmTotalCostResponse;
+  "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
+  "LlmUsageRecordResponse": LlmUsageRecordResponse;
+  "LlmUsageResponse": LlmUsageResponse;
+  "McpAddServerResponse": McpAddServerResponse;
+  "McpApiKey": McpApiKey;
+  "McpApiKeyCreate": McpApiKeyCreate;
+  "McpApiKeyCreated": McpApiKeyCreated;
+  "McpCreateActionItem": McpCreateActionItem;
+  "McpOauthGrantsResponse": McpOauthGrantsResponse;
+  "McpRefreshToolsResponse": McpRefreshToolsResponse;
+  "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
+  "McpScreenActivityRow": McpScreenActivityRow;
+  "McpScreenActivitySummaryResponse": McpScreenActivitySummaryResponse;
+  "McpServerRequest": McpServerRequest;
+  "McpSseAuthMethodResponse": McpSseAuthMethodResponse;
+  "McpSseAuthenticationResponse": McpSseAuthenticationResponse;
+  "McpSseInfoResponse": McpSseInfoResponse;
+  "McpSseInstructionsResponse": McpSseInstructionsResponse;
+  "McpStatusResponse": McpStatusResponse;
+  "McpUpdateActionItem": McpUpdateActionItem;
+  "MeetingParticipant": MeetingParticipant;
+  "Memory": Memory;
+  "MemoryAssistantSettings": MemoryAssistantSettings;
+  "MemoryCategory": MemoryCategory;
+  "MemoryDB": MemoryDB;
+  "MemoryLayer": MemoryLayer;
+  "MemoryMutationResponse": MemoryMutationResponse;
+  "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
+  "MentorNotificationSettingsResponse": MentorNotificationSettingsResponse;
+  "MentorNotificationSettingsUpdate": MentorNotificationSettingsUpdate;
+  "MergeConversationsRequest": MergeConversationsRequest;
+  "MergeConversationsResponse": MergeConversationsResponse;
+  "Message": Message;
+  "MessageConversation": MessageConversation;
+  "MessageConversationStructured": MessageConversationStructured;
+  "MessageReportResponse": MessageReportResponse;
+  "MessageSender": MessageSender;
+  "MessageType": MessageType;
+  "MigrationRequest": MigrationRequest;
+  "MigrationRequestsResponse": MigrationRequestsResponse;
+  "MigrationStatusResponse": MigrationStatusResponse;
+  "MigrationTargetRequest": MigrationTargetRequest;
+  "MoveConversationRequest": MoveConversationRequest;
+  "NotificationSettingsResponse": NotificationSettingsResponse;
+  "NotificationStatusResponse": NotificationStatusResponse;
+  "OAuthUrlResponse": OAuthUrlResponse;
+  "OnboardingStateResponse": OnboardingStateResponse;
+  "OverageInfoResponse": OverageInfoResponse;
+  "PageContext": PageContext;
+  "PayPalPaymentDetailsResponse": PayPalPaymentDetailsResponse;
+  "PaymentCheckoutSessionResponse": PaymentCheckoutSessionResponse;
+  "PaymentMethodStatusResponse": PaymentMethodStatusResponse;
+  "PaymentMutationResponse": PaymentMutationResponse;
+  "PaymentStatusMessageResponse": PaymentStatusMessageResponse;
+  "PaymentSubscriptionResponse": PaymentSubscriptionResponse;
+  "PaymentUpgradeSubscriptionResponse": PaymentUpgradeSubscriptionResponse;
+  "PaywallStatusResponse": PaywallStatusResponse;
+  "PendingSyncResponse": PendingSyncResponse;
+  "Person": Person;
+  "PhoneCallQuota": PhoneCallQuota;
+  "PhoneMutationResponse": PhoneMutationResponse;
+  "PhoneNumberResponse": PhoneNumberResponse;
+  "PhoneNumbersResponse": PhoneNumbersResponse;
+  "PlanLimits": PlanLimits;
+  "PlanType": PlanType;
+  "PluginResult": PluginResult;
+  "PricingOption": PricingOption;
+  "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
+  "ProactiveNotification": ProactiveNotification;
+  "ProcessConversationRequest": ProcessConversationRequest;
+  "ProgressExtractRequest": ProgressExtractRequest;
+  "ProgressExtractResponse": ProgressExtractResponse;
+  "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
+  "PublicFairUseCaseStatusResponse": PublicFairUseCaseStatusResponse;
+  "RebuildResponse": RebuildResponse;
+  "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
+  "ReorderFoldersRequest": ReorderFoldersRequest;
+  "ResponseMessage": ResponseMessage;
+  "ReviewResolutionRequest": ReviewResolutionRequest;
+  "ReviewResolutionResponse": ReviewResolutionResponse;
+  "SaveFcmTokenRequest": SaveFcmTokenRequest;
+  "SearchConversationsResponse": SearchConversationsResponse;
+  "SearchRequest": SearchRequest;
+  "SearchedMemory": SearchedMemory;
+  "SendMessageRequest": SendMessageRequest;
+  "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
+  "SetConversationEventsStateRequest": SetConversationEventsStateRequest;
+  "ShareActionItemsResponse": ShareActionItemsResponse;
+  "ShareChatMessagesResponse": ShareChatMessagesResponse;
+  "ShareTasksRequest": ShareTasksRequest;
+  "SharedActionItemPreview": SharedActionItemPreview;
+  "SharedActionItemsResponse": SharedActionItemsResponse;
+  "SharedAssistantSettings": SharedAssistantSettings;
+  "SharedChatMessage": SharedChatMessage;
+  "SharedChatMessagesResponse": SharedChatMessagesResponse;
+  "SharedConversationResponse": SharedConversationResponse;
+  "SimpleActionItem": SimpleActionItem;
+  "SimpleChatMessage": SimpleChatMessage;
+  "SimpleConversation": SimpleConversation;
+  "SimplePerson": SimplePerson;
+  "SimpleStructured": SimpleStructured;
+  "SimpleTranscriptSegment": SimpleTranscriptSegment;
+  "SpeechProfileMutationResponse": SpeechProfileMutationResponse;
+  "SpeechProfileResponse": SpeechProfileResponse;
+  "SpeechProfileUploadResponse": SpeechProfileUploadResponse;
+  "StoreMeetingRequest": StoreMeetingRequest;
+  "StoreMeetingResponse": StoreMeetingResponse;
+  "StoreRecordingPermissionResponse": StoreRecordingPermissionResponse;
+  "StripeConnectAccountResponse": StripeConnectAccountResponse;
+  "StripeOnboardingStatusResponse": StripeOnboardingStatusResponse;
+  "StripeSupportedCountryResponse": StripeSupportedCountryResponse;
+  "Structured": Structured;
+  "SubjectAttribution": SubjectAttribution;
+  "Subscription": Subscription;
+  "SubscriptionPlan": SubscriptionPlan;
+  "SubscriptionStatus": SubscriptionStatus;
+  "SyncBatchItem": SyncBatchItem;
+  "SyncBatchRequest": SyncBatchRequest;
+  "SyncJobStartResponse": SyncJobStartResponse;
+  "SyncJobStatusResponse": SyncJobStatusResponse;
+  "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
+  "Targeting": Targeting;
+  "TaskAssistantSettings": TaskAssistantSettings;
+  "TaskIntegrationData": TaskIntegrationData;
+  "TaskIntegrationMutationResponse": TaskIntegrationMutationResponse;
+  "TaskIntegrationsResponse": TaskIntegrationsResponse;
+  "TestDailySummaryRequest": TestDailySummaryRequest;
+  "TestPromptRequest": TestPromptRequest;
+  "TokenResponse": TokenResponse;
+  "TrainingDataOptInResponse": TrainingDataOptInResponse;
+  "TranscriptSegment": TranscriptSegment;
+  "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
+  "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
+  "Translation": Translation;
+  "TrialMetadata": TrialMetadata;
+  "TriggerType": TriggerType;
+  "TtsSynthesizeRequest": TtsSynthesizeRequest;
+  "TtsVoiceSettings": TtsVoiceSettings;
+  "UnapprovedPublicAppResponse": UnapprovedPublicAppResponse;
+  "UpdateAIUserProfileRequest": UpdateAIUserProfileRequest;
+  "UpdateActionItemDescriptionRequest": UpdateActionItemDescriptionRequest;
+  "UpdateActionItemRequest": UpdateActionItemRequest;
+  "UpdateAnnouncementRequest": UpdateAnnouncementRequest;
+  "UpdateAssistantSettingsRequest": UpdateAssistantSettingsRequest;
+  "UpdateConversationRequest": UpdateConversationRequest;
+  "UpdateFolderRequest": UpdateFolderRequest;
+  "UpdateGoalRequest": UpdateGoalRequest;
+  "UpdateMemoryRequest": UpdateMemoryRequest;
+  "UpdateNotificationSettingsRequest": UpdateNotificationSettingsRequest;
+  "UpdateSegmentTextRequest": UpdateSegmentTextRequest;
+  "UpdateSummaryRequest": UpdateSummaryRequest;
+  "UpgradeSubscriptionRequest": UpgradeSubscriptionRequest;
+  "UsageHistoryPoint": UsageHistoryPoint;
+  "UsagePeriod": UsagePeriod;
+  "UsageStats": UsageStats;
+  "UserDataExportResponse": UserDataExportResponse;
+  "UserLanguageResponse": UserLanguageResponse;
+  "UserLanguageUpdateResponse": UserLanguageUpdateResponse;
+  "UserProfile": UserProfile;
+  "UserProfileResponse": UserProfileResponse;
+  "UserStatusResponse": UserStatusResponse;
+  "UserSubscriptionResponse": UserSubscriptionResponse;
+  "UserUsageResponse": UserUsageResponse;
+  "UserWebhookUrlResponse": UserWebhookUrlResponse;
+  "UserWebhooksStatusResponse": UserWebhooksStatusResponse;
+  "ValidationError": ValidationError;
+  "VerifyPhoneNumberRequest": VerifyPhoneNumberRequest;
+  "VerifyPhoneNumberResponse": VerifyPhoneNumberResponse;
+  "VoiceMessageTranscriptionResponse": VoiceMessageTranscriptionResponse;
+  "WebhookType": WebhookType;
+  "WrappedStatusResponse": WrappedStatusResponse;
+  "routers__developer__CreateActionItemRequest": routers__developer__CreateActionItemRequest;
+  "routers__developer__UpdateActionItemRequest": routers__developer__UpdateActionItemRequest;
+  "routers__goals__GoalType": routers__goals__GoalType;
+  "routers__memories__BatchMemoriesRequest": routers__memories__BatchMemoriesRequest;
+  "routers__memories__BatchMemoriesResponse": routers__memories__BatchMemoriesResponse;
+  "routers__payment__PricingOption": routers__payment__PricingOption;
 }
 
 export interface OmiApiPaths {
-  '/v1/action-items': {
+  "/v1/action-items": {
     get: {
-      operationId: 'get_action_items_v1_action_items_get';
+      operationId: "get_action_items_v1_action_items_get";
       responses: {
-        '200': ActionItemsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": ActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     post: {
-      operationId: 'create_action_item_v1_action_items_post';
+      operationId: "create_action_item_v1_action_items_post";
       responses: {
-        '200': ActionItemResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/action-items/accept': {
-    post: {
-      operationId: 'accept_shared_action_items_v1_action_items_accept_post';
-      responses: {
-        '200': AcceptSharedActionItemsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": ActionItemResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/batch': {
+  "/v1/action-items/accept": {
     post: {
-      operationId: 'create_action_items_batch_v1_action_items_batch_post';
+      operationId: "accept_shared_action_items_v1_action_items_accept_post";
       responses: {
-        '200': BatchCreateActionItemsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AcceptSharedActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/action-items/batch": {
+    post: {
+      operationId: "create_action_items_batch_v1_action_items_batch_post";
+      responses: {
+        "200": BatchCreateActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     patch: {
-      operationId: 'batch_update_action_items_v1_action_items_batch_patch';
+      operationId: "batch_update_action_items_v1_action_items_batch_patch";
       responses: {
-        '200': BatchMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": BatchMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/batch-delete': {
+  "/v1/action-items/batch-delete": {
     post: {
-      operationId: 'batch_delete_action_items_v1_action_items_batch_delete_post';
+      operationId: "batch_delete_action_items_v1_action_items_batch_delete_post";
       responses: {
-        '200': BatchDeleteActionItemsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": BatchDeleteActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/pending-sync': {
+  "/v1/action-items/pending-sync": {
     get: {
-      operationId: 'get_pending_sync_items_v1_action_items_pending_sync_get';
+      operationId: "get_pending_sync_items_v1_action_items_pending_sync_get";
       responses: {
-        '200': PendingSyncResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": PendingSyncResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/search': {
+  "/v1/action-items/search": {
     get: {
-      operationId: 'search_action_items_v1_action_items_search_get';
+      operationId: "search_action_items_v1_action_items_search_get";
       responses: {
-        '200': ActionItemsSearchResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": ActionItemsSearchResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/share': {
+  "/v1/action-items/share": {
     post: {
-      operationId: 'share_action_items_v1_action_items_share_post';
+      operationId: "share_action_items_v1_action_items_share_post";
       responses: {
-        '200': ShareActionItemsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": ShareActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/shared/{token}': {
+  "/v1/action-items/shared/{token}": {
     get: {
-      operationId: 'get_shared_action_items_v1_action_items_shared__token__get';
+      operationId: "get_shared_action_items_v1_action_items_shared__token__get";
       responses: {
-        '200': SharedActionItemsResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": SharedActionItemsResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/sync-batch': {
+  "/v1/action-items/sync-batch": {
     patch: {
-      operationId: 'sync_batch_update_v1_action_items_sync_batch_patch';
+      operationId: "sync_batch_update_v1_action_items_sync_batch_patch";
       responses: {
-        '200': BatchMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": BatchMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/{action_item_id}': {
+  "/v1/action-items/{action_item_id}": {
     get: {
-      operationId: 'get_action_item_v1_action_items__action_item_id__get';
+      operationId: "get_action_item_v1_action_items__action_item_id__get";
       responses: {
-        '200': ActionItemResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": ActionItemResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     patch: {
-      operationId: 'update_action_item_v1_action_items__action_item_id__patch';
+      operationId: "update_action_item_v1_action_items__action_item_id__patch";
       responses: {
-        '200': ActionItemResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": ActionItemResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_action_item_v1_action_items__action_item_id__delete';
+      operationId: "delete_action_item_v1_action_items__action_item_id__delete";
       responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/action-items/{action_item_id}/completed': {
+  "/v1/action-items/{action_item_id}/completed": {
     patch: {
-      operationId: 'toggle_action_item_completion_v1_action_items__action_item_id__completed_patch';
+      operationId: "toggle_action_item_completion_v1_action_items__action_item_id__completed_patch";
       responses: {
-        '200': ActionItemResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": ActionItemResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/agent/execute-tool': {
+  "/v1/agent/execute-tool": {
     post: {
-      operationId: 'execute_tool_v1_agent_execute_tool_post';
+      operationId: "execute_tool_v1_agent_execute_tool_post";
       responses: {
-        '200': ExecuteToolResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": ExecuteToolResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/agent/keepalive': {
+  "/v1/agent/keepalive": {
     post: {
-      operationId: 'keepalive_v1_agent_keepalive_post';
+      operationId: "keepalive_v1_agent_keepalive_post";
       responses: {
-        '200': AgentKeepaliveResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AgentKeepaliveResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/agent/tools': {
+  "/v1/agent/tools": {
     get: {
-      operationId: 'list_tools_v1_agent_tools_get';
+      operationId: "list_tools_v1_agent_tools_get";
       responses: {
-        '200': AgentToolsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AgentToolsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/agent/vm-ensure': {
+  "/v1/agent/vm-ensure": {
     post: {
-      operationId: 'ensure_vm_v1_agent_vm_ensure_post';
+      operationId: "ensure_vm_v1_agent_vm_ensure_post";
       responses: {
-        '200': AgentVmInfo;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AgentVmInfo;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/agent/vm-status': {
+  "/v1/agent/vm-status": {
     get: {
-      operationId: 'get_vm_status_v1_agent_vm_status_get';
+      operationId: "get_vm_status_v1_agent_vm_status_get";
       responses: {
-        '200': AgentVmInfo;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AgentVmInfo;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements': {
+  "/v1/announcements": {
     post: {
-      operationId: 'create_announcement_endpoint_v1_announcements_post';
+      operationId: "create_announcement_endpoint_v1_announcements_post";
       responses: {
-        '200': Announcement;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Announcement;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements/all': {
+  "/v1/announcements/all": {
     get: {
-      operationId: 'list_all_announcements_v1_announcements_all_get';
+      operationId: "list_all_announcements_v1_announcements_all_get";
       responses: {
-        '200': Array<Announcement>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<Announcement>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements/changelogs': {
+  "/v1/announcements/changelogs": {
     get: {
-      operationId: 'get_changelogs_v1_announcements_changelogs_get';
+      operationId: "get_changelogs_v1_announcements_changelogs_get";
       responses: {
-        '200': Array<Announcement>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<Announcement>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements/features': {
+  "/v1/announcements/features": {
     get: {
-      operationId: 'get_features_v1_announcements_features_get';
+      operationId: "get_features_v1_announcements_features_get";
       responses: {
-        '200': Array<Announcement>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<Announcement>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements/general': {
+  "/v1/announcements/general": {
     get: {
-      operationId: 'get_announcements_v1_announcements_general_get';
+      operationId: "get_announcements_v1_announcements_general_get";
       responses: {
-        '200': Array<Announcement>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<Announcement>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements/pending': {
+  "/v1/announcements/pending": {
     get: {
-      operationId: 'get_pending_announcements_endpoint_v1_announcements_pending_get';
+      operationId: "get_pending_announcements_endpoint_v1_announcements_pending_get";
       responses: {
-        '200': Array<Announcement>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<Announcement>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements/{announcement_id}': {
+  "/v1/announcements/{announcement_id}": {
     get: {
-      operationId: 'get_announcement_v1_announcements__announcement_id__get';
+      operationId: "get_announcement_v1_announcements__announcement_id__get";
       responses: {
-        '200': Announcement;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Announcement;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     put: {
-      operationId: 'update_announcement_endpoint_v1_announcements__announcement_id__put';
+      operationId: "update_announcement_endpoint_v1_announcements__announcement_id__put";
       responses: {
-        '200': Announcement;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Announcement;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_announcement_endpoint_v1_announcements__announcement_id__delete';
+      operationId: "delete_announcement_endpoint_v1_announcements__announcement_id__delete";
       responses: {
-        '200': AnnouncementDeleteResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AnnouncementDeleteResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/announcements/{announcement_id}/dismiss': {
+  "/v1/announcements/{announcement_id}/dismiss": {
     post: {
-      operationId: 'dismiss_announcement_endpoint_v1_announcements__announcement_id__dismiss_post';
+      operationId: "dismiss_announcement_endpoint_v1_announcements__announcement_id__dismiss_post";
       responses: {
-        '200': DismissAnnouncementResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": DismissAnnouncementResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/app-capabilities': {
+  "/v1/app-capabilities": {
     get: {
-      operationId: 'get_app_capabilities_v1_app_capabilities_get';
+      operationId: "get_app_capabilities_v1_app_capabilities_get";
       responses: {
-        '200': Array<AppCapabilityResponse>;
-        '401': void;
+        "200": Array<AppCapabilityResponse>;
+        "401": void;
       };
     };
   };
-  '/v1/app-categories': {
+  "/v1/app-categories": {
     get: {
-      operationId: 'get_app_categories_v1_app_categories_get';
+      operationId: "get_app_categories_v1_app_categories_get";
       responses: {
-        '200': Array<AppSelectOption>;
-        '401': void;
+        "200": Array<AppSelectOption>;
+        "401": void;
       };
     };
   };
-  '/v1/app/generate': {
+  "/v1/app/generate": {
     post: {
-      operationId: 'generate_app_endpoint_v1_app_generate_post';
+      operationId: "generate_app_endpoint_v1_app_generate_post";
       responses: {
-        '200': AppGenerationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppGenerationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/app/generate-description': {
+  "/v1/app/generate-description": {
     post: {
-      operationId: 'generate_description_endpoint_v1_app_generate_description_post';
+      operationId: "generate_description_endpoint_v1_app_generate_description_post";
       responses: {
-        '200': AppDescriptionGenerationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppDescriptionGenerationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/app/generate-description-emoji': {
+  "/v1/app/generate-description-emoji": {
     post: {
-      operationId: 'generate_description_and_emoji_endpoint_v1_app_generate_description_emoji_post';
+      operationId: "generate_description_and_emoji_endpoint_v1_app_generate_description_emoji_post";
       responses: {
-        '200': AppDescriptionEmojiGenerationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppDescriptionEmojiGenerationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/app/generate-icon': {
+  "/v1/app/generate-icon": {
     post: {
-      operationId: 'generate_app_icon_endpoint_v1_app_generate_icon_post';
+      operationId: "generate_app_icon_endpoint_v1_app_generate_icon_post";
       responses: {
-        '200': AppIconGenerationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppIconGenerationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/app/generate-prompts': {
+  "/v1/app/generate-prompts": {
     get: {
-      operationId: 'generate_sample_prompts_endpoint_v1_app_generate_prompts_get';
+      operationId: "generate_sample_prompts_endpoint_v1_app_generate_prompts_get";
       responses: {
-        '200': AppPromptsGenerationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppPromptsGenerationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/app/payment-plans': {
+  "/v1/app/payment-plans": {
     get: {
-      operationId: 'get_payment_plans_v1_v1_app_payment_plans_get';
+      operationId: "get_payment_plans_v1_v1_app_payment_plans_get";
       responses: {
-        '200': Array<AppSelectOption>;
-        '401': void;
+        "200": Array<AppSelectOption>;
+        "401": void;
       };
     };
   };
-  '/v1/app/plans': {
+  "/v1/app/plans": {
     get: {
-      operationId: 'get_payment_plans_v1_app_plans_get';
+      operationId: "get_payment_plans_v1_app_plans_get";
       responses: {
-        '200': Array<AppSelectOption>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<AppSelectOption>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/app/proactive-notification-scopes': {
+  "/v1/app/proactive-notification-scopes": {
     get: {
-      operationId: 'get_notification_scopes_v1_app_proactive_notification_scopes_get';
+      operationId: "get_notification_scopes_v1_app_proactive_notification_scopes_get";
       responses: {
-        '200': Array<AppSelectOption>;
-        '401': void;
+        "200": Array<AppSelectOption>;
+        "401": void;
       };
     };
   };
-  '/v1/app/thumbnails': {
+  "/v1/app/thumbnails": {
     post: {
-      operationId: 'upload_app_thumbnail_endpoint_v1_app_thumbnails_post';
+      operationId: "upload_app_thumbnail_endpoint_v1_app_thumbnails_post";
       responses: {
-        '200': AppThumbnailUploadResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppThumbnailUploadResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps': {
+  "/v1/apps": {
     get: {
-      operationId: 'get_apps_v1_apps_get';
+      operationId: "get_apps_v1_apps_get";
       responses: {
-        '200': Array<AppBaseModel>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<AppBaseModel>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     post: {
-      operationId: 'create_app_v1_apps_post';
+      operationId: "create_app_v1_apps_post";
       responses: {
-        '200': AppCreateResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppCreateResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/disable': {
+  "/v1/apps/disable": {
     post: {
-      operationId: 'disable_app_endpoint_v1_apps_disable_post';
+      operationId: "disable_app_endpoint_v1_apps_disable_post";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/enable': {
+  "/v1/apps/enable": {
     post: {
-      operationId: 'enable_app_endpoint_v1_apps_enable_post';
+      operationId: "enable_app_endpoint_v1_apps_enable_post";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/enabled': {
+  "/v1/apps/enabled": {
     get: {
-      operationId: 'get_user_enabled_apps_v1_apps_enabled_get';
+      operationId: "get_user_enabled_apps_v1_apps_enabled_get";
       responses: {
-        '200': Array<string>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<string>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/mcp': {
+  "/v1/apps/mcp": {
     post: {
-      operationId: 'add_mcp_server_v1_apps_mcp_post';
+      operationId: "add_mcp_server_v1_apps_mcp_post";
       responses: {
-        '200': McpAddServerResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": McpAddServerResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/mcp/callback': {
+  "/v1/apps/mcp/callback": {
     get: {
-      operationId: 'mcp_oauth_callback_v1_apps_mcp_callback_get';
+      operationId: "mcp_oauth_callback_v1_apps_mcp_callback_get";
       responses: {
-        '200': unknown;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/migrate-owner': {
+  "/v1/apps/migrate-owner": {
     post: {
-      operationId: 'migrate_app_owner_v1_apps_migrate_owner_post';
+      operationId: "migrate_app_owner_v1_apps_migrate_owner_post";
       responses: {
-        '200': AppMigrationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMigrationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/popular': {
+  "/v1/apps/popular": {
     get: {
-      operationId: 'get_popular_apps_endpoint_v1_apps_popular_get';
+      operationId: "get_popular_apps_endpoint_v1_apps_popular_get";
       responses: {
-        '200': Array<AppBaseModel>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<AppBaseModel>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/public/unapproved': {
+  "/v1/apps/public/unapproved": {
     get: {
-      operationId: 'get_unapproved_public_apps_v1_apps_public_unapproved_get';
+      operationId: "get_unapproved_public_apps_v1_apps_public_unapproved_get";
       responses: {
-        '200': Array<UnapprovedPublicAppResponse>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<UnapprovedPublicAppResponse>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/review': {
+  "/v1/apps/review": {
     post: {
-      operationId: 'review_app_v1_apps_review_post';
+      operationId: "review_app_v1_apps_review_post";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/tester': {
+  "/v1/apps/tester": {
     post: {
-      operationId: 'add_new_tester_v1_apps_tester_post';
+      operationId: "add_new_tester_v1_apps_tester_post";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/tester/access': {
+  "/v1/apps/tester/access": {
     post: {
-      operationId: 'add_app_access_tester_v1_apps_tester_access_post';
+      operationId: "add_app_access_tester_v1_apps_tester_access_post";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'remove_app_access_tester_v1_apps_tester_access_delete';
+      operationId: "remove_app_access_tester_v1_apps_tester_access_delete";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/tester/check': {
+  "/v1/apps/tester/check": {
     get: {
-      operationId: 'check_is_tester_v1_apps_tester_check_get';
+      operationId: "check_is_tester_v1_apps_tester_check_get";
       responses: {
-        '200': AppTesterCheckResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppTesterCheckResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}': {
+  "/v1/apps/{app_id}": {
     get: {
-      operationId: 'get_app_details_v1_apps__app_id__get';
+      operationId: "get_app_details_v1_apps__app_id__get";
       responses: {
-        '200': App;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": App;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     patch: {
-      operationId: 'update_app_v1_apps__app_id__patch';
+      operationId: "update_app_v1_apps__app_id__patch";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_app_v1_apps__app_id__delete';
+      operationId: "delete_app_v1_apps__app_id__delete";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/approve': {
+  "/v1/apps/{app_id}/approve": {
     post: {
-      operationId: 'approve_app_v1_apps__app_id__approve_post';
+      operationId: "approve_app_v1_apps__app_id__approve_post";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/change-visibility': {
+  "/v1/apps/{app_id}/change-visibility": {
     patch: {
-      operationId: 'change_app_visibility_v1_apps__app_id__change_visibility_patch';
+      operationId: "change_app_visibility_v1_apps__app_id__change_visibility_patch";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/keys': {
+  "/v1/apps/{app_id}/keys": {
     get: {
-      operationId: 'list_api_keys_v1_apps__app_id__keys_get';
+      operationId: "list_api_keys_v1_apps__app_id__keys_get";
       responses: {
-        '200': Array<AppApiKeyResponse>;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Array<AppApiKeyResponse>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     post: {
-      operationId: 'create_api_key_for_app_v1_apps__app_id__keys_post';
+      operationId: "create_api_key_for_app_v1_apps__app_id__keys_post";
       responses: {
-        '200': AppApiKeyResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppApiKeyResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/keys/{key_id}': {
+  "/v1/apps/{app_id}/keys/{key_id}": {
     delete: {
-      operationId: 'delete_api_key_v1_apps__app_id__keys__key_id__delete';
+      operationId: "delete_api_key_v1_apps__app_id__keys__key_id__delete";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/mcp/refresh': {
+  "/v1/apps/{app_id}/mcp/refresh": {
     post: {
-      operationId: 'refresh_mcp_tools_v1_apps__app_id__mcp_refresh_post';
+      operationId: "refresh_mcp_tools_v1_apps__app_id__mcp_refresh_post";
       responses: {
-        '200': McpRefreshToolsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": McpRefreshToolsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/popular': {
+  "/v1/apps/{app_id}/popular": {
     patch: {
-      operationId: 'set_app_popular_v1_apps__app_id__popular_patch';
+      operationId: "set_app_popular_v1_apps__app_id__popular_patch";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/refresh-manifest': {
+  "/v1/apps/{app_id}/refresh-manifest": {
     post: {
-      operationId: 'refresh_app_manifest_v1_apps__app_id__refresh_manifest_post';
+      operationId: "refresh_app_manifest_v1_apps__app_id__refresh_manifest_post";
       responses: {
-        '200': AppManifestRefreshResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppManifestRefreshResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/reject': {
+  "/v1/apps/{app_id}/reject": {
     post: {
-      operationId: 'reject_app_v1_apps__app_id__reject_post';
+      operationId: "reject_app_v1_apps__app_id__reject_post";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/review': {
+  "/v1/apps/{app_id}/review": {
     patch: {
-      operationId: 'update_app_review_v1_apps__app_id__review_patch';
+      operationId: "update_app_review_v1_apps__app_id__review_patch";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/review/reply': {
+  "/v1/apps/{app_id}/review/reply": {
     patch: {
-      operationId: 'reply_to_review_v1_apps__app_id__review_reply_patch';
+      operationId: "reply_to_review_v1_apps__app_id__review_reply_patch";
       responses: {
-        '200': AppMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/reviews': {
+  "/v1/apps/{app_id}/reviews": {
     get: {
-      operationId: 'app_reviews_v1_apps__app_id__reviews_get';
+      operationId: "app_reviews_v1_apps__app_id__reviews_get";
       responses: {
-        '200': Array<AppReview>;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Array<AppReview>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/apps/{app_id}/subscription': {
+  "/v1/apps/{app_id}/subscription": {
     get: {
-      operationId: 'get_app_subscription_v1_apps__app_id__subscription_get';
+      operationId: "get_app_subscription_v1_apps__app_id__subscription_get";
       responses: {
-        '200': AppSubscriptionResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'cancel_app_subscription_v1_apps__app_id__subscription_delete';
-      responses: {
-        '200': AppSubscriptionCancelResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/calendar/google/events': {
-    get: {
-      operationId: 'list_google_calendar_events_v1_calendar_google_events_get';
-      responses: {
-        '200': Array<GoogleCalendarEvent>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/calendar/meetings': {
-    get: {
-      operationId: 'list_calendar_meetings_v1_calendar_meetings_get';
-      responses: {
-        '200': Array<CalendarMeetingContext>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'store_calendar_meeting_v1_calendar_meetings_post';
-      responses: {
-        '200': StoreMeetingResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/calendar/meetings/{meeting_id}': {
-    get: {
-      operationId: 'get_calendar_meeting_v1_calendar_meetings__meeting_id__get';
-      responses: {
-        '200': CalendarMeetingContext;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/calendar/onboarding/skip': {
-    post: {
-      operationId: 'skip_calendar_onboarding_v1_calendar_onboarding_skip_post';
-      responses: {
-        '200': CalendarOnboardingSkipResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/calendar/onboarding/status': {
-    get: {
-      operationId: 'get_calendar_onboarding_status_v1_calendar_onboarding_status_get';
-      responses: {
-        '200': CalendarOnboardingStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations': {
-    get: {
-      operationId: 'get_conversations_v1_conversations_get';
-      responses: {
-        '200': Array<Conversation>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'process_in_progress_conversation_v1_conversations_post';
-      responses: {
-        '200': CreateConversationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/count': {
-    get: {
-      operationId: 'get_conversations_count_v1_conversations_count_get';
-      responses: {
-        '200': ConversationsCountResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/from-segments': {
-    post: {
-      operationId: 'create_conversation_from_segments_user_v1_conversations_from_segments_post';
-      responses: {
-        '200': ConversationCreateResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/merge': {
-    post: {
-      operationId: 'merge_conversations_v1_conversations_merge_post';
-      responses: {
-        '200': MergeConversationsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/search': {
-    post: {
-      operationId: 'search_conversations_endpoint_v1_conversations_search_post';
-      responses: {
-        '200': SearchConversationsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}': {
-    get: {
-      operationId: 'get_conversation_by_id_v1_conversations__conversation_id__get';
-      responses: {
-        '200': Conversation;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppSubscriptionResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_conversation_v1_conversations__conversation_id__delete';
+      operationId: "cancel_app_subscription_v1_apps__app_id__subscription_delete";
       responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AppSubscriptionCancelResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/conversations/{conversation_id}/action-items': {
+  "/v1/calendar/google/events": {
     get: {
-      operationId: 'get_conversation_action_items_v1_conversations__conversation_id__action_items_get';
+      operationId: "list_google_calendar_events_v1_calendar_google_events_get";
       responses: {
-        '200': ConversationActionItemsResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Array<GoogleCalendarEvent>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
-    patch: {
-      operationId: 'set_action_item_status_v1_conversations__conversation_id__action_items_patch';
+  };
+  "/v1/calendar/meetings": {
+    get: {
+      operationId: "list_calendar_meetings_v1_calendar_meetings_get";
       responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Array<CalendarMeetingContext>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "store_calendar_meeting_v1_calendar_meetings_post";
+      responses: {
+        "200": StoreMeetingResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/calendar/meetings/{meeting_id}": {
+    get: {
+      operationId: "get_calendar_meeting_v1_calendar_meetings__meeting_id__get";
+      responses: {
+        "200": CalendarMeetingContext;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/calendar/onboarding/skip": {
+    post: {
+      operationId: "skip_calendar_onboarding_v1_calendar_onboarding_skip_post";
+      responses: {
+        "200": CalendarOnboardingSkipResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/calendar/onboarding/status": {
+    get: {
+      operationId: "get_calendar_onboarding_status_v1_calendar_onboarding_status_get";
+      responses: {
+        "200": CalendarOnboardingStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations": {
+    get: {
+      operationId: "get_conversations_v1_conversations_get";
+      responses: {
+        "200": Array<Conversation>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "process_in_progress_conversation_v1_conversations_post";
+      responses: {
+        "200": CreateConversationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/count": {
+    get: {
+      operationId: "get_conversations_count_v1_conversations_count_get";
+      responses: {
+        "200": ConversationsCountResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/from-segments": {
+    post: {
+      operationId: "create_conversation_from_segments_user_v1_conversations_from_segments_post";
+      responses: {
+        "200": ConversationCreateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/merge": {
+    post: {
+      operationId: "merge_conversations_v1_conversations_merge_post";
+      responses: {
+        "200": MergeConversationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/search": {
+    post: {
+      operationId: "search_conversations_endpoint_v1_conversations_search_post";
+      responses: {
+        "200": SearchConversationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}": {
+    get: {
+      operationId: "get_conversation_by_id_v1_conversations__conversation_id__get";
+      responses: {
+        "200": Conversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_conversation_action_items_v1_conversations__conversation_id__action_items_delete';
+      operationId: "delete_conversation_v1_conversations__conversation_id__delete";
       responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/conversations/{conversation_id}/action-items/{action_item_idx}': {
+  "/v1/conversations/{conversation_id}/action-items": {
+    get: {
+      operationId: "get_conversation_action_items_v1_conversations__conversation_id__action_items_get";
+      responses: {
+        "200": ConversationActionItemsResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
     patch: {
-      operationId: 'update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch';
+      operationId: "set_action_item_status_v1_conversations__conversation_id__action_items_patch";
       responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}': {
-    patch: {
-      operationId: 'set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch';
-      responses: {
-        '200': Conversation;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/calendar-event': {
-    post: {
-      operationId: 'link_calendar_event_v1_conversations__conversation_id__calendar_event_post';
-      responses: {
-        '200': CalendarEventLink;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'unlink_calendar_event_v1_conversations__conversation_id__calendar_event_delete';
+      operationId: "delete_conversation_action_items_v1_conversations__conversation_id__action_items_delete";
       responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/conversations/{conversation_id}/calendar-event/auto-link': {
+  "/v1/conversations/{conversation_id}/action-items/{action_item_idx}": {
+    patch: {
+      operationId: "update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch";
+      responses: {
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}": {
+    patch: {
+      operationId: "set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch";
+      responses: {
+        "200": Conversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/calendar-event": {
     post: {
-      operationId: 'auto_link_calendar_event_v1_conversations__conversation_id__calendar_event_auto_link_post';
+      operationId: "link_calendar_event_v1_conversations__conversation_id__calendar_event_post";
       responses: {
-        '200': CalendarEventLink;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/events': {
-    patch: {
-      operationId: 'set_conversation_events_state_v1_conversations__conversation_id__events_patch';
-      responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/finalize': {
-    post: {
-      operationId: 'finalize_conversation_v1_conversations__conversation_id__finalize_post';
-      responses: {
-        '200': CreateConversationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/folder': {
-    patch: {
-      operationId: 'move_conversation_to_folder_v1_conversations__conversation_id__folder_patch';
-      responses: {
-        '200': FolderMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/photos': {
-    get: {
-      operationId: 'get_conversation_photos_v1_conversations__conversation_id__photos_get';
-      responses: {
-        '200': Array<ConversationPhoto>;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/recording': {
-    get: {
-      operationId: 'conversation_has_audio_recording_v1_conversations__conversation_id__recording_get';
-      responses: {
-        '200': ConversationRecordingResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/reprocess': {
-    post: {
-      operationId: 'reprocess_conversation_v1_conversations__conversation_id__reprocess_post';
-      responses: {
-        '200': Conversation;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/segments/assign-bulk': {
-    patch: {
-      operationId: 'assign_segments_bulk_v1_conversations__conversation_id__segments_assign_bulk_patch';
-      responses: {
-        '200': Conversation;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/segments/text': {
-    patch: {
-      operationId: 'patch_conversation_segment_text_v1_conversations__conversation_id__segments_text_patch';
-      responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/segments/{segment_idx}/assign': {
-    patch: {
-      operationId: 'set_assignee_conversation_segment_v1_conversations__conversation_id__segments__segment_idx__assign_patch';
-      responses: {
-        '200': Conversation;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/shared': {
-    get: {
-      operationId: 'get_shared_conversation_by_id_v1_conversations__conversation_id__shared_get';
-      responses: {
-        '200': SharedConversationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/starred': {
-    patch: {
-      operationId: 'set_conversation_starred_v1_conversations__conversation_id__starred_patch';
-      responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/suggested-apps': {
-    get: {
-      operationId: 'get_conversation_suggested_apps_v1_conversations__conversation_id__suggested_apps_get';
-      responses: {
-        '200': ConversationSuggestedAppsResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/summary': {
-    patch: {
-      operationId: 'patch_conversation_summary_v1_conversations__conversation_id__summary_patch';
-      responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/test-prompt': {
-    post: {
-      operationId: 'test_prompt_v1_conversations__conversation_id__test_prompt_post';
-      responses: {
-        '200': ConversationTestPromptResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/title': {
-    patch: {
-      operationId: 'patch_conversation_title_v1_conversations__conversation_id__title_patch';
-      responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/transcripts': {
-    get: {
-      operationId: 'get_conversation_transcripts_by_models_v1_conversations__conversation_id__transcripts_get';
-      responses: {
-        '200': Record<string, Array<TranscriptSegment>>;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/conversations/{conversation_id}/visibility': {
-    patch: {
-      operationId: 'set_conversation_visibility_v1_conversations__conversation_id__visibility_patch';
-      responses: {
-        '200': ConversationStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/keys': {
-    get: {
-      operationId: 'listApiKeys';
-      responses: {
-        '200': Array<DevApiKey>;
-        '401': void;
-      };
-    };
-    post: {
-      operationId: 'createApiKey';
-      responses: {
-        '200': DevApiKeyCreated;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/keys/{key_id}': {
-    delete: {
-      operationId: 'revokeApiKey';
-      responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/user/action-items': {
-    get: {
-      operationId: 'listActionItems';
-      responses: {
-        '200': Array<DeveloperActionItem>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'createActionItem';
-      responses: {
-        '200': DeveloperActionItem;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/user/action-items/batch': {
-    post: {
-      operationId: 'createActionItemsBatch';
-      responses: {
-        '200': BatchActionItemsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/user/action-items/{action_item_id}': {
-    patch: {
-      operationId: 'updateActionItem';
-      responses: {
-        '200': DeveloperActionItem;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": CalendarEventLink;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'deleteActionItem';
+      operationId: "unlink_calendar_event_v1_conversations__conversation_id__calendar_event_delete";
       responses: {
-        '200': DeveloperSuccessResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/dev/user/conversations': {
-    get: {
-      operationId: 'listConversations';
-      responses: {
-        '200': Array<DeveloperConversation>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
+  "/v1/conversations/{conversation_id}/calendar-event/auto-link": {
     post: {
-      operationId: 'createConversation';
+      operationId: "auto_link_calendar_event_v1_conversations__conversation_id__calendar_event_auto_link_post";
       responses: {
-        '200': ConversationCreateResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": CalendarEventLink;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/dev/user/conversations/from-segments': {
-    post: {
-      operationId: 'createConversationFromSegments';
-      responses: {
-        '200': ConversationCreateResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/user/conversations/{conversation_id}': {
-    get: {
-      operationId: 'getConversation';
-      responses: {
-        '200': DeveloperConversation;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
+  "/v1/conversations/{conversation_id}/events": {
     patch: {
-      operationId: 'updateConversation';
+      operationId: "set_conversation_events_state_v1_conversations__conversation_id__events_patch";
       responses: {
-        '200': DeveloperConversation;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/finalize": {
+    post: {
+      operationId: "finalize_conversation_v1_conversations__conversation_id__finalize_post";
+      responses: {
+        "200": CreateConversationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/folder": {
+    patch: {
+      operationId: "move_conversation_to_folder_v1_conversations__conversation_id__folder_patch";
+      responses: {
+        "200": FolderMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/photos": {
+    get: {
+      operationId: "get_conversation_photos_v1_conversations__conversation_id__photos_get";
+      responses: {
+        "200": Array<ConversationPhoto>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/recording": {
+    get: {
+      operationId: "conversation_has_audio_recording_v1_conversations__conversation_id__recording_get";
+      responses: {
+        "200": ConversationRecordingResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/reprocess": {
+    post: {
+      operationId: "reprocess_conversation_v1_conversations__conversation_id__reprocess_post";
+      responses: {
+        "200": Conversation;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/segments/assign-bulk": {
+    patch: {
+      operationId: "assign_segments_bulk_v1_conversations__conversation_id__segments_assign_bulk_patch";
+      responses: {
+        "200": Conversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/segments/text": {
+    patch: {
+      operationId: "patch_conversation_segment_text_v1_conversations__conversation_id__segments_text_patch";
+      responses: {
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign": {
+    patch: {
+      operationId: "set_assignee_conversation_segment_v1_conversations__conversation_id__segments__segment_idx__assign_patch";
+      responses: {
+        "200": Conversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/shared": {
+    get: {
+      operationId: "get_shared_conversation_by_id_v1_conversations__conversation_id__shared_get";
+      responses: {
+        "200": SharedConversationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/starred": {
+    patch: {
+      operationId: "set_conversation_starred_v1_conversations__conversation_id__starred_patch";
+      responses: {
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/suggested-apps": {
+    get: {
+      operationId: "get_conversation_suggested_apps_v1_conversations__conversation_id__suggested_apps_get";
+      responses: {
+        "200": ConversationSuggestedAppsResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/summary": {
+    patch: {
+      operationId: "patch_conversation_summary_v1_conversations__conversation_id__summary_patch";
+      responses: {
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/test-prompt": {
+    post: {
+      operationId: "test_prompt_v1_conversations__conversation_id__test_prompt_post";
+      responses: {
+        "200": ConversationTestPromptResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/title": {
+    patch: {
+      operationId: "patch_conversation_title_v1_conversations__conversation_id__title_patch";
+      responses: {
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/transcripts": {
+    get: {
+      operationId: "get_conversation_transcripts_by_models_v1_conversations__conversation_id__transcripts_get";
+      responses: {
+        "200": Record<string, Array<TranscriptSegment>>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/visibility": {
+    patch: {
+      operationId: "set_conversation_visibility_v1_conversations__conversation_id__visibility_patch";
+      responses: {
+        "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/keys": {
+    get: {
+      operationId: "listApiKeys";
+      responses: {
+        "200": Array<DevApiKey>;
+        "401": void;
+      };
+    };
+    post: {
+      operationId: "createApiKey";
+      responses: {
+        "200": DevApiKeyCreated;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/keys/{key_id}": {
+    delete: {
+      operationId: "revokeApiKey";
+      responses: {
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/action-items": {
+    get: {
+      operationId: "listActionItems";
+      responses: {
+        "200": Array<DeveloperActionItem>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "createActionItem";
+      responses: {
+        "200": DeveloperActionItem;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/action-items/batch": {
+    post: {
+      operationId: "createActionItemsBatch";
+      responses: {
+        "200": BatchActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/action-items/{action_item_id}": {
+    patch: {
+      operationId: "updateActionItem";
+      responses: {
+        "200": DeveloperActionItem;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'deleteConversation';
+      operationId: "deleteActionItem";
       responses: {
-        '200': DeveloperSuccessResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DeveloperSuccessResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/dev/user/folders': {
+  "/v1/dev/user/conversations": {
     get: {
-      operationId: 'listFolders';
+      operationId: "listConversations";
       responses: {
-        '200': Array<DeveloperFolder>;
-        '401': void;
-      };
-    };
-  };
-  '/v1/dev/user/goals': {
-    get: {
-      operationId: 'listGoals';
-      responses: {
-        '200': Array<DeveloperGoal>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<DeveloperConversation>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     post: {
-      operationId: 'createGoal';
+      operationId: "createConversation";
       responses: {
-        '200': DeveloperGoal;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": ConversationCreateResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/dev/user/goals/{goal_id}': {
-    get: {
-      operationId: 'getGoal';
+  "/v1/dev/user/conversations/from-segments": {
+    post: {
+      operationId: "createConversationFromSegments";
       responses: {
-        '200': DeveloperGoal;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": ConversationCreateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/conversations/{conversation_id}": {
+    get: {
+      operationId: "getConversation";
+      responses: {
+        "200": DeveloperConversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     patch: {
-      operationId: 'updateGoal';
+      operationId: "updateConversation";
       responses: {
-        '200': DeveloperGoal;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DeveloperConversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'deleteGoal';
+      operationId: "deleteConversation";
       responses: {
-        '200': DeveloperSuccessResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DeveloperSuccessResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/dev/user/goals/{goal_id}/history': {
+  "/v1/dev/user/folders": {
     get: {
-      operationId: 'listGoalHistory';
+      operationId: "listFolders";
       responses: {
-        '200': Array<Record<string, unknown>>;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Array<DeveloperFolder>;
+        "401": void;
       };
     };
   };
-  '/v1/dev/user/goals/{goal_id}/progress': {
-    patch: {
-      operationId: 'updateGoalProgress';
-      responses: {
-        '200': DeveloperGoal;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/user/memories': {
+  "/v1/dev/user/goals": {
     get: {
-      operationId: 'listMemories';
+      operationId: "listGoals";
       responses: {
-        '200': Array<DeveloperMemory>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Array<DeveloperGoal>;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     post: {
-      operationId: 'createMemory';
+      operationId: "createGoal";
       responses: {
-        '200': DeveloperMemory;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": DeveloperGoal;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/dev/user/memories/batch': {
-    post: {
-      operationId: 'createMemoriesBatch';
-      responses: {
-        '200': BatchMemoriesResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/dev/user/memories/vector/search': {
+  "/v1/dev/user/goals/{goal_id}": {
     get: {
-      operationId: 'search_memories_vector_v1_dev_user_memories_vector_search_get';
+      operationId: "getGoal";
       responses: {
-        '200': DeveloperMemoryVectorSearchResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": DeveloperGoal;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
-  };
-  '/v1/dev/user/memories/{memory_id}': {
     patch: {
-      operationId: 'updateMemory';
+      operationId: "updateGoal";
       responses: {
-        '200': DeveloperMemory;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DeveloperGoal;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'deleteMemory';
+      operationId: "deleteGoal";
       responses: {
-        '200': DeveloperSuccessResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DeveloperSuccessResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/fair-use/case/{case_ref}/status': {
+  "/v1/dev/user/goals/{goal_id}/history": {
     get: {
-      operationId: 'get_public_case_status_v1_fair_use_case__case_ref__status_get';
+      operationId: "listGoalHistory";
       responses: {
-        '200': PublicFairUseCaseStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Array<Record<string, unknown>>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/fair-use/status': {
-    get: {
-      operationId: 'get_my_fair_use_status_v1_fair_use_status_get';
-      responses: {
-        '200': FairUseStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/folders': {
-    get: {
-      operationId: 'get_folders_v1_folders_get';
-      responses: {
-        '200': Array<Folder>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'create_folder_v1_folders_post';
-      responses: {
-        '200': Folder;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/folders/reorder': {
-    post: {
-      operationId: 'reorder_folders_v1_folders_reorder_post';
-      responses: {
-        '200': FolderMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/folders/{folder_id}': {
-    get: {
-      operationId: 'get_folder_v1_folders__folder_id__get';
-      responses: {
-        '200': Folder;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
+  "/v1/dev/user/goals/{goal_id}/progress": {
     patch: {
-      operationId: 'update_folder_v1_folders__folder_id__patch';
+      operationId: "updateGoalProgress";
       responses: {
-        '200': Folder;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DeveloperGoal;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/memories": {
+    get: {
+      operationId: "listMemories";
+      responses: {
+        "200": Array<DeveloperMemory>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "createMemory";
+      responses: {
+        "200": DeveloperMemory;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/memories/batch": {
+    post: {
+      operationId: "createMemoriesBatch";
+      responses: {
+        "200": BatchMemoriesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/memories/vector/search": {
+    get: {
+      operationId: "search_memories_vector_v1_dev_user_memories_vector_search_get";
+      responses: {
+        "200": DeveloperMemoryVectorSearchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/memories/{memory_id}": {
+    patch: {
+      operationId: "updateMemory";
+      responses: {
+        "200": DeveloperMemory;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_folder_v1_folders__folder_id__delete';
+      operationId: "deleteMemory";
       responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DeveloperSuccessResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/folders/{folder_id}/conversations': {
+  "/v1/fair-use/case/{case_ref}/status": {
     get: {
-      operationId: 'get_folder_conversations_v1_folders__folder_id__conversations_get';
+      operationId: "get_public_case_status_v1_fair_use_case__case_ref__status_get";
       responses: {
-        '200': Array<Conversation>;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": PublicFairUseCaseStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/folders/{folder_id}/conversations/bulk-move': {
+  "/v1/fair-use/status": {
+    get: {
+      operationId: "get_my_fair_use_status_v1_fair_use_status_get";
+      responses: {
+        "200": FairUseStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/folders": {
+    get: {
+      operationId: "get_folders_v1_folders_get";
+      responses: {
+        "200": Array<Folder>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
     post: {
-      operationId: 'bulk_move_conversations_v1_folders__folder_id__conversations_bulk_move_post';
+      operationId: "create_folder_v1_folders_post";
       responses: {
-        '200': BulkMoveConversationsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Folder;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/goals': {
-    get: {
-      operationId: 'get_current_goal_v1_goals_get';
-      responses: {
-        '200': GoalResponse | null;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
+  "/v1/folders/reorder": {
     post: {
-      operationId: 'create_goal_v1_goals_post';
+      operationId: "reorder_folders_v1_folders_reorder_post";
       responses: {
-        '200': GoalResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": FolderMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/goals/advice': {
+  "/v1/folders/{folder_id}": {
     get: {
-      operationId: 'get_current_goal_advice_v1_goals_advice_get';
+      operationId: "get_folder_v1_folders__folder_id__get";
       responses: {
-        '200': AdviceResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": Folder;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
-  };
-  '/v1/goals/all': {
-    get: {
-      operationId: 'get_all_goals_v1_goals_all_get';
-      responses: {
-        '200': Array<GoalResponse>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/goals/extract-progress': {
-    post: {
-      operationId: 'extract_and_update_progress_v1_goals_extract_progress_post';
-      responses: {
-        '200': ProgressExtractResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/goals/suggest': {
-    get: {
-      operationId: 'suggest_goal_v1_goals_suggest_get';
-      responses: {
-        '200': GoalSuggestionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/goals/{goal_id}': {
     patch: {
-      operationId: 'update_goal_v1_goals__goal_id__patch';
+      operationId: "update_folder_v1_folders__folder_id__patch";
       responses: {
-        '200': GoalResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Folder;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_goal_v1_goals__goal_id__delete';
+      operationId: "delete_folder_v1_folders__folder_id__delete";
       responses: {
-        '200': GoalDeleteResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/goals/{goal_id}/advice': {
+  "/v1/folders/{folder_id}/conversations": {
     get: {
-      operationId: 'get_goal_advice_v1_goals__goal_id__advice_get';
+      operationId: "get_folder_conversations_v1_folders__folder_id__conversations_get";
       responses: {
-        '200': AdviceResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": Array<Conversation>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/goals/{goal_id}/history': {
-    get: {
-      operationId: 'get_goal_history_v1_goals__goal_id__history_get';
-      responses: {
-        '200': Array<GoalHistoryEntryResponse>;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/goals/{goal_id}/progress': {
-    patch: {
-      operationId: 'update_goal_progress_v1_goals__goal_id__progress_patch';
-      responses: {
-        '200': GoalResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/import/jobs': {
-    get: {
-      operationId: 'get_import_jobs_v1_import_jobs_get';
-      responses: {
-        '200': Array<ImportJobResponse>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/import/jobs/{job_id}': {
-    get: {
-      operationId: 'get_import_job_status_v1_import_jobs__job_id__get';
-      responses: {
-        '200': ImportJobResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/import/limitless': {
+  "/v1/folders/{folder_id}/conversations/bulk-move": {
     post: {
-      operationId: 'import_limitless_data_v1_import_limitless_post';
+      operationId: "bulk_move_conversations_v1_folders__folder_id__conversations_bulk_move_post";
       responses: {
-        '200': ImportJobResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": BulkMoveConversationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/import/limitless/conversations': {
+  "/v1/goals": {
+    get: {
+      operationId: "get_current_goal_v1_goals_get";
+      responses: {
+        "200": GoalResponse | null;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_goal_v1_goals_post";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/advice": {
+    get: {
+      operationId: "get_current_goal_advice_v1_goals_advice_get";
+      responses: {
+        "200": AdviceResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/all": {
+    get: {
+      operationId: "get_all_goals_v1_goals_all_get";
+      responses: {
+        "200": Array<GoalResponse>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/extract-progress": {
+    post: {
+      operationId: "extract_and_update_progress_v1_goals_extract_progress_post";
+      responses: {
+        "200": ProgressExtractResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/suggest": {
+    get: {
+      operationId: "suggest_goal_v1_goals_suggest_get";
+      responses: {
+        "200": GoalSuggestionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/{goal_id}": {
+    patch: {
+      operationId: "update_goal_v1_goals__goal_id__patch";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
     delete: {
-      operationId: 'delete_limitless_conversations_v1_import_limitless_conversations_delete';
+      operationId: "delete_goal_v1_goals__goal_id__delete";
       responses: {
-        '200': DeleteLimitlessConversationsResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": GoalDeleteResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/integrations/apple-health/sync': {
+  "/v1/goals/{goal_id}/advice": {
+    get: {
+      operationId: "get_goal_advice_v1_goals__goal_id__advice_get";
+      responses: {
+        "200": AdviceResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/{goal_id}/history": {
+    get: {
+      operationId: "get_goal_history_v1_goals__goal_id__history_get";
+      responses: {
+        "200": Array<GoalHistoryEntryResponse>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/{goal_id}/progress": {
+    patch: {
+      operationId: "update_goal_progress_v1_goals__goal_id__progress_patch";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/import/jobs": {
+    get: {
+      operationId: "get_import_jobs_v1_import_jobs_get";
+      responses: {
+        "200": Array<ImportJobResponse>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/import/jobs/{job_id}": {
+    get: {
+      operationId: "get_import_job_status_v1_import_jobs__job_id__get";
+      responses: {
+        "200": ImportJobResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/import/limitless": {
+    post: {
+      operationId: "import_limitless_data_v1_import_limitless_post";
+      responses: {
+        "200": ImportJobResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/import/limitless/conversations": {
+    delete: {
+      operationId: "delete_limitless_conversations_v1_import_limitless_conversations_delete";
+      responses: {
+        "200": DeleteLimitlessConversationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/integrations/apple-health/sync": {
     put: {
-      operationId: 'sync_apple_health_data_v1_integrations_apple_health_sync_put';
+      operationId: "sync_apple_health_data_v1_integrations_apple_health_sync_put";
       responses: {
-        '200': AppleHealthSyncResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AppleHealthSyncResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/integrations/notification': {
+  "/v1/integrations/notification": {
     post: {
-      operationId: 'send_app_notification_to_user_v1_integrations_notification_post';
+      operationId: "send_app_notification_to_user_v1_integrations_notification_post";
       responses: {
-        '200': NotificationStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": NotificationStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/integrations/{app_key}': {
+  "/v1/integrations/{app_key}": {
     get: {
-      operationId: 'get_integration_v1_integrations__app_key__get';
-      responses: {
-        '200': IntegrationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    put: {
-      operationId: 'save_integration_v1_integrations__app_key__put';
-      responses: {
-        '200': IntegrationMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_integration_v1_integrations__app_key__delete';
-      responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/integrations/{app_key}/oauth-url': {
-    get: {
-      operationId: 'get_oauth_url_v1_integrations__app_key__oauth_url_get';
-      responses: {
-        '200': OAuthUrlResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/knowledge-graph': {
-    get: {
-      operationId: 'get_knowledge_graph_v1_knowledge_graph_get';
-      responses: {
-        '200': KnowledgeGraphResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_knowledge_graph_v1_knowledge_graph_delete';
-      responses: {
-        '200': DeleteKnowledgeGraphResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/knowledge-graph/rebuild': {
-    post: {
-      operationId: 'rebuild_graph_v1_knowledge_graph_rebuild_post';
-      responses: {
-        '200': RebuildResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/action-items': {
-    get: {
-      operationId: 'get_action_items_v1_mcp_action_items_get';
-      responses: {
-        '200': Array<SimpleActionItem>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'create_action_item_v1_mcp_action_items_post';
-      responses: {
-        '200': SimpleActionItem;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/action-items/search': {
-    get: {
-      operationId: 'search_action_items_v1_mcp_action_items_search_get';
-      responses: {
-        '200': Array<SimpleActionItem>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/action-items/{action_item_id}': {
-    patch: {
-      operationId: 'update_action_item_v1_mcp_action_items__action_item_id__patch';
-      responses: {
-        '200': SimpleActionItem;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_action_item_v1_mcp_action_items__action_item_id__delete';
-      responses: {
-        '200': McpStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/action-items/{action_item_id}/complete': {
-    post: {
-      operationId: 'complete_action_item_v1_mcp_action_items__action_item_id__complete_post';
-      responses: {
-        '200': SimpleActionItem;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/chat': {
-    get: {
-      operationId: 'get_chat_messages_v1_mcp_chat_get';
-      responses: {
-        '200': Array<SimpleChatMessage>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/conversations': {
-    get: {
-      operationId: 'get_conversations_v1_mcp_conversations_get';
-      responses: {
-        '200': Array<SimpleConversation>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/conversations/search': {
-    get: {
-      operationId: 'search_conversations_v1_mcp_conversations_search_get';
-      responses: {
-        '200': Array<SimpleConversation>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/conversations/{conversation_id}': {
-    get: {
-      operationId: 'get_conversation_by_id_v1_mcp_conversations__conversation_id__get';
-      responses: {
-        '200': FullConversation;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/daily-summaries': {
-    get: {
-      operationId: 'get_daily_summaries_v1_mcp_daily_summaries_get';
-      responses: {
-        '200': Array<Record<string, unknown>>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/goals': {
-    get: {
-      operationId: 'get_goals_v1_mcp_goals_get';
-      responses: {
-        '200': Array<Record<string, unknown>>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/keys': {
-    get: {
-      operationId: 'get_keys_v1_mcp_keys_get';
-      responses: {
-        '200': Array<McpApiKey>;
-        '401': void;
-      };
-    };
-    post: {
-      operationId: 'create_key_v1_mcp_keys_post';
-      responses: {
-        '200': McpApiKeyCreated;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/keys/{key_id}': {
-    delete: {
-      operationId: 'delete_key_v1_mcp_keys__key_id__delete';
-      responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/memories': {
-    get: {
-      operationId: 'get_memories_v1_mcp_memories_get';
-      responses: {
-        '200': Array<CleanerMemory>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'create_memory_v1_mcp_memories_post';
-      responses: {
-        '200': Memory;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/memories/search': {
-    get: {
-      operationId: 'search_memories_v1_mcp_memories_search_get';
-      responses: {
-        '200': Array<SearchedMemory>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/memories/{memory_id}': {
-    patch: {
-      operationId: 'edit_memory_v1_mcp_memories__memory_id__patch';
-      responses: {
-        '200': McpStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_memory_v1_mcp_memories__memory_id__delete';
-      responses: {
-        '200': McpStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/oauth/grants': {
-    get: {
-      operationId: 'get_oauth_grants_v1_mcp_oauth_grants_get';
-      responses: {
-        '200': McpOauthGrantsResponse;
-        '401': void;
-      };
-    };
-  };
-  '/v1/mcp/oauth/grants/{grant_id}': {
-    delete: {
-      operationId: 'revoke_oauth_grant_v1_mcp_oauth_grants__grant_id__delete';
-      responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/people': {
-    get: {
-      operationId: 'get_people_v1_mcp_people_get';
-      responses: {
-        '200': Array<SimplePerson>;
-        '401': void;
-      };
-    };
-  };
-  '/v1/mcp/profile': {
-    get: {
-      operationId: 'get_user_profile_v1_mcp_profile_get';
-      responses: {
-        '200': UserProfile;
-        '401': void;
-      };
-    };
-  };
-  '/v1/mcp/screen-activity': {
-    get: {
-      operationId: 'get_screen_activity_v1_mcp_screen_activity_get';
-      responses: {
-        '200': Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/sse': {
-    get: {
-      operationId: 'mcp_sse_get_v1_mcp_sse_get';
-      responses: {
-        '200': void;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'mcp_streamable_http_v1_mcp_sse_post';
-      responses: {
-        '200': void;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'mcp_delete_session_v1_mcp_sse_delete';
-      responses: {
-        '200': void;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/mcp/sse/info': {
-    get: {
-      operationId: 'mcp_sse_info_v1_mcp_sse_info_get';
-      responses: {
-        '200': McpSseInfoResponse;
-        '401': void;
-      };
-    };
-  };
-  '/v1/payment-methods/default': {
-    post: {
-      operationId: 'set_default_payment_method_endpoint_v1_payment_methods_default_post';
-      responses: {
-        '200': PaymentMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payment-methods/status': {
-    get: {
-      operationId: 'get_payment_method_status_v1_payment_methods_status_get';
-      responses: {
-        '200': PaymentMethodStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payments/available-plans': {
-    get: {
-      operationId: 'get_available_plans_endpoint_v1_payments_available_plans_get';
-      responses: {
-        '200': AvailablePlansResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payments/cancel': {
-    get: {
-      operationId: 'stripe_cancel_v1_payments_cancel_get';
-      responses: {
-        '200': unknown;
-        '401': void;
-      };
-    };
-  };
-  '/v1/payments/checkout-session': {
-    post: {
-      operationId: 'create_checkout_session_endpoint_v1_payments_checkout_session_post';
-      responses: {
-        '200': PaymentCheckoutSessionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payments/customer-portal': {
-    post: {
-      operationId: 'create_customer_portal_endpoint_v1_payments_customer_portal_post';
-      responses: {
-        '200': CustomerPortalSessionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payments/overage-info': {
-    get: {
-      operationId: 'get_overage_info_endpoint_v1_payments_overage_info_get';
-      responses: {
-        '200': OverageInfoResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payments/portal-return': {
-    get: {
-      operationId: 'portal_return_v1_payments_portal_return_get';
-      responses: {
-        '200': unknown;
-        '401': void;
-      };
-    };
-  };
-  '/v1/payments/subscription': {
-    delete: {
-      operationId: 'cancel_subscription_endpoint_v1_payments_subscription_delete';
-      responses: {
-        '200': PaymentStatusMessageResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payments/success': {
-    get: {
-      operationId: 'stripe_success_v1_payments_success_get';
-      responses: {
-        '200': unknown;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/payments/upgrade-subscription': {
-    post: {
-      operationId: 'upgrade_subscription_endpoint_v1_payments_upgrade_subscription_post';
-      responses: {
-        '200': PaymentUpgradeSubscriptionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/paypal/payment-details': {
-    get: {
-      operationId: 'get_paypal_payment_details_endpoint_v1_paypal_payment_details_get';
-      responses: {
-        '200': PayPalPaymentDetailsResponse | null;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'save_paypal_payment_details_v1_paypal_payment_details_post';
-      responses: {
-        '200': PaymentMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/phone/numbers': {
-    get: {
-      operationId: 'list_phone_numbers_v1_phone_numbers_get';
-      responses: {
-        '200': PhoneNumbersResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/phone/numbers/verify': {
-    post: {
-      operationId: 'verify_phone_number_v1_phone_numbers_verify_post';
-      responses: {
-        '200': VerifyPhoneNumberResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/phone/numbers/verify/check': {
-    post: {
-      operationId: 'check_phone_verification_v1_phone_numbers_verify_check_post';
-      responses: {
-        '200': CheckVerificationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/phone/numbers/{phone_number_id}': {
-    delete: {
-      operationId: 'remove_phone_number_v1_phone_numbers__phone_number_id__delete';
-      responses: {
-        '200': PhoneMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/phone/token': {
-    post: {
-      operationId: 'get_phone_token_v1_phone_token_post';
-      responses: {
-        '200': TokenResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/phone/twiml': {
-    post: {
-      operationId: 'twiml_voice_webhook_v1_phone_twiml_post';
-      responses: {
-        '200': void;
-        '401': void;
-      };
-    };
-  };
-  '/v1/stripe/connect-accounts': {
-    post: {
-      operationId: 'create_connect_account_endpoint_v1_stripe_connect_accounts_post';
-      responses: {
-        '200': StripeConnectAccountResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/stripe/connect/webhook': {
-    post: {
-      operationId: 'stripe_connect_webhook_v1_stripe_connect_webhook_post';
-      responses: {
-        '200': PaymentMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/stripe/onboarded': {
-    get: {
-      operationId: 'check_onboarding_status_v1_stripe_onboarded_get';
-      responses: {
-        '200': StripeOnboardingStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/stripe/refresh/{account_id}': {
-    post: {
-      operationId: 'refresh_account_link_endpoint_v1_stripe_refresh__account_id__post';
-      responses: {
-        '200': StripeConnectAccountResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/stripe/return/{account_id}': {
-    get: {
-      operationId: 'stripe_return_v1_stripe_return__account_id__get';
-      responses: {
-        '200': unknown;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/stripe/supported-countries': {
-    get: {
-      operationId: 'get_supported_countries_v1_stripe_supported_countries_get';
-      responses: {
-        '200': Array<StripeSupportedCountryResponse>;
-        '401': void;
-      };
-    };
-  };
-  '/v1/stripe/webhook': {
-    post: {
-      operationId: 'stripe_webhook_v1_stripe_webhook_post';
-      responses: {
-        '200': PaymentMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/sync/audio/{conversation_id}/precache': {
-    post: {
-      operationId: 'precache_conversation_audio_endpoint_v1_sync_audio__conversation_id__precache_post';
-      responses: {
-        '200': AudioPrecacheResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/sync/audio/{conversation_id}/urls': {
-    get: {
-      operationId: 'get_audio_signed_urls_endpoint_v1_sync_audio__conversation_id__urls_get';
-      responses: {
-        '200': AudioUrlsResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/sync/audio/{conversation_id}/{audio_file_id}': {
-    get: {
-      operationId: 'download_audio_file_endpoint_v1_sync_audio__conversation_id___audio_file_id__get';
-      responses: {
-        '200': string;
-        '202': AudioDownloadPendingResponse;
-        '206': string;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations': {
-    get: {
-      operationId: 'get_task_integrations_v1_task_integrations_get';
-      responses: {
-        '200': TaskIntegrationsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations/asana/projects/{workspace_gid}': {
-    get: {
-      operationId: 'get_asana_projects_v1_task_integrations_asana_projects__workspace_gid__get';
-      responses: {
-        '200': AsanaProjectsResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations/asana/workspaces': {
-    get: {
-      operationId: 'get_asana_workspaces_v1_task_integrations_asana_workspaces_get';
-      responses: {
-        '200': AsanaWorkspacesResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations/clickup/lists/{space_id}': {
-    get: {
-      operationId: 'get_clickup_lists_v1_task_integrations_clickup_lists__space_id__get';
-      responses: {
-        '200': ClickUpListsResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations/clickup/spaces/{team_id}': {
-    get: {
-      operationId: 'get_clickup_spaces_v1_task_integrations_clickup_spaces__team_id__get';
-      responses: {
-        '200': ClickUpSpacesResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations/clickup/teams': {
-    get: {
-      operationId: 'get_clickup_teams_v1_task_integrations_clickup_teams_get';
-      responses: {
-        '200': ClickUpTeamsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations/default': {
-    get: {
-      operationId: 'get_default_task_integration_v1_task_integrations_default_get';
-      responses: {
-        '200': DefaultTaskIntegrationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+      operationId: "get_integration_v1_integrations__app_key__get";
+      responses: {
+        "200": IntegrationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     put: {
-      operationId: 'set_default_task_integration_v1_task_integrations_default_put';
+      operationId: "save_integration_v1_integrations__app_key__put";
       responses: {
-        '200': DefaultTaskIntegrationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": IntegrationMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_integration_v1_integrations__app_key__delete";
+      responses: {
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/task-integrations/{app_key}': {
+  "/v1/integrations/{app_key}/oauth-url": {
+    get: {
+      operationId: "get_oauth_url_v1_integrations__app_key__oauth_url_get";
+      responses: {
+        "200": OAuthUrlResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/knowledge-graph": {
+    get: {
+      operationId: "get_knowledge_graph_v1_knowledge_graph_get";
+      responses: {
+        "200": KnowledgeGraphResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_knowledge_graph_v1_knowledge_graph_delete";
+      responses: {
+        "200": DeleteKnowledgeGraphResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/knowledge-graph/rebuild": {
+    post: {
+      operationId: "rebuild_graph_v1_knowledge_graph_rebuild_post";
+      responses: {
+        "200": RebuildResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/action-items": {
+    get: {
+      operationId: "get_action_items_v1_mcp_action_items_get";
+      responses: {
+        "200": Array<SimpleActionItem>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_action_item_v1_mcp_action_items_post";
+      responses: {
+        "200": SimpleActionItem;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/action-items/search": {
+    get: {
+      operationId: "search_action_items_v1_mcp_action_items_search_get";
+      responses: {
+        "200": Array<SimpleActionItem>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/action-items/{action_item_id}": {
+    patch: {
+      operationId: "update_action_item_v1_mcp_action_items__action_item_id__patch";
+      responses: {
+        "200": SimpleActionItem;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_action_item_v1_mcp_action_items__action_item_id__delete";
+      responses: {
+        "200": McpStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/action-items/{action_item_id}/complete": {
+    post: {
+      operationId: "complete_action_item_v1_mcp_action_items__action_item_id__complete_post";
+      responses: {
+        "200": SimpleActionItem;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/chat": {
+    get: {
+      operationId: "get_chat_messages_v1_mcp_chat_get";
+      responses: {
+        "200": Array<SimpleChatMessage>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/conversations": {
+    get: {
+      operationId: "get_conversations_v1_mcp_conversations_get";
+      responses: {
+        "200": Array<SimpleConversation>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/conversations/search": {
+    get: {
+      operationId: "search_conversations_v1_mcp_conversations_search_get";
+      responses: {
+        "200": Array<SimpleConversation>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/conversations/{conversation_id}": {
+    get: {
+      operationId: "get_conversation_by_id_v1_mcp_conversations__conversation_id__get";
+      responses: {
+        "200": FullConversation;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/daily-summaries": {
+    get: {
+      operationId: "get_daily_summaries_v1_mcp_daily_summaries_get";
+      responses: {
+        "200": Array<Record<string, unknown>>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/goals": {
+    get: {
+      operationId: "get_goals_v1_mcp_goals_get";
+      responses: {
+        "200": Array<Record<string, unknown>>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/keys": {
+    get: {
+      operationId: "get_keys_v1_mcp_keys_get";
+      responses: {
+        "200": Array<McpApiKey>;
+        "401": void;
+      };
+    };
+    post: {
+      operationId: "create_key_v1_mcp_keys_post";
+      responses: {
+        "200": McpApiKeyCreated;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/keys/{key_id}": {
+    delete: {
+      operationId: "delete_key_v1_mcp_keys__key_id__delete";
+      responses: {
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/memories": {
+    get: {
+      operationId: "get_memories_v1_mcp_memories_get";
+      responses: {
+        "200": Array<CleanerMemory>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_memory_v1_mcp_memories_post";
+      responses: {
+        "200": Memory;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/memories/search": {
+    get: {
+      operationId: "search_memories_v1_mcp_memories_search_get";
+      responses: {
+        "200": Array<SearchedMemory>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/memories/{memory_id}": {
+    patch: {
+      operationId: "edit_memory_v1_mcp_memories__memory_id__patch";
+      responses: {
+        "200": McpStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_memory_v1_mcp_memories__memory_id__delete";
+      responses: {
+        "200": McpStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/oauth/grants": {
+    get: {
+      operationId: "get_oauth_grants_v1_mcp_oauth_grants_get";
+      responses: {
+        "200": McpOauthGrantsResponse;
+        "401": void;
+      };
+    };
+  };
+  "/v1/mcp/oauth/grants/{grant_id}": {
+    delete: {
+      operationId: "revoke_oauth_grant_v1_mcp_oauth_grants__grant_id__delete";
+      responses: {
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/people": {
+    get: {
+      operationId: "get_people_v1_mcp_people_get";
+      responses: {
+        "200": Array<SimplePerson>;
+        "401": void;
+      };
+    };
+  };
+  "/v1/mcp/profile": {
+    get: {
+      operationId: "get_user_profile_v1_mcp_profile_get";
+      responses: {
+        "200": UserProfile;
+        "401": void;
+      };
+    };
+  };
+  "/v1/mcp/screen-activity": {
+    get: {
+      operationId: "get_screen_activity_v1_mcp_screen_activity_get";
+      responses: {
+        "200": Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/sse": {
+    get: {
+      operationId: "mcp_sse_get_v1_mcp_sse_get";
+      responses: {
+        "200": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "mcp_streamable_http_v1_mcp_sse_post";
+      responses: {
+        "200": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "mcp_delete_session_v1_mcp_sse_delete";
+      responses: {
+        "200": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/sse/info": {
+    get: {
+      operationId: "mcp_sse_info_v1_mcp_sse_info_get";
+      responses: {
+        "200": McpSseInfoResponse;
+        "401": void;
+      };
+    };
+  };
+  "/v1/payment-methods/default": {
+    post: {
+      operationId: "set_default_payment_method_endpoint_v1_payment_methods_default_post";
+      responses: {
+        "200": PaymentMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payment-methods/status": {
+    get: {
+      operationId: "get_payment_method_status_v1_payment_methods_status_get";
+      responses: {
+        "200": PaymentMethodStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/available-plans": {
+    get: {
+      operationId: "get_available_plans_endpoint_v1_payments_available_plans_get";
+      responses: {
+        "200": AvailablePlansResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/cancel": {
+    get: {
+      operationId: "stripe_cancel_v1_payments_cancel_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+      };
+    };
+  };
+  "/v1/payments/checkout-session": {
+    post: {
+      operationId: "create_checkout_session_endpoint_v1_payments_checkout_session_post";
+      responses: {
+        "200": PaymentCheckoutSessionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/customer-portal": {
+    post: {
+      operationId: "create_customer_portal_endpoint_v1_payments_customer_portal_post";
+      responses: {
+        "200": CustomerPortalSessionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/overage-info": {
+    get: {
+      operationId: "get_overage_info_endpoint_v1_payments_overage_info_get";
+      responses: {
+        "200": OverageInfoResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/portal-return": {
+    get: {
+      operationId: "portal_return_v1_payments_portal_return_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+      };
+    };
+  };
+  "/v1/payments/subscription": {
+    delete: {
+      operationId: "cancel_subscription_endpoint_v1_payments_subscription_delete";
+      responses: {
+        "200": PaymentStatusMessageResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/success": {
+    get: {
+      operationId: "stripe_success_v1_payments_success_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/upgrade-subscription": {
+    post: {
+      operationId: "upgrade_subscription_endpoint_v1_payments_upgrade_subscription_post";
+      responses: {
+        "200": PaymentUpgradeSubscriptionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/paypal/payment-details": {
+    get: {
+      operationId: "get_paypal_payment_details_endpoint_v1_paypal_payment_details_get";
+      responses: {
+        "200": PayPalPaymentDetailsResponse | null;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "save_paypal_payment_details_v1_paypal_payment_details_post";
+      responses: {
+        "200": PaymentMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/phone/numbers": {
+    get: {
+      operationId: "list_phone_numbers_v1_phone_numbers_get";
+      responses: {
+        "200": PhoneNumbersResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/phone/numbers/verify": {
+    post: {
+      operationId: "verify_phone_number_v1_phone_numbers_verify_post";
+      responses: {
+        "200": VerifyPhoneNumberResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/phone/numbers/verify/check": {
+    post: {
+      operationId: "check_phone_verification_v1_phone_numbers_verify_check_post";
+      responses: {
+        "200": CheckVerificationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/phone/numbers/{phone_number_id}": {
+    delete: {
+      operationId: "remove_phone_number_v1_phone_numbers__phone_number_id__delete";
+      responses: {
+        "200": PhoneMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/phone/token": {
+    post: {
+      operationId: "get_phone_token_v1_phone_token_post";
+      responses: {
+        "200": TokenResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/phone/twiml": {
+    post: {
+      operationId: "twiml_voice_webhook_v1_phone_twiml_post";
+      responses: {
+        "200": void;
+        "401": void;
+      };
+    };
+  };
+  "/v1/stripe/connect-accounts": {
+    post: {
+      operationId: "create_connect_account_endpoint_v1_stripe_connect_accounts_post";
+      responses: {
+        "200": StripeConnectAccountResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/stripe/connect/webhook": {
+    post: {
+      operationId: "stripe_connect_webhook_v1_stripe_connect_webhook_post";
+      responses: {
+        "200": PaymentMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/stripe/onboarded": {
+    get: {
+      operationId: "check_onboarding_status_v1_stripe_onboarded_get";
+      responses: {
+        "200": StripeOnboardingStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/stripe/refresh/{account_id}": {
+    post: {
+      operationId: "refresh_account_link_endpoint_v1_stripe_refresh__account_id__post";
+      responses: {
+        "200": StripeConnectAccountResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/stripe/return/{account_id}": {
+    get: {
+      operationId: "stripe_return_v1_stripe_return__account_id__get";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/stripe/supported-countries": {
+    get: {
+      operationId: "get_supported_countries_v1_stripe_supported_countries_get";
+      responses: {
+        "200": Array<StripeSupportedCountryResponse>;
+        "401": void;
+      };
+    };
+  };
+  "/v1/stripe/webhook": {
+    post: {
+      operationId: "stripe_webhook_v1_stripe_webhook_post";
+      responses: {
+        "200": PaymentMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/sync/audio/{conversation_id}/precache": {
+    post: {
+      operationId: "precache_conversation_audio_endpoint_v1_sync_audio__conversation_id__precache_post";
+      responses: {
+        "200": AudioPrecacheResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/sync/audio/{conversation_id}/urls": {
+    get: {
+      operationId: "get_audio_signed_urls_endpoint_v1_sync_audio__conversation_id__urls_get";
+      responses: {
+        "200": AudioUrlsResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/sync/audio/{conversation_id}/{audio_file_id}": {
+    get: {
+      operationId: "download_audio_file_endpoint_v1_sync_audio__conversation_id___audio_file_id__get";
+      responses: {
+        "200": string;
+        "202": AudioDownloadPendingResponse;
+        "206": string;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/task-integrations": {
+    get: {
+      operationId: "get_task_integrations_v1_task_integrations_get";
+      responses: {
+        "200": TaskIntegrationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/task-integrations/asana/projects/{workspace_gid}": {
+    get: {
+      operationId: "get_asana_projects_v1_task_integrations_asana_projects__workspace_gid__get";
+      responses: {
+        "200": AsanaProjectsResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/task-integrations/asana/workspaces": {
+    get: {
+      operationId: "get_asana_workspaces_v1_task_integrations_asana_workspaces_get";
+      responses: {
+        "200": AsanaWorkspacesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/task-integrations/clickup/lists/{space_id}": {
+    get: {
+      operationId: "get_clickup_lists_v1_task_integrations_clickup_lists__space_id__get";
+      responses: {
+        "200": ClickUpListsResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/task-integrations/clickup/spaces/{team_id}": {
+    get: {
+      operationId: "get_clickup_spaces_v1_task_integrations_clickup_spaces__team_id__get";
+      responses: {
+        "200": ClickUpSpacesResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/task-integrations/clickup/teams": {
+    get: {
+      operationId: "get_clickup_teams_v1_task_integrations_clickup_teams_get";
+      responses: {
+        "200": ClickUpTeamsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/task-integrations/default": {
+    get: {
+      operationId: "get_default_task_integration_v1_task_integrations_default_get";
+      responses: {
+        "200": DefaultTaskIntegrationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
     put: {
-      operationId: 'save_task_integration_v1_task_integrations__app_key__put';
+      operationId: "set_default_task_integration_v1_task_integrations_default_put";
       responses: {
-        '200': TaskIntegrationMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_task_integration_v1_task_integrations__app_key__delete';
-      responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DefaultTaskIntegrationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/task-integrations/{app_key}/oauth-url': {
-    get: {
-      operationId: 'get_oauth_url_v1_task_integrations__app_key__oauth_url_get';
-      responses: {
-        '200': OAuthUrlResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/task-integrations/{app_key}/tasks': {
-    post: {
-      operationId: 'create_task_via_integration_v1_task_integrations__app_key__tasks_post';
-      responses: {
-        '200': CreateTaskResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/ai-profile': {
-    get: {
-      operationId: 'get_ai_profile_v1_users_ai_profile_get';
-      responses: {
-        '200': AIUserProfileResponse | null;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    patch: {
-      operationId: 'update_ai_profile_v1_users_ai_profile_patch';
-      responses: {
-        '200': AIUserProfileResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/analytics/chat_message': {
-    post: {
-      operationId: 'set_chat_message_analytics_v1_users_analytics_chat_message_post';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/analytics/memory_summary': {
-    get: {
-      operationId: 'get_memory_summary_rating_v1_users_analytics_memory_summary_get';
-      responses: {
-        '200': MemorySummaryRatingResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'set_memory_summary_rating_v1_users_analytics_memory_summary_post';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/assistant-settings': {
-    get: {
-      operationId: 'get_assistant_settings_v1_users_assistant_settings_get';
-      responses: {
-        '200': AssistantSettingsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    patch: {
-      operationId: 'update_assistant_settings_v1_users_assistant_settings_patch';
-      responses: {
-        '200': AssistantSettingsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/daily-summaries': {
-    get: {
-      operationId: 'get_daily_summaries_v1_users_daily_summaries_get';
-      responses: {
-        '200': DailySummariesResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/daily-summaries/{summary_id}': {
-    get: {
-      operationId: 'get_daily_summary_v1_users_daily_summaries__summary_id__get';
-      responses: {
-        '200': DailySummaryResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_daily_summary_v1_users_daily_summaries__summary_id__delete';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/daily-summaries/{summary_id}/regenerate': {
-    post: {
-      operationId: 'regenerate_daily_summary_v1_users_daily_summaries__summary_id__regenerate_post';
-      responses: {
-        '200': DailySummaryResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/daily-summaries/{summary_id}/visibility': {
-    patch: {
-      operationId: 'set_daily_summary_visibility_v1_users_daily_summaries__summary_id__visibility_patch';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/daily-summary-settings': {
-    get: {
-      operationId: 'get_daily_summary_settings_v1_users_daily_summary_settings_get';
-      responses: {
-        '200': DailySummarySettingsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    patch: {
-      operationId: 'update_daily_summary_settings_v1_users_daily_summary_settings_patch';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/daily-summary-settings/test': {
-    post: {
-      operationId: 'test_daily_summary_v1_users_daily_summary_settings_test_post';
-      responses: {
-        '200': DailySummaryTestResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/delete-account': {
-    delete: {
-      operationId: 'delete_account_v1_users_delete_account_delete';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/developer/webhook/{wtype}': {
-    get: {
-      operationId: 'get_user_webhook_endpoint_v1_users_developer_webhook__wtype__get';
-      responses: {
-        '200': UserWebhookUrlResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'set_user_webhook_endpoint_v1_users_developer_webhook__wtype__post';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/developer/webhook/{wtype}/disable': {
-    post: {
-      operationId: 'disable_user_webhook_endpoint_v1_users_developer_webhook__wtype__disable_post';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/developer/webhook/{wtype}/enable': {
-    post: {
-      operationId: 'enable_user_webhook_endpoint_v1_users_developer_webhook__wtype__enable_post';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/developer/webhooks/status': {
-    get: {
-      operationId: 'get_user_webhooks_status_v1_users_developer_webhooks_status_get';
-      responses: {
-        '200': UserWebhooksStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/export': {
-    get: {
-      operationId: 'export_all_user_data_v1_users_export_get';
-      responses: {
-        '200': UserDataExportResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/fcm-token': {
-    post: {
-      operationId: 'save_token_v1_users_fcm_token_post';
-      responses: {
-        '200': FcmTokenResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/geolocation': {
-    patch: {
-      operationId: 'set_user_geolocation_v1_users_geolocation_patch';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/language': {
-    get: {
-      operationId: 'get_user_language_v1_users_language_get';
-      responses: {
-        '200': UserLanguageResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    patch: {
-      operationId: 'set_user_language_v1_users_language_patch';
-      responses: {
-        '200': UserLanguageUpdateResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/byok-active': {
-    post: {
-      operationId: 'activate_byok_endpoint_v1_users_me_byok_active_post';
-      responses: {
-        '200': BYOKActiveResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'deactivate_byok_endpoint_v1_users_me_byok_active_delete';
-      responses: {
-        '200': BYOKActiveResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/llm-usage': {
-    get: {
-      operationId: 'get_llm_usage_v1_users_me_llm_usage_get';
-      responses: {
-        '200': LlmUsageResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'record_llm_usage_bucket_v1_users_me_llm_usage_post';
-      responses: {
-        '200': LlmUsageRecordResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/llm-usage/top-features': {
-    get: {
-      operationId: 'get_llm_top_features_v1_users_me_llm_usage_top_features_get';
-      responses: {
-        '200': Array<LlmUsageFeatureResponse>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/llm-usage/total': {
-    get: {
-      operationId: 'get_total_llm_cost_v1_users_me_llm_usage_total_get';
-      responses: {
-        '200': LlmTotalCostResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/paywall': {
-    get: {
-      operationId: 'get_user_paywall_status_v1_users_me_paywall_get';
-      responses: {
-        '200': PaywallStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/subscription': {
-    get: {
-      operationId: 'get_user_subscription_endpoint_v1_users_me_subscription_get';
-      responses: {
-        '200': UserSubscriptionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/trial': {
-    get: {
-      operationId: 'get_user_trial_status_v1_users_me_trial_get';
-      responses: {
-        '200': TrialMetadata;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/usage': {
-    get: {
-      operationId: 'get_user_usage_stats_endpoint_v1_users_me_usage_get';
-      responses: {
-        '200': UserUsageResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/me/usage-quota': {
-    get: {
-      operationId: 'get_user_chat_usage_quota_v1_users_me_usage_quota_get';
-      responses: {
-        '200': ChatUsageQuota;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/mentor-notification-settings': {
-    get: {
-      operationId: 'get_mentor_notification_settings_v1_users_mentor_notification_settings_get';
-      responses: {
-        '200': MentorNotificationSettingsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    patch: {
-      operationId: 'update_mentor_notification_settings_v1_users_mentor_notification_settings_patch';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/migration/batch-requests': {
-    post: {
-      operationId: 'handle_batch_migration_requests_v1_users_migration_batch_requests_post';
-      responses: {
-        '200': MigrationStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/migration/requests': {
-    get: {
-      operationId: 'get_migration_requests_v1_users_migration_requests_get';
-      responses: {
-        '200': MigrationRequestsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'handle_migration_requests_v1_users_migration_requests_post';
-      responses: {
-        '200': MigrationStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/migration/requests/data-protection-level/finalize': {
-    post: {
-      operationId: 'finalize_migration_request_v1_users_migration_requests_data_protection_level_finalize_post';
-      responses: {
-        '200': MigrationStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/notification-settings': {
-    get: {
-      operationId: 'get_notification_settings_v1_users_notification_settings_get';
-      responses: {
-        '200': NotificationSettingsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    patch: {
-      operationId: 'update_notification_settings_v1_users_notification_settings_patch';
-      responses: {
-        '200': NotificationSettingsResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/onboarding': {
-    get: {
-      operationId: 'get_onboarding_state_v1_users_onboarding_get';
-      responses: {
-        '200': OnboardingStateResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    patch: {
-      operationId: 'update_onboarding_state_v1_users_onboarding_patch';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/people': {
-    get: {
-      operationId: 'get_all_people_v1_users_people_get';
-      responses: {
-        '200': Array<Person>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'get_or_create_person_v1_users_people_post';
-      responses: {
-        '200': Person;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/people/{person_id}': {
-    get: {
-      operationId: 'get_single_person_v1_users_people__person_id__get';
-      responses: {
-        '200': Person;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_person_endpoint_v1_users_people__person_id__delete';
-      responses: {
-        '204': void;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/people/{person_id}/name': {
-    patch: {
-      operationId: 'update_person_name_v1_users_people__person_id__name_patch';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/people/{person_id}/speech-samples/{sample_index}': {
-    delete: {
-      operationId: 'delete_person_speech_sample_endpoint_v1_users_people__person_id__speech_samples__sample_index__delete';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/preferences/app': {
+  "/v1/task-integrations/{app_key}": {
     put: {
-      operationId: 'set_preferred_app_for_user_v1_users_preferences_app_put';
+      operationId: "save_task_integration_v1_task_integrations__app_key__put";
       responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/private-cloud-sync': {
-    get: {
-      operationId: 'get_private_cloud_sync_v1_users_private_cloud_sync_get';
-      responses: {
-        '200': PrivateCloudSyncResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'set_private_cloud_sync_v1_users_private_cloud_sync_post';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/profile': {
-    get: {
-      operationId: 'get_user_profile_endpoint_v1_users_profile_get';
-      responses: {
-        '200': UserProfileResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/stats/chat-messages': {
-    get: {
-      operationId: 'get_chat_message_count_v1_users_stats_chat_messages_get';
-      responses: {
-        '200': ChatMessageCountResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/users/store-recording-permission': {
-    get: {
-      operationId: 'get_store_recording_permission_v1_users_store_recording_permission_get';
-      responses: {
-        '200': StoreRecordingPermissionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'store_recording_permission_v1_users_store_recording_permission_post';
-      responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": TaskIntegrationMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_permission_and_recordings_v1_users_store_recording_permission_delete';
+      operationId: "delete_task_integration_v1_task_integrations__app_key__delete";
       responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/users/training-data-opt-in': {
+  "/v1/task-integrations/{app_key}/oauth-url": {
     get: {
-      operationId: 'get_training_data_opt_in_status_v1_users_training_data_opt_in_get';
+      operationId: "get_oauth_url_v1_task_integrations__app_key__oauth_url_get";
       responses: {
-        '200': TrainingDataOptInResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": OAuthUrlResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
+  };
+  "/v1/task-integrations/{app_key}/tasks": {
     post: {
-      operationId: 'set_training_data_opt_in_status_v1_users_training_data_opt_in_post';
+      operationId: "create_task_via_integration_v1_task_integrations__app_key__tasks_post";
       responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": CreateTaskResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/users/transcription-preferences': {
+  "/v1/users/ai-profile": {
     get: {
-      operationId: 'get_transcription_preferences_endpoint_v1_users_transcription_preferences_get';
+      operationId: "get_ai_profile_v1_users_ai_profile_get";
       responses: {
-        '200': TranscriptionPreferencesResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AIUserProfileResponse | null;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     patch: {
-      operationId: 'update_transcription_preferences_endpoint_v1_users_transcription_preferences_patch';
+      operationId: "update_ai_profile_v1_users_ai_profile_patch";
       responses: {
-        '200': UserStatusResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": AIUserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v1/wrapped/{year}': {
-    get: {
-      operationId: 'get_wrapped_status_v1_wrapped__year__get';
-      responses: {
-        '200': WrappedStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v1/wrapped/{year}/generate': {
+  "/v1/users/analytics/chat_message": {
     post: {
-      operationId: 'generate_wrapped_v1_wrapped__year__generate_post';
+      operationId: "set_chat_message_analytics_v1_users_analytics_chat_message_post";
       responses: {
-        '200': GenerateWrappedResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v2/apps': {
+  "/v1/users/analytics/memory_summary": {
     get: {
-      operationId: 'get_apps_v2_v2_apps_get';
+      operationId: "get_memory_summary_rating_v1_users_analytics_memory_summary_get";
       responses: {
-        '200': AppCatalogResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/apps/capability/{capability_id}/grouped': {
-    get: {
-      operationId: 'get_capability_apps_grouped_by_category_v2_apps_capability__capability_id__grouped_get';
-      responses: {
-        '200': AppCatalogResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/apps/search': {
-    get: {
-      operationId: 'search_apps_v2_apps_search_get';
-      responses: {
-        '200': AppSearchResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/files': {
-    post: {
-      operationId: 'upload_file_chat_v2_files_post';
-      responses: {
-        '200': Array<FileChat>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/firmware/latest': {
-    get: {
-      operationId: 'get_latest_version_v2_firmware_latest_get';
-      responses: {
-        '200': FirmwareVersionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/firmware/stable': {
-    get: {
-      operationId: 'get_stable_version_v2_firmware_stable_get';
-      responses: {
-        '200': FirmwareVersionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/initial-message': {
-    post: {
-      operationId: 'create_initial_message_v2_initial_message_post';
-      responses: {
-        '200': Message;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/messages': {
-    get: {
-      operationId: 'get_messages_v2_messages_get';
-      responses: {
-        '200': Array<Message>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": MemorySummaryRatingResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     post: {
-      operationId: 'send_message_v2_messages_post';
+      operationId: "set_memory_summary_rating_v1_users_analytics_memory_summary_post";
       responses: {
-        '200': ResponseMessage;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'clear_chat_messages_v2_messages_delete';
-      responses: {
-        '200': Message;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v2/messages/share': {
-    post: {
-      operationId: 'share_chat_messages_v2_messages_share_post';
-      responses: {
-        '200': ShareChatMessagesResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/messages/shared/{token}': {
+  "/v1/users/assistant-settings": {
     get: {
-      operationId: 'get_shared_chat_messages_v2_messages_shared__token__get';
+      operationId: "get_assistant_settings_v1_users_assistant_settings_get";
       responses: {
-        '200': SharedChatMessagesResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AssistantSettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
-  };
-  '/v2/messages/{message_id}/rating': {
     patch: {
-      operationId: 'rate_message_v2_messages__message_id__rating_patch';
+      operationId: "update_assistant_settings_v1_users_assistant_settings_patch";
       responses: {
-        '200': ChatRatingResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": AssistantSettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v2/messages/{message_id}/report': {
-    post: {
-      operationId: 'report_message_v2_messages__message_id__report_post';
-      responses: {
-        '200': MessageReportResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/sync-local-files': {
-    post: {
-      operationId: 'sync_local_files_v2_v2_sync_local_files_post';
-      responses: {
-        '202': SyncJobStartResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/sync-local-files/{job_id}': {
+  "/v1/users/daily-summaries": {
     get: {
-      operationId: 'get_sync_job_status_v2_sync_local_files__job_id__get';
+      operationId: "get_daily_summaries_v1_users_daily_summaries_get";
       responses: {
-        '200': SyncJobStatusResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": DailySummariesResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v2/tts/synthesize': {
-    post: {
-      operationId: 'tts_synthesize_v2_tts_synthesize_post';
-      responses: {
-        '200': unknown;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/voice-message/transcribe': {
-    post: {
-      operationId: 'transcribe_voice_message_v2_voice_message_transcribe_post';
-      responses: {
-        '200': VoiceMessageTranscriptionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v2/voice-messages': {
-    post: {
-      operationId: 'create_voice_message_stream_v2_voice_messages_post';
-      responses: {
-        '200': unknown;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v3/memories': {
+  "/v1/users/daily-summaries/{summary_id}": {
     get: {
-      operationId: 'get_memories_v3_memories_get';
+      operationId: "get_daily_summary_v1_users_daily_summaries__summary_id__get";
       responses: {
-        '200': Array<MemoryDB>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-    post: {
-      operationId: 'create_memory_v3_memories_post';
-      responses: {
-        '200': MemoryDB;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": DailySummaryResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_memories_v3_memories_delete';
+      operationId: "delete_daily_summary_v1_users_daily_summaries__summary_id__delete";
       responses: {
-        '200': MemoryMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": UserStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v3/memories/batch': {
+  "/v1/users/daily-summaries/{summary_id}/regenerate": {
     post: {
-      operationId: 'create_memories_batch_v3_memories_batch_post';
+      operationId: "regenerate_daily_summary_v1_users_daily_summaries__summary_id__regenerate_post";
       responses: {
-        '200': routers__memories__BatchMemoriesResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": DailySummaryResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v3/memories/review-queue': {
-    get: {
-      operationId: 'list_memory_review_queue_v3_memories_review_queue_get';
-      responses: {
-        '200': Array<Record<string, unknown>>;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v3/memories/review-queue/{review_id}/resolve': {
-    post: {
-      operationId: 'resolve_memory_review_item_v3_memories_review_queue__review_id__resolve_post';
-      responses: {
-        '200': ReviewResolutionResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v3/memories/{memory_id}': {
+  "/v1/users/daily-summaries/{summary_id}/visibility": {
     patch: {
-      operationId: 'edit_memory_v3_memories__memory_id__patch';
+      operationId: "set_daily_summary_visibility_v1_users_daily_summaries__summary_id__visibility_patch";
       responses: {
-        '200': MemoryMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
-      };
-    };
-    delete: {
-      operationId: 'delete_memory_v3_memories__memory_id__delete';
-      responses: {
-        '200': MemoryMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": UserStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v3/memories/{memory_id}/review': {
-    post: {
-      operationId: 'review_memory_v3_memories__memory_id__review_post';
+  "/v1/users/daily-summary-settings": {
+    get: {
+      operationId: "get_daily_summary_settings_v1_users_daily_summary_settings_get";
       responses: {
-        '200': MemoryMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": DailySummarySettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
-  };
-  '/v3/memories/{memory_id}/visibility': {
     patch: {
-      operationId: 'update_memory_visibility_v3_memories__memory_id__visibility_patch';
+      operationId: "update_daily_summary_settings_v1_users_daily_summary_settings_patch";
       responses: {
-        '200': MemoryMutationResponse;
-        '401': void;
-        '404': void;
-        '422': HTTPValidationError;
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v3/speech-profile': {
-    get: {
-      operationId: 'has_speech_profile_v3_speech_profile_get';
+  "/v1/users/daily-summary-settings/test": {
+    post: {
+      operationId: "test_daily_summary_v1_users_daily_summary_settings_test_post";
       responses: {
-        '200': HasSpeechProfileResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": DailySummaryTestResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v3/speech-profile/expand': {
-    get: {
-      operationId: 'get_extra_speech_profile_samples_v3_speech_profile_expand_get';
+  "/v1/users/delete-account": {
+    delete: {
+      operationId: "delete_account_v1_users_delete_account_delete";
       responses: {
-        '200': Array<string>;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/developer/webhook/{wtype}": {
+    get: {
+      operationId: "get_user_webhook_endpoint_v1_users_developer_webhook__wtype__get";
+      responses: {
+        "200": UserWebhookUrlResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "set_user_webhook_endpoint_v1_users_developer_webhook__wtype__post";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/developer/webhook/{wtype}/disable": {
+    post: {
+      operationId: "disable_user_webhook_endpoint_v1_users_developer_webhook__wtype__disable_post";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/developer/webhook/{wtype}/enable": {
+    post: {
+      operationId: "enable_user_webhook_endpoint_v1_users_developer_webhook__wtype__enable_post";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/developer/webhooks/status": {
+    get: {
+      operationId: "get_user_webhooks_status_v1_users_developer_webhooks_status_get";
+      responses: {
+        "200": UserWebhooksStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/export": {
+    get: {
+      operationId: "export_all_user_data_v1_users_export_get";
+      responses: {
+        "200": UserDataExportResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/fcm-token": {
+    post: {
+      operationId: "save_token_v1_users_fcm_token_post";
+      responses: {
+        "200": FcmTokenResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/geolocation": {
+    patch: {
+      operationId: "set_user_geolocation_v1_users_geolocation_patch";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/language": {
+    get: {
+      operationId: "get_user_language_v1_users_language_get";
+      responses: {
+        "200": UserLanguageResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "set_user_language_v1_users_language_patch";
+      responses: {
+        "200": UserLanguageUpdateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/byok-active": {
+    post: {
+      operationId: "activate_byok_endpoint_v1_users_me_byok_active_post";
+      responses: {
+        "200": BYOKActiveResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
     delete: {
-      operationId: 'delete_extra_speech_profile_sample_v3_speech_profile_expand_delete';
+      operationId: "deactivate_byok_endpoint_v1_users_me_byok_active_delete";
       responses: {
-        '200': SpeechProfileMutationResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": BYOKActiveResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
-  '/v3/upload-audio': {
-    post: {
-      operationId: 'upload_profile_v3_upload_audio_post';
-      responses: {
-        '200': SpeechProfileUploadResponse;
-        '401': void;
-        '422': HTTPValidationError;
-      };
-    };
-  };
-  '/v4/speech-profile': {
+  "/v1/users/me/llm-usage": {
     get: {
-      operationId: 'get_speech_profile_v4_speech_profile_get';
+      operationId: "get_llm_usage_v1_users_me_llm_usage_get";
       responses: {
-        '200': SpeechProfileResponse;
-        '401': void;
-        '422': HTTPValidationError;
+        "200": LlmUsageResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "record_llm_usage_bucket_v1_users_me_llm_usage_post";
+      responses: {
+        "200": LlmUsageRecordResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/llm-usage/top-features": {
+    get: {
+      operationId: "get_llm_top_features_v1_users_me_llm_usage_top_features_get";
+      responses: {
+        "200": Array<LlmUsageFeatureResponse>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/llm-usage/total": {
+    get: {
+      operationId: "get_total_llm_cost_v1_users_me_llm_usage_total_get";
+      responses: {
+        "200": LlmTotalCostResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/paywall": {
+    get: {
+      operationId: "get_user_paywall_status_v1_users_me_paywall_get";
+      responses: {
+        "200": PaywallStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/subscription": {
+    get: {
+      operationId: "get_user_subscription_endpoint_v1_users_me_subscription_get";
+      responses: {
+        "200": UserSubscriptionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/trial": {
+    get: {
+      operationId: "get_user_trial_status_v1_users_me_trial_get";
+      responses: {
+        "200": TrialMetadata;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/usage": {
+    get: {
+      operationId: "get_user_usage_stats_endpoint_v1_users_me_usage_get";
+      responses: {
+        "200": UserUsageResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/usage-quota": {
+    get: {
+      operationId: "get_user_chat_usage_quota_v1_users_me_usage_quota_get";
+      responses: {
+        "200": ChatUsageQuota;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/mentor-notification-settings": {
+    get: {
+      operationId: "get_mentor_notification_settings_v1_users_mentor_notification_settings_get";
+      responses: {
+        "200": MentorNotificationSettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_mentor_notification_settings_v1_users_mentor_notification_settings_patch";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/migration/batch-requests": {
+    post: {
+      operationId: "handle_batch_migration_requests_v1_users_migration_batch_requests_post";
+      responses: {
+        "200": MigrationStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/migration/requests": {
+    get: {
+      operationId: "get_migration_requests_v1_users_migration_requests_get";
+      responses: {
+        "200": MigrationRequestsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "handle_migration_requests_v1_users_migration_requests_post";
+      responses: {
+        "200": MigrationStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/migration/requests/data-protection-level/finalize": {
+    post: {
+      operationId: "finalize_migration_request_v1_users_migration_requests_data_protection_level_finalize_post";
+      responses: {
+        "200": MigrationStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/notification-settings": {
+    get: {
+      operationId: "get_notification_settings_v1_users_notification_settings_get";
+      responses: {
+        "200": NotificationSettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_notification_settings_v1_users_notification_settings_patch";
+      responses: {
+        "200": NotificationSettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/onboarding": {
+    get: {
+      operationId: "get_onboarding_state_v1_users_onboarding_get";
+      responses: {
+        "200": OnboardingStateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_onboarding_state_v1_users_onboarding_patch";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/people": {
+    get: {
+      operationId: "get_all_people_v1_users_people_get";
+      responses: {
+        "200": Array<Person>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "get_or_create_person_v1_users_people_post";
+      responses: {
+        "200": Person;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/people/{person_id}": {
+    get: {
+      operationId: "get_single_person_v1_users_people__person_id__get";
+      responses: {
+        "200": Person;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_person_endpoint_v1_users_people__person_id__delete";
+      responses: {
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/people/{person_id}/name": {
+    patch: {
+      operationId: "update_person_name_v1_users_people__person_id__name_patch";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/people/{person_id}/speech-samples/{sample_index}": {
+    delete: {
+      operationId: "delete_person_speech_sample_endpoint_v1_users_people__person_id__speech_samples__sample_index__delete";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/preferences/app": {
+    put: {
+      operationId: "set_preferred_app_for_user_v1_users_preferences_app_put";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/private-cloud-sync": {
+    get: {
+      operationId: "get_private_cloud_sync_v1_users_private_cloud_sync_get";
+      responses: {
+        "200": PrivateCloudSyncResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "set_private_cloud_sync_v1_users_private_cloud_sync_post";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/profile": {
+    get: {
+      operationId: "get_user_profile_endpoint_v1_users_profile_get";
+      responses: {
+        "200": UserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/stats/chat-messages": {
+    get: {
+      operationId: "get_chat_message_count_v1_users_stats_chat_messages_get";
+      responses: {
+        "200": ChatMessageCountResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/store-recording-permission": {
+    get: {
+      operationId: "get_store_recording_permission_v1_users_store_recording_permission_get";
+      responses: {
+        "200": StoreRecordingPermissionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "store_recording_permission_v1_users_store_recording_permission_post";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_permission_and_recordings_v1_users_store_recording_permission_delete";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/training-data-opt-in": {
+    get: {
+      operationId: "get_training_data_opt_in_status_v1_users_training_data_opt_in_get";
+      responses: {
+        "200": TrainingDataOptInResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "set_training_data_opt_in_status_v1_users_training_data_opt_in_post";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/transcription-preferences": {
+    get: {
+      operationId: "get_transcription_preferences_endpoint_v1_users_transcription_preferences_get";
+      responses: {
+        "200": TranscriptionPreferencesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_transcription_preferences_endpoint_v1_users_transcription_preferences_patch";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/wrapped/{year}": {
+    get: {
+      operationId: "get_wrapped_status_v1_wrapped__year__get";
+      responses: {
+        "200": WrappedStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/wrapped/{year}/generate": {
+    post: {
+      operationId: "generate_wrapped_v1_wrapped__year__generate_post";
+      responses: {
+        "200": GenerateWrappedResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/apps": {
+    get: {
+      operationId: "get_apps_v2_v2_apps_get";
+      responses: {
+        "200": AppCatalogResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/apps/capability/{capability_id}/grouped": {
+    get: {
+      operationId: "get_capability_apps_grouped_by_category_v2_apps_capability__capability_id__grouped_get";
+      responses: {
+        "200": AppCatalogResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/apps/search": {
+    get: {
+      operationId: "search_apps_v2_apps_search_get";
+      responses: {
+        "200": AppSearchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/files": {
+    post: {
+      operationId: "upload_file_chat_v2_files_post";
+      responses: {
+        "200": Array<FileChat>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/firmware/latest": {
+    get: {
+      operationId: "get_latest_version_v2_firmware_latest_get";
+      responses: {
+        "200": FirmwareVersionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/firmware/stable": {
+    get: {
+      operationId: "get_stable_version_v2_firmware_stable_get";
+      responses: {
+        "200": FirmwareVersionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/initial-message": {
+    post: {
+      operationId: "create_initial_message_v2_initial_message_post";
+      responses: {
+        "200": Message;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/messages": {
+    get: {
+      operationId: "get_messages_v2_messages_get";
+      responses: {
+        "200": Array<Message>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "send_message_v2_messages_post";
+      responses: {
+        "200": ResponseMessage;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "clear_chat_messages_v2_messages_delete";
+      responses: {
+        "200": Message;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/messages/share": {
+    post: {
+      operationId: "share_chat_messages_v2_messages_share_post";
+      responses: {
+        "200": ShareChatMessagesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/messages/shared/{token}": {
+    get: {
+      operationId: "get_shared_chat_messages_v2_messages_shared__token__get";
+      responses: {
+        "200": SharedChatMessagesResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/messages/{message_id}/rating": {
+    patch: {
+      operationId: "rate_message_v2_messages__message_id__rating_patch";
+      responses: {
+        "200": ChatRatingResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/messages/{message_id}/report": {
+    post: {
+      operationId: "report_message_v2_messages__message_id__report_post";
+      responses: {
+        "200": MessageReportResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/sync-local-files": {
+    post: {
+      operationId: "sync_local_files_v2_v2_sync_local_files_post";
+      responses: {
+        "202": SyncJobStartResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/sync-local-files/{job_id}": {
+    get: {
+      operationId: "get_sync_job_status_v2_sync_local_files__job_id__get";
+      responses: {
+        "200": SyncJobStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/tts/synthesize": {
+    post: {
+      operationId: "tts_synthesize_v2_tts_synthesize_post";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/voice-message/transcribe": {
+    post: {
+      operationId: "transcribe_voice_message_v2_voice_message_transcribe_post";
+      responses: {
+        "200": VoiceMessageTranscriptionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/voice-messages": {
+    post: {
+      operationId: "create_voice_message_stream_v2_voice_messages_post";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories": {
+    get: {
+      operationId: "get_memories_v3_memories_get";
+      responses: {
+        "200": Array<MemoryDB>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_memory_v3_memories_post";
+      responses: {
+        "200": MemoryDB;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_memories_v3_memories_delete";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/batch": {
+    post: {
+      operationId: "create_memories_batch_v3_memories_batch_post";
+      responses: {
+        "200": routers__memories__BatchMemoriesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/review-queue": {
+    get: {
+      operationId: "list_memory_review_queue_v3_memories_review_queue_get";
+      responses: {
+        "200": Array<Record<string, unknown>>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/review-queue/{review_id}/resolve": {
+    post: {
+      operationId: "resolve_memory_review_item_v3_memories_review_queue__review_id__resolve_post";
+      responses: {
+        "200": ReviewResolutionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/{memory_id}": {
+    patch: {
+      operationId: "edit_memory_v3_memories__memory_id__patch";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_memory_v3_memories__memory_id__delete";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/{memory_id}/review": {
+    post: {
+      operationId: "review_memory_v3_memories__memory_id__review_post";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/{memory_id}/visibility": {
+    patch: {
+      operationId: "update_memory_visibility_v3_memories__memory_id__visibility_patch";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/speech-profile": {
+    get: {
+      operationId: "has_speech_profile_v3_speech_profile_get";
+      responses: {
+        "200": HasSpeechProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/speech-profile/expand": {
+    get: {
+      operationId: "get_extra_speech_profile_samples_v3_speech_profile_expand_get";
+      responses: {
+        "200": Array<string>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_extra_speech_profile_sample_v3_speech_profile_expand_delete";
+      responses: {
+        "200": SpeechProfileMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/upload-audio": {
+    post: {
+      operationId: "upload_profile_v3_upload_audio_post";
+      responses: {
+        "200": SpeechProfileUploadResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v4/speech-profile": {
+    get: {
+      operationId: "get_speech_profile_v4_speech_profile_get";
+      responses: {
+        "200": SpeechProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
