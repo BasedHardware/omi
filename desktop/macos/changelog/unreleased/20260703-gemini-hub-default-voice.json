@@ -1,0 +1,3 @@
+{
+  "change": "Voice answers powered by Gemini now always use the same voice (Charon) instead of a provider default that could vary"
+}

@@ -448,6 +448,12 @@ final class RealtimeHubSession: NSObject {
           "generationConfig": [
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
+            // Pin the spoken voice — with no speechConfig Gemini picks its own default,
+            // which differs from the OpenAI hub voice (marin) and can change across
+            // model revisions. Charon: deep, calm, "informative" — closest match to marin.
+            "speechConfig": [
+              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Charon"]]
+            ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
