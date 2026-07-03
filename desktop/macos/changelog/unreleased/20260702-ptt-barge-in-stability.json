@@ -1,3 +1,0 @@
-{
-  "change": "Stabilized push-to-talk barge-in handling so rapid follow-up turns keep conversation context and fall back cleanly if no realtime session owns the commit."
-}

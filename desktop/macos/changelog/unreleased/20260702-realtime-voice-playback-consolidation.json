@@ -1,3 +1,0 @@
-{
-  "change": "Realtime push-to-talk now uses the selected app voice playback service for no-audio fallbacks and background-agent kickoff acknowledgements instead of owning a separate Apple TTS path."
-}

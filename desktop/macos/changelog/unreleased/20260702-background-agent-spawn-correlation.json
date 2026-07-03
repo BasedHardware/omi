@@ -1,3 +1,0 @@
-{
-  "change": "Fixed visible background-agent pill startup so top-level spawned agents keep canonical runtime context while their runs execute."
-}
