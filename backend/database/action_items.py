@@ -4,6 +4,7 @@ from typing import Optional, List
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+import pytz
 
 from ._client import db
 import logging
@@ -833,4 +834,73 @@ def get_scores(uid: str, date: str = None) -> dict:
         'overall': overall,
         'default_tab': default_tab,
         'date': day.strftime('%Y-%m-%d'),
+    }
+
+
+def get_completion_streak(
+    uid: str,
+    *,
+    tz: str = 'UTC',
+    today: Optional[str] = None,
+    max_days: int = 366,
+    firestore_client=None,
+) -> dict:
+    """Consecutive-day action-item completion streak, an engagement metric.
+
+    A day counts toward the streak when at least one non-deleted action item was completed that
+    day, bucketed by ``completed_at`` in the caller's IANA time zone ``tz``. The current streak is
+    the run of consecutive completed days ending today, or ending yesterday when nothing has been
+    completed yet today, so a still-live streak is not reported as broken before the day is over.
+
+    Args:
+        uid: User ID.
+        tz: IANA time zone used to bucket ``completed_at`` into local days.
+        today: Local ``YYYY-MM-DD`` anchoring "today" (defaults to the current local date).
+        max_days: How far back to look; caps the single range query.
+        firestore_client: Optional injected client (tests); defaults to the shared client.
+
+    Returns:
+        {'current_streak': int, 'longest_streak': int, 'completed_today': bool,
+         'last_completed_date': 'YYYY-MM-DD' | None}
+    """
+    client = firestore_client if firestore_client is not None else db
+    zone = pytz.timezone(tz)
+    today_date = datetime.strptime(today, '%Y-%m-%d').date() if today else datetime.now(zone).date()
+    window_start = datetime.now(timezone.utc) - timedelta(days=max_days)
+
+    col = client.collection('users').document(uid).collection(action_items_collection)
+    completed_days = set()
+    for doc in col.where(filter=FieldFilter('completed_at', '>=', window_start)).stream():
+        data = doc.to_dict()
+        if data.get('deleted') or not data.get('completed'):
+            continue
+        completed_at = data.get('completed_at')
+        if completed_at is not None:
+            completed_days.add(completed_at.astimezone(zone).date())
+
+    if not completed_days:
+        return {'current_streak': 0, 'longest_streak': 0, 'completed_today': False, 'last_completed_date': None}
+
+    completed_today = today_date in completed_days
+
+    # Current streak: consecutive days ending today, or yesterday if today is not done yet.
+    current_streak = 0
+    cursor = today_date if completed_today else today_date - timedelta(days=1)
+    while cursor in completed_days:
+        current_streak += 1
+        cursor -= timedelta(days=1)
+
+    # Longest streak anywhere in the window.
+    longest_streak = current_run = 0
+    prev = None
+    for day in sorted(completed_days):
+        current_run = current_run + 1 if prev is not None and day - prev == timedelta(days=1) else 1
+        longest_streak = max(longest_streak, current_run)
+        prev = day
+
+    return {
+        'current_streak': current_streak,
+        'longest_streak': longest_streak,
+        'completed_today': completed_today,
+        'last_completed_date': max(completed_days).isoformat(),
     }

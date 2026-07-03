@@ -1,6 +1,7 @@
 """Scores — daily, weekly, and overall productivity scores computed from action items."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+import pytz
 
 import database.action_items as action_items_db
 from utils.other import endpoints as auth
@@ -25,3 +26,13 @@ def get_scores(
 ):
     date = validate_calendar_date(date)
     return action_items_db.get_scores(uid, date=date)
+
+
+@router.get('/v1/scores/streak', tags=['scores'])
+def get_streak(
+    tz: str = Query('UTC'),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    if tz not in pytz.all_timezones_set:
+        raise HTTPException(status_code=400, detail='Invalid timezone')
+    return action_items_db.get_completion_streak(uid, tz=tz)
