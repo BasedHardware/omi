@@ -532,7 +532,7 @@ def search_conversations_via_integration(
 
 @router.post(
     '/v2/integrations/{app_id}/notification',
-    response_model=integration_models.EmptyResponse,
+    response_model=integration_models.IntegrationNotificationResponse,
     tags=['integration', 'notifications'],
 )
 def send_notification_via_integration(

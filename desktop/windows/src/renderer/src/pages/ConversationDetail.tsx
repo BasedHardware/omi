@@ -7,23 +7,7 @@ import { toast } from '../lib/toast'
 import type { ChatMessage } from '../../../shared/types'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Spinner } from '../components/ui/Spinner'
-
-type ServerConversation = {
-  id: string
-  title?: string | null
-  overview?: string | null
-  status?: string | null
-  transcript_segments?: { text: string; speaker?: string; start?: number; end?: number }[]
-  structured?: {
-    title?: string | null
-    overview?: string | null
-    action_items?: { id?: string; description: string; completed?: boolean }[]
-    category?: string | null
-    emoji?: string | null
-  } | null
-  created_at?: string
-  finished_at?: string
-}
+import type { Conversation as ServerConversation } from '../lib/omiApi.generated'
 
 type Display = {
   title: string

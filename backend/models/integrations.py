@@ -53,6 +53,10 @@ class EmptyResponse(BaseModel):
     pass
 
 
+class IntegrationNotificationResponse(BaseModel):
+    status: str
+
+
 class ConversationCreateResponse(BaseModel):
     status: str
     conversation_id: str

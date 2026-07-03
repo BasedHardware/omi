@@ -24,20 +24,7 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 import type { LocalConversation } from '../../../shared/types'
-
-type CloudConversation = {
-  id: string
-  title?: string | null
-  overview?: string | null
-  created_at?: string
-  finished_at?: string
-  status?: string
-  transcript_segments?: { text: string }[]
-  structured?: {
-    title?: string | null
-    emoji?: string | null
-  } | null
-}
+import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
 
 function summarize(segments: { text: string }[] | undefined): string {
   if (!segments || segments.length === 0) return ''

@@ -6,46 +6,12 @@ import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { GenerateGoalsButton } from '../components/ui/GenerateGoalsButton'
 import { toast } from '../lib/toast'
-
-// A goal as returned by the goals endpoints. The backend uses a target/current
-// value model (the progress endpoint is PATCH .../progress?current_value=), so
-// progress is derived from current_value / target_value. Fields beyond id/title
-// are optional and read defensively — the macOS Goal model carries unit,
-// description, status and timestamps, not all of which every goal sets.
-type Goal = {
-  id: string
-  title: string
-  // Backend completion model (verified against the live API): a goal is done
-  // when is_active === false. There is no status / completed_at field, and
-  // there is no GET /v1/goals/completed route (it 405s — "completed" parses as
-  // a goal id). Completed history is derived from /v1/goals/all by is_active.
-  is_active?: boolean
-  goal_type?: string | null // 'scale' | 'boolean'
-  target_value?: number | null
-  current_value?: number | null
-  min_value?: number | null
-  max_value?: number | null
-  unit?: string | null
-  created_at?: string | null
-  updated_at?: string | null
-}
+import type {
+  GoalResponse as Goal,
+  GoalSuggestionResponse as GoalSuggestion
+} from '../lib/omiApi.generated'
 
 type GoalPatch = Partial<Pick<Goal, 'title' | 'target_value' | 'unit'>>
-
-// Shape returned by GET /v1/goals/suggest — the backend's `'goals'` LLM reads
-// the user's recent memories and proposes one goal (verified live against
-// api.omi.me). It does not create anything; we preview it and let the user add
-// it via the normal POST /v1/goals path. (The macOS desktop instead runs a
-// richer Gemini-direct generation; this server-side suggestion is the
-// no-AI-key parity we can offer on Windows today.)
-type GoalSuggestion = {
-  suggested_title: string
-  suggested_type?: string | null
-  suggested_target?: number | null
-  suggested_min?: number | null
-  suggested_max?: number | null
-  reasoning?: string | null
-}
 
 // Module-level cache so navigating away and back is instant; refresh re-fetches.
 const cache = {

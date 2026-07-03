@@ -38,8 +38,19 @@ BACKEND_DIR = ROOT_DIR / 'backend'
 E2E_DIR = BACKEND_DIR / 'testing' / 'e2e'
 DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'openapi.json'
 DEFAULT_APP_CLIENT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
+DEFAULT_INTEGRATION_PUBLIC_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'integration-public-openapi.json'
 
 DOCUMENTED_PUBLIC_PREFIXES = ('/v1/dev/',)
+INTEGRATION_PUBLIC_PATHS = (
+    '/v1/integrations/notification',
+    '/v2/integrations/{app_id}/user/conversations',
+    '/v2/integrations/{app_id}/user/memories',
+    '/v2/integrations/{app_id}/memories',
+    '/v2/integrations/{app_id}/conversations',
+    '/v2/integrations/{app_id}/search/conversations',
+    '/v2/integrations/{app_id}/notification',
+    '/v2/integrations/{app_id}/tasks',
+)
 APP_CLIENT_PREFIXES = (
     '/v1/action-items',
     '/v1/agent',
@@ -226,6 +237,7 @@ HTTP_METHODS = {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'}
 
 OPENAPI_TITLE = 'Omi Developer API'
 APP_CLIENT_OPENAPI_TITLE = 'Omi App Client API'
+INTEGRATION_PUBLIC_OPENAPI_TITLE = 'Omi Integration API'
 OPENAPI_VERSION = '1.0.0'
 OPENAPI_DESCRIPTION = (
     'Programmatic access to your Omi data - memories, conversations, action items, goals, folders, and API keys. '
@@ -259,6 +271,12 @@ DEVELOPER_API_KEY_AUTH_SCHEME = {
     'scheme': 'bearer',
     'bearerFormat': 'Omi Developer API key',
     'description': 'Send `Authorization: Bearer <omi_developer_api_key>`.',
+}
+INTEGRATION_API_KEY_AUTH_SCHEME = {
+    'type': 'http',
+    'scheme': 'bearer',
+    'bearerFormat': 'Omi Integration API key',
+    'description': 'Send `Authorization: Bearer <omi_integration_api_key>`.',
 }
 ERROR_RESPONSE_SCHEMA = {
     'type': 'object',
@@ -565,6 +583,10 @@ def generate_app_client_openapi() -> dict[str, Any]:
     return generate_openapi('app-client')
 
 
+def generate_integration_public_openapi() -> dict[str, Any]:
+    return generate_openapi('integration-public')
+
+
 def generate_openapi(surface: str) -> dict[str, Any]:
     original_env = dict(os.environ)
     side_effect_snapshot = snapshot_side_effect_paths()
@@ -624,6 +646,10 @@ def is_app_client_contract_path(path: str) -> bool:
     return False
 
 
+def is_integration_public_contract_path(path: str) -> bool:
+    return path in INTEGRATION_PUBLIC_PATHS
+
+
 def is_audited_public_path(path: str) -> bool:
     for prefix in AUDITED_PUBLIC_PREFIXES:
         if prefix.endswith('/'):
@@ -647,6 +673,14 @@ def app_client_contract_routes(app) -> list[APIRoute]:
         route
         for route in app.routes
         if isinstance(route, APIRoute) and is_app_client_contract_path(route.path) and route.include_in_schema
+    ]
+
+
+def integration_public_contract_routes(app) -> list[APIRoute]:
+    return [
+        route
+        for route in app.routes
+        if isinstance(route, APIRoute) and is_integration_public_contract_path(route.path) and route.include_in_schema
     ]
 
 
@@ -720,6 +754,34 @@ def _normalize_app_client_security(schema: dict[str, Any]) -> None:
                     operation['responses'].setdefault('404', {'$ref': '#/components/responses/Error404'})
 
 
+def _normalize_integration_public_security(schema: dict[str, Any]) -> None:
+    components = schema.setdefault('components', {})
+    security_schemes = components.setdefault('securitySchemes', {})
+    security_schemes.clear()
+    security_schemes['integrationApiKey'] = INTEGRATION_API_KEY_AUTH_SCHEME
+    components.setdefault('schemas', {})['ErrorResponse'] = ERROR_RESPONSE_SCHEMA
+    responses = components.setdefault('responses', {})
+    for status_code, response in COMMON_RESPONSES.items():
+        responses[f'Error{status_code}'] = {
+            **response,
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ErrorResponse'},
+                }
+            },
+        }
+    schema.pop('security', None)
+
+    for path, operations in schema.get('paths', {}).items():
+        for method, operation in operations.items():
+            if method.upper() in HTTP_METHODS:
+                operation['security'] = [{'integrationApiKey': []}]
+                operation.setdefault('responses', {})['401'] = {'$ref': '#/components/responses/Error401'}
+                operation['responses'].setdefault('403', {'$ref': '#/components/responses/Error403'})
+                if '{' in path and method.upper() in {'GET', 'PATCH', 'DELETE'}:
+                    operation['responses'].setdefault('404', {'$ref': '#/components/responses/Error404'})
+
+
 def _rewrite_refs(value: Any, ref_map: dict[str, str]) -> None:
     if isinstance(value, dict):
         ref = value.get('$ref')
@@ -759,6 +821,9 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     elif surface == 'app-client':
         routes = app_client_contract_routes(app)
         title = APP_CLIENT_OPENAPI_TITLE
+    elif surface == 'integration-public':
+        routes = integration_public_contract_routes(app)
+        title = INTEGRATION_PUBLIC_OPENAPI_TITLE
     else:
         raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
@@ -774,8 +839,10 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     )
     if surface == 'public':
         _normalize_bearer_security(schema)
-    else:
+    elif surface == 'app-client':
         _normalize_app_client_security(schema)
+    elif surface == 'integration-public':
+        _normalize_integration_public_security(schema)
     _normalize_component_names(schema)
     validate_contract(app, schema, surface)
     return schema
@@ -848,6 +915,29 @@ def validate_contract(app, schema: dict[str, Any], surface: str = 'public') -> N
         for path in schema.get('paths', {}):
             if not is_app_client_contract_path(path):
                 raise OpenAPIContractError(f'non-app-client route leaked into app-client OpenAPI: {path}')
+    elif surface == 'integration-public':
+        documented = set(documented_route_keys(schema))
+        expected = set(
+            iter_route_keys(
+                route
+                for route in app.routes
+                if isinstance(route, APIRoute) and is_integration_public_contract_path(route.path)
+            )
+        )
+        missing = sorted(expected - documented)
+        extra = sorted(documented - expected)
+        if missing or extra:
+            parts = []
+            if missing:
+                parts.append('integration routes missing from OpenAPI: ' + ', '.join(f'{m} {p}' for m, p in missing))
+            if extra:
+                parts.append(
+                    'OpenAPI routes not present in integration surface: ' + ', '.join(f'{m} {p}' for m, p in extra)
+                )
+            raise OpenAPIContractError('\n'.join(parts))
+        for path in schema.get('paths', {}):
+            if not is_integration_public_contract_path(path):
+                raise OpenAPIContractError(f'non-integration route leaked into integration OpenAPI: {path}')
     else:
         raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
@@ -873,7 +963,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Export or verify an Omi OpenAPI contract.')
     parser.add_argument(
         '--surface',
-        choices=('public', 'app-client'),
+        choices=('public', 'app-client', 'integration-public'),
         default='public',
         help='contract surface to export; defaults to public Developer API',
     )
@@ -896,6 +986,8 @@ def default_spec_path(surface: str) -> Path:
         return DEFAULT_SPEC_PATH
     if surface == 'app-client':
         return DEFAULT_APP_CLIENT_SPEC_PATH
+    if surface == 'integration-public':
+        return DEFAULT_INTEGRATION_PUBLIC_SPEC_PATH
     raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
 
