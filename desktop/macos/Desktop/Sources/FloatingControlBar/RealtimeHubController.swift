@@ -40,19 +40,20 @@ enum RealtimeHubCloseClassifier {
   static func category(
     message: String,
     aliveFor: TimeInterval,
-    hasActiveTurn: Bool = false
+    hasActiveTurn: Bool = false,
+    provider: RealtimeHubProvider = .openai
   ) -> RealtimeHubCloseCategory? {
     let lower = message.lowercased()
     guard lower.contains("websocket closed (1008)") else { return nil }
     if CredentialHealthManager.classifyProviderClose(
       message: message,
-      provider: .openai) == .providerQuotaExceeded(provider: .openai)
+      provider: provider) == .providerQuotaExceeded(provider: provider)
     {
       return .providerQuotaExceeded
     }
     if CredentialHealthManager.classifyProviderClose(
       message: message,
-      provider: .openai) == .providerAuthFailed(provider: .openai, mode: .byok)
+      provider: provider) == .providerAuthFailed(provider: provider, mode: .byok)
     {
       return .providerAuthFailed
     }
@@ -195,6 +196,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// Provider turn completion means the server finished sending; the Mac may still be
   /// playing the queued tail, and a new PTT during that tail is still a barge-in.
   private var realtimePlaybackActive = false
+  private var turnGeneration: UInt64 = 0
   /// Monotonic owner for realtime playback-idle callbacks. The PCM player can
   /// complete older buffers after a stop, rebuild, or newer audio chunk; only the
   /// latest scheduled playback epoch may clear `realtimePlaybackActive`.
@@ -614,6 +616,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
+    turnGeneration &+= 1
+    let screenshotTurnGeneration = turnGeneration
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     pendingVoiceAgentHandoff = nil
@@ -667,6 +671,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     Task.detached(priority: .utility) {
       let jpeg = ScreenCaptureManager.captureScreenJPEG()
       await MainActor.run {
+        guard self.turnGeneration == screenshotTurnGeneration else { return }
         self.speculativeScreenshot = jpeg
         if self.sessionProvider == .gemini, let jpeg {
           self.session?.sendVideoFrame(jpeg, mime: "image/jpeg")
@@ -716,8 +721,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // upload/decode before the model answers. Nothing to attach here.)
     guard session != nil else {
       if pendingBargeInReplacement != nil {
-        pendingBargeInReplacement?.pendingCommit = true
-        return .deferredForReplacement
+        log("RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — falling back to buffered transcription")
+        clearBargeInReplacementState()
+        responding = false
+        ensureWarm()
+        return .rejectedNoSession
       } else {
         responding = false
         exitVoiceUI(clearResponseGlow: true)
@@ -734,6 +742,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
+    turnGeneration &+= 1
     turnTranscript = ""
     assistantText = ""
     pendingVoiceAgentHandoff = nil
@@ -1286,7 +1295,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     let closeCategory = RealtimeHubCloseClassifier.category(
       message: message,
       aliveFor: aliveFor,
-      hasActiveTurn: hasActiveTurn)
+      hasActiveTurn: hasActiveTurn,
+      provider: sessionProvider ?? .openai)
     let provider = sessionProvider
     let authMode: CredentialAuthMode = sessionAuth?.isEphemeral == true ? .managed : .byok
     let fingerprint = provider.flatMap { APIKeyService.byokKey($0.byokProvider) }.map(APIKeyService.byokFingerprint)

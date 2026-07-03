@@ -123,6 +123,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationSpacing: CGFloat = 8
     private static let askOmiAnimationDuration: TimeInterval = 0.14
     private static let askOmiSettleDelay: TimeInterval = 0.16
+    private static let frameNoopEpsilon: CGFloat = 0.5
     private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
@@ -159,6 +160,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
     private var frameAnimationToken: Int = 0
+    private var pendingFrameAnimationTarget: NSRect?
     private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
 
     private var notchModeEnabled: Bool {
@@ -1288,8 +1290,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             ? originForTopCenterAnchor(newSize: constrainedSize)
             : originForCenterAnchor(newSize: constrainedSize)
 
-        log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
-
         let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
         if animated, anchorTop, notchModeEnabled {
             let currentTopCenteredFrame = NSRect(
@@ -1316,11 +1316,29 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         animated: Bool = false,
         animationDuration: TimeInterval = 0.18
     ) {
+        let wasResizable = styleMask.contains(.resizable)
         if makeResizable {
             styleMask.insert(.resizable)
         } else {
             styleMask.remove(.resizable)
         }
+
+        let alreadyAtTarget = Self.framesEquivalent(frame, targetFrame)
+        let alreadyAnimatingToTarget = pendingFrameAnimationTarget.map {
+            Self.framesEquivalent($0, targetFrame)
+        } ?? false
+
+        if alreadyAtTarget, wasResizable == makeResizable {
+            frameAnimationToken += 1
+            pendingFrameAnimationTarget = nil
+            isResizingProgrammatically = false
+            return
+        }
+        if alreadyAnimatingToTarget, wasResizable == makeResizable {
+            return
+        }
+
+        log("FloatingControlBar: resizeToFrame to \(targetFrame.size) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
         isResizingProgrammatically = true
 
@@ -1336,9 +1354,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
+    private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool {
+        abs(lhs.origin.x - rhs.origin.x) <= frameNoopEpsilon
+            && abs(lhs.origin.y - rhs.origin.y) <= frameNoopEpsilon
+            && abs(lhs.size.width - rhs.size.width) <= frameNoopEpsilon
+            && abs(lhs.size.height - rhs.size.height) <= frameNoopEpsilon
+    }
+
     private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
         frameAnimationToken += 1
         let token = frameAnimationToken
+        pendingFrameAnimationTarget = frame
         let startFrame = self.frame
         let steps = max(1, Int((duration * 120).rounded()))
         for step in 1...steps {
@@ -1356,6 +1382,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 self.setFrame(interpolated, display: true, animate: false)
                 if step == steps {
                     self.setFrame(frame, display: true, animate: false)
+                    if self.frameAnimationToken == token {
+                        self.pendingFrameAnimationTarget = nil
+                    }
                     completion?()
                 }
             }

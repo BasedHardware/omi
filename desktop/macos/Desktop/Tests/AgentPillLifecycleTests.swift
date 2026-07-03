@@ -551,7 +551,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     // OpenAI can cancel a response in-session. Gemini cannot reliably cancel a
     // streaming reply, so barge-in must replace the session. Managed Gemini
     // tokens are single-use, so the replacement session remints before it
-    // connects and holds early PTT audio/commit during that remint gap.
+    // connects and holds early PTT audio during that remint gap. If the user
+    // releases before the replacement is ready, PushToTalk falls back to its
+    // buffered transcription path instead of dropping captured speech.
     XCTAssertTrue(sessionSource.contains("enum RealtimeHubBargeInStrategy"))
     XCTAssertTrue(sessionSource.contains("provider == .gemini ? .freshSession : .inSessionCancel"))
     XCTAssertTrue(hubSource.contains("private var sessionAuth: HubAuth?"))
@@ -565,8 +567,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("barge-in replacement queued behind existing token mint"))
     XCTAssertTrue(hubSource.contains("finishBargeInReplacementAfterSessionStart(provider: provider)"))
     XCTAssertTrue(hubSource.contains("pendingBargeInReplacement?.audioBuffer.append(pcm16k)"))
-    XCTAssertTrue(hubSource.contains("pendingBargeInReplacement?.pendingCommit = true"))
-    XCTAssertTrue(hubSource.contains("return .deferredForReplacement"))
+    XCTAssertTrue(hubSource.contains("barge-in replacement not ready at commit — falling back to buffered transcription"))
+    XCTAssertTrue(hubSource.contains("clearBargeInReplacementState()\n        responding = false\n        ensureWarm()\n        return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
     XCTAssertTrue(hubSource.contains("if provider == .gemini, let speculativeScreenshot"))
@@ -575,6 +577,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("exitVoiceUI(clearResponseGlow: true)"))
     XCTAssertTrue(hubSource.contains("} else {\n        responding = false\n        exitVoiceUI(clearResponseGlow: true)\n        return .rejectedNoSession\n      }"))
     XCTAssertTrue(hubSource.contains("let providerResponseInFlight = responding"))
+    XCTAssertTrue(hubSource.contains("private var turnGeneration: UInt64 = 0"))
+    XCTAssertTrue(hubSource.contains("let screenshotTurnGeneration = turnGeneration"))
+    XCTAssertTrue(hubSource.contains("guard self.turnGeneration == screenshotTurnGeneration else { return }"))
     XCTAssertTrue(hubSource.contains("preserveInterruptedTurnForContinuity()"))
     XCTAssertTrue(hubSource.contains("var replacementSessionOwnsInputTurn = false"))
     XCTAssertTrue(hubSource.contains("case .freshSession:"))
@@ -972,6 +977,50 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatPageSource.contains(".markdownTableBackgroundStyle"))
   }
 
+  func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
+    let source = try omiAppSource()
+    let loggerSource = try loggerSource()
+
+    XCTAssertTrue(source.contains("options.enableAutoSessionTracking = !isDev"))
+    XCTAssertTrue(source.contains("options.enableCrashHandler = !isDev"))
+    XCTAssertTrue(source.contains("options.enableAppHangTracking = !isDev"))
+    XCTAssertTrue(source.contains("options.enableWatchdogTerminationTracking = !isDev"))
+    XCTAssertTrue(source.contains("options.appHangTimeoutInterval = isDev ? 0 : 3.0"))
+    XCTAssertTrue(source.contains("guard !AnalyticsManager.isDevBuild else { return }"))
+    XCTAssertTrue(source.contains("if !AnalyticsManager.isDevBuild {\n      SentrySDK.capture(message: \"App Terminating\")"))
+    XCTAssertTrue(loggerSource.contains("if !isDevBuild {\n    let breadcrumb = Breadcrumb(level: .info, category: \"app\")"))
+    XCTAssertTrue(loggerSource.contains("guard !isDevBuild else { return }"))
+  }
+
+  func testFloatingVoicePlaybackIgnoresStaleBargeInCallbacks() throws {
+    let source = try floatingBarVoicePlaybackServiceSource()
+
+    XCTAssertTrue(source.contains("private var playbackGeneration: UInt64 = 0"))
+    XCTAssertTrue(source.contains("private var localSpeechActive = false"))
+    XCTAssertTrue(source.contains("if localSpeechActive { return true }"))
+    XCTAssertTrue(source.contains("localSpeechActive = true\n    let utterance = AVSpeechUtterance"))
+    XCTAssertTrue(source.contains("playbackGeneration &+= 1"))
+    XCTAssertTrue(source.contains("let generation = playbackGeneration"))
+    XCTAssertTrue(source.contains("guard self.playbackGeneration == generation else { return }"))
+    XCTAssertTrue(source.contains("guard self.audioPlayer === player else { return }"))
+    XCTAssertTrue(source.contains("speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
+    XCTAssertTrue(source.contains("self.localSpeechActive = false\n      self.clearFloatingPillResponseGlowIfIdle()"))
+  }
+
+  func testFloatingBarResizeCoalescesNoopFrames() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("private static let frameNoopEpsilon: CGFloat = 0.5"))
+    XCTAssertTrue(source.contains("private var pendingFrameAnimationTarget: NSRect?"))
+    XCTAssertTrue(source.contains("let wasResizable = styleMask.contains(.resizable)"))
+    XCTAssertTrue(source.contains("let alreadyAnimatingToTarget = pendingFrameAnimationTarget.map"))
+    XCTAssertTrue(source.contains("if alreadyAtTarget, wasResizable == makeResizable"))
+    XCTAssertTrue(source.contains("if alreadyAnimatingToTarget, wasResizable == makeResizable"))
+    XCTAssertTrue(source.contains("frameAnimationToken += 1"))
+    XCTAssertTrue(source.contains("pendingFrameAnimationTarget = frame"))
+    XCTAssertTrue(source.contains("private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool"))
+  }
+
   private func agentPillSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -1188,6 +1237,30 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/StreamingPCMPlayer.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func omiAppSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/OmiApp.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func floatingBarVoicePlaybackServiceSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func loggerSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Logger.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
