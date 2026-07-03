@@ -115,6 +115,11 @@ export interface ResolveInput {
   task: string;
   taskType?: TaskType;
   availability?: AvailabilityMap;
+  /**
+   * An agent chosen structurally (e.g. a Swift UI provider pick that arrives as
+   * query.adapterId). Takes precedence over a name parsed from the task text.
+   */
+  explicitAgent?: RoutableAgentId;
 }
 
 /**
@@ -124,7 +129,8 @@ export function resolveAgent(input: ResolveInput): RoutingPlan {
   const { task } = input;
   const availability = input.availability ?? {};
   const taskType = input.taskType ?? "general";
-  const mentioned = parseExplicitMention(task);
+  // A structured pick (query.adapterId) outranks a name mentioned in the text.
+  const mentioned = input.explicitAgent ?? parseExplicitMention(task);
 
   // 1. Explicit mention wins — but never silently fall back if it's not
   //    connected. The caller uses `needsSetup` to trigger the guided install.

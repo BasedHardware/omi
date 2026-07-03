@@ -61,6 +61,13 @@ import {
   ensureRegisteredAdapter,
 } from "./runtime/adapter-selection.js";
 import {
+  buildAvailabilitySnapshot,
+  isDispatchRetryable,
+  planQueryDispatch,
+} from "./runtime/dispatch-routing.js";
+import { executeWithFallback } from "./runtime/agent-fallback.js";
+import type { RoutableAgentId } from "./runtime/agent-router.js";
+import {
   activeControlToolOwnerId,
   AGENT_CONTROL_TOOL_NAMES,
   controlRequestKey,
@@ -928,6 +935,34 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   const codexAvailable = await ensureCodexAdapter();
+
+  // Availability snapshot for the router. `acp` (Claude Code) is always present.
+  const availabilitySnapshot = () =>
+    buildAvailabilitySnapshot({
+      piMono: piMonoAuthToken !== undefined && piMonoAuthToken !== "",
+      hermes: hermesAvailable,
+      openclaw: openClawAvailable,
+      codex: codexAvailable,
+    });
+
+  // Activate a single adapter for one dispatch attempt. Throws (retryably) when
+  // the adapter can't be brought up, which the fallback executor uses to advance.
+  const activateAdapter = async (adapterId: RoutableAgentId): Promise<void> => {
+    if (adapterId === "acp") {
+      await startAcpProcess();
+      await initializeAcp();
+    } else if (adapterId === "pi-mono") {
+      if (!(await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN))) {
+        throw new Error("pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token).");
+      }
+    } else if (adapterId === "hermes") {
+      if (!(await ensureHermesAdapter())) throw new Error(adapterActivationError("hermes"));
+    } else if (adapterId === "openclaw") {
+      if (!(await ensureOpenClawAdapter())) throw new Error(adapterActivationError("openclaw"));
+    } else if (adapterId === "codex") {
+      if (!(await ensureCodexAdapter())) throw new Error(adapterActivationError("codex"));
+    }
+  };
   if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
@@ -1004,7 +1039,6 @@ async function main(): Promise<void> {
       case "query":
         (async () => {
           const query = msg as QueryMessage;
-          const adapterId = query.adapterId ?? defaultAdapterId;
           if (query.protocolVersion === 2 && !query.clientId?.trim()) {
             throw new Error("protocol v2 query requires clientId");
           }
@@ -1021,25 +1055,32 @@ async function main(): Promise<void> {
           const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
           currentOwnerId = queryOwnerId;
           try {
-            if (adapterId === "acp") {
-              await startAcpProcess();
-              await initializeAcp();
-            } else if (adapterId === "pi-mono") {
-              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
-            } else if (adapterId === "hermes") {
-              if (!(await ensureHermesAdapter())) {
-                throw new Error(adapterActivationError("hermes"));
-              }
-            } else if (adapterId === "openclaw") {
-              if (!(await ensureOpenClawAdapter())) {
-                throw new Error(adapterActivationError("openclaw"));
-              }
-            } else if (adapterId === "codex") {
-              if (!(await ensureCodexAdapter())) {
-                throw new Error(adapterActivationError("codex"));
-              }
+            // Route: honor an explicit adapterId, else pick via the router
+            // (explicit mention > capability match > default Claude Code).
+            const plan = planQueryDispatch(query, availabilitySnapshot());
+            if (plan.needsSetup) {
+              // Named an agent that isn't connected — guide setup, don't silently fall back.
+              throw new Error(adapterActivationError(plan.needsSetup) ?? plan.explanation);
             }
-            await facade.handleQuery(query);
+            logErr(`Router: ${plan.reason} — plan=[${plan.order.join(", ")}] (${plan.explanation})`);
+
+            // Execute with fallback: advance to the next agent when one can't be
+            // brought up. NOTE: terminal *run* failures are still surfaced by
+            // facade.handleQuery as error events (see compatibility-facade.ts),
+            // so they don't yet trigger fallback — that surfacing is the next,
+            // facade/kernel step. Activation/spawn failures fall back here today.
+            const outcome = await executeWithFallback(plan.order as RoutableAgentId[], {
+              runOne: async (agent) => {
+                query.adapterId = agent;
+                await activateAdapter(agent);
+                await facade.handleQuery(query);
+              },
+              isRetryable: isDispatchRetryable,
+              log: logErr,
+            });
+            if (!outcome.ok) {
+              throw outcome.error ?? new Error("No agent could handle the task.");
+            }
           } finally {
             if (queryOwnerKey && insertedOwner) {
               activeControlToolOwnersByRequest.delete(queryOwnerKey);
