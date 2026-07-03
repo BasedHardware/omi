@@ -15,10 +15,13 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from datetime import datetime, timezone  # noqa: E402
 from unittest.mock import MagicMock, patch  # noqa: E402
 
+import pytz  # noqa: E402
+
 import utils.llm.external_integrations as ext  # noqa: E402
 
 
-def test_summarize_experience_grounds_prompt_in_current_date():
+def _capture_prompt(text, **kwargs):
+    """Call summarize_experience_text with a mocked LLM and return the prompt it built."""
     captured = {}
     fake_response = MagicMock()
     fake_response.action_items = []
@@ -29,8 +32,26 @@ def test_summarize_experience_grounds_prompt_in_current_date():
     llm.with_structured_output.return_value = chain
 
     with patch.object(ext, 'get_llm', return_value=llm):
-        ext.summarize_experience_text('I have a dentist appointment tomorrow')
+        ext.summarize_experience_text(text, **kwargs)
+    return captured['prompt']
 
-    prompt = captured['prompt']
+
+def test_summarize_experience_grounds_prompt_in_current_date():
+    prompt = _capture_prompt('I have a dentist appointment tomorrow')
     assert 'today is' in prompt.lower()
+    # No timezone passed -> anchor to today's UTC date, labeled UTC.
     assert datetime.now(timezone.utc).strftime('%Y-%m-%d') in prompt
+    assert '(UTC)' in prompt
+
+
+def test_summarize_experience_uses_provided_timezone():
+    prompt = _capture_prompt('dentist tomorrow', tz='Asia/Tokyo')
+    # The anchor date is computed in the user's timezone, which can differ from UTC near midnight.
+    assert datetime.now(pytz.timezone('Asia/Tokyo')).strftime('%Y-%m-%d') in prompt
+    assert 'Asia/Tokyo' in prompt
+
+
+def test_summarize_experience_falls_back_to_utc_on_invalid_timezone():
+    prompt = _capture_prompt('dentist tomorrow', tz='Not/ARealZone')
+    assert datetime.now(timezone.utc).strftime('%Y-%m-%d') in prompt
+    assert '(UTC)' in prompt
