@@ -129,6 +129,17 @@ fn duration_bucket(elapsed: Duration) -> &'static str {
     }
 }
 
+/// Context for structured upstream_result logging on the error/timeout path,
+/// mirroring the fields the success path logs so sweeps can bucket timeouts and
+/// upstream failures by provider/model/action/payload (issue #8906).
+struct UpstreamLogCtx<'a> {
+    uid: &'a str,
+    provider: &'a str,
+    model: &'a str,
+    action: &'a str,
+    payload_bucket: &'a str,
+}
+
 fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
     let error = error.without_url();
     if error.is_timeout() {
@@ -136,6 +147,39 @@ fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
         ProxyError::UpstreamTimeout
     } else {
         tracing::error!("gemini_proxy: {} failed: {}", operation, error);
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
+    }
+}
+
+/// Like `map_upstream_error` but also emits a structured `upstream_result` log
+/// line mirroring the success path, so observability sweeps can bucket timeouts
+/// and upstream failures by provider/model/action/payload (issue #8906).
+fn map_upstream_error_logged(
+    error: reqwest::Error,
+    operation: &str,
+    ctx: &UpstreamLogCtx,
+    started: Instant,
+) -> ProxyError {
+    let error = error.without_url();
+    let status_label = if error.is_timeout() {
+        "timeout"
+    } else {
+        "error"
+    };
+    tracing::warn!(
+        "gemini_proxy: upstream_result uid={} provider={} model={} action={} payload_bucket={} duration_bucket={} status={} operation={}",
+        ctx.uid,
+        ctx.provider,
+        ctx.model,
+        ctx.action,
+        ctx.payload_bucket,
+        duration_bucket(started.elapsed()),
+        status_label,
+        operation,
+    );
+    if error.is_timeout() {
+        ProxyError::UpstreamTimeout
+    } else {
         ProxyError::Status(StatusCode::BAD_GATEWAY)
     }
 }
@@ -240,6 +284,13 @@ async fn gemini_proxy(
 
     let url = build_gemini_url(&path, byok_key);
     let request_payload_bucket = payload_bucket(sanitized_body.len());
+    let log_ctx = UpstreamLogCtx {
+        uid: &user.uid,
+        provider: "ai_studio_byok",
+        model,
+        action,
+        payload_bucket: request_payload_bucket,
+    };
     let started = Instant::now();
     let upstream = state
         .gemini_client
@@ -248,14 +299,14 @@ async fn gemini_proxy(
         .body(sanitized_body)
         .send()
         .await
-        .map_err(|e| map_upstream_error(e, "BYOK upstream request"))?;
+        .map_err(|e| map_upstream_error_logged(e, "BYOK upstream request", &log_ctx, started))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let bytes = upstream
         .bytes()
         .await
-        .map_err(|e| map_upstream_error(e, "BYOK upstream body read"))?;
+        .map_err(|e| map_upstream_error_logged(e, "BYOK upstream body read", &log_ctx, started))?;
     tracing::info!(
         "gemini_proxy: upstream_result uid={} provider=ai_studio_byok model={} action={} payload_bucket={} duration_bucket={} status={}",
         user.uid,
@@ -390,14 +441,22 @@ async fn gemini_proxy_server_key(
             .await
     };
 
-    let upstream = upstream.map_err(|e| map_upstream_error(e, "upstream request"))?;
+    let log_ctx = UpstreamLogCtx {
+        uid: &user.uid,
+        provider: upstream_provider,
+        model,
+        action,
+        payload_bucket: request_payload_bucket,
+    };
+    let upstream = upstream
+        .map_err(|e| map_upstream_error_logged(e, "upstream request", &log_ctx, started))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let bytes = upstream
         .bytes()
         .await
-        .map_err(|e| map_upstream_error(e, "upstream body read"))?;
+        .map_err(|e| map_upstream_error_logged(e, "upstream body read", &log_ctx, started))?;
     tracing::info!(
         "gemini_proxy: upstream_result uid={} provider={} model={} action={} payload_bucket={} duration_bucket={} status={}",
         user.uid,
