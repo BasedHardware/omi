@@ -8902,10 +8902,17 @@
             "type": "boolean"
           },
           "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only.",
             "readOnly": true,
-            "title": "Layer",
-            "type": "string"
+            "title": "Layer"
           },
           "manually_added": {
             "default": false,
@@ -8924,8 +8931,14 @@
             "title": "Memory Id"
           },
           "memory_tier": {
-            "$ref": "#/components/schemas/MemoryLayer",
-            "default": "long_term"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryLayer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "object_entity_ids": {
             "description": "Stable entity ids referenced by the fact arguments",
@@ -21703,6 +21716,24 @@
               ],
               "description": "Filter by starred status",
               "title": "Starred"
+            }
+          },
+          {
+            "description": "Comma-separated source filter (e.g. friend,omi)",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated source filter (e.g. friend,omi)",
+              "title": "Sources"
             }
           },
           {

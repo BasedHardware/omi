@@ -84,10 +84,10 @@ class GeneratedMemoryDB {
   final DateTime? invalidAt;
   final bool isLocked;
   final bool kgExtracted;
-  final String layer;
+  final String? layer;
   final bool manuallyAdded;
   final String? memoryId;
-  final String memoryTier;
+  final String? memoryTier;
   final List<String>? objectEntityIds;
   final String? predicate;
   final String? primaryCaptureDevice;
@@ -127,7 +127,7 @@ class GeneratedMemoryDB {
     required this.layer,
     this.manuallyAdded = false,
     this.memoryId,
-    this.memoryTier = "long_term",
+    this.memoryTier,
     this.objectEntityIds,
     this.predicate,
     this.primaryCaptureDevice,
@@ -166,10 +166,10 @@ class GeneratedMemoryDB {
       invalidAt: _readFieldValue<DateTime>(_readField(json, const ["invalid_at"]), "invalid_at", _readDateTime, requiredField: false, nullable: true),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       kgExtracted: _required(_readFieldValue<bool>(_readField(json, const ["kg_extracted"]), "kg_extracted", _readBool, requiredField: false, nullable: false, defaultValue: false), "kg_extracted"),
-      layer: _required(_readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: false), "layer"),
+      layer: _readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: true),
       manuallyAdded: _required(_readFieldValue<bool>(_readField(json, const ["manually_added"]), "manually_added", _readBool, requiredField: false, nullable: false, defaultValue: false), "manually_added"),
       memoryId: _readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: false, nullable: true),
-      memoryTier: _required(_readFieldValue<String>(_readField(json, const ["memory_tier"]), "memory_tier", _readString, requiredField: false, nullable: false, defaultValue: "long_term"), "memory_tier"),
+      memoryTier: _readFieldValue<String>(_readField(json, const ["memory_tier"]), "memory_tier", _readString, requiredField: false, nullable: true),
       objectEntityIds: _readFieldValue<List<String>>(_readField(json, const ["object_entity_ids"]), "object_entity_ids", _readStringList, requiredField: false, nullable: true),
       predicate: _readFieldValue<String>(_readField(json, const ["predicate"]), "predicate", _readString, requiredField: false, nullable: true),
       primaryCaptureDevice: _readFieldValue<String>(_readField(json, const ["primary_capture_device"]), "primary_capture_device", _readString, requiredField: false, nullable: true),
