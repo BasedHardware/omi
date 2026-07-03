@@ -11,6 +11,10 @@ from typing import List
 
 MAX_DRAFT_IMAGES = 8
 MAX_IMAGE_B64_CHARS = 5_000_000  # ~3.7 MB decoded per image
+# Aggregate cap across all inline images in one request. Per-image + count caps alone
+# still allow 8 × 5M = 40M chars (~30 MB); this bounds the total a single request can
+# push through the drafter (memory + LLM-token abuse) as defense-in-depth.
+MAX_TOTAL_IMAGE_B64_CHARS = 10_000_000  # ~7.5 MB decoded across the whole request
 
 
 def validate_draft_images(thread: List) -> None:
@@ -23,3 +27,8 @@ def validate_draft_images(thread: List) -> None:
     for b64 in images:
         if len(b64) > MAX_IMAGE_B64_CHARS:
             raise ValueError(f"inline image too large: {len(b64)} base64 chars (max {MAX_IMAGE_B64_CHARS})")
+    total = sum(len(b64) for b64 in images)
+    if total > MAX_TOTAL_IMAGE_B64_CHARS:
+        raise ValueError(
+            f"inline images too large in aggregate: {total} base64 chars (max {MAX_TOTAL_IMAGE_B64_CHARS})"
+        )

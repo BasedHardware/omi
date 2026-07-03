@@ -44,6 +44,11 @@ MAX_STYLE_SAMPLES = 30
 # with hundreds of memories doesn't blow up the prompt (MemoryService.read ignores
 # its limit on the legacy path).
 DURABLE_FACTS_CAP = 15
+# Cap on the cached AI-profile fallback text fed into the draft prompt. The API allows
+# profile_text up to 50k chars; unbounded it would bloat the prompt and crowd out
+# higher-priority context (the recent thread + the user's voice samples), so bound it
+# like every other context source.
+PROFILE_TEXT_CHAR_CAP = 4000
 NUM_CANDIDATES = 5
 # In a group, when the latest message isn't directed at the user we don't invent a
 # reply — the model emits this sentinel and we surface an empty, abstained draft.
@@ -154,7 +159,9 @@ def _relevant_context(uid: str, thread: List[dict]) -> str:
             profile = users_db.get_ai_user_profile(uid)
             profile_text = profile.get('profile_text') if isinstance(profile, dict) else None
             if isinstance(profile_text, str) and profile_text.strip():
-                bits.append("WHAT OMI KNOWS ABOUT YOU:\n" + profile_text.strip())
+                # Bound like every other context source so a large profile can't bloat
+                # the prompt or crowd out the thread / voice samples.
+                bits.append("WHAT OMI KNOWS ABOUT YOU:\n" + profile_text.strip()[:PROFILE_TEXT_CHAR_CAP])
         except Exception as e:
             logger.warning(f"reply_draft: user profile fallback failed uid={uid}: {e}")
 

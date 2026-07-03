@@ -524,3 +524,30 @@ def test_group_with_sender_attribution_reaches_the_drafter():
 
     assert out.get('abstain') is not True
     assert out['draft'] == 'sure, im down'
+
+
+def test_profile_fallback_text_is_length_capped():
+    """The AI-profile fallback (used when both memory paths are empty) must be bounded
+    like every other context source, so a huge profile can't bloat the prompt."""
+
+    class _EmptyMemoryService:
+        def __init__(self, *a, **k):
+            pass
+
+        def search(self, *a, **k):
+            return []
+
+        def read(self, *a, **k):
+            return []
+
+    long_profile = "x" * (rd.PROFILE_TEXT_CHAR_CAP + 5000)
+    with patch.object(rd, 'MemoryService', _EmptyMemoryService), patch.object(
+        rd.users_db, 'get_ai_user_profile', return_value={'profile_text': long_profile}
+    ), patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
+        rd.vector_db, 'query_vectors', return_value=[]
+    ):
+        out = rd._relevant_context('uid', [{'text': 'what have you been up to?', 'is_from_me': False}])
+
+    assert 'WHAT OMI KNOWS ABOUT YOU' in out
+    # Only the capped number of profile chars survive (the profile is all 'x').
+    assert out.count('x') == rd.PROFILE_TEXT_CHAR_CAP

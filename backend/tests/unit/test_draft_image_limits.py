@@ -65,3 +65,18 @@ def test_limits_enforced_for_telegram_and_whatsapp():
             person="+1",
             thread=[WhatsAppDraftMessage(text="hi", image_b64=_img(10)) for _ in range(MAX_DRAFT_IMAGES + 1)],
         )
+
+
+def test_aggregate_image_size_rejected():
+    from models.draft_common import MAX_TOTAL_IMAGE_B64_CHARS
+
+    # Each image is under the per-image cap and the count is within MAX_DRAFT_IMAGES,
+    # but together they exceed the aggregate cap.
+    per = MAX_IMAGE_B64_CHARS // 2  # under per-image cap
+    count = (MAX_TOTAL_IMAGE_B64_CHARS // per) + 2  # pushes the sum over the aggregate cap
+    assert count <= MAX_DRAFT_IMAGES  # keep count within the per-count limit
+    with pytest.raises(ValidationError):
+        IMessageDraftRequest(
+            person="+1",
+            thread=[IMessageDraftMessage(text="hi", image_b64=_img(per)) for _ in range(count)],
+        )
