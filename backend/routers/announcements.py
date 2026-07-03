@@ -14,6 +14,7 @@ from database.announcements import (
     get_announcement_by_id,
     get_app_changelogs,
     get_app_features,
+    get_dismissed_announcement_ids,
     get_firmware_features,
     get_general_announcements,
     get_pending_announcements,
@@ -175,6 +176,19 @@ def dismiss_announcement_endpoint(
 
     success = dismiss_announcement(uid, announcement_id, data.cta_clicked)
     return {"success": success, "message": "Announcement dismissed"}
+
+
+@router.get("/v1/announcements/dismissed", tags=["announcements"])
+def list_dismissed_announcements(uid: str = Depends(auth_endpoints.get_current_user_uid)):
+    """List the announcement IDs the current user has dismissed.
+
+    Dismissal state is only ever written (POST /v1/announcements/{announcement_id}/dismiss)
+    and consumed server-side to filter the pending list, so a client had no way to read it
+    back. This returns the dismissed ids (sorted) so a client can reconcile its local state.
+    Declared before GET /v1/announcements/{announcement_id} so the static path is not
+    captured as an announcement id.
+    """
+    return {"dismissed_ids": sorted(get_dismissed_announcement_ids(uid))}
 
 
 # ----------------------------
