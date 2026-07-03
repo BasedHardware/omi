@@ -255,7 +255,7 @@ class TestV2TranscribeEndpoint:
             resp = client.post(
                 "/v2/transcribe?min_speakers=2&max_speakers=5&num_speakers=3",
                 files={"file": ("test.wav", b"fake", "audio/wav")},
-                data={"diarize": "true"}
+                data={"diarize": "true"},
             )
 
         assert resp.status_code == 200
@@ -271,7 +271,7 @@ class TestV2TranscribeEndpoint:
         resp = client.post(
             "/v2/transcribe?min_speakers=0",
             files={"file": ("test.wav", b"fake", "audio/wav")},
-            data={"diarize": "true"}
+            data={"diarize": "true"},
         )
         assert resp.status_code == 422
 
@@ -281,7 +281,7 @@ class TestV2TranscribeEndpoint:
         resp = client.post(
             "/v2/transcribe?min_speakers=5&max_speakers=2",
             files={"file": ("test.wav", b"fake", "audio/wav")},
-            data={"diarize": "true"}
+            data={"diarize": "true"},
         )
         assert resp.status_code == 422
         assert "min_speakers cannot be greater than max_speakers" in resp.json()["detail"]
