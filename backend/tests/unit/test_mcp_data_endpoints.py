@@ -264,7 +264,20 @@ async def test_sse_get_keepalive_uses_transport_rate_limit():
 def test_sse_tool_security_schemes_match_runtime_scope_map():
     for tool in sse.MCP_TOOLS:
         advertised_scopes = tool['securitySchemes'][0]['scopes']
-        assert advertised_scopes == [sse.TOOL_REQUIRED_SCOPE[tool['name']]]
+        # Every scope a tool advertises must be the exact set enforced at runtime; search/fetch
+        # advertise (and now require) both memories.read and conversations.read.
+        assert advertised_scopes == sse._required_scopes(tool['name'])
+
+
+def test_search_requires_both_advertised_read_scopes():
+    # search/fetch advertise memories.read + conversations.read; granting only one must be
+    # rejected at request time, with the challenge listing the scopes required.
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, _ = sse.handle_mcp_message(
+        auth_context, {'id': 1, 'method': 'tools/call', 'params': {'name': 'search', 'arguments': {'query': 'x'}}}
+    )
+    assert response['error']['code'] == -32003
+    assert 'conversations.read' in response['error']['data']['_meta']['mcp/www_authenticate']
 
 
 def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
@@ -634,7 +647,7 @@ class TestUnifiedSearchFetch:
         mock_vec.find_similar_memories.return_value = []
         mock_vec.query_vectors.return_value = []
         resp, _ = sse.handle_mcp_message(
-            UID,
+            sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read', 'conversations.read']),
             {
                 'jsonrpc': '2.0',
                 'id': 1,

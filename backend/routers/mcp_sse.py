@@ -220,6 +220,11 @@ def invalid_mcp_auth_exception(
 
 
 TOOL_REQUIRED_SCOPE = {
+    # search/fetch read across both memories and conversations (the connector contract), so
+    # they require both scopes at request time, listed in the same order SEARCH_SECURITY
+    # advertises. A tool value may be a single scope or a list; all listed scopes must be granted.
+    "search": ["memories.read", "conversations.read"],
+    "fetch": ["memories.read", "conversations.read"],
     "get_user_profile": "memories.read",
     "get_memories": "memories.read",
     "search_memories": "memories.read",
@@ -259,15 +264,28 @@ SCOPE_PERMISSION_TEXT = {
 }
 
 
+def _required_scopes(tool_name: str) -> list[str]:
+    """The scopes a tool requires at request time, as a list. Most tools require a single
+    scope; the connector's search/fetch read across both memories and conversations, so
+    they require both. Every listed scope must be granted for the call to proceed."""
+    required = TOOL_REQUIRED_SCOPE.get(tool_name)
+    if required is None:
+        return []
+    if isinstance(required, str):
+        return [required]
+    return list(required)
+
+
 def _tools_for_scopes(scopes: list[str]) -> list[dict]:
     scope_set = set(scopes)
-    return [tool for tool in MCP_TOOLS if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set]
+    return [tool for tool in MCP_TOOLS if set(_required_scopes(tool["name"])) <= scope_set]
 
 
 def _require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
-    required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
-    if required_scope and required_scope not in set(auth_context.scopes):
-        raise ToolExecutionError(f"Insufficient scope: {required_scope}", code=-32003)
+    granted = set(auth_context.scopes)
+    for required_scope in _required_scopes(tool_name):
+        if required_scope not in granted:
+            raise ToolExecutionError(f"Insufficient scope: {required_scope}", code=-32003)
 
 
 # MCP Tool Definitions
@@ -1422,7 +1440,7 @@ def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Opt
         except ToolExecutionError as e:
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
-                required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
+                required_scope = " ".join(_required_scopes(tool_name))
                 error["error"]["data"] = {
                     "_meta": {
                         "mcp/www_authenticate": (
