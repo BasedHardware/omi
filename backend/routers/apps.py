@@ -403,7 +403,15 @@ def search_apps(
         app_dict['rating_avg'] = rating_avg
         app_dict['rating_count'] = len(sorted_reviews)
 
-        apps.append(App(**app_dict))
+        # Skip a malformed/legacy app document rather than 500 the whole search page.
+        try:
+            apps.append(App(**app_dict))
+        except ValidationError as e:
+            logger.warning(
+                "Skipping malformed app %s in search results: %s",
+                app_dict.get('id'),
+                [err['loc'][0] for err in e.errors() if err.get('loc')],
+            )
 
     # Always exclude persona type apps from results
     filtered_apps = [app for app in apps if not app.is_a_persona()]
