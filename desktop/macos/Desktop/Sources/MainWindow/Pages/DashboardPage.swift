@@ -1087,7 +1087,6 @@ struct DashboardPage: View {
                    < Self.memoryExportStatusActiveRefreshThrottle {
                 return false
             }
-            lastMemoryExportStatusRefreshAt = now
             return true
         }
         guard shouldRefresh else { return }
@@ -1095,6 +1094,7 @@ struct DashboardPage: View {
         let statuses = await MemoryExportService.shared.allStatuses()
         await MainActor.run {
             memoryExportStatuses = statuses
+            lastMemoryExportStatusRefreshAt = Date()
         }
     }
 

@@ -104,6 +104,15 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(source.contains("private func dismissHomeConnectSheet()"))
     }
 
+    func testMemoryExportStatusThrottleUpdatesAfterStatusesLoad() throws {
+        let source = try dashboardSource()
+        let method = try methodBody(named: "loadMemoryExportStatuses", in: source)
+
+        XCTAssertTrue(method.contains("let statuses = await MemoryExportService.shared.allStatuses()"))
+        XCTAssertTrue(method.contains("memoryExportStatuses = statuses\n            lastMemoryExportStatusRefreshAt = Date()"))
+        XCTAssertFalse(method.contains("lastMemoryExportStatusRefreshAt = now\n            return true"))
+    }
+
     func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
         let source = try appsSource()
 
@@ -146,7 +155,7 @@ final class DashboardCaptureStateTests: XCTestCase {
     }
 
     private func methodBody(named name: String, in source: String) throws -> String {
-        let pattern = #"private func \#(name)\([^\)]*\) \{([\s\S]*?)\n    \}"#
+        let pattern = #"private func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n    \}"#
         let regex = try NSRegularExpression(pattern: pattern)
         let range = NSRange(source.startIndex..<source.endIndex, in: source)
         let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))
