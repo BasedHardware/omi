@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Sources/TelegramInboxStore.swift
+  s_a0ba892d21e486::t_041556a3a900cd 242-244,254
+desktop/macos/Desktop/Sources/MainWindow/Pages/TelegramInboxPage.swift
+  s_a0ba892d21e486::t_f5ee9bc85002f5 134
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppInboxPage.swift
+  s_a0ba892d21e486::t_d273b7626cfe8b 80
+  s_a0ba892d21e486::t_738686aa388d68 272-275
+desktop/macos/Desktop/Sources/IMessageInboxStore.swift
+  s_a0ba892d21e486::t_d6a684da871958 206-209,219
+desktop/macos/Desktop/Sources/WhatsAppInboxStore.swift
+  s_a0ba892d21e486::t_f59b6770254a0f 207-209,219
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageInboxPage.swift
+  s_a0ba892d21e486::t_8916f55f55d6de 78
+desktop/macos/Desktop/Sources/MessagingMedia.swift
+  s_a0ba892d21e486::t_65621e9797aeaf 11-21,25-26
+  s_a0ba892d21e486::t_2141af2b4020b6 48-50
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingInboxKit.swift
+  s_a0ba892d21e486::t_5534da1f6b8ce6 144-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "649d583ef49e4fd6f3da2edf09b909855b9252c5",
+  "prompts": {},
+  "sessions": {
+    "s_a0ba892d21e486": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2027e0a6-1ed1-4496-9186-7a24083f6964",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
