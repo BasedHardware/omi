@@ -129,6 +129,23 @@ final class AgentRuntimeStatusStore: ObservableObject {
     sessionIdBySurface[surface.key]
   }
 
+  func clear(surface: AgentSurfaceReference) {
+    if let existing = projectionsBySurface.removeValue(forKey: surface.key) {
+      if let runId = existing.runId {
+        projectionByRunId.removeValue(forKey: runId)
+      }
+      if let sessionId = existing.sessionId {
+        projectionBySessionId.removeValue(forKey: sessionId)
+      }
+    }
+    if let runId = runIdBySurface.removeValue(forKey: surface.key) {
+      projectionByRunId.removeValue(forKey: runId)
+    }
+    if let sessionId = sessionIdBySurface.removeValue(forKey: surface.key) {
+      projectionBySessionId.removeValue(forKey: sessionId)
+    }
+  }
+
   func beginRequest(surface: AgentSurfaceReference, statusText: String? = "Starting...") {
     clearTerminalProjectionForNewRun(surface: surface)
     update(surface: surface, status: .starting, statusText: statusText, terminal: false)

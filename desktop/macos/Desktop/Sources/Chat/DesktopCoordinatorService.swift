@@ -104,6 +104,7 @@ struct DesktopCoordinatorCompletionDeltaItem: Codable {
 struct DesktopCoordinatorCompletionDelta: Codable {
   let ids: [String]
   let prompt: String
+  let completedAtHighWaterMs: Int?
 }
 
 struct DesktopCoordinatorSpawnedAgent: Codable {
@@ -146,6 +147,8 @@ final class DesktopCoordinatorService {
   private let formatter = ISO8601DateFormatter()
   private let checkpointDefaults: UserDefaults
   private let completionCheckpointPrefix = "desktopCoordinator.completedAgentDelta.seenRunIds"
+  private let completionHighWaterPrefix = "desktopCoordinator.completedAgentDelta.highWaterMs"
+  private let completionDeltaMaxAgeMs = 60 * 60 * 1_000
 
   init(
     runtime: DesktopCoordinatorRuntimeControlling = AgentRuntimeProcess.shared,
@@ -322,7 +325,11 @@ final class DesktopCoordinatorService {
     guard let delta = await peekCompletedAgentDelta(surfaceKind: surfaceKind, limit: limit) else {
       return nil
     }
-    acknowledgeCompletedAgentDelta(surfaceKind: surfaceKind, ids: delta.ids)
+    acknowledgeCompletedAgentDelta(
+      surfaceKind: surfaceKind,
+      ids: delta.ids,
+      completedAtHighWaterMs: delta.completedAtHighWaterMs
+    )
     return delta.prompt
   }
 
@@ -338,15 +345,29 @@ final class DesktopCoordinatorService {
     do {
       let raw = try await callRuntimeControlTool(ToolName.listAgentSessions, input: ["limit": 50])
       let seen = Set(checkpointDefaults.stringArray(forKey: completionCheckpointKey(surfaceKey: surfaceKey)) ?? [])
+      let nowMs = currentTimeMs()
+      let highWaterKey = completionHighWaterKey(surfaceKey: surfaceKey)
+      guard checkpointDefaults.object(forKey: highWaterKey) != nil else {
+        checkpointDefaults.set(nowMs, forKey: highWaterKey)
+        return nil
+      }
+      let highWaterMs = checkpointDefaults.integer(forKey: highWaterKey)
+      let minCompletedAtMs = nowMs - completionDeltaMaxAgeMs
       let items = parseCompletionDeltaItems(from: raw)
-        .filter { !seen.contains($0.id) }
+        .filter {
+          guard let completedAtMs = $0.completedAtMs else { return false }
+          return completedAtMs > highWaterMs
+            && completedAtMs >= minCompletedAtMs
+            && !seen.contains($0.id)
+        }
         .prefix(limit)
         .map { $0 }
 
       guard !items.isEmpty else { return nil }
       return DesktopCoordinatorCompletionDelta(
         ids: items.map(\.id),
-        prompt: formatCompletionDeltaPrompt(surfaceKind: surfaceLabel, items: items)
+        prompt: formatCompletionDeltaPrompt(surfaceKind: surfaceLabel, items: items),
+        completedAtHighWaterMs: items.compactMap(\.completedAtMs).max()
       )
     } catch {
       logError("DesktopCoordinatorService: completed agent delta unavailable", error: error)
@@ -356,12 +377,22 @@ final class DesktopCoordinatorService {
 
   func acknowledgeCompletedAgentDelta(surfaceKind: String, ids: [String]) {
     guard !ids.isEmpty else { return }
-    checkpointCompletionDelta(surfaceKind: surfaceKind, ids: ids)
+    checkpointCompletionDelta(surfaceKind: surfaceKind, ids: ids, completedAtHighWaterMs: nil)
+  }
+
+  func acknowledgeCompletedAgentDelta(surfaceKind: String, ids: [String], completedAtHighWaterMs: Int?) {
+    guard !ids.isEmpty else { return }
+    checkpointCompletionDelta(surfaceKind: surfaceKind, ids: ids, completedAtHighWaterMs: completedAtHighWaterMs)
   }
 
   func acknowledgeCompletedAgentDelta(surface: AgentSurfaceReference, ids: [String]) {
     guard !ids.isEmpty else { return }
-    checkpointCompletionDelta(surfaceKey: surface.key, ids: ids)
+    checkpointCompletionDelta(surfaceKey: surface.key, ids: ids, completedAtHighWaterMs: nil)
+  }
+
+  func acknowledgeCompletedAgentDelta(surface: AgentSurfaceReference, ids: [String], completedAtHighWaterMs: Int?) {
+    guard !ids.isEmpty else { return }
+    checkpointCompletionDelta(surfaceKey: surface.key, ids: ids, completedAtHighWaterMs: completedAtHighWaterMs)
   }
 
   func routeIntent(intent: String, surfaceKind: String? = nil, taskId: String? = nil) async -> DesktopCoordinatorRouteDecision {
@@ -602,15 +633,19 @@ final class DesktopCoordinatorService {
     }
   }
 
-  private func checkpointCompletionDelta(surfaceKind: String, ids: [String]) {
-    checkpointCompletionDelta(surfaceKey: surfaceKind, ids: ids)
+  private func checkpointCompletionDelta(surfaceKind: String, ids: [String], completedAtHighWaterMs: Int?) {
+    checkpointCompletionDelta(surfaceKey: surfaceKind, ids: ids, completedAtHighWaterMs: completedAtHighWaterMs)
   }
 
-  private func checkpointCompletionDelta(surfaceKey: String, ids: [String]) {
+  private func checkpointCompletionDelta(surfaceKey: String, ids: [String], completedAtHighWaterMs: Int?) {
     let key = completionCheckpointKey(surfaceKey: surfaceKey)
     var seen = checkpointDefaults.stringArray(forKey: key) ?? []
     seen.append(contentsOf: ids)
     checkpointDefaults.set(Array(seen.suffix(100)), forKey: key)
+    if let completedAtHighWaterMs {
+      let highWaterKey = completionHighWaterKey(surfaceKey: surfaceKey)
+      checkpointDefaults.set(max(checkpointDefaults.integer(forKey: highWaterKey), completedAtHighWaterMs), forKey: highWaterKey)
+    }
   }
 
   private func completionCheckpointKey(surfaceKind: String) -> String {
@@ -619,6 +654,10 @@ final class DesktopCoordinatorService {
 
   private func completionCheckpointKey(surfaceKey: String) -> String {
     "\(completionCheckpointPrefix).\(surfaceKey.isEmpty ? "unknown" : surfaceKey)"
+  }
+
+  private func completionHighWaterKey(surfaceKey: String) -> String {
+    "\(completionHighWaterPrefix).\(surfaceKey.isEmpty ? "unknown" : surfaceKey)"
   }
 
   private func formatCompletionDeltaPrompt(surfaceKind: String, items: [DesktopCoordinatorCompletionDeltaItem]) -> String {
@@ -722,6 +761,10 @@ final class DesktopCoordinatorService {
     if let int = value as? Int { return int }
     if let number = value as? NSNumber { return number.intValue }
     return nil
+  }
+
+  private func currentTimeMs() -> Int {
+    Int(Date().timeIntervalSince1970 * 1_000)
   }
 
   private func sanitizePromptLine(_ text: String, maxLength: Int) -> String {

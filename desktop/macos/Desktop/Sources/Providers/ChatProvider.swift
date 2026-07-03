@@ -3014,9 +3014,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Stop / Follow-Up
 
-    /// Text of a follow-up queued while the current query is being interrupted.
-    /// Checked at the end of `sendMessage` — if set, a new query is chained automatically.
-    private var pendingFollowUpText: String?
+    private struct PendingFollowUpRequest {
+        let text: String
+        let model: String?
+        let systemPromptSuffix: String?
+        let systemPromptPrefix: String?
+        let systemPromptStyle: ChatSystemPromptStyle
+        let sessionKey: String?
+        let omiSessionId: String?
+        let surfaceRef: AgentSurfaceReference?
+        let legacyClientScope: String?
+    }
+
+    /// Follow-ups queued while the current query is being interrupted.
+    /// Drained FIFO at the end of `sendMessage` so rapid barge-ins do not overwrite each other.
+    private var pendingFollowUps: [PendingFollowUpRequest] = []
+    private var activeFollowUpContext: PendingFollowUpRequest?
 
     /// Stop the running agent, keeping partial response
     func stopAgent() {
@@ -3037,8 +3050,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             await MainActor.run {
                 if self.isSending && self.sendGeneration == myGen {
                     log("ChatProvider: interrupt didn't close stream in 3s — force-resetting isSending")
-                    self.isSending = false
-                    self.isStopping = false
+                    self.releaseSendLock(sendGeneration: myGen)
                 }
             }
         }
@@ -3095,8 +3107,29 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Queue the follow-up and interrupt the current query.
         // When sendMessage finishes (due to the interrupt), it checks
-        // pendingFollowUpText and chains a new full query automatically.
-        pendingFollowUpText = trimmedText
+        // pendingFollowUps and chains a new full query automatically.
+        let context = activeFollowUpContext ?? PendingFollowUpRequest(
+            text: trimmedText,
+            model: nil,
+            systemPromptSuffix: nil,
+            systemPromptPrefix: nil,
+            systemPromptStyle: .main,
+            sessionKey: nil,
+            omiSessionId: nil,
+            surfaceRef: nil,
+            legacyClientScope: nil
+        )
+        pendingFollowUps.append(PendingFollowUpRequest(
+            text: trimmedText,
+            model: context.model,
+            systemPromptSuffix: context.systemPromptSuffix,
+            systemPromptPrefix: context.systemPromptPrefix,
+            systemPromptStyle: context.systemPromptStyle,
+            sessionKey: context.sessionKey,
+            omiSessionId: context.omiSessionId,
+            surfaceRef: context.surfaceRef,
+            legacyClientScope: context.legacyClientScope
+        ))
         await agentBridge.interrupt()
         log("ChatProvider: follow-up queued, interrupt sent")
     }
@@ -3410,6 +3443,23 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // floating-bar / PTT entry points (nil for non-traced call sites).
         let tracer = QueryTracerContext.current
 
+        isSending = true
+        errorMessage = nil
+        currentError = nil
+        sendGeneration += 1
+        let sendGen = sendGeneration
+        activeFollowUpContext = PendingFollowUpRequest(
+            text: trimmedText,
+            model: model,
+            systemPromptSuffix: systemPromptSuffix,
+            systemPromptPrefix: systemPromptPrefix,
+            systemPromptStyle: systemPromptStyle,
+            sessionKey: sessionKey,
+            omiSessionId: omiSessionId,
+            surfaceRef: surfaceRef,
+            legacyClientScope: legacyClientScope
+        )
+
         // Ensure bridge is running
         tracer?.begin("bridge_ensure")
         guard await ensureBridgeStarted() else {
@@ -3418,6 +3468,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
+            releaseSendLock(sendGeneration: sendGen)
             return nil
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
@@ -3441,16 +3492,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                releaseSendLock(sendGeneration: sendGen)
                 return nil
             }
             sessionId = sid
         }
-
-        isSending = true
-        errorMessage = nil
-        currentError = nil
-        sendGeneration += 1
-        let sendGen = sendGeneration
 
         // Safety-net watchdog: if this specific send is still "in flight"
         // 3 minutes from now, something in the bridge / stream pipeline has
@@ -3464,8 +3510,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             await MainActor.run {
                 guard let self = self, self.isSending, self.sendGeneration == sendGen else { return }
                 log("ChatProvider: send watchdog fired at 180s — bridge is stuck; force-resetting")
-                self.isSending = false
-                self.isStopping = false
+                self.releaseSendLock(sendGeneration: sendGen)
                 self.errorMessage = "Response took too long. Try again."
             }
         }
@@ -3478,7 +3523,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         if !pendingAttachments.isEmpty {
             let ok = await awaitPendingUploads()
             if !ok {
-                isSending = false
+                releaseSendLock(sendGeneration: sendGen)
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
                 return nil
@@ -3925,7 +3970,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let consumerSurface = resolvedSurface ?? AgentSurfaceReference.mainChat(chatId: resolvedMainChatRuntimeChatId)
                 DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
                     surface: consumerSurface,
-                    ids: coordinatorCompletionDeltaContext.ids
+                    ids: coordinatorCompletionDeltaContext.ids,
+                    completedAtHighWaterMs: coordinatorCompletionDeltaContext.completedAtHighWaterMs
                 )
             }
 
@@ -3989,8 +4035,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // still in-flight. The AI message still has a local UUID at this point
             // (isSynced=false). pollForNewMessages() handles this by merging the
             // backend copy into the local message rather than appending a duplicate.
-            isSending = false
-            isStopping = false
+            releaseSendLock(sendGeneration: sendGen)
 
             // Save AI response to backend. aiMessageId is captured above so we can
             // locate the right message even if the user has started a new query by
@@ -4237,16 +4282,37 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
 
-        isSending = false
-        isStopping = false
+        let releasedCurrentGeneration = releaseSendLock(sendGeneration: sendGen)
 
-        // If a follow-up was queued while we were running, chain it as a new full query
-        if let followUp = pendingFollowUpText {
-            pendingFollowUpText = nil
+        // If follow-ups were queued while we were running, chain the oldest as a new full query.
+        // Each chained query drains one item; this preserves user barge-in order without
+        // recursively starting overlapping bridge queries.
+        if releasedCurrentGeneration, !pendingFollowUps.isEmpty {
+            let followUp = pendingFollowUps.removeFirst()
             log("ChatProvider: chaining follow-up query")
-            await sendMessage(followUp, isFollowUp: true)
+            await sendMessage(
+                followUp.text,
+                model: followUp.model,
+                isFollowUp: true,
+                systemPromptSuffix: followUp.systemPromptSuffix,
+                systemPromptPrefix: followUp.systemPromptPrefix,
+                systemPromptStyle: followUp.systemPromptStyle,
+                sessionKey: followUp.sessionKey,
+                omiSessionId: followUp.omiSessionId,
+                surfaceRef: followUp.surfaceRef,
+                legacyClientScope: followUp.legacyClientScope
+            )
         }
         return completedResponseText
+    }
+
+    @discardableResult
+    private func releaseSendLock(sendGeneration generation: Int) -> Bool {
+        guard sendGeneration == generation else { return false }
+        isSending = false
+        isStopping = false
+        activeFollowUpContext = nil
+        return true
     }
 
     /// Generate a title for the session using LLM
@@ -4631,12 +4697,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         if isInDefaultChat {
             // Default chat mode: clear UI immediately, delete in background
+            let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
+            let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
             messages = []
             resetMessagesPagination()
+            AgentRuntimeStatusStore.shared.clear(surface: surface)
+            await invalidateAgentSession(sessionKey: "main")
             if let ownerId = runtimeOwnerId {
                 MainChatRuntimeSessionStore.clear(
                     ownerId: ownerId,
-                    chatId: mainChatRuntimeChatId(sessionId: nil)
+                    chatId: runtimeChatId
                 )
             }
             log("Cleared default chat messages")
@@ -4652,6 +4722,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let sessionToDelete = currentSession
             if let session = sessionToDelete, let ownerId = runtimeOwnerId {
                 MainChatRuntimeSessionStore.clear(ownerId: ownerId, chatId: session.id)
+            }
+            if let session = sessionToDelete {
+                AgentRuntimeStatusStore.shared.clear(surface: .mainChat(chatId: session.id))
+                await invalidateAgentSession(sessionKey: session.id)
             }
 
             // Immediately clear UI state

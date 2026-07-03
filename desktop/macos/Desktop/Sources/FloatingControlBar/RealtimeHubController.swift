@@ -168,6 +168,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var pendingRealtimeToolCallIds = Set<String>()
   private var realtimeToolTurnEpoch = 0
   private var pendingCompletedAgentDeltaAckIds: [String] = []
+  private var pendingCompletedAgentDeltaHighWaterMs: Int?
   /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   private var lastTurnAt: Date?
@@ -468,6 +469,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     clearBargeInReplacementState()
     pendingCompletedAgentDeltaAckIds.removeAll()
+    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
   }
 
@@ -627,6 +629,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     turnRecorded = false
     pendingVoiceAgentHandoff = nil
     pendingCompletedAgentDeltaAckIds.removeAll()
+    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     lastTurnAt = Date()
     if bargeIn {
@@ -746,6 +749,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     assistantText = ""
     pendingVoiceAgentHandoff = nil
     pendingCompletedAgentDeltaAckIds.removeAll()
+    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     clearBargeInReplacementState()
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
@@ -1003,6 +1007,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           let openLoops = try await DesktopCoordinatorService.shared.openLoopsJSON()
           if let completionDelta = await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surfaceKind: "ptt") {
             self.pendingCompletedAgentDeltaAckIds = completionDelta.ids
+            self.pendingCompletedAgentDeltaHighWaterMs = completionDelta.completedAtHighWaterMs
             return """
             \(openLoops)
 
@@ -1332,9 +1337,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if !pendingCompletedAgentDeltaAckIds.isEmpty {
       DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
         surfaceKind: "ptt",
-        ids: pendingCompletedAgentDeltaAckIds
+        ids: pendingCompletedAgentDeltaAckIds,
+        completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs
       )
       pendingCompletedAgentDeltaAckIds.removeAll()
+      pendingCompletedAgentDeltaHighWaterMs = nil
     }
     exitVoiceUI()
   }
@@ -1464,6 +1471,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       || (barState?.isVoiceResponseActive == true)
     responding = false
     pendingCompletedAgentDeltaAckIds.removeAll()
+    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     let aliveFor = (hubConnected ? lastWarmAt.map { Date().timeIntervalSince($0) } : nil) ?? 0
     // Most "session error" closes are expected lifecycle events, not bugs: a socket
