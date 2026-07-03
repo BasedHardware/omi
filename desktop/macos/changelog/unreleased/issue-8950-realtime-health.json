@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Gemini realtime token minting and separated expected realtime idle closes from failure analytics."
+}

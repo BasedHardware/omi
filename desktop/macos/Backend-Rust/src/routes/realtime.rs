@@ -231,15 +231,7 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         .format("%Y-%m-%dT%H:%M:%SZ")
         .to_string();
 
-    // Single use + short windows bound the cost. NOTE: only the bare token form is
-    // verified to connect to the BidiGenerateContentConstrained endpoint; locking the
-    // model/config via `liveConnectConstraints` is a follow-up that needs its own
-    // spike (the constraint shape wasn't verified) — see Phase 2 spike notes.
-    let body = serde_json::json!({
-        "uses": 1,
-        "expireTime": expire,
-        "newSessionExpireTime": new_session_expire,
-    });
+    let body = gemini_auth_token_body(&new_session_expire, &expire);
     let req = http_client()
         .post(GEMINI_AUTH_TOKENS_URL)
         .query(&[("key", key)])
@@ -265,6 +257,18 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         provider: "gemini".to_string(),
         token,
         expires_at: Some(expire),
+    })
+}
+
+fn gemini_auth_token_body(new_session_expire: &str, expire: &str) -> serde_json::Value {
+    // Google's CreateAuthTokenRequest wraps token settings under `authToken`.
+    // Top-level `uses`/`expireTime` fields are ignored/rejected by the v1alpha API.
+    serde_json::json!({
+        "authToken": {
+            "uses": 1,
+            "expireTime": expire,
+            "newSessionExpireTime": new_session_expire,
+        }
     })
 }
 
@@ -398,4 +402,24 @@ pub fn realtime_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/realtime/session", post(mint_session))
         .route("/v2/realtime/usage", post(report_usage))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gemini_auth_token_body_wraps_settings_under_auth_token() {
+        let body = gemini_auth_token_body("2026-07-03T18:40:00Z", "2026-07-03T19:08:00Z");
+
+        assert_eq!(body["authToken"]["uses"], 1);
+        assert_eq!(
+            body["authToken"]["newSessionExpireTime"],
+            "2026-07-03T18:40:00Z"
+        );
+        assert_eq!(body["authToken"]["expireTime"], "2026-07-03T19:08:00Z");
+        assert!(body.get("uses").is_none());
+        assert!(body.get("expireTime").is_none());
+        assert!(body.get("newSessionExpireTime").is_none());
+    }
 }
