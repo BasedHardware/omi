@@ -204,6 +204,15 @@ def get_memories_by_subject_entity(uid: str, subject_entity_id: str, limit: int 
     active = [
         memory for memory in memories if memory.get('user_review') is not False and memory.get('invalid_at') is None
     ]
+    # The query has no order_by (to avoid a composite index), so sort the already
+    # fetched active set by recency in Python before truncating — otherwise the
+    # slice would return an arbitrary (document-id-ordered) subset of facts, which
+    # downstream profile/reply context relies on being the freshest.
+    _epoch = datetime.min.replace(tzinfo=timezone.utc)
+    active.sort(
+        key=lambda m: m['created_at'] if isinstance(m.get('created_at'), datetime) else _epoch,
+        reverse=True,
+    )
     return active[:limit]
 
 

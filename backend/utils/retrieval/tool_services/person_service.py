@@ -53,20 +53,24 @@ UNTRUSTED_DATA_NOTICE = (
 
 
 def resolve_person(uid: str, name_or_id: str) -> Union[dict, AmbiguousPerson, None]:
-    """Resolve a person by document id, then display name, then handle.
+    """Resolve a person by document id, then handle, then display name.
 
     Returns:
-      - a person dict on an unambiguous match (id, single name match, or handle),
+      - a person dict on an unambiguous match (id, handle, or single name match),
       - an ``AmbiguousPerson`` sentinel when the NAME matches more than one person
         (callers must disambiguate — never pick arbitrarily),
       - ``None`` when nothing matches.
 
-    Resolution by explicit id and by handle (phone/email) is unambiguous and always
-    wins directly; only the name step can be ambiguous.
+    Resolution by explicit id and by handle (phone/email) is unambiguous, so both are
+    tried BEFORE the name lookup — an input that is a valid handle for exactly one
+    person must win directly and never be reported as an ambiguous name.
     """
     if not name_or_id:
         return None
     person = users_db.get_person(uid, name_or_id)
+    if person:
+        return person
+    person = users_db.get_person_by_handle(uid, name_or_id)
     if person:
         return person
     matches = users_db.get_people_by_name(uid, name_or_id)
@@ -74,7 +78,7 @@ def resolve_person(uid: str, name_or_id: str) -> Union[dict, AmbiguousPerson, No
         return matches[0]
     if len(matches) > 1:
         return AmbiguousPerson(name_or_id, len(matches))
-    return users_db.get_person_by_handle(uid, name_or_id)
+    return None
 
 
 def get_person_context(uid: str, name_or_id: str, max_conversations: int = 5, max_memories: int = 20) -> str:

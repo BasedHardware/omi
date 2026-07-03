@@ -162,11 +162,20 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
     # Only persist fields the LLM actually returned as non-empty strings, so a
     # partial/malformed response can't erase existing profile data with None and
     # a non-string value can't blow up on .strip().
-    update = {'profile_updated_at': datetime.now(timezone.utc), 'message_count': total_segments}
+    fields = {}
     for field in _PROFILE_STRING_FIELDS:
         value = parsed.get(field)
         if isinstance(value, str) and value.strip():
-            update[field] = value.strip()
+            fields[field] = value.strip()
 
+    # Guard the staleness clock: only bump profile_updated_at when the LLM
+    # actually produced usable profile content. Otherwise a malformed or empty
+    # (but valid-dict) response would reset the timestamp and suppress retries
+    # for PROFILE_STALE_DAYS, masking a failed refresh.
+    if 'profile_summary' not in fields:
+        logger.warning(f"generate_person_profile produced no usable fields uid={uid} person={person_id}")
+        return False
+
+    update = {'profile_updated_at': datetime.now(timezone.utc), 'message_count': total_segments, **fields}
     users_db.update_person_profile(uid, person_id, update)
     return True

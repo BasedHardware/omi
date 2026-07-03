@@ -95,3 +95,22 @@ def test_generate_person_profile_skips_when_thin():
         updated = pp.generate_person_profile('uid', 'p1', force=True)
     assert updated is False
     upd.assert_not_called()
+
+
+def test_generate_person_profile_does_not_bump_timestamp_on_empty_llm_output():
+    # A valid dict with no usable profile fields must NOT persist or bump
+    # profile_updated_at — otherwise the staleness clock resets and retries are
+    # suppressed for PROFILE_STALE_DAYS, masking a failed refresh.
+    person = {'id': 'p1', 'name': 'Alice'}
+    convo = {'transcript_segments': _segments(8)}
+    empty_json = '{"relationship": "", "profile_summary": "  ", "tone_notes": null}'
+    with patch.object(pp.users_db, 'get_person', return_value=person), patch.object(
+        pp.conversations_db, 'get_conversations_by_person_id', return_value=[convo]
+    ), patch.object(pp.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
+        pp.users_db, 'update_person_profile'
+    ) as upd, patch.object(
+        pp, 'get_llm', return_value=SimpleNamespace(invoke=lambda prompt: SimpleNamespace(content=empty_json))
+    ):
+        updated = pp.generate_person_profile('uid', 'p1', force=True)
+    assert updated is False
+    upd.assert_not_called()

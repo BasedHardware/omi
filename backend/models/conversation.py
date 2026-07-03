@@ -161,9 +161,11 @@ class Conversation(BaseModel):
         # Derive the unencrypted person_ids index from transcript_segments on every
         # construction so it is persisted consistently across all create/save paths
         # (segments themselves are encrypted at rest and can't be queried directly).
-        # Only overwrite when segments are present, to avoid clobbering an already-set
-        # index for lightweight projections that omit segments.
-        if self.transcript_segments:
+        # Recompute only when transcript_segments was explicitly provided — checked via
+        # model_fields_set, NOT truthiness. An explicitly-emptied segment list ([]) must
+        # clear the index too; only a genuinely OMITTED list (lightweight projections)
+        # should preserve an already-set person_ids to avoid clobbering it.
+        if 'transcript_segments' in self.model_fields_set:
             self.person_ids = sorted({s.person_id for s in self.transcript_segments if s.person_id})
         return self
 
