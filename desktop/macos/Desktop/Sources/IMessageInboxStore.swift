@@ -214,9 +214,9 @@ final class IMessageInboxStore: ObservableObject {
   }
 
   /// Draft a reply and send it immediately, without review. Only ever called for
-  /// chats the user explicitly enabled auto-reply on. Sent messages can't be
+  /// 1:1 chats the user explicitly enabled auto-reply on. Sent messages can't be
   /// unsent, so a send failure is logged and the draft is simply dropped (never
-  /// silently retried into a duplicate send).
+  /// silently retried into a duplicate send). Group chats are draft-only (see below).
   private func autoReply(_ chat: IMessageChat) async {
     guard
       let resp = try? await APIClient.shared.imessageDraftReply(
@@ -232,6 +232,13 @@ final class IMessageInboxStore: ObservableObject {
     guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    // Groups are DRAFT-ONLY: never auto-send to a group chat (higher blast radius and
+    // different send/rollback semantics). Surface the draft for the user to review
+    // and send manually instead of sending it automatically.
+    if chat.isGroup {
+      preDrafts[chat.id] = text
+      return
+    }
     // Final guard: the draft round-trip is async, so re-check that auto-reply is
     // still enabled (and this task wasn't cancelled) right before the irreversible
     // send. The user may have toggled it off while the draft was being generated.

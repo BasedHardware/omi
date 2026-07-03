@@ -97,7 +97,9 @@ final class TelegramInboxStore: ObservableObject {
       self?.handle(event)
     }
     guard TelegramClientService.shared.start() else {
-      connection = .error("Telegram helper is unavailable.")
+      // start() fails closed when the helper binary is missing or no shippable
+      // Omi-registered API credentials are configured (see TelegramClientService).
+      connection = .error("Telegram isn't available in this build yet.")
       return
     }
     // Drive the initial connect directly rather than waiting for the helper's
@@ -263,6 +265,12 @@ final class TelegramInboxStore: ObservableObject {
     guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    // Groups are DRAFT-ONLY: never auto-send to a group chat. Surface the draft for
+    // the user to review and send manually instead.
+    if chat.isGroup {
+      preDrafts[chat.chatID] = text
+      return
+    }
     // Final guard: the draft round-trip is async, so re-check auto-reply is still on
     // (and this task wasn't cancelled) right before the irreversible send.
     guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {

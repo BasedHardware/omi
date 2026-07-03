@@ -218,6 +218,13 @@ final class WhatsAppInboxStore: ObservableObject {
   /// chats the user explicitly enabled auto-reply on. Sent messages can't be
   /// unsent, so a send failure is logged and the draft is simply dropped.
   private func autoReply(_ chat: WhatsAppChat) async {
+    // Groups are DRAFT-ONLY: never auto-send to a group chat. (In practice WhatsApp
+    // group sends already have no dialable number, but guard explicitly so this holds
+    // regardless of how the phone is resolved.)
+    if chat.isGroup {
+      await predraft(chat)
+      return
+    }
     // Automated send only works for 1:1 chats with a dialable number (from the
     // JID, or — for @lid privacy chats — the session identifier).
     let phone = chat.dialablePhone ?? WhatsAppSenderService.phoneDigits(forChatID: chat.chatID)

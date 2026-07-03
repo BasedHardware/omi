@@ -99,14 +99,31 @@ final class TelegramClientService: @unchecked Sendable {
   // shared public creds are the most likely to trip Telegram's anti-abuse
   // heuristics, so this MUST be switched to an Omi-registered pair before release.
   // See desktop/macos/telegram-helper/README.md and the feature plan.
-  private func apiCredentials() -> (id: String, hash: String) {
-    let id =
-      Self.environmentValue("OMI_TELEGRAM_API_ID")
-      ?? (Bundle.main.object(forInfoDictionaryKey: "OMITelegramAPIID") as? String) ?? "0"
-    let hash =
-      Self.environmentValue("OMI_TELEGRAM_API_HASH")
-      ?? (Bundle.main.object(forInfoDictionaryKey: "OMITelegramAPIHash") as? String) ?? ""
-    return (id, hash)
+  private func apiCredentials() -> (id: String, hash: String, fromEnv: Bool) {
+    // Dev path: both values from env (developers configure a pair for testing).
+    if let envId = Self.environmentValue("OMI_TELEGRAM_API_ID"),
+      let envHash = Self.environmentValue("OMI_TELEGRAM_API_HASH")
+    {
+      return (envId, envHash, true)
+    }
+    // Ship path: Omi's own registered pair from Info.plist (or the "0"/"" default when
+    // none is configured, which fails the shippable check below).
+    let id = (Bundle.main.object(forInfoDictionaryKey: "OMITelegramAPIID") as? String) ?? "0"
+    let hash = (Bundle.main.object(forInfoDictionaryKey: "OMITelegramAPIHash") as? String) ?? ""
+    return (id, hash, false)
+  }
+
+  /// Whether credentials are safe to start the helper with. Fails closed on missing
+  /// credentials, and refuses to *ship* Telegram Desktop's public `2040` pair (which
+  /// trips Telegram anti-abuse) — that pair is allowed only via dev env vars, never
+  /// from a bundled/default (release) source. Requiring an Omi-registered pair is a
+  /// hard pre-production gate.
+  private static func credentialsAreShippable(_ creds: (id: String, hash: String, fromEnv: Bool)) -> Bool {
+    let id = creds.id.trimmingCharacters(in: .whitespaces)
+    let hash = creds.hash.trimmingCharacters(in: .whitespaces)
+    guard !id.isEmpty, id != "0", !hash.isEmpty else { return false }
+    if id == "2040" && !creds.fromEnv { return false }
+    return true
   }
 
   // MARK: - Lifecycle
@@ -121,6 +138,18 @@ final class TelegramClientService: @unchecked Sendable {
     }
     let creds = apiCredentials()
     let selftest = Self.environmentValue("OMI_TELEGRAM_SELFTEST") == "1"
+
+    // Fail closed before spawning the helper / attempting any MTProto login when no
+    // shippable Omi-registered credentials are configured. Selftest bypasses this
+    // (it never talks to Telegram). The store surfaces start()==false as a clear
+    // "Telegram isn't available" state.
+    if !selftest && !Self.credentialsAreShippable(creds) {
+      NSLog(
+        "Telegram: refusing to start — no Omi-registered API credentials. "
+          + "Set OMITelegramAPIID/OMITelegramAPIHash (release), or OMI_TELEGRAM_API_ID/HASH for dev. "
+          + "The public 2040 pair must not ship.")
+      return false
+    }
 
     let process = Process()
     process.executableURL = launch.executable
