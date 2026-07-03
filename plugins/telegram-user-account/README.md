@@ -33,7 +33,7 @@ new users (lower ToS risk, easier recovery).
 | **Rate-limit cap** | None (Telegram's own anti-flood) | 30 sends/hour (plan §8) + FLOOD_WAIT detection |
 | **On FLOOD_WAIT** | Returns 502 | Returns 429 with Retry-After + registers local cooldown |
 | **Discovery file** | `~/.config/omi/ai-clone-plugin.json` | `~/.config/omi/ai-clone-telegram-user.json` |
-| **Storage** | `users_data.json` keyed by chat_id | `users_data.json` keyed by Telegram user handle |
+| **Storage** | `users_data.json` keyed by chat_id | `users_data.json` keyed by Telegram user id |
 | **Per-user identifier** | Telegram chat_id | Telegram user id (str) |
 
 ## Setup
@@ -315,13 +315,38 @@ Test files:
 alongside the bot plugin. The script reads the session
 from `$TELEGRAM_USER_SESSION_FILE` (default
 `/tmp/omi-e2e/telegram-user.session`) and pipes it into
-the plugin's stdin. The file is `chmod 600` and the script
-verifies its existence before launching.
+the plugin's stdin.
+
+> ⚠️ **The session file is for E2E testing ONLY.** This
+> path is a deliberate trade-off for hermetic test
+> harnesses: a CI runner has no interactive way to run
+> `session_string_generator.py`, so the stack runner
+> accepts a pre-generated session string from disk so the
+> test path can exercise the full plugin flow end-to-end.
+>
+> **Do NOT use a real session string here in any
+> non-hermetic environment.** A real session string on
+> disk under `/tmp` is a fully-compromising identity
+> secret and contradicts the "no on-disk session storage"
+> threat model documented in the Security Model section
+> above. The E2E session file is expected to be a
+> throwaway session generated for the test run only.
+>
+> If you need a real session for local dev, run the
+> `session_string_generator.py` flow instead: the
+> generated session is captured by the desktop's
+> ConnectSheet and stored in the macOS Keychain, never on
+> disk.
 
 ```bash
+# E2E / hermetic test run only -- synthetic session.
 TELEGRAM_USER_ACCOUNT=1 \
-TELEGRAM_USER_SESSION_FILE=/path/to/session \
+TELEGRAM_USER_SESSION_FILE=/path/to/e2e-session \
   bash desktop/macos/scripts/ai-clone-stack.sh
+
+# Real session: do NOT use the stack runner path. Instead,
+# use the desktop's ConnectSheet -> Reply as me -> Generate
+# session flow, which writes the session to Keychain.
 ```
 
 ## Maintenance notes
