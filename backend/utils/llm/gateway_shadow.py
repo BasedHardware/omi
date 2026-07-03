@@ -42,7 +42,7 @@ except ImportError:
 
 
 from utils.executors import llm_executor, start_background_task, submit_with_context
-from utils.llm.gateway_client import CHAT_STRUCTURED_AUTO_LANE_ID
+from utils.llm.gateway_client import BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS, CHAT_STRUCTURED_AUTO_LANE_ID
 from utils.llm.gateway_observability import record_gateway_request_result, record_gateway_shadow_comparison
 from utils.llm.providers import get_or_create_omi_gateway_llm
 
@@ -63,7 +63,11 @@ def maybe_wrap_dev_gateway_shadow(
     if not _dev_shadow_enabled(provider=provider, streaming=streaming):
         return legacy_model
 
-    gateway_model = get_or_create_omi_gateway_llm(CHAT_STRUCTURED_AUTO_LANE_ID, streaming=False)
+    gateway_model = get_or_create_omi_gateway_llm(
+        CHAT_STRUCTURED_AUTO_LANE_ID,
+        streaming=False,
+        options={'request_timeout': BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS},
+    )
     return GatewayShadowChatModel(
         feature=feature,
         model_name=model,

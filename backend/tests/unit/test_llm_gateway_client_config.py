@@ -96,6 +96,7 @@ def test_gateway_langchain_client_uses_internal_gateway_base_url_and_auth(monkey
 
 def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
     submitted = []
+    captured_gateway_options = {}
     legacy = FakeChatModel(name='legacy', calls=[])
     gateway = FakeChatModel(name='gateway', calls=[])
 
@@ -107,7 +108,12 @@ def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
     monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
     monkeypatch.delenv('K_SERVICE', raising=False)
     monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
-    monkeypatch.setattr(gateway_shadow, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: gateway)
+
+    def fake_gateway(*args, **kwargs):
+        captured_gateway_options.update(kwargs.get('options') or {})
+        return gateway
+
+    monkeypatch.setattr(gateway_shadow, 'get_or_create_omi_gateway_llm', fake_gateway)
     monkeypatch.setattr(gateway_shadow, 'submit_with_context', immediate_submit)
 
     result = clients.get_llm('conv_discard').invoke('hello')
@@ -115,6 +121,7 @@ def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
     assert result.content == 'legacy response'
     assert len(legacy.calls) == 1
     assert len(gateway.calls) == 1
+    assert captured_gateway_options['request_timeout'] == 35.0
     assert submitted == ['_run_sync_shadow']
 
 

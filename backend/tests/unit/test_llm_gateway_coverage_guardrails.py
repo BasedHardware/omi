@@ -94,6 +94,15 @@ def test_generated_gateway_lanes_preserve_model_config_route_options():
         assert route.provider_options == get_route_options(feature, model, provider)
 
 
+def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():
+    config = load_gateway_config(prod_mode=True)
+
+    for feature in get_all_configured_features():
+        if get_provider(feature) == 'anthropic':
+            lane = config.lanes[feature_lane_id(feature)]
+            assert lane.capabilities.streaming is False
+
+
 def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
     inventory = _load_inventory()
 
