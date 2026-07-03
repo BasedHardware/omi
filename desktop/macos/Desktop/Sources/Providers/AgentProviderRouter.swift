@@ -64,9 +64,54 @@ enum AgentProviderRouter {
         return codingHits >= computerHits ? .coding : .computerUse
     }
 
+    /// Shared provider-name → dispatch decision used by every spawn surface
+    /// (voice hub, desktop chat, automation bridge) so routing rules cannot
+    /// drift between copies of the same switch. Returns nil for an unknown
+    /// provider name; the caller owns the error message.
+    ///
+    /// Rules: explicit names dispatch directly (health is checked by the
+    /// caller's preflight); "auto"/"best"/"any" always routes; an empty name
+    /// routes only for coding/computer-use tasks when a ready external
+    /// provider exists — general tasks stay on the default orchestrator,
+    /// which uniquely has the user's Omi data tools.
+    static func dispatchDecision(
+        providerName: String,
+        brief: String,
+        availability: (AgentPillsManager.DirectedProvider) -> Bool = {
+            AgentProviderHealth.report(for: $0).readiness == .ready
+        }
+    ) -> Decision? {
+        switch providerName {
+        case "openclaw":
+            return Decision(primary: .openclaw, fallbacks: [], reason: "explicit")
+        case "hermes":
+            return Decision(primary: .hermes, fallbacks: [], reason: "explicit")
+        case "codex":
+            return Decision(primary: .codex, fallbacks: [], reason: "explicit")
+        case "auto", "best", "any":
+            return route(task: brief, availability: availability)
+        case "":
+            let decision = route(task: brief, availability: availability)
+            if decision.primary != nil, classify(brief) != .general {
+                return Decision(
+                    primary: decision.primary,
+                    fallbacks: decision.fallbacks,
+                    reason: "default auto-routed: \(decision.reason)")
+            }
+            return Decision(primary: nil, fallbacks: [], reason: "default orchestrator")
+        default:
+            return nil
+        }
+    }
+
+    /// Only providers that are actually ready (installed AND wired AND authed —
+    /// see AgentProviderHealth) may enter a chain; a merely-installed binary
+    /// with a dead gateway or missing auth would burn a hop on a doomed run.
     static func route(
         task: String,
-        availability: (AgentPillsManager.DirectedProvider) -> Bool = { LocalAgentProviderDetector.isAvailable($0) }
+        availability: (AgentPillsManager.DirectedProvider) -> Bool = {
+            AgentProviderHealth.report(for: $0).readiness == .ready
+        }
     ) -> Decision {
         let kind = classify(task)
         let ranked = prior(for: kind)

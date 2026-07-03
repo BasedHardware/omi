@@ -62,4 +62,41 @@ final class AgentProviderRouterTests: XCTestCase {
     XCTAssertTrue(decision.reason.contains("codex"))
     XCTAssertTrue(decision.reason.contains("default"))
   }
+
+  // MARK: - Shared dispatch decision (all spawn surfaces)
+
+  func testDispatchExplicitNameIsDirect() {
+    let d = AgentProviderRouter.dispatchDecision(providerName: "codex", brief: "anything", availability: allAvailable)
+    XCTAssertEqual(d?.primary, .codex)
+    XCTAssertEqual(d?.fallbacks.isEmpty, true)
+    XCTAssertEqual(d?.reason, "explicit")
+  }
+
+  func testDispatchUnknownNameIsNil() {
+    XCTAssertNil(AgentProviderRouter.dispatchDecision(providerName: "gemini", brief: "x", availability: allAvailable))
+  }
+
+  func testDispatchAutoRoutes() {
+    let d = AgentProviderRouter.dispatchDecision(providerName: "auto", brief: "write a python script", availability: allAvailable)
+    XCTAssertEqual(d?.primary, .codex)
+  }
+
+  func testDispatchUnnamedCodingTaskRoutesToBestReadyProvider() {
+    let d = AgentProviderRouter.dispatchDecision(providerName: "", brief: "write a python script", availability: allAvailable)
+    XCTAssertEqual(d?.primary, .codex)
+    XCTAssertEqual(d?.fallbacks, [.hermes, .openclaw, nil])
+  }
+
+  func testDispatchUnnamedGeneralTaskStaysOnDefaultOrchestrator() {
+    let d = AgentProviderRouter.dispatchDecision(providerName: "", brief: "plan a birthday dinner", availability: allAvailable)
+    XCTAssertNotNil(d)
+    XCTAssertNil(d?.primary)
+    XCTAssertEqual(d?.fallbacks.isEmpty, true)
+  }
+
+  func testDispatchUnnamedCodingTaskWithNoReadyProvidersStaysDefault() {
+    let d = AgentProviderRouter.dispatchDecision(providerName: "", brief: "write a python script", availability: noneAvailable(_:))
+    XCTAssertNotNil(d)
+    XCTAssertNil(d?.primary)
+  }
 }

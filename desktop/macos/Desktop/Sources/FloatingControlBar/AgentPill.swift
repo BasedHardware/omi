@@ -1316,7 +1316,7 @@ final class AgentPillsManager: ObservableObject {
         while !chain.isEmpty {
             let candidate = chain.removeFirst()
             if let provider = candidate {
-                if LocalAgentProviderDetector.isAvailable(provider) {
+                if AgentProviderHealth.report(for: provider).readiness == .ready {
                     hop = provider
                     foundHop = true
                     break

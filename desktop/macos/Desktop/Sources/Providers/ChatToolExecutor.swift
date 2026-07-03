@@ -469,24 +469,15 @@ class ChatToolExecutor {
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
       .replacingOccurrences(of: " ", with: "")
-    let directedProvider: AgentPillsManager.DirectedProvider?
-    var routedFallbacks: [AgentPillsManager.DirectedProvider?] = []
-    switch providerName {
-    case "openclaw": directedProvider = .openclaw
-    case "hermes": directedProvider = .hermes
-    case "codex": directedProvider = .codex
-    case "auto", "best", "any":
-      let decision = AgentProviderRouter.route(task: brief)
-      directedProvider = decision.primary
-      routedFallbacks = decision.fallbacks
-    case "": directedProvider = nil
-    default:
+    guard let decision = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
       return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex, auto."
     }
+    let directedProvider = decision.primary
+    let routedFallbacks = decision.fallbacks
     if let directedProvider {
-      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
-      guard availability.isAvailable else {
-        return availability.toolError
+      let health = AgentProviderHealth.report(for: directedProvider)
+      guard health.readiness == .ready else {
+        return "Error: \(health.detail)"
       }
     }
     let model = ShortcutSettings.shared.selectedModel.isEmpty

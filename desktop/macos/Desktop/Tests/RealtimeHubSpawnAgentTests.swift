@@ -25,11 +25,13 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directedProvider)"))
-    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
+    // Dispatch gates on full health (installed AND wired AND authed), not
+    // binary presence — a not-onboarded provider must not get a doomed spawn.
+    XCTAssertTrue(source.contains("AgentProviderHealth.report(for: directedProvider)"))
+    XCTAssertTrue(source.contains("guard health.readiness == .ready else"))
     XCTAssertTrue(source.contains("assistantText = setupPrompt"))
-    XCTAssertTrue(source.contains("output: availability.toolError"))
-    // The unavailable path must not dead-end: it instructs the model to offer
+    XCTAssertTrue(source.contains("output: \"Error: \\(health.detail)\""))
+    // The not-ready path must not dead-end: it instructs the model to offer
     // a consent-gated setup_agent_provider call carrying the original task.
     XCTAssertTrue(source.contains("call setup_agent_provider with provider="))
     XCTAssertTrue(source.contains("and their original task as brief."))

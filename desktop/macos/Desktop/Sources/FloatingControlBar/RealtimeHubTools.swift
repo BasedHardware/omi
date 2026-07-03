@@ -74,9 +74,9 @@ enum HubTool: String {
 enum RealtimeHubTools {
   private static func localAgentProviderInstruction() -> String {
     let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
-    let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
-    let available = availability.filter(\.isAvailable).map(\.provider)
-    let unavailable = availability.filter { !$0.isAvailable }
+    let reports = providers.map { AgentProviderHealth.report(for: $0) }
+    let available = reports.filter { $0.readiness == .ready }.map(\.provider)
+    let unavailable = reports.filter { $0.readiness != .ready }
 
     let autoInstruction =
       available.isEmpty
@@ -93,7 +93,7 @@ enum RealtimeHubTools {
       parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
     }
     let missingText = unavailable
-      .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+      .map { "\($0.provider.displayName): \($0.detail)" }
       .joined(separator: " ")
     parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
     parts.append(
@@ -106,7 +106,7 @@ enum RealtimeHubTools {
 
   private static func availableDirectedProviderRawValues() -> [String] {
     [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
-      .filter { LocalAgentProviderDetector.isAvailable($0) }
+      .filter { AgentProviderHealth.report(for: $0).readiness == .ready }
       .map(\.rawValue)
   }
 

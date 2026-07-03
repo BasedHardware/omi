@@ -1014,38 +1014,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
-      let directedProvider: AgentPillsManager.DirectedProvider?
-      var routedFallbacks: [AgentPillsManager.DirectedProvider?] = []
-      switch providerName {
-      case "openclaw": directedProvider = .openclaw
-      case "hermes": directedProvider = .hermes
-      case "codex": directedProvider = .codex
-      case "auto", "best", "any":
-        let decision = AgentProviderRouter.route(task: brief)
-        directedProvider = decision.primary
-        routedFallbacks = decision.fallbacks
-        log("RealtimeHub[\(providerTag)]: spawn_agent auto-route \(decision.reason)")
-      case "": directedProvider = nil
-      default:
+      guard let decision = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
         session?.sendToolResult(
           callId: callId, name: name,
           output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', 'codex', or 'auto'.")
         return
       }
+      let directedProvider = decision.primary
+      let routedFallbacks = decision.fallbacks
+      log("RealtimeHub[\(providerTag)]: spawn_agent dispatch \(decision.reason)")
       if let directedProvider {
-        let availability = LocalAgentProviderDetector.availability(for: directedProvider)
-        guard availability.isAvailable else {
-          let setupPrompt = availability.setupPrompt
+        let health = AgentProviderHealth.report(for: directedProvider)
+        guard health.readiness == .ready else {
+          let setupPrompt = "\(health.detail) I can set it up for you."
           assistantText = setupPrompt
           barState?.isVoiceResponseActive = true
           if !audioReceivedThisTurn {
             speak(directedProvider.setupNeededStatus)
           }
           suppressAssistantOutputForCurrentTurn = true
-          log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) unavailable")
+          log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) not ready (\(health.readiness.rawValue))")
           sendToolResultIfCurrent(
             source: source, callId: callId, name: name,
-            output: availability.toolError
+            output: "Error: \(health.detail)"
               + " Offer to set it up for the user; if they agree, call setup_agent_provider with provider=\"\(directedProvider.rawValue)\" and their original task as brief.")
           return
         }

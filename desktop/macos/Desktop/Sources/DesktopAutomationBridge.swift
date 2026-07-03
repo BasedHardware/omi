@@ -647,26 +647,16 @@ final class DesktopAutomationActionRegistry {
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
       return await MainActor.run {
-        let directedProvider: AgentPillsManager.DirectedProvider?
-        var routedFallbacks: [AgentPillsManager.DirectedProvider?] = []
-        var routeReason = "explicit"
-        switch providerName {
-        case "openclaw": directedProvider = .openclaw
-        case "hermes": directedProvider = .hermes
-        case "codex": directedProvider = .codex
-        case "auto", "best", "any":
-          let decision = AgentProviderRouter.route(task: brief)
-          directedProvider = decision.primary
-          routedFallbacks = decision.fallbacks
-          routeReason = decision.reason
-        case "": directedProvider = nil
-        default:
+        guard let decision = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
           return ["error": "unknown provider '\(providerName)'; expected openclaw|hermes|codex|auto or empty"]
         }
+        let directedProvider = decision.primary
+        let routedFallbacks = decision.fallbacks
+        let routeReason = decision.reason
         if let directedProvider {
-          let availability = LocalAgentProviderDetector.availability(for: directedProvider)
-          guard availability.isAvailable else {
-            return ["error": availability.toolError]
+          let health = AgentProviderHealth.report(for: directedProvider)
+          guard health.readiness == .ready else {
+            return ["error": "Error: \(health.detail)"]
           }
         }
         let model = ShortcutSettings.shared.selectedModel.isEmpty
