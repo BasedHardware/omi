@@ -38,10 +38,13 @@ private final class SendCancellationBox: @unchecked Sendable {
 /// Send (or for opted-in auto-reply).
 ///
 /// `NSAppleScript` is documented as main-thread-only and is not thread-safe, so the
-/// script is created and executed on the main queue. It runs there ASYNCHRONOUSLY
-/// (dispatched, not on the caller's actor synchronously) so the calling Task isn't
-/// blocked while the Apple event is delivered — the send no longer freezes the
-/// Replies inbox the way the previous synchronous `@MainActor` call did.
+/// script is created and executed on the main queue. Dispatching it async keeps the
+/// calling Task from blocking, which avoids the previous synchronous `@MainActor`
+/// stall. Tradeoff (honest): the main run loop IS still blocked for the duration of
+/// the Apple event — including any first-launch TCC automation prompt or slow chat
+/// resolution — so a slow send can briefly hitch the UI. There is no safe way to run
+/// `NSAppleScript` itself off the main thread; doing the work off-main would require
+/// reworking this to `NSUserAppleScriptTask` or an XPC helper (see PR discussion).
 enum IMessageSenderService {
 
   static func send(text: String, toChatGUID chatGUID: String) async throws {
