@@ -10,7 +10,7 @@ import type { RewindSettings } from '../../shared/types'
 // shared/rewindExclusions and are merged in at capture time.
 const DEFAULTS: RewindSettings = {
   captureEnabled: true,
-  intervalMs: 1000,
+  intervalMs: 5000,
   retentionDays: 14,
   excludedApps: []
 }

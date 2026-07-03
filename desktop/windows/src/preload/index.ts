@@ -97,6 +97,11 @@ const omi: OmiBridgeApi = {
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
+  onRewindCaptureNow: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('rewind:captureNow', listener)
+    return () => ipcRenderer.removeListener('rewind:captureNow', listener)
+  },
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
