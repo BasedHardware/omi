@@ -190,10 +190,11 @@ struct WhatsAppContactsSyncResponsePayload: Decodable {
 struct WhatsAppDraftMessagePayload: Encodable, Sendable {
   let text: String
   let isFromMe: Bool
+  var sender: String? = nil  // group-chat sender name/handle; lets the backend attribute messages
   var timestamp: Date? = nil  // send time; lets the backend order the thread deterministically
 
   enum CodingKeys: String, CodingKey {
-    case text, timestamp
+    case text, timestamp, sender
     case isFromMe = "is_from_me"
   }
 
@@ -201,6 +202,7 @@ struct WhatsAppDraftMessagePayload: Encodable, Sendable {
     var c = encoder.container(keyedBy: CodingKeys.self)
     try c.encode(text, forKey: .text)
     try c.encode(isFromMe, forKey: .isFromMe)
+    try c.encodeIfPresent(sender, forKey: .sender)
     if let timestamp {
       try c.encode(WhatsAppPayloadFormat.string(from: timestamp), forKey: .timestamp)
     }
@@ -211,6 +213,12 @@ struct WhatsAppDraftRequestPayload: Encodable {
   let person: String
   let thread: [WhatsAppDraftMessagePayload]
   let intent: String?
+  var isGroup: Bool = false
+
+  enum CodingKeys: String, CodingKey {
+    case person, thread, intent
+    case isGroup = "is_group"
+  }
 }
 
 struct WhatsAppDraftResponsePayload: Decodable {
@@ -218,6 +226,9 @@ struct WhatsAppDraftResponsePayload: Decodable {
   /// True when the person matched more than one contact: `draft` is a
   /// disambiguation ask, not a sendable reply. Defaults false for older backends.
   var ambiguous: Bool = false
+  /// True when the drafter judged the latest group message wasn't directed at the
+  /// user: `draft` is empty and no draft should be shown. Defaults false.
+  var abstain: Bool = false
 
   enum CodingKeys: String, CodingKey { case draft, ambiguous }
 
@@ -271,10 +282,14 @@ struct WhatsAppChat: Identifiable, Sendable {
   }
   var awaitingReply: Bool { !(bubbles.last?.isFromMe ?? true) }
 
-  /// Recent thread as draft-reply context (last N messages).
+  /// Recent thread as draft-reply context (last N messages). In group chats each
+  /// incoming bubble carries its sender so the backend can attribute messages and
+  /// judge whether the user is actually being addressed.
   func draftContext(limit: Int = 20) -> [WhatsAppDraftMessagePayload] {
     bubbles.suffix(limit).map {
-      WhatsAppDraftMessagePayload(text: $0.text, isFromMe: $0.isFromMe, timestamp: $0.date)
+      WhatsAppDraftMessagePayload(
+        text: $0.text, isFromMe: $0.isFromMe,
+        sender: isGroup ? $0.senderName : nil, timestamp: $0.date)
     }
   }
 }

@@ -246,8 +246,12 @@ private struct ChatDetailView: View {
     defer { isDrafting = false }
     do {
       let resp = try await APIClient.shared.imessageDraftReply(
-        person: chat.personRef, thread: chat.draftContext(), intent: nil)
-      if resp.ambiguous {
+        person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
+      if resp.abstain {
+        // Group message that wasn't directed at the user — don't invent a reply.
+        draft = ""
+        errorText = "This didn't look like it was meant for you — no reply drafted."
+      } else if resp.ambiguous {
         // The contact name matched more than one person — `draft` is a
         // disambiguation ask, not a reply. Surface it and keep the composer empty
         // so it can't be sent as-is.

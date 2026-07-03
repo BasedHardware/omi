@@ -129,8 +129,11 @@ struct InboxConversationRow: View {
             .foregroundColor(OmiColors.textSecondary)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
-          if awaitingReply {
-            InboxDraftBadge(ready: draftReady, accent: accent)
+          // Show the pill ONLY once a reply has actually been drafted for this
+          // chat — never on every awaiting thread. `awaitingReply` is kept for
+          // callers that still gate other behavior on it.
+          if draftReady {
+            InboxDraftBadge(accent: accent)
           }
         }
       }
@@ -142,18 +145,18 @@ struct InboxConversationRow: View {
   }
 }
 
-/// "Draft" / "Draft ready" pill used in the list row (right, under the time).
+/// "Draft ready" pill used in the list row (right, under the time). Only rendered
+/// when a reply has actually been drafted for the chat.
 struct InboxDraftBadge: View {
-  let ready: Bool
   let accent: Color
 
   var body: some View {
-    Text(ready ? "Draft ready" : "Draft")
+    Text("Draft ready")
       .scaledFont(size: 9, weight: .semibold)
-      .foregroundColor(ready ? .white : accent)
+      .foregroundColor(.white)
       .padding(.horizontal, 5)
       .padding(.vertical, 1)
-      .background(ready ? accent : accent.opacity(0.15))
+      .background(accent)
       .clipShape(Capsule())
       .fixedSize()
   }

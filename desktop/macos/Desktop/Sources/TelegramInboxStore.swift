@@ -23,8 +23,18 @@ final class TelegramInboxStore: ObservableObject {
 
   @Published var chats: [TelegramChat] = []
   @Published var connection: ConnectionState = .disconnected
-  @Published var selectedChatID: String?
-  /// Replies pre-drafted in the background when a new inbound message arrived.
+  /// Drafts are generated on-demand when the user opens a chat (not eagerly for
+  /// every inbound), so the "Draft ready" pill only appears on chats the user
+  /// actually looked at.
+  @Published var selectedChatID: String? {
+    didSet {
+      guard selectedChatID != oldValue, let chat = selectedChat, chat.awaitingReply,
+        preDrafts[chat.chatID] == nil, !autoReplyChats.contains(chat.chatID)
+      else { return }
+      Task { await predraft(chat) }
+    }
+  }
+  /// Replies drafted on-demand when the user opened the chat.
   @Published var preDrafts: [String: String] = [:]
   /// Chat ids the user opted into automatic replies for. When a new inbound
   /// message arrives in one of these chats, Omi drafts AND sends without review
@@ -191,8 +201,12 @@ final class TelegramInboxStore: ObservableObject {
     if autoReplyChats.contains(chat.chatID) {
       await autoReply(chat)
     } else {
+      // A new inbound arrived → any earlier draft is stale. Drop it; we draft
+      // on-demand when the user opens the chat (or right now if it's already open).
       preDrafts[chat.chatID] = nil
-      await predraft(chat)
+      if chat.chatID == selectedChatID {
+        await predraft(chat)
+      }
     }
   }
 
@@ -209,10 +223,14 @@ final class TelegramInboxStore: ObservableObject {
   private func predraft(_ chat: TelegramChat) async {
     guard
       let resp = try? await APIClient.shared.telegramDraftReply(
-        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+        person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
     else { return }
-    guard !resp.ambiguous else { return }  // don't offer a disambiguation ask as a pre-draft
-    preDrafts[chat.chatID] = resp.draft
+    // Don't offer a disambiguation ask as a draft; and when the backend abstained
+    // (group message not meant for the user) show no draft.
+    guard !resp.ambiguous, !resp.abstain else { return }
+    let draft = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !draft.isEmpty else { return }
+    preDrafts[chat.chatID] = draft
   }
 
   /// Draft AND send without review. Only ever called for opted-in chats. A send
@@ -220,12 +238,14 @@ final class TelegramInboxStore: ObservableObject {
   private func autoReply(_ chat: TelegramChat) async {
     guard
       let resp = try? await APIClient.shared.telegramDraftReply(
-        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+        person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
     else { return }
     guard !resp.ambiguous else {
       NSLog("Telegram auto-reply skipped for %@: ambiguous contact", chat.chatID)
       return
     }
+    // Backend abstained (group message not directed at the user) → nothing to send.
+    guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
     TelegramClientService.shared.send(chatID: chat.chatID, text: text)

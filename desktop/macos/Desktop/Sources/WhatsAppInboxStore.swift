@@ -13,8 +13,18 @@ final class WhatsAppInboxStore: ObservableObject {
   @Published var isLoading = false
   @Published var errorMessage: String?
   @Published var permissionNeeded = false
-  @Published var selectedChatID: String?
-  /// Replies pre-drafted in the background when a new inbound message arrived.
+  /// Drafts are generated on-demand when the user opens a chat (not eagerly for
+  /// every inbound), so the "Draft ready" pill only appears on chats the user
+  /// actually looked at.
+  @Published var selectedChatID: String? {
+    didSet {
+      guard selectedChatID != oldValue, let chat = selectedChat, chat.awaitingReply,
+        preDrafts[chat.id] == nil, !autoReplyChats.contains(chat.chatID)
+      else { return }
+      Task { await predraft(chat) }
+    }
+  }
+  /// Replies drafted on-demand when the user opened the chat.
   @Published var preDrafts: [String: String] = [:]
   /// Chat IDs the user has opted into automatic replies for. When a new inbound
   /// message arrives in one of these chats, Omi drafts AND sends a reply without
@@ -164,8 +174,12 @@ final class WhatsAppInboxStore: ObservableObject {
         if autoReplyChats.contains(chat.chatID) {
           Task { await self.autoReply(chat) }
         } else {
+          // A new inbound arrived → any earlier draft is stale. Drop it; we draft
+          // on-demand when the user opens the chat (or right now if it's already open).
           preDrafts[chat.id] = nil
-          Task { await self.predraft(chat) }
+          if chat.id == selectedChatID {
+            Task { await self.predraft(chat) }
+          }
         }
       }
     }
@@ -175,11 +189,14 @@ final class WhatsAppInboxStore: ObservableObject {
   private func predraft(_ chat: WhatsAppChat) async {
     guard
       let resp = try? await APIClient.shared.whatsappDraftReply(
-        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+        person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
     else { return }
-    // Don't offer a disambiguation ask as a ready-to-send pre-draft.
-    guard !resp.ambiguous else { return }
-    preDrafts[chat.id] = resp.draft
+    // Don't offer a disambiguation ask as a draft; and when the backend abstained
+    // (group message not meant for the user) show no draft.
+    guard !resp.ambiguous, !resp.abstain else { return }
+    let draft = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !draft.isEmpty else { return }
+    preDrafts[chat.id] = draft
   }
 
   /// Draft a reply and send it immediately, without review. Only ever called for
@@ -195,12 +212,14 @@ final class WhatsAppInboxStore: ObservableObject {
     }
     guard
       let resp = try? await APIClient.shared.whatsappDraftReply(
-        person: chat.personRef, thread: chat.draftContext(), intent: nil)
+        person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
     else { return }
     guard !resp.ambiguous else {
       NSLog("WhatsApp auto-reply skipped for \(chat.chatID): ambiguous contact needs disambiguation")
       return
     }
+    // Backend abstained (group message not directed at the user) → nothing to send.
+    guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
     do {

@@ -5613,10 +5613,12 @@ extension APIClient {
 
   /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
   /// a disambiguation ask as if it were a reply.
-  func imessageDraftReply(person: String, thread: [IMessageDraftMessagePayload], intent: String?) async throws
+  func imessageDraftReply(
+    person: String, thread: [IMessageDraftMessagePayload], intent: String?, isGroup: Bool = false
+  ) async throws
     -> IMessageDraftResponsePayload
   {
-    let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent)
+    let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
     return try await post("v1/imessage/draft-reply", body: body)
   }
 
@@ -5670,10 +5672,12 @@ extension APIClient {
 
   /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
   /// a disambiguation ask as if it were a reply.
-  func telegramDraftReply(person: String, thread: [TelegramDraftMessagePayload], intent: String?) async throws
+  func telegramDraftReply(
+    person: String, thread: [TelegramDraftMessagePayload], intent: String?, isGroup: Bool = false
+  ) async throws
     -> TelegramDraftResponsePayload
   {
-    let body = TelegramDraftRequestPayload(person: person, thread: thread, intent: intent)
+    let body = TelegramDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
     return try await post("v1/telegram/draft-reply", body: body)
   }
 
@@ -5681,10 +5685,12 @@ extension APIClient {
     let _: XSimpleOK = try await post("v1/telegram/disconnect")
   }
 
-  func whatsappDraftReply(person: String, thread: [WhatsAppDraftMessagePayload], intent: String?) async throws
+  func whatsappDraftReply(
+    person: String, thread: [WhatsAppDraftMessagePayload], intent: String?, isGroup: Bool = false
+  ) async throws
     -> WhatsAppDraftResponsePayload
   {
-    let body = WhatsAppDraftRequestPayload(person: person, thread: thread, intent: intent)
+    let body = WhatsAppDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
     return try await post("v1/whatsapp/draft-reply", body: body)
   }
 
