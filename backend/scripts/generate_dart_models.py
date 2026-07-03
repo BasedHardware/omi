@@ -225,6 +225,7 @@ SCHEMA_GROUPS = {
             'DailySummaryLocationPin',
             'DailySummaryResponse',
             'DailySummariesResponse',
+            'FairUseDailyGenerationsBudgetResponse',
             'FairUseLimitsResponse',
             'FairUseUsagePctResponse',
             'FairUseStatusResponse',
