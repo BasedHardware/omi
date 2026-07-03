@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   asRoutableAgentId,
   buildAvailabilitySnapshot,
+  DispatchAttemptError,
   inferTaskType,
   isDispatchRetryable,
   planQueryDispatch,
@@ -71,22 +72,27 @@ describe("dispatch-routing — live dispatch composition", () => {
   async function simulateDispatch(
     query: { adapterId?: string; prompt: string },
     snapshot = allLocalConnected,
-    opts: { failActivation?: Set<RoutableAgentId> } = {}
+    opts: {
+      failActivation?: Set<RoutableAgentId>;
+      runFails?: Map<RoutableAgentId, { retryable: boolean }>;
+    } = {}
   ) {
     const plan = planQueryDispatch(query, snapshot);
     if (plan.needsSetup) return { plan, guidedSetup: plan.needsSetup as RoutableAgentId };
-    const activated: RoutableAgentId[] = [];
     const handled: RoutableAgentId[] = [];
     const outcome = await executeWithFallback(plan.order as RoutableAgentId[], {
       runOne: async (agent) => {
+        // Mirrors index.ts runOne: activate, then facade.handleQuery outcome.
         if (opts.failActivation?.has(agent)) throw new Error(`${agent} is not available.`);
-        activated.push(agent);
-        handled.push(agent); // stands in for facade.handleQuery
+        const runFail = opts.runFails?.get(agent);
+        if (runFail) throw new DispatchAttemptError(`${agent} run failed`, runFail.retryable);
+        handled.push(agent); // stands in for a successful facade.handleQuery
       },
-      isRetryable: isDispatchRetryable,
+      isRetryable: (error) =>
+        error instanceof DispatchAttemptError ? error.retryable : isDispatchRetryable(error),
       log: () => {},
     });
-    return { plan, outcome, activated, handled };
+    return { plan, outcome, handled };
   }
 
   it("a) explicit mention + connected -> runs that agent", async () => {
@@ -120,5 +126,27 @@ describe("dispatch-routing — live dispatch composition", () => {
     // openclaw was attempted then a different agent handled it
     expect(r.handled.length).toBe(1);
     expect(r.handled[0]).not.toBe("openclaw");
+  });
+
+  it("e) primary RUN fails retryably -> fallback advances to the next agent", async () => {
+    const r = await simulateDispatch(
+      { adapterId: "openclaw", prompt: "edit this" },
+      allLocalConnected,
+      { runFails: new Map([["openclaw", { retryable: true }]]) }
+    );
+    expect(r.outcome?.ok).toBe(true);
+    expect(r.outcome?.agent).not.toBe("openclaw");
+    expect(r.handled[0]).not.toBe("openclaw");
+  });
+
+  it("f) primary RUN fails NON-retryably -> surfaced immediately, no fallback", async () => {
+    const r = await simulateDispatch(
+      { adapterId: "openclaw", prompt: "edit this" },
+      allLocalConnected,
+      { runFails: new Map([["openclaw", { retryable: false }]]) }
+    );
+    expect(r.outcome?.ok).toBe(false);
+    expect(r.handled).toHaveLength(0); // nothing else was tried
+    expect(r.outcome?.attempts).toHaveLength(1);
   });
 });

@@ -62,6 +62,7 @@ import {
 } from "./runtime/adapter-selection.js";
 import {
   buildAvailabilitySnapshot,
+  DispatchAttemptError,
   isDispatchRetryable,
   planQueryDispatch,
 } from "./runtime/dispatch-routing.js";
@@ -1064,18 +1065,22 @@ async function main(): Promise<void> {
             }
             logErr(`Router: ${plan.reason} — plan=[${plan.order.join(", ")}] (${plan.explanation})`);
 
-            // Execute with fallback: advance to the next agent when one can't be
-            // brought up. NOTE: terminal *run* failures are still surfaced by
-            // facade.handleQuery as error events (see compatibility-facade.ts),
-            // so they don't yet trigger fallback — that surfacing is the next,
-            // facade/kernel step. Activation/spawn failures fall back here today.
+            // Execute with fallback: advance to the next agent both when one
+            // can't be brought up (activation/spawn throw) and when its run
+            // fails retryably. We suppress the facade's own error emit so a
+            // non-final failure never sends a terminal error before the retry;
+            // the final failure is emitted by the outer catch below.
             const outcome = await executeWithFallback(plan.order as RoutableAgentId[], {
               runOne: async (agent) => {
                 query.adapterId = agent;
                 await activateAdapter(agent);
-                await facade.handleQuery(query);
+                const queryOutcome = await facade.handleQuery(query, { suppressFailureEmit: true });
+                if (!queryOutcome.ok) {
+                  throw new DispatchAttemptError(queryOutcome.message, queryOutcome.retryable, queryOutcome.failure);
+                }
               },
-              isRetryable: isDispatchRetryable,
+              isRetryable: (error) =>
+                error instanceof DispatchAttemptError ? error.retryable : isDispatchRetryable(error),
               log: logErr,
             });
             if (!outcome.ok) {
@@ -1091,7 +1096,8 @@ async function main(): Promise<void> {
           const query = msg as QueryMessage;
           send({
             type: "error",
-            message: String(err),
+            message: err instanceof DispatchAttemptError ? err.message : String(err),
+            failure: err instanceof DispatchAttemptError ? err.failure : undefined,
             protocolVersion: query.protocolVersion,
             requestId: requestIdFor(query),
             clientId: query.clientId,

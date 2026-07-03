@@ -478,6 +478,88 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("returns an ok outcome on a successful run", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const outcome = await facade.handleQuery(v1Query({ id: "ok-request" }));
+    expect(outcome).toEqual({ ok: true });
+    store.close();
+  });
+
+  it("returns a failure outcome and still emits by default on a terminal run failure", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const sent: OutboundMessage[] = [];
+    adapter.failNextExecutionError = new AdapterRuntimeError({
+      code: "adapter_process_exited",
+      source: "adapter_process",
+      adapterId: "openclaw",
+      retryable: true,
+      userMessage: "OpenClaw crashed mid-run",
+      technicalMessage: "exit 1",
+    });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const outcome = await facade.handleQuery({
+      ...v1Query({ id: "fail-default", prompt: "fail" }),
+      protocolVersion: 2,
+      requestId: "fail-default",
+      clientId: "client-fail-default",
+      adapterId: "fake",
+    });
+
+    expect(outcome).toMatchObject({ ok: false, retryable: true });
+    // Default: the error IS emitted (legacy behavior preserved).
+    expect(sent.some((m) => m.type === "error")).toBe(true);
+    store.close();
+  });
+
+  it("suppresses the error emit when asked, so the caller can fall back", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const sent: OutboundMessage[] = [];
+    adapter.failNextExecutionError = new AdapterRuntimeError({
+      code: "adapter_process_exited",
+      source: "adapter_process",
+      adapterId: "openclaw",
+      retryable: true,
+      userMessage: "OpenClaw crashed mid-run",
+      technicalMessage: "exit 1",
+    });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const outcome = await facade.handleQuery(
+      {
+        ...v1Query({ id: "fail-suppressed", prompt: "fail" }),
+        protocolVersion: 2,
+        requestId: "fail-suppressed",
+        clientId: "client-fail-suppressed",
+        adapterId: "fake",
+      },
+      { suppressFailureEmit: true }
+    );
+
+    expect(outcome).toMatchObject({ ok: false, retryable: true });
+    expect(outcome).toHaveProperty("failure.code", "adapter_process_exited");
+    // No terminal error reached the client — the caller owns the retry decision.
+    expect(sent.some((m) => m.type === "error")).toBe(false);
+    store.close();
+  });
+
   it("maps v1 sessionKey to a legacy alias and returns adapter-native sessionId compatibility", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const sent: OutboundMessage[] = [];

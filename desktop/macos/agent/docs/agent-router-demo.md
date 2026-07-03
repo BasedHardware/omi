@@ -71,9 +71,12 @@ cd desktop/macos && OMI_APP_NAME="omi-agent-router" OMI_SKIP_TUNNEL=1 ./run.sh
   codex today. Still to do on the Swift side: add `codex` to `AgentHarnessMode` /
   `DirectedProvider`, parse the spoken agent name into a routing directive, and
   turn the existing `setupPrompt` text into a guided install flow.
-- **Fallback is wired at the module level**, exercised by tests and the demo
-  script. Threading `executeWithFallback` through the live `facade.handleQuery`
-  attempt lifecycle in `kernel.ts` is the remaining integration.
+- **Fallback covers both activation and run failures.** `facade.handleQuery`
+  accepts `{ suppressFailureEmit: true }` and returns an outcome, so a terminal
+  *run* failure (not just a spawn failure) advances to the next agent when the
+  failure is retryable, and surfaces immediately when it isn't — without a
+  non-final error event leaking to the client, and without touching `kernel.ts`.
+  Run `node scripts/dispatch-harness.mjs` to see cases (e)/(f).
 - **Capability table is intentionally simple** (task-type → ranked agents). It's
   built to extend with success-rate / cost / latency signals without touching
   call sites.

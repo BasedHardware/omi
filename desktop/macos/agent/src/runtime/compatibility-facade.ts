@@ -55,6 +55,20 @@ export interface CompatibilityFacadeOptions {
   maxRecoverableRetries?: number;
 }
 
+/** Options for handleQuery. Defaults preserve the original (emit-on-failure) behavior. */
+export interface HandleQueryOptions {
+  /**
+   * When true, a terminal run failure is NOT sent to the client as an error
+   * event; the outcome is returned instead so the caller can try another agent.
+   */
+  suppressFailureEmit?: boolean;
+}
+
+/** Result of handleQuery, used by the live dispatcher to drive cross-agent fallback. */
+export type QueryOutcome =
+  | { ok: true }
+  | { ok: false; failure?: RuntimeFailure; message: string; retryable: boolean };
+
 interface ActiveRequestContext {
   protocolVersion?: ProtocolVersion;
   requestId: string;
@@ -200,7 +214,7 @@ export class JsonlCompatibilityFacade {
     }
   }
 
-  async handleQuery(message: QueryMessage): Promise<void> {
+  async handleQuery(message: QueryMessage, options: HandleQueryOptions = {}): Promise<QueryOutcome> {
     const input = this.buildRunInput(message);
     const key = this.activeRequestKey(input.requestId, input.clientId);
     if (this.activeByRequest.has(key)) {
@@ -227,13 +241,18 @@ export class JsonlCompatibilityFacade {
       if (result.terminalStatus === "failed") {
         const failure = failureFromResultJson(result.run.resultJson);
         const message = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
-        const errorMessage: ErrorMessage = {
-          type: "error",
-          message,
-          failure,
-        };
-        this.send(this.withCorrelation(errorMessage, context));
-        return;
+        // Default: emit the error (legacy behavior). When the caller drives
+        // cross-agent fallback it suppresses the emit and inspects the outcome,
+        // so a non-final failure never sends a terminal error before the retry.
+        if (!options.suppressFailureEmit) {
+          const errorMessage: ErrorMessage = {
+            type: "error",
+            message,
+            failure,
+          };
+          this.send(this.withCorrelation(errorMessage, context));
+        }
+        return { ok: false, failure, message, retryable: failure?.retryable ?? true };
       }
 
       const resultMessage: ResultMessage = {
@@ -250,11 +269,15 @@ export class JsonlCompatibilityFacade {
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
       };
       this.send(this.withCorrelation(resultMessage, context));
+      return { ok: true };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
       this.log(`Compatibility query error: ${messageText}`);
-      const errorMessage: ErrorMessage = { type: "error", message: messageText };
-      this.send(this.withCorrelation(errorMessage, context));
+      if (!options.suppressFailureEmit) {
+        const errorMessage: ErrorMessage = { type: "error", message: messageText };
+        this.send(this.withCorrelation(errorMessage, context));
+      }
+      return { ok: false, message: messageText, retryable: true };
     } finally {
       this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {

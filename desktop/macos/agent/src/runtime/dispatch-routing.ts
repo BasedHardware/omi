@@ -11,6 +11,22 @@ import {
   type RoutingPlan,
   type TaskType,
 } from "./agent-router.js";
+import type { RuntimeFailure } from "./failures.js";
+
+/**
+ * A single agent attempt failed. Carries whether the fallback executor should
+ * advance to the next agent, plus the structured failure for the final emit.
+ */
+export class DispatchAttemptError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly failure?: RuntimeFailure
+  ) {
+    super(message);
+    this.name = "DispatchAttemptError";
+  }
+}
 
 /** Which local agents activated at startup. `acp` (Claude Code) is always present. */
 export interface AdapterAvailabilityFlags {
