@@ -737,7 +737,7 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var isConnected: Bool {
-    MemoryBankConnector.handles(destination) && statuses[destination]?.hasConnection == true
+    statuses[destination]?.hasConnection == true
   }
 
   /// Labeled header that makes the automatic (MCP) vs manual (pack) choice obvious.

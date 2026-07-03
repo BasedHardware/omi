@@ -205,7 +205,7 @@ private struct ConnectOptionCard: View {
   }
 
   private var isConnected: Bool {
-    MemoryBankConnector.handles(destination) && statuses[destination]?.hasConnection == true
+    statuses[destination]?.hasConnection == true
   }
 
   private func prepareMCPKeyIfNeeded() async {
