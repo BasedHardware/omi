@@ -1015,15 +1015,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
       let directedProvider: AgentPillsManager.DirectedProvider?
+      var routedFallbacks: [AgentPillsManager.DirectedProvider?] = []
       switch providerName {
       case "openclaw": directedProvider = .openclaw
       case "hermes": directedProvider = .hermes
       case "codex": directedProvider = .codex
+      case "auto", "best", "any":
+        let decision = AgentProviderRouter.route(task: brief)
+        directedProvider = decision.primary
+        routedFallbacks = decision.fallbacks
+        log("RealtimeHub[\(providerTag)]: spawn_agent auto-route \(decision.reason)")
       case "": directedProvider = nil
       default:
         session?.sendToolResult(
           callId: callId, name: name,
-          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.")
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', 'codex', or 'auto'.")
         return
       }
       if let directedProvider {
@@ -1053,7 +1059,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         brief, model: model, fromVoice: false,
         preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
         bridgeHarnessOverride: directedProvider?.harnessMode)
-      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
+      pill.fallbackProviders = routedFallbacks
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") fallbacks=\(routedFallbacks.count) titled=\(title?.isEmpty == false)")
       if !audioReceivedThisTurn {
         let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck

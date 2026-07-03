@@ -295,7 +295,7 @@ enum DesktopCapabilityRegistry {
       bullets: [
         "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
         "The only way to start a floating-bar subagent is to call spawn_agent; saying you will start one does not start it.",
-        "If the user asks to use OpenClaw, Hermes, or Codex, call spawn_agent with provider set to openclaw, hermes, or codex.",
+        "If the user asks to use OpenClaw, Hermes, or Codex, call spawn_agent with provider set to openclaw, hermes, or codex. If they ask for an agent without naming one, use provider auto — Omi picks the best installed provider with automatic fallback.",
         "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."
       ]),
     Capability(

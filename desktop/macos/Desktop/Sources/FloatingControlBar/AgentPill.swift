@@ -61,6 +61,12 @@ final class AgentPill: ObservableObject, Identifiable {
     let model: String
     let bridgeHarnessOverride: AgentHarnessMode?
 
+    /// Remaining auto-route fallback chain (a `nil` entry is the default Omi
+    /// orchestrator). When this pill fails, the manager consumes the chain and
+    /// respawns the task on the next provider. Empty for explicitly directed
+    /// pills — a user who names an agent should not be silently rerouted.
+    var fallbackProviders: [AgentPillsManager.DirectedProvider?] = []
+
     @Published var title: String
     @Published var status: Status = .queued
     @Published var latestActivity: String = "Queued…"
@@ -698,10 +704,13 @@ final class AgentPillsManager: ObservableObject {
         let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
         projectionStreamsByPill[pill.id] = AgentRuntimeStatusStore.shared.$projectionsBySurface
             .receive(on: DispatchQueue.main)
-            .sink { [weak pill] projections in
+            .sink { [weak self, weak pill] projections in
                 guard let pill, let projection = projections[surfaceRef.key] else { return }
                 guard !pill.status.isFinished || projection.status.isTerminal else { return }
                 AgentPillsManager.apply(projection: projection, to: pill)
+                if projection.status.isTerminal {
+                    self?.attemptProviderFallback(for: pill)
+                }
             }
 
         // Stagger bridge boots: chain this pill's warmup after the previous
@@ -1175,6 +1184,7 @@ final class AgentPillsManager: ObservableObject {
         if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
             Self.apply(projection: projection, to: pill)
             if projection.status.isTerminal {
+                attemptProviderFallback(for: pill)
                 pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
                 if pill.viewedAt != nil {
                     scheduleViewedExpiration(for: pill)
@@ -1188,6 +1198,7 @@ final class AgentPillsManager: ObservableObject {
             pill.completedAt = Date()
             Self.ensureFailureMessage(errorText, for: pill)
             pill.markContentChanged()
+            attemptProviderFallback(for: pill)
         } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
             pill.status = .done
             pill.completedAt = Date()
@@ -1202,6 +1213,7 @@ final class AgentPillsManager: ObservableObject {
             pill.latestActivity = "Agent ended before reporting a final result"
             Self.ensureFailureMessage("Agent ended before reporting a final result", for: pill)
             pill.markContentChanged()
+            attemptProviderFallback(for: pill)
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         if pill.viewedAt != nil {
@@ -1210,6 +1222,53 @@ final class AgentPillsManager: ObservableObject {
         // Keep the provider + stream alive after completion so a voice/text follow-up
         // can continue THIS agent's session with full context. They're torn down on
         // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
+    }
+
+    /// Consume the pill's auto-route fallback chain after a terminal failure:
+    /// respawn the same task on the next installed provider (a `nil` hop is the
+    /// default Omi orchestrator). Idempotent — the chain is consumed on first
+    /// call, so repeated terminal projections can't spawn duplicate retries.
+    @discardableResult
+    func attemptProviderFallback(for pill: AgentPill) -> Bool {
+        guard case .failed = pill.status else { return false }
+        guard !pill.fallbackProviders.isEmpty else { return false }
+        var chain = pill.fallbackProviders
+        pill.fallbackProviders = []
+
+        var hop: DirectedProvider?
+        var foundHop = false
+        while !chain.isEmpty {
+            let candidate = chain.removeFirst()
+            if let provider = candidate {
+                if LocalAgentProviderDetector.isAvailable(provider) {
+                    hop = provider
+                    foundHop = true
+                    break
+                }
+            } else {
+                hop = nil  // default Omi orchestrator terminal fallback
+                foundHop = true
+                break
+            }
+        }
+        guard foundHop else { return false }
+
+        let display = hop?.displayName ?? "Omi"
+        log("AgentPills: pill '\(pill.title)' failed — falling back to \(display)")
+        pill.latestActivity = "Failed — retrying with \(display)"
+        pill.markContentChanged()
+
+        let successor = spawn(
+            query: pill.query,
+            model: pill.model,
+            fromVoice: false,
+            preFetchedTitle: pill.title,
+            bridgeHarnessOverride: hop?.harnessMode
+        )
+        successor.fallbackProviders = chain
+        successor.latestActivity = "Retrying via \(display)…"
+        successor.markContentChanged()
+        return true
     }
 
     private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {

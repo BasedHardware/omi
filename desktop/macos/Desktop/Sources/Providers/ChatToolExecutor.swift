@@ -470,13 +470,18 @@ class ChatToolExecutor {
       .lowercased()
       .replacingOccurrences(of: " ", with: "")
     let directedProvider: AgentPillsManager.DirectedProvider?
+    var routedFallbacks: [AgentPillsManager.DirectedProvider?] = []
     switch providerName {
     case "openclaw": directedProvider = .openclaw
     case "hermes": directedProvider = .hermes
     case "codex": directedProvider = .codex
+    case "auto", "best", "any":
+      let decision = AgentProviderRouter.route(task: brief)
+      directedProvider = decision.primary
+      routedFallbacks = decision.fallbacks
     case "": directedProvider = nil
     default:
-      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex, auto."
     }
     if let directedProvider {
       let availability = LocalAgentProviderDetector.availability(for: directedProvider)
@@ -493,6 +498,7 @@ class ChatToolExecutor {
       preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
       bridgeHarnessOverride: directedProvider?.harnessMode
     )
+    pill.fallbackProviders = routedFallbacks
     return """
     Agent started as a floating agent pill.
     id: \(pill.id.uuidString)

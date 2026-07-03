@@ -634,6 +634,72 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "spawn_agent_pill",
+      summary: "Spawn a real floating agent pill (provider-directed or auto-routed) for agent-dispatch e2e tests",
+      params: ["brief", "provider"]
+    ) { params in
+      let brief = (params["brief"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !brief.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("brief is required")
+      }
+      let providerName = (params["provider"] ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      return await MainActor.run {
+        let directedProvider: AgentPillsManager.DirectedProvider?
+        var routedFallbacks: [AgentPillsManager.DirectedProvider?] = []
+        var routeReason = "explicit"
+        switch providerName {
+        case "openclaw": directedProvider = .openclaw
+        case "hermes": directedProvider = .hermes
+        case "codex": directedProvider = .codex
+        case "auto", "best", "any":
+          let decision = AgentProviderRouter.route(task: brief)
+          directedProvider = decision.primary
+          routedFallbacks = decision.fallbacks
+          routeReason = decision.reason
+        case "": directedProvider = nil
+        default:
+          return ["error": "unknown provider '\(providerName)'; expected openclaw|hermes|codex|auto or empty"]
+        }
+        if let directedProvider {
+          let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+          guard availability.isAvailable else {
+            return ["error": availability.toolError]
+          }
+        }
+        let model = ShortcutSettings.shared.selectedModel.isEmpty
+          ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        let pill = AgentPillsManager.shared.spawnFromUserQuery(
+          brief,
+          model: model,
+          fromVoice: false,
+          preFetchedTitle: directedProvider?.displayName,
+          bridgeHarnessOverride: directedProvider?.harnessMode
+        )
+        pill.fallbackProviders = routedFallbacks
+        return [
+          "pillId": pill.id.uuidString,
+          "title": pill.title,
+          "provider": directedProvider?.rawValue ?? "default",
+          "fallbacks": routedFallbacks.map { $0?.rawValue ?? "default" }.joined(separator: ","),
+          "reason": routeReason,
+        ]
+      }
+    }
+
+    register(
+      name: "agent_pills_status",
+      summary: "List current floating agent pills with status, provider, and activity"
+    ) { _ in
+      let listing = await MainActor.run {
+        AgentPillsManager.shared.manage(action: "list", agentId: nil)
+      }
+      return ["pills": listing]
+    }
+
+    register(
       name: "spatial_overlay_present_fixture",
       summary: "Present a deterministic spatial-overlay fixture for dogfood harnesses",
       params: ["fixture", "settleMs"]

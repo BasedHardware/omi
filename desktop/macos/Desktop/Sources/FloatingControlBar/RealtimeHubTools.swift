@@ -75,8 +75,13 @@ enum RealtimeHubTools {
     let available = availability.filter(\.isAvailable).map(\.provider)
     let unavailable = availability.filter { !$0.isAvailable }
 
+    let autoInstruction =
+      available.isEmpty
+      ? ""
+      : " If the user asks for an agent without naming one (e.g. \"have an agent do this\", \"use the best agent\"), call spawn_agent with provider set to \"auto\" — Omi picks the best installed agent for the task and falls back to the others automatically."
+
     if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect."
+      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect." + autoInstruction
     }
 
     var parts: [String] = []
@@ -88,6 +93,9 @@ enum RealtimeHubTools {
       .map { "\($0.provider.displayName): \($0.setupPrompt)" }
       .joined(separator: " ")
     parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    if !autoInstruction.isEmpty {
+      parts.append(autoInstruction.trimmingCharacters(in: .whitespaces))
+    }
     return parts.joined(separator: " ")
   }
 
@@ -240,8 +248,10 @@ enum RealtimeHubTools {
   static func openAITools(availableDirectedProviders: [String]) -> [[String: Any]] {
     let providerProperty: [String: Any]? = availableDirectedProviders.isEmpty ? nil : [
       "type": "string",
-      "enum": availableDirectedProviders,
-      "description": "Optional available local provider to run this background agent through.",
+      "enum": availableDirectedProviders + ["auto"],
+      "description":
+        "Optional available local provider to run this background agent through. "
+        + "Use \"auto\" to let Omi pick the best installed provider for the task with automatic fallback.",
     ]
     return baseOpenAITools(providerProperty: providerProperty)
   }
