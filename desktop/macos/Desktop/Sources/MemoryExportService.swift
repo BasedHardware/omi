@@ -520,12 +520,17 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       // Claude may render a secret field, but the backend expects it to stay blank.
       return [
         CloudConnectorCopySection(
-          id: "connector_fields",
-          title: "",
+          id: "main_fields",
+          title: "Main fields",
           fields: [
             CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
             CloudConnectorCopyField(
               id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+          ]),
+        CloudConnectorCopySection(
+          id: "advanced_settings",
+          title: "Advanced settings",
+          fields: [
             CloudConnectorCopyField(
               id: "oauth_client_id", label: "OAuth Client ID", value: cloudOAuthClientID ?? ""),
             CloudConnectorCopyField(
