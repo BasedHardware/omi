@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/IMessageSenderService.swift
+  s_a0ba892d21e486::t_15346b9f8e16ed 41-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b71dd7434a0fbbb3bfefe4791a2f827b350ed132",
+  "prompts": {},
+  "sessions": {
+    "s_a0ba892d21e486": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2027e0a6-1ed1-4496-9186-7a24083f6964",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
