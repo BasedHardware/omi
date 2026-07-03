@@ -605,7 +605,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Start the WhatsApp watcher app-wide so auto-reply fires on new messages even
     // when the WhatsApp tab was never opened this session (the store is a singleton).
-    Task { @MainActor in WhatsAppInboxStore.shared.startWatching() }
+    // Gated on sign-in and on WhatsApp access actually being available, so we never
+    // spin up a filesystem watcher for a signed-out user or one who hasn't connected
+    // WhatsApp (Full Disk Access to the WhatsApp container is the consent signal).
+    let whatsappDBPresent = FileManager.default.fileExists(
+      atPath: WhatsAppPermissionPolicy.chatDatabaseURL.path)
+    if AuthState.shared.isSignedIn && whatsappDBPresent && WhatsAppPermissionPolicy.fullDiskAccessGranted() {
+      Task { @MainActor in WhatsAppInboxStore.shared.startWatching() }
+    }
 
     log("AppDelegate: applicationDidFinishLaunching completed")
   }

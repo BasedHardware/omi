@@ -5627,6 +5627,9 @@ extension APIClient {
   func imessageSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
     let body = IMessageContactsSyncRequestPayload(contacts: contacts)
     let resp: IMessageContactsSyncResponsePayload = try await post("v1/imessage/contacts/sync", body: body)
+    // A 200 with success:false is a backend-level partial failure; surface it instead
+    // of returning 0, which is indistinguishable from a genuine zero-upsert success.
+    guard resp.success else { throw APIError.invalidResponse }
     return resp.peopleUpserted
   }
 
@@ -5702,6 +5705,9 @@ extension APIClient {
   func whatsappSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
     let body = IMessageContactsSyncRequestPayload(contacts: contacts)
     let resp: WhatsAppContactsSyncResponsePayload = try await post("v1/whatsapp/contacts/sync", body: body)
+    // A 200 with success:false is a backend-level partial failure; surface it instead
+    // of returning 0, which is indistinguishable from a genuine zero-upsert success.
+    guard resp.success else { throw APIError.invalidResponse }
     return resp.peopleUpserted
   }
 }

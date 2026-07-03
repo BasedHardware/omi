@@ -94,7 +94,11 @@ actor IMessageContactResolver {
 
     let sources = base.appendingPathComponent("Sources", isDirectory: true)
     if let items = try? fm.contentsOfDirectory(at: sources, includingPropertiesForKeys: nil) {
-      for dir in items {
+      // Sort source directories: `contentsOfDirectory` has no guaranteed order, and
+      // loading is first-write-wins, so an unsorted iteration makes the resolved name/
+      // photo for a handle present in multiple AddressBook sources (iCloud, local,
+      // CardDAV) non-deterministic across launches. A stable path sort fixes that.
+      for dir in items.sorted(by: { $0.path < $1.path }) {
         let db = dir.appendingPathComponent("AddressBook-v22.abcddb", isDirectory: false)
         if fm.fileExists(atPath: db.path) { urls.append(db) }
       }

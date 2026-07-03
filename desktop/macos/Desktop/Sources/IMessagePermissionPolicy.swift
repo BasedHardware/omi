@@ -67,21 +67,10 @@ enum IMessagePermissionPolicy {
     // macOS lists an app under Full Disk Access only after the app itself has
     // *attempted* to read an FDA-protected file — the denied TCC access is what
     // inserts our row into the list. Opening this pane alone never adds us, so
-    // trigger the chat.db read first (result ignored). Then the user lands on a
-    // list that already contains this app and only needs to flip the toggle,
-    // instead of an empty list where they'd have to hunt for the app with "+".
-    _ = fullDiskAccessGranted()
-
-    // The Privacy panes snapshot their app list when the window loads and do NOT
-    // refresh when a new app is registered while Settings is already open. If we
-    // just registered above but Settings is already showing a stale list, the
-    // user won't see our row. Quit the running instance so reopening rebuilds the
-    // list fresh (with our just-added app). A cold Settings needs no such reset.
-    let settingsApps = NSWorkspace.shared.runningApplications.filter {
-      $0.bundleIdentifier == "com.apple.systempreferences"
-    }
-    let wasRunning = !settingsApps.isEmpty
-    settingsApps.forEach { $0.terminate() }
+    // trigger the chat.db read first. Then the user lands on a list that already
+    // contains this app and only needs to flip the toggle, instead of an empty list
+    // where they'd have to hunt for the app with "+".
+    let granted = fullDiskAccessGranted()
 
     let openPane = {
       if let url = URL(
@@ -90,12 +79,48 @@ enum IMessagePermissionPolicy {
         NSWorkspace.shared.open(url)
       }
     }
-    if wasRunning {
-      // Give the quit a moment to complete so the relaunch loads a fresh list.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: openPane)
-    } else {
+
+    // When access is already available (or chat.db is absent), the probe added no new
+    // row, so there is nothing to refresh — don't terminate a Settings window the user
+    // may have open for something else. Just open the pane.
+    guard !granted else {
+      openPane()
+      return
+    }
+
+    // The Privacy panes snapshot their app list when the window loads and do NOT
+    // refresh when a new app is registered while Settings is already open. If we just
+    // registered above but Settings is showing a stale list, the user won't see our
+    // row. Quit the running instance so reopening rebuilds the list fresh.
+    let workspace = NSWorkspace.shared
+    let settingsApps = workspace.runningApplications.filter {
+      $0.bundleIdentifier == "com.apple.systempreferences"
+    }
+    guard !settingsApps.isEmpty else {
+      openPane()  // cold Settings needs no reset
+      return
+    }
+
+    // Reopen the pane only once the old instance has actually terminated — observed via
+    // the workspace notification rather than a fixed delay (which could reopen against a
+    // still-tearing-down instance and land on the stale list). A timeout fallback
+    // guarantees the pane always opens even if the notification never arrives.
+    var observer: NSObjectProtocol?
+    var opened = false
+    let finish = {
+      guard !opened else { return }
+      opened = true
+      if let observer { workspace.notificationCenter.removeObserver(observer) }
       openPane()
     }
+    observer = workspace.notificationCenter.addObserver(
+      forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
+    ) { note in
+      let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+      if app?.bundleIdentifier == "com.apple.systempreferences" { finish() }
+    }
+    settingsApps.forEach { $0.terminate() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: finish)
   }
 
   // MARK: - Messages automation (Apple Events)

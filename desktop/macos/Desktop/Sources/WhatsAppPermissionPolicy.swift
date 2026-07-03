@@ -31,10 +31,18 @@ enum WhatsAppPermissionPolicy {
       .appendingPathComponent("Message", isDirectory: true)
   }
 
-  /// Absolute file URL for a `ZMEDIALOCALPATH`, or nil when empty.
+  /// Absolute file URL for a `ZMEDIALOCALPATH`, or nil when empty or when the path
+  /// escapes the media directory. `ZMEDIALOCALPATH` comes straight from the WhatsApp
+  /// database; a tampered/corrupt row containing `../` segments must not be able to
+  /// resolve to a file outside `Message/` (this connector runs with Full Disk Access).
   static func mediaFileURL(forLocalPath localPath: String?) -> URL? {
     guard let p = localPath?.trimmingCharacters(in: .whitespaces), !p.isEmpty else { return nil }
-    return messageMediaDirectoryURL.appendingPathComponent(p, isDirectory: false)
+    let base = messageMediaDirectoryURL.standardizedFileURL
+    let resolved = base.appendingPathComponent(p, isDirectory: false).standardizedFileURL
+    // Containment guard: the resolved path must stay within the media base directory.
+    let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
+    guard resolved.path == base.path || resolved.path.hasPrefix(basePath) else { return nil }
+    return resolved
   }
 
   /// WhatsApp.app bundle id (Mac App Store Catalyst build).
