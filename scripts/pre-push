@@ -349,6 +349,10 @@ check_backend_typecheck_if_needed() {
     'backend/database/import_jobs.py' \
     'backend/database/daily_summaries.py' \
     'backend/database/x_posts.py' \
+    'backend/database/auth.py' \
+    'backend/database/cache_manager.py' \
+    'backend/database/memory_vector_repair_outbox.py' \
+    'backend/database/memory_vector_repair_outbox_telemetry.py' \
     'backend/database/desktop_update_policy.py' \
     'backend/database/memory_app_key_grants.py' \
     'backend/database/memory_imports.py' \
