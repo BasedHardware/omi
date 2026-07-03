@@ -1,0 +1,42 @@
+backend/utils/llm/person_profile.py
+  s_a0ba892d21e486::t_bb13bc6250fb42 101-104
+  s_a0ba892d21e486::t_234b32b3d3e1de 47-51
+backend/tests/unit/test_memories_stale_updates.py
+  s_a0ba892d21e486::t_7dcafcf1279501 145-146,150-151
+  s_a0ba892d21e486::t_05a643ef269615 170-171
+  s_a0ba892d21e486::t_5f6e04695a7e71 152-153
+backend/utils/llm/style_fingerprint.py
+  s_a0ba892d21e486::t_e718408a64cb49 151
+  s_a0ba892d21e486::t_3c7d0482d96909 36-56
+  s_a0ba892d21e486::t_906d1c46b70f48 16
+  s_a0ba892d21e486::t_076240460ded65 144
+  s_a0ba892d21e486::t_9368a8ba3d6f5b 245
+  s_a0ba892d21e486::t_4a407e00610d7f 35,57
+backend/utils/llm/reply_draft.py
+  s_a0ba892d21e486::t_07c6480a7e6ff4 65-70
+backend/database/users.py
+  s_a0ba892d21e486::t_e64fa70d8d13c2 571-578
+backend/database/memories.py
+  s_a0ba892d21e486::t_ba001a202d5e59 204-213
+  s_a0ba892d21e486::t_f641ed851946fd 33-36
+backend/tests/unit/test_reply_draft.py
+  s_a0ba892d21e486::t_bbf8c7cbab2606 563-571
+backend/tests/unit/test_style_fingerprint.py
+  s_a0ba892d21e486::t_810f372a7f23bf 36-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2ae2ec26d3a0f8da6ce5c114552b84ec8f281fd9",
+  "prompts": {},
+  "sessions": {
+    "s_a0ba892d21e486": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2027e0a6-1ed1-4496-9186-7a24083f6964",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
