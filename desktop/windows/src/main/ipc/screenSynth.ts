@@ -7,6 +7,7 @@ import {
   advanceWatermark,
   recordRun
 } from '../screenSynth/state'
+import { buildOcrContextText } from '../rewind/ocrLayout'
 import type { ScreenFrameLite, ScreenSynthState, ScreenSynthRun } from '../../shared/types'
 
 export function registerScreenSynthHandlers(): void {
@@ -20,7 +21,11 @@ export function registerScreenSynthHandlers(): void {
       app: f.app,
       windowTitle: f.windowTitle,
       processName: f.processName,
-      ocrText: f.ocrText
+      ocrText: f.ocrText,
+      ocrContext: buildOcrContextText(f.ocrText, f.ocrLinesJson, {
+        width: f.width,
+        height: f.height
+      })
     }))
   })
   ipcMain.handle('screenSynth:getState', async () => getScreenSynthState())

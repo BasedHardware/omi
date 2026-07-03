@@ -23,7 +23,11 @@ async function backfill(): Promise<void> {
         continue
       }
       const result = await helperProcess.ocr(jpeg)
-      setRewindFrameOcr(f.id, result.ok ? result.fullText : '')
+      setRewindFrameOcr(
+        f.id,
+        result.ok ? result.fullText : '',
+        result.ok ? result.lines : undefined
+      )
     }
   } finally {
     running = false

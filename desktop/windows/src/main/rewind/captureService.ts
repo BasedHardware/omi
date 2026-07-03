@@ -58,7 +58,7 @@ async function refreshCurrentScreen(frameId: number, jpeg: Buffer): Promise<void
     const res = await helperProcess.ocr(jpeg)
     if (res.ok) {
       setCurrentScreen(res.fullText)
-      setRewindFrameOcr(frameId, res.fullText)
+      setRewindFrameOcr(frameId, res.fullText, res.lines)
     }
   } catch {
     /* best-effort: keep the last good cached value */
