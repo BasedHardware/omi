@@ -215,12 +215,13 @@ final class TelegramInboxStore: ObservableObject {
     lastLatestMessageID[chat.chatID] = t.latestMessageID
     guard t.awaitingReply, known != t.latestMessageID else { return }
 
+    // A new inbound arrived → any earlier draft is stale regardless of path. Drop it
+    // first so an outdated draft can't linger if the fresh attempt abstains or fails.
+    preDrafts[chat.chatID] = nil
     if autoReplyChats.contains(chat.chatID) {
       scheduleAutoReply(chat)
     } else {
-      // A new inbound arrived → any earlier draft is stale. Drop it; we draft
-      // on-demand when the user opens the chat (or right now if it's already open).
-      preDrafts[chat.chatID] = nil
+      // We draft on-demand when the user opens the chat (or right now if open).
       if chat.chatID == selectedChatID {
         await predraft(chat)
       }
@@ -265,16 +266,17 @@ final class TelegramInboxStore: ObservableObject {
     guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    // Final guard: the draft round-trip is async, so re-check auto-reply is still on
+    // (and this task wasn't cancelled) BEFORE publishing a group draft or sending a
+    // 1:1 — a toggled-off auto-reply must neither send nor surface a draft.
+    guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {
+      NSLog("Telegram auto-reply cancelled for %@ before send (toggled off mid-draft)", chat.chatID)
+      return
+    }
     // Groups are DRAFT-ONLY: never auto-send to a group chat. Surface the draft for
     // the user to review and send manually instead.
     if chat.isGroup {
       preDrafts[chat.chatID] = text
-      return
-    }
-    // Final guard: the draft round-trip is async, so re-check auto-reply is still on
-    // (and this task wasn't cancelled) right before the irreversible send.
-    guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {
-      NSLog("Telegram auto-reply cancelled for %@ before send (toggled off mid-draft)", chat.chatID)
       return
     }
     TelegramClientService.shared.send(chatID: chat.chatID, text: text)

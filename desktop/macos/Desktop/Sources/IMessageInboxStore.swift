@@ -185,12 +185,14 @@ final class IMessageInboxStore: ObservableObject {
       // Only act on NEW arrivals (after the first baseline pass), so we don't flood
       // the backend for every existing unread thread on launch.
       if baselined, let known, known != latestID {
+        // A new inbound arrived → any earlier draft is stale regardless of path. Drop
+        // it first so an outdated draft can't linger if the fresh attempt abstains,
+        // fails, or (for a 1:1) sends instead of drafting.
+        preDrafts[chat.id] = nil
         if autoReplyChats.contains(chat.chatGUID) {
           scheduleAutoReply(chat)
         } else {
-          // A new inbound arrived → any earlier draft is stale. Drop it; we draft
-          // on-demand when the user opens the chat (or right now if it's already open).
-          preDrafts[chat.id] = nil
+          // We draft on-demand when the user opens the chat (or right now if open).
           if chat.id == selectedChatID {
             Task { await self.predraft(chat) }
           }
@@ -232,18 +234,19 @@ final class IMessageInboxStore: ObservableObject {
     guard !resp.abstain else { return }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    // Final guard: the draft round-trip is async, so re-check that auto-reply is still
+    // enabled (and this task wasn't cancelled) BEFORE either publishing a group draft
+    // or sending a 1:1. The user may have toggled it off while the draft was being
+    // generated — in which case we must neither send nor surface a draft for it.
+    guard !Task.isCancelled, autoReplyChats.contains(chat.chatGUID) else {
+      NSLog("iMessage auto-reply cancelled for \(chat.chatGUID) before send (toggled off mid-draft)")
+      return
+    }
     // Groups are DRAFT-ONLY: never auto-send to a group chat (higher blast radius and
     // different send/rollback semantics). Surface the draft for the user to review
     // and send manually instead of sending it automatically.
     if chat.isGroup {
       preDrafts[chat.id] = text
-      return
-    }
-    // Final guard: the draft round-trip is async, so re-check that auto-reply is
-    // still enabled (and this task wasn't cancelled) right before the irreversible
-    // send. The user may have toggled it off while the draft was being generated.
-    guard !Task.isCancelled, autoReplyChats.contains(chat.chatGUID) else {
-      NSLog("iMessage auto-reply cancelled for \(chat.chatGUID) before send (toggled off mid-draft)")
       return
     }
     do {

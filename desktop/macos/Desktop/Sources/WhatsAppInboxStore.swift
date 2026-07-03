@@ -186,12 +186,14 @@ final class WhatsAppInboxStore: ObservableObject {
       // Only act on NEW arrivals (after the first baseline pass), so we don't flood
       // the backend for every existing unread thread on launch.
       if baselined, let known, known != latestID {
+        // A new inbound arrived → any earlier draft is stale regardless of path. Drop
+        // it first so an outdated draft can't linger if the fresh attempt abstains,
+        // fails, or (for a 1:1) sends instead of drafting.
+        preDrafts[chat.id] = nil
         if autoReplyChats.contains(chat.chatID) {
           scheduleAutoReply(chat)
         } else {
-          // A new inbound arrived → any earlier draft is stale. Drop it; we draft
-          // on-demand when the user opens the chat (or right now if it's already open).
-          preDrafts[chat.id] = nil
+          // We draft on-demand when the user opens the chat (or right now if open).
           if chat.id == selectedChatID {
             Task { await self.predraft(chat) }
           }
