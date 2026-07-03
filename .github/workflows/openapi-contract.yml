@@ -82,3 +82,6 @@ jobs:
 
       - name: Check generated app-client TypeScript schemas
         run: python backend/scripts/generate_ts_openapi_types.py --check
+
+      - name: Check generated desktop Swift DTOs
+        run: python backend/scripts/generate_swift_openapi_types.py --check
