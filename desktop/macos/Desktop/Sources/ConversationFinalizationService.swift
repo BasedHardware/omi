@@ -395,12 +395,16 @@ actor ConversationFinalizationService {
       let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
       let retryCount = (session?.retryCount ?? 0) + 1
       if retryCount >= maxRetries {
-        await AnalyticsManager.shared.recordingError(
+        let segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+        await AnalyticsManager.shared.conversationReconciliationFailed(
           error: "session_reconciliation_failed",
           reason: "cloud_reconcile_exhausted",
           source: session?.source,
           stage: session?.finalizationStrategy?.rawValue,
-          retryCount: retryCount
+          retryCount: retryCount,
+          hasBackendId: session?.backendId?.isEmpty == false,
+          hasClientConversationId: session?.clientConversationId?.isEmpty == false,
+          segmentCount: segmentCount
         )
       }
       try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
