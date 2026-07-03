@@ -168,7 +168,14 @@ def main() -> int:
 
     if args.mode == "auto":
         latest_change_age = latest_change_age_seconds(changes)
-        if latest_change_age is not None and latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
+        if latest_change_age is None:
+            set_output("should_release", "false")
+            set_output(
+                "reason",
+                "Waiting for desktop release quiet window: could not determine latest releasable change age.",
+            )
+            return 0
+        if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
             wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
             set_output("should_release", "false")
             set_output(

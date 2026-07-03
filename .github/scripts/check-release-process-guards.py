@@ -45,6 +45,8 @@ def check_desktop_codemagic_release() -> list[str]:
     planner_text = planner.read_text(encoding="utf-8")
     if "AUTO_RELEASE_QUIET_SECONDS = 10 * 60" not in planner_text:
         errors.append("desktop auto-release planner must keep a 10 minute quiet window before auto-tagging")
+    if "latest_change_age is None" not in planner_text:
+        errors.append("desktop auto-release planner must fail closed when latest change age cannot be determined")
     if "RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60" not in planner_text:
         errors.append("desktop auto-release planner must keep the recent-tag lease for Codemagic checks")
 
@@ -99,9 +101,16 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
         return errors
 
     workflow_text = workflow.read_text(encoding="utf-8")
+    if not re.search(r"(?m)^\s*-\s*['\"]?app/\*\*['\"]?\s*$", workflow_text):
+        errors.append("mobile_internal_auto.yml must gate pushes to app/** paths")
+    if "group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}" not in workflow_text:
+        errors.append("mobile_internal_auto.yml must give each matrix workflow its own concurrency group")
+    token_check_index = workflow_text.find("Validate Codemagic API token")
+    debounce_index = workflow_text.find("Debounce mobile internal deploys")
+    if token_check_index == -1 or debounce_index == -1 or token_check_index > debounce_index:
+        errors.append("mobile_internal_auto.yml must validate CODEMAGIC_API_TOKEN before the push debounce")
     for required in (
         "paths:",
-        "- 'app/**'",
         "https://api.codemagic.io/builds",
         "ios-internal-auto",
         "android-internal-auto",
