@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::app::Route;
+use crate::app::{Db, Route};
 use crate::notification_history::NotificationEntry;
 use crate::sidecar::BackendStatus;
 
@@ -8,6 +8,7 @@ use crate::sidecar::BackendStatus;
 pub fn Sidebar() -> Element {
     let backend_status: Signal<BackendStatus> = use_context();
     let mut notif_history: Signal<Vec<NotificationEntry>> = use_context();
+    let db: Signal<Option<Db>> = use_context();
     let mut notif_open = use_signal(|| false);
 
     let status_class = match *backend_status.read() {
@@ -52,6 +53,9 @@ pub fn Sidebar() -> Element {
                                         class: "notif-clear-btn",
                                         onclick: move |_| {
                                             notif_history.write().clear();
+                                            if let Some(Db(ref d)) = *db.read() {
+                                                let _ = d.clear_notifications();
+                                            }
                                         },
                                         "Clear"
                                     }
