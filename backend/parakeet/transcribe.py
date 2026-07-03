@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 BATCH_MODEL_NAME = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 STREAM_MODEL_NAME = os.getenv("PARAKEET_STREAM_MODEL", "")
+LEGACY_STREAM_MODEL_NAME = os.getenv("PARAKEET_V3_STREAM_MODEL", "")
 INFERENCE_MODE = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
 
 _stream_model = None
@@ -107,6 +108,14 @@ def _load_nemo_model(model_name: str):
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
+def _init_legacy_stream_model():
+    global _stream_model
+    if not LEGACY_STREAM_MODEL_NAME:
+        logger.info("No PARAKEET_V3_STREAM_MODEL set, /v3/stream will use batch fallback")
+        return
+    _stream_model = _load_nemo_model(LEGACY_STREAM_MODEL_NAME)
+
+
 def _init_nim():
     global _nim_url
     _nim_url = os.getenv("NIM_INFERENCE_URL", "http://localhost:9000")
@@ -115,6 +124,8 @@ def _init_nim():
 
 if INFERENCE_MODE == "nim":
     _init_nim()
+else:
+    _init_legacy_stream_model()
 
 
 def _transcribe_from_gpu_result(result: dict) -> dict:
