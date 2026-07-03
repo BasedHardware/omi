@@ -220,6 +220,7 @@ struct DashboardPage: View {
     @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
+    @State private var selectedCatalogApp: OmiApp?
     @State private var selectedImportConnector: ImportConnector?
     @State private var selectedExportDestination: MemoryExportDestination?
     @State private var isShowingAppsPopup = false
@@ -319,6 +320,13 @@ struct DashboardPage: View {
                 }
             )
             .frame(minWidth: 500, minHeight: 500)
+        }
+        .dismissableSheet(item: $selectedCatalogApp) { app in
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedCatalogApp = nil })
+                .frame(width: 500, height: 650)
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
         }
         .dismissableSheet(item: $selectedImportConnector) { connector in
             ImportConnectorSheet(
@@ -523,6 +531,15 @@ struct DashboardPage: View {
                 initialSection: appsPopupInitialSection,
                 onDismiss: {
                     isShowingAppsPopup = false
+                },
+                onSelectApp: { app in
+                    openAppFromAppsPopup(app)
+                },
+                onSelectConnector: { connector in
+                    openImportConnectorFromAppsPopup(connector)
+                },
+                onSelectDestination: { destination in
+                    openExportDestinationFromAppsPopup(destination)
                 }
             )
             .id(appsPopupPresentationID)
@@ -787,6 +804,21 @@ struct DashboardPage: View {
         appsPopupInitialSection = initialSection
         appsPopupPresentationID = UUID()
         isShowingAppsPopup = true
+    }
+
+    private func openAppFromAppsPopup(_ app: OmiApp) {
+        isShowingAppsPopup = false
+        selectedCatalogApp = app
+    }
+
+    private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
+        isShowingAppsPopup = false
+        selectedImportConnector = connector
+    }
+
+    private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
+        isShowingAppsPopup = false
+        selectedExportDestination = destination
     }
 
     private func openImportConnector(_ connectorID: String) {

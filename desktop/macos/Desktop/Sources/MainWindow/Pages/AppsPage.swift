@@ -115,6 +115,9 @@ struct AppsPage: View {
     var appState: AppState? = nil
     var initialSection: AppsCatalogInitialSection = .imports
     var onDismiss: (() -> Void)? = nil
+    var onSelectApp: ((OmiApp) -> Void)? = nil
+    var onSelectConnector: ((ImportConnector) -> Void)? = nil
+    var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil
     @StateObject private var connectorStatusStore = ImportConnectorStatusStore()
     @State private var searchText = ""
     @State private var selectedApp: OmiApp?
@@ -183,7 +186,7 @@ struct AppsPage: View {
                                     title: filterResultsTitle,
                                     apps: filteredApps,
                                     appProvider: appProvider,
-                                    onSelectApp: { selectedApp = $0 }
+                                    onSelectApp: selectApp
                                 )
 
                                 // Infinite scroll: load more when reaching bottom
@@ -214,19 +217,19 @@ struct AppsPage: View {
                             switch initialSection {
                             case .imports:
                                 ImportsSection(statusStore: connectorStatusStore) { connector in
-                                    selectedConnector = connector
+                                    selectConnector(connector)
                                 }
 
                                 ExportsSection(statuses: exportStatuses) { destination in
-                                    selectedExportDestination = destination
+                                    selectDestination(destination)
                                 }
                             case .exports:
                                 ExportsSection(statuses: exportStatuses) { destination in
-                                    selectedExportDestination = destination
+                                    selectDestination(destination)
                                 }
 
                                 ImportsSection(statusStore: connectorStatusStore) { connector in
-                                    selectedConnector = connector
+                                    selectConnector(connector)
                                 }
                             }
 
@@ -236,7 +239,7 @@ struct AppsPage: View {
                                     title: "Other",
                                     apps: Array(appProvider.popularApps.prefix(6)),
                                     appProvider: appProvider,
-                                    onSelectApp: { selectedApp = $0 },
+                                    onSelectApp: selectApp,
                                     showSeeMore: appProvider.popularApps.count > 6,
                                     onSeeMore: { viewAllSection = "featured" }
                                 )
@@ -248,7 +251,7 @@ struct AppsPage: View {
                                     title: "Integrations",
                                     apps: Array(appProvider.integrationApps.prefix(6)),
                                     appProvider: appProvider,
-                                    onSelectApp: { selectedApp = $0 },
+                                    onSelectApp: selectApp,
                                     showSeeMore: appProvider.integrationApps.count > 6,
                                     onSeeMore: { viewAllSection = "integrations" }
                                 )
@@ -260,7 +263,7 @@ struct AppsPage: View {
                                     title: "Realtime Notifications",
                                     apps: Array(appProvider.notificationApps.prefix(6)),
                                     appProvider: appProvider,
-                                    onSelectApp: { selectedApp = $0 },
+                                    onSelectApp: selectApp,
                                     showSeeMore: appProvider.notificationApps.count > 6,
                                     onSeeMore: { viewAllSection = "notifications" }
                                 )
@@ -317,17 +320,19 @@ struct AppsPage: View {
         .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenExportRequested)) { note in
             if let raw = note.userInfo?["destination"] as? String,
                 let dest = MemoryExportDestination(rawValue: raw) {
-                selectedExportDestination = dest
+                selectDestination(dest)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenImportRequested)) { note in
             if let raw = note.userInfo?["connector"] as? String {
                 if raw == "__more_sources" {
-                    selectedConnector = ImportConnector.all.first {
+                    if let connector = ImportConnector.all.first(where: {
                         !$0.isConnected && $0.id != "chatgpt" && $0.id != "claude"
-                    } ?? ImportConnector.all.first
+                    }) ?? ImportConnector.all.first {
+                        selectConnector(connector)
+                    }
                 } else if let connector = ImportConnector.all.first(where: { $0.id == raw }) {
-                    selectedConnector = connector
+                    selectConnector(connector)
                 }
             }
         }
@@ -346,6 +351,30 @@ struct AppsPage: View {
         .task {
             await connectorStatusStore.refresh()
             exportStatuses = await MemoryExportService.shared.allStatuses()
+        }
+    }
+
+    private func selectApp(_ app: OmiApp) {
+        if let onSelectApp {
+            onSelectApp(app)
+        } else {
+            selectedApp = app
+        }
+    }
+
+    private func selectConnector(_ connector: ImportConnector) {
+        if let onSelectConnector {
+            onSelectConnector(connector)
+        } else {
+            selectedConnector = connector
+        }
+    }
+
+    private func selectDestination(_ destination: MemoryExportDestination) {
+        if let onSelectDestination {
+            onSelectDestination(destination)
+        } else {
+            selectedExportDestination = destination
         }
     }
 
