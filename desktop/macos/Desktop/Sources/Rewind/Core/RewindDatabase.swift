@@ -2314,6 +2314,36 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("createCommitmentsTable") { db in
+            try db.create(table: "commitments") { t in
+                t.autoIncrementedPrimaryKey("id")
+
+                t.column("text", .text).notNull()
+                t.column("speaker", .text)
+                t.column("deadline", .datetime)
+                t.column("status", .text).notNull().defaults(to: "pending")
+
+                t.column("sourceSessionId", .integer)
+                    .references("transcription_sessions", onDelete: .setNull)
+                t.column("sourceConversationId", .text)
+
+                t.column("fulfilledAt", .datetime)
+                t.column("fulfilledByEvidence", .text)
+                t.column("fulfilledBySessionId", .integer)
+
+                t.column("confidence", .double)
+                t.column("embedding", .blob)
+
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            try db.create(index: "idx_commitments_status", on: "commitments", columns: ["status"])
+            try db.create(index: "idx_commitments_deadline", on: "commitments", columns: ["deadline"])
+            try db.create(index: "idx_commitments_created", on: "commitments", columns: ["createdAt"])
+            try db.create(index: "idx_commitments_source_session", on: "commitments", columns: ["sourceSessionId"])
+        }
+
         try migrator.migrate(queue)
     }
 

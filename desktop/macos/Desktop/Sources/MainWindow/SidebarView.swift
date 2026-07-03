@@ -13,6 +13,7 @@ enum SidebarNavItem: Int, CaseIterable {
   case apps = 8
   case settings = 9
   case permissions = 10
+  case commitments = 11
   case help = 12
 
   var title: String {
@@ -28,6 +29,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "Apps"
     case .settings: return "Settings"
     case .permissions: return "Permissions"
+    case .commitments: return "Commitments"
     case .help: return "Help from Founder"
     }
   }
@@ -45,6 +47,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
     case .permissions: return "exclamationmark.triangle.fill"
+    case .commitments: return "handshake.fill"
     case .help: return "bubble.left.fill"
     }
   }
@@ -55,6 +58,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .conversations, .rewind: return 1
     case .memories: return 2
     case .tasks: return 3
+    case .commitments: return 3
     case .chat: return 4
     case .dashboard: return 5
     case .apps: return 6
@@ -64,7 +68,7 @@ enum SidebarNavItem: Int, CaseIterable {
 
   /// Items shown in the main navigation (top section)
   static var mainItems: [SidebarNavItem] {
-    [.dashboard, .conversations, .memories, .tasks, .rewind, .apps]
+    [.dashboard, .conversations, .memories, .tasks, .commitments, .rewind, .apps]
   }
 }
 

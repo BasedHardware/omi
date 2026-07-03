@@ -181,6 +181,7 @@ extension AppState {
             try await TranscriptionStorage.shared.markSessionCompleted(
               id: sessionId, backendId: memoryId)
             log("Transcription: Marked DB session \(sessionId) completed (backend: \(memoryId))")
+            Task { await CommitmentService.shared.processFinalizedSession(sessionId: sessionId) }
           } catch {
             logError(
               "Transcription: Failed to mark DB session \(sessionId) completed", error: error)
