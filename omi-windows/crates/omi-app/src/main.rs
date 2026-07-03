@@ -17,6 +17,7 @@ mod hotkey;
 mod knowledge;
 mod llm;
 mod mcp_bridge;
+mod notification_history;
 mod notifications;
 mod pages;
 mod proactive;
