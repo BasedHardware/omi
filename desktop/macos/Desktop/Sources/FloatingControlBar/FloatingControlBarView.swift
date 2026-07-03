@@ -380,41 +380,37 @@ struct FloatingControlBarView: View {
         // It is intentionally subtle (transparent) to preserve the minimal
         // notch aesthetic.
         ZStack(alignment: .leading) {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onAskAI()
-                }
+            Button(action: onAskAI) {
+                Color.clear
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
             if notchSettingsHovering {
-                Button {
-                    openFloatingBarSettings()
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.86))
-                        .frame(width: 26, height: 24)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Floating Bar Settings")
-                .transition(.scale.combined(with: .opacity))
+                notchSettingsButton
+                    .zIndex(1)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.leading, 5)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(notchSettingsHovering ? "Floating Bar Settings" : "Ask Omi")
-        .accessibilityHint(notchSettingsHovering ? "Open settings" : "Open the conversation")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction {
-            if notchSettingsHovering {
-                openFloatingBarSettings()
-            } else {
-                onAskAI()
-            }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var notchSettingsButton: some View {
+        Button(action: openFloatingBarSettings) {
+            Image(systemName: "gearshape.fill")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.white.opacity(0.86))
+                .frame(width: 26, height: 24)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .help("Floating Bar Settings")
+        .accessibilityIdentifier("notch_floating_bar_settings")
+        .accessibilityLabel("Floating Bar Settings")
+        .accessibilityHint("Open settings")
     }
 
     private var notchOmiChatRow: some View {
@@ -1856,11 +1852,21 @@ private struct AgentMainChatView: View {
         guard !trimmed.isEmpty else { return }
         followUpText = ""
         if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
-            let sibling = manager.spawnFromHandoff(
-                handoff,
+            guard let sibling = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+                .init(
+                    originalUserText: handoff.originalRequest,
+                    brief: handoff.agentTask,
+                    title: nil,
+                    spokenAck: nil,
+                    directedProvider: nil,
+                    harnessOverride: pill.bridgeHarnessOverride
+                ),
                 model: pill.model,
-                bridgeHarnessOverride: pill.bridgeHarnessOverride
-            )
+                fromVoice: false
+            ) else {
+                manager.continueAgent(from: pill, text: trimmed)
+                return
+            }
             state.present(.agent(sibling.id))
             // Route through the window resize/observer setup so the new
             // sibling's reportContentHeight(.agent(sibling.id)) updates are
@@ -1871,7 +1877,6 @@ private struct AgentMainChatView: View {
         }
         manager.continueAgent(from: pill, text: trimmed)
     }
-
 }
 
 /// Re-renders when any individual pill's @Published status changes — the

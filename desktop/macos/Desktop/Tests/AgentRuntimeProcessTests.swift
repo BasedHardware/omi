@@ -30,6 +30,15 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["adapterAcknowledged"] as? Bool, false)
   }
 
+  func testInitMessageCarriesAdvertisedAgentControlTools() {
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","sessionId":"","agentControlTools":["list_agent_sessions","spawn_background_agent"]}"#
+    )
+
+    XCTAssertEqual(message?.kind, .initMessage)
+    XCTAssertEqual(message?.payload["agentControlTools"] as? [String], ["list_agent_sessions", "spawn_background_agent"])
+  }
+
   func testControlToolResultRoutesByRequestId() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"control_tool_result","protocolVersion":2,"requestId":"control-1","clientId":"client-1","name":"inspect_agent_artifacts","result":"{\"ok\":true,\"artifacts\":[]}"}"#
@@ -239,6 +248,19 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
   }
 
+  func testClientRegistrationWaitsForInitWhenProcessIsAlreadyRunning() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("if isRunning {\n      try await waitForInit(timeout: 30.0)\n      return\n    }"))
+    XCTAssertTrue(source.contains("try await waitForInit(timeout: 30.0)"))
+    XCTAssertTrue(source.contains("case .initMessage:"))
+    XCTAssertTrue(source.contains("resolveInitContinuations()"))
+  }
+
   func testAppSurfacesUseDirectControlToolOnly() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -265,6 +287,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("func directControlTool("))
     XCTAssertTrue(source.contains("Agent control requires a signed-in owner"))
+    XCTAssertTrue(source.contains("advertisedAgentControlTools.contains(name)"))
+    XCTAssertTrue(source.contains("Agent runtime does not advertise direct control tool"))
     XCTAssertTrue(source.contains(#""type": "direct_control_tool""#))
     XCTAssertTrue(source.contains(#""ownerId": ownerId"#))
   }

@@ -19,17 +19,31 @@ import type {
   AgentRun,
   AgentSession,
   AgentStore,
+  AgentGrant,
   ArtifactLifecycleState,
   ArtifactRole,
   AttemptStatus,
   NewAgentArtifact,
+  NewAgentGrant,
   ResumeFidelity,
   RunAttempt,
   RunMode,
   RunStatus,
   DelegationMode,
   DelegationStatus,
+  DesktopArtifactDelivery,
+  DesktopAttentionOverride,
+  DesktopCandidateStatus,
+  DesktopCoordinatorDispatch,
+  DesktopMemoryCandidate,
+  DesktopTaskCandidate,
+  NewDesktopContextAccessLog,
+  NewDesktopContextPacket,
+  NewDesktopCoordinatorDispatch,
 } from "./types.js";
+import { buildDesktopActionQueue, type DesktopActionQueueItem, type QueueArtifactDeliveryInput, type QueueCandidateInput, type QueueDispatchInput, type QueueOverrideInput, type QueueRunInput } from "./desktop-action-queue.js";
+import { buildDesktopContextPacket, type DesktopContextPacketBuildInput, type BuiltDesktopContextPacket, type DesktopContextSnippetInput } from "./desktop-context-packet.js";
+import { routeDesktopIntent, type DesktopIntentRoute, type DesktopIntentRouteInput, type DesktopIntentSessionCandidate } from "./desktop-intent-router.js";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,6 +53,14 @@ const TERMINAL_STATUSES: readonly RunStatus[] = ["succeeded", "failed", "cancell
 const DEFAULT_DELEGATION_MAX_DEPTH = 3;
 const HARD_DELEGATION_MAX_DEPTH = 5;
 const DEFAULT_DELEGATION_MAX_BUDGET_USD = 5;
+
+function requiresVerifiedContextDispatch(snippet: DesktopContextSnippetInput): boolean {
+  const tier = snippet.sensitivityTier.toLowerCase();
+  if (snippet.sourceKind === "screenshot_image") return true;
+  if (snippet.sourceKind === "rewind_timeline") return true;
+  if (snippet.sourceKind === "screen_current" && tier !== "low") return true;
+  return tier === "sensitive";
+}
 const HARD_DELEGATION_MAX_BUDGET_USD = 10;
 
 function stableHash(value: string | undefined): string {
@@ -220,6 +242,57 @@ export interface InspectArtifactsInput {
   limit?: number;
 }
 
+export interface DesktopAwarenessSnapshotInput {
+  ownerId?: string;
+  limit?: number;
+}
+
+export interface DesktopAwarenessSnapshot {
+  ownerId: string;
+  generatedAtMs: number;
+  sessions: KernelSessionSummary[];
+  runs: AgentRun[];
+  dispatches: DesktopCoordinatorDispatch[];
+  artifactDeliveries: DesktopArtifactDelivery[];
+  memoryCandidates: DesktopMemoryCandidate[];
+  taskCandidates: DesktopTaskCandidate[];
+  actionQueue: DesktopActionQueueItem[];
+  runtime: {
+    activeExecutionCount: number;
+    registeredAdapters: string[];
+  };
+}
+
+export interface DesktopActionQueueInput {
+  ownerId?: string;
+  staleAfterMs?: number;
+  limit?: number;
+}
+
+export interface DesktopOpenLoopsInput {
+  ownerId?: string;
+  limit?: number;
+}
+
+export interface DesktopContextPacketPersistInput extends Omit<DesktopContextPacketBuildInput, "ownerId"> {
+  ownerId?: string;
+}
+
+export interface ResolveDesktopDispatchInput {
+  ownerId: string;
+  status: "resolved" | "cancelled";
+  resolvedBy?: string | null;
+  resolutionJson?: string | null;
+  resolvedAtMs?: number;
+  grant?: Omit<NewAgentGrant, "sessionId"> & { sessionId?: string };
+}
+
+export interface ResolveDesktopDispatchResult {
+  dispatch: DesktopCoordinatorDispatch;
+  grant: AgentGrant | null;
+  event: AgentEvent | null;
+}
+
 export interface UpdateArtifactLifecycleInput {
   artifactId: string;
   state: ArtifactLifecycleState;
@@ -286,6 +359,30 @@ export interface SendAgentMessageInput {
   model?: string;
   mcpServers?: Record<string, unknown>[];
   metadata?: Record<string, unknown>;
+}
+
+export interface SpawnBackgroundAgentInput {
+  ownerId: string;
+  clientId: string;
+  requestId: string;
+  prompt: string;
+  title?: string;
+  surfaceKind?: string;
+  externalRefKind?: string;
+  externalRefId?: string;
+  adapterId?: string;
+  defaultAdapterId?: string;
+  cwd?: string;
+  model?: string;
+  mcpServers?: Record<string, unknown>[];
+  mode?: RunMode;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SpawnBackgroundAgentResult {
+  session: AgentSession;
+  run: AgentRun;
+  attempt?: RunAttempt;
 }
 
 export interface DelegateAgentInput {
@@ -401,6 +498,37 @@ export class AgentRuntimeKernel {
       mcpServers: input.mcpServers,
       metadata: input.metadata,
     });
+  }
+
+  async spawnBackgroundAgent(input: SpawnBackgroundAgentInput): Promise<SpawnBackgroundAgentResult> {
+    const runInput: ExecuteAgentRunInput = {
+      ownerId: input.ownerId,
+      surfaceKind: input.surfaceKind ?? "background_agent",
+      externalRefKind: input.externalRefKind,
+      externalRefId: input.externalRefId,
+      title: input.title ?? `Background: ${input.prompt.slice(0, 80)}`,
+      defaultAdapterId: input.defaultAdapterId ?? input.adapterId,
+      adapterId: input.adapterId ?? input.defaultAdapterId,
+      clientId: input.clientId,
+      requestId: input.requestId,
+      prompt: input.prompt,
+      mode: input.mode ?? "act",
+      cwd: input.cwd,
+      model: input.model,
+      mcpServers: input.mcpServers,
+      metadata: {
+        ...(input.metadata ?? {}),
+        spawnKind: "background_agent",
+      },
+    };
+    const accepted = this.createAcceptedRun(runInput);
+    void this.executeAcceptedRun(runInput, accepted).catch(() => {
+      // executeAcceptedRun records the failed run/attempt and emits events.
+    });
+    return {
+      session: accepted.session,
+      run: accepted.run,
+    };
   }
 
   async delegateAgent(input: DelegateAgentInput): Promise<DelegateAgentResult> {
@@ -837,6 +965,184 @@ export class AgentRuntimeKernel {
     }));
   }
 
+  buildDesktopAwarenessSnapshot(input: DesktopAwarenessSnapshotInput): DesktopAwarenessSnapshot {
+    const ownerId = input.ownerId ?? "desktop-local-user";
+    const limit = boundedLimit(input.limit, 50, 200);
+    const sessions = this.listSessions({ ownerId, limit });
+    const runs = this.store
+      .allRows(
+        `SELECT r.*
+         FROM runs r
+         JOIN sessions s ON s.session_id = r.session_id
+         WHERE s.owner_id = ?
+         ORDER BY r.updated_at_ms DESC
+         LIMIT ?`,
+        [ownerId, limit],
+      )
+      .map(runFromRow);
+    const dispatches = this.readDesktopDispatches(ownerId, limit);
+    const artifactDeliveries = this.readDesktopArtifactDeliveries(ownerId, limit);
+    const memoryCandidates = this.readDesktopMemoryCandidates(ownerId, limit);
+    const taskCandidates = this.readDesktopTaskCandidates(ownerId, limit);
+    return {
+      ownerId,
+      generatedAtMs: Date.now(),
+      sessions,
+      runs,
+      dispatches,
+      artifactDeliveries,
+      memoryCandidates,
+      taskCandidates,
+      actionQueue: this.listDesktopActionQueue({ ownerId, limit }),
+      runtime: {
+        activeExecutionCount: this.activeExecutions.size,
+        registeredAdapters: this.registry.adapterIds(),
+      },
+    };
+  }
+
+  listDesktopActionQueue(input: DesktopActionQueueInput): DesktopActionQueueItem[] {
+    const ownerId = input.ownerId ?? "desktop-local-user";
+    const limit = boundedLimit(input.limit, 50, 200);
+    const nowMs = Date.now();
+    const runWindow = this.readDesktopQueueRuns(ownerId, Math.max(limit * 5, 200));
+    const queue = buildDesktopActionQueue({
+      nowMs,
+      staleAfterMs: input.staleAfterMs,
+      dispatches: this.readDesktopDispatches(ownerId, limit).map(dispatchToQueueInput),
+      runs: runWindow,
+      runItemLimit: limit,
+      runSuppressionContext: runWindow,
+      artifactDeliveries: this.readDesktopArtifactDeliveries(ownerId, limit).map(deliveryToQueueInput),
+      candidates: [
+        ...this.readDesktopMemoryCandidates(ownerId, limit).map(memoryCandidateToQueueInput),
+        ...this.readDesktopTaskCandidates(ownerId, limit).map(taskCandidateToQueueInput),
+      ],
+      overrides: this.readDesktopAttentionOverrides(ownerId).map(overrideToQueueInput),
+    });
+    return queue.slice(0, limit);
+  }
+
+  getDesktopOpenLoops(input: DesktopOpenLoopsInput): DesktopActionQueueItem[] {
+    return this.listDesktopActionQueue(input).filter((item) =>
+      ["dispatch", "failed_run", "artifact_delivery", "stale_run", "candidate_review"].includes(item.kind)
+    );
+  }
+
+  persistDesktopContextPacket(input: DesktopContextPacketPersistInput): BuiltDesktopContextPacket {
+    const ownerId = input.ownerId ?? "desktop-local-user";
+    this.validateSensitiveContextDispatches({ ...input, ownerId });
+    const built = buildDesktopContextPacket({ ...input, ownerId });
+    this.withTransaction(() => {
+      this.store.insertDesktopContextPacket({
+        ...(built.packet as unknown as NewDesktopContextPacket),
+        packetJson: JSON.stringify(built.packet.packetJson),
+        redactedPreviewJson: JSON.stringify(built.packet.redactedPreviewJson),
+      });
+      for (const accessLog of built.accessLogs) {
+        this.store.insertDesktopContextAccessLog(accessLog);
+      }
+    });
+    return built;
+  }
+
+  routeDesktopIntent(input: Omit<DesktopIntentRouteInput, "nowMs" | "actionQueue" | "sessionCandidates"> & { ownerId?: string }): DesktopIntentRoute {
+    const ownerId = input.ownerId ?? "desktop-local-user";
+    return routeDesktopIntent({
+      ...input,
+      nowMs: Date.now(),
+      actionQueue: this.listDesktopActionQueue({ ownerId, limit: 50 }),
+      sessionCandidates: this.desktopIntentSessionCandidates(ownerId, input.surfaceKind, input.taskId ?? null),
+    });
+  }
+
+  private validateSensitiveContextDispatches(input: DesktopContextPacketBuildInput): void {
+    for (const snippet of input.snippets) {
+      if (snippet.selected === false || !requiresVerifiedContextDispatch(snippet)) continue;
+      const dispatchId = snippet.dispatchId?.trim();
+      if (!dispatchId) {
+        throw new Error(`Sensitive context snippet ${snippet.snippetId} requires a dispatch id`);
+      }
+      const row = this.store.getOptionalRow("SELECT * FROM desktop_dispatches WHERE dispatch_id = ? AND owner_id = ?", [
+        dispatchId,
+        input.ownerId,
+      ]);
+      if (!row) {
+        throw new Error(`Sensitive context dispatch ${dispatchId} was not found for owner`);
+      }
+      const dispatch = desktopDispatchFromRow(row);
+      const resolution = parseJsonObject(dispatch.resolutionJson);
+      if (!["approval", "screen_context"].includes(dispatch.kind)) {
+        throw new Error(`Sensitive context dispatch ${dispatchId} has invalid kind`);
+      }
+      if (dispatch.status !== "resolved" || resolution.decision !== "allow") {
+        throw new Error(`Sensitive context dispatch ${dispatchId} is not approved`);
+      }
+      if (dispatch.operation && dispatch.operation !== snippet.operation) {
+        throw new Error(`Sensitive context dispatch ${dispatchId} operation does not match snippet`);
+      }
+    }
+  }
+
+  createDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch {
+    return this.store.insertDesktopDispatch(input);
+  }
+
+  resolveDesktopDispatch(dispatchId: string, input: ResolveDesktopDispatchInput): ResolveDesktopDispatchResult {
+    return this.withTransaction(() => {
+      const dispatch = this.store.resolveDesktopDispatch(dispatchId, input);
+      let grant: AgentGrant | null = null;
+      if (input.status === "resolved" && input.grant && input.grant.effect === "allow") {
+        const resolution = parseJsonObject(input.resolutionJson);
+        if (dispatch.kind !== "approval") {
+          throw new Error("Only approval dispatches can mint grants");
+        }
+        if (resolution.decision !== "allow") {
+          throw new Error("Resolved dispatch grants require an allow resolution");
+        }
+        if (!dispatch.capability || input.grant.capability !== dispatch.capability) {
+          throw new Error("Resolved dispatch grant capability must match the approval request");
+        }
+        if (!dispatch.operation || input.grant.operation !== dispatch.operation) {
+          throw new Error("Resolved dispatch grant operation must match the approval request");
+        }
+        if (!dispatch.resourceRef || input.grant.resourcePattern !== dispatch.resourceRef) {
+          throw new Error("Resolved dispatch grant resource must match the approval request");
+        }
+        if (!Number.isFinite(input.grant.expiresAtMs)) {
+          throw new Error("Resolved dispatch grants require a finite expiry");
+        }
+        const sessionId = input.grant.sessionId ?? dispatch.sourceSessionId;
+        if (!sessionId) {
+          throw new Error("Resolved dispatch grants require a session scope");
+        }
+        this.assertSessionOwner(this.readSession(sessionId), input.ownerId);
+        grant = this.store.insertGrant({
+          ...input.grant,
+          sessionId,
+          runId: input.grant.runId ?? dispatch.sourceRunId,
+          source: input.grant.source ?? "user",
+        });
+      }
+      const event = dispatch.sourceSessionId
+        ? this.appendEvent({
+            sessionId: dispatch.sourceSessionId,
+            runId: dispatch.sourceRunId,
+            attemptId: dispatch.sourceAttemptId,
+            type: "approval.resolved",
+            payload: {
+              dispatchId: dispatch.dispatchId,
+              status: dispatch.status,
+              resolvedBy: dispatch.resolvedBy,
+              resolution: parseJsonObject(dispatch.resolutionJson),
+              grantId: grant?.grantId ?? null,
+            },
+          })
+        : null;
+      return { dispatch, grant, event };
+    });
+  }
+
   getRun(input: GetRunInput): KernelRunDetails {
     const run = this.readRun(input.runId);
     const session = this.readSession(run.sessionId);
@@ -882,7 +1188,21 @@ export class AgentRuntimeKernel {
         [input.state, now, artifact.artifactId],
       );
       const updatedArtifact = this.readArtifact(artifact.artifactId);
-      return { artifact: updatedArtifact, changed: true, event: null };
+      const event = this.appendEvent({
+        sessionId: updatedArtifact.sessionId,
+        runId: updatedArtifact.runId,
+        attemptId: updatedArtifact.attemptId,
+        type: "artifact.lifecycle_updated",
+        payload: {
+          artifactId: updatedArtifact.artifactId,
+          previousState: artifact.lifecycleState,
+          state: updatedArtifact.lifecycleState,
+          reason: input.reason ?? null,
+          metadata: input.metadata ?? {},
+          lifecycleUpdatedAtMs: now,
+        },
+      });
+      return { artifact: updatedArtifact, changed: true, event };
     });
   }
 
@@ -2161,6 +2481,125 @@ export class AgentRuntimeKernel {
       .map(delegationFromRow);
   }
 
+  private readDesktopDispatches(ownerId: string, limit: number): DesktopCoordinatorDispatch[] {
+    return this.store
+      .allRows(
+        `SELECT * FROM desktop_dispatches
+         WHERE owner_id = ?
+         ORDER BY status = 'pending' DESC, priority DESC, created_at_ms DESC
+         LIMIT ?`,
+        [ownerId, limit],
+      )
+      .map(desktopDispatchFromRow);
+  }
+
+  private readDesktopArtifactDeliveries(ownerId: string, limit: number): DesktopArtifactDelivery[] {
+    return this.store
+      .allRows(
+        `SELECT * FROM desktop_artifact_deliveries
+         WHERE owner_id = ?
+         ORDER BY updated_at_ms DESC
+         LIMIT ?`,
+        [ownerId, limit],
+      )
+      .map(desktopArtifactDeliveryFromRow);
+  }
+
+  private readDesktopMemoryCandidates(ownerId: string, limit: number): DesktopMemoryCandidate[] {
+    return this.store
+      .allRows(
+        `SELECT * FROM desktop_memory_candidates
+         WHERE owner_id = ?
+         ORDER BY status = 'pending' DESC, created_at_ms DESC
+         LIMIT ?`,
+        [ownerId, limit],
+      )
+      .map(desktopMemoryCandidateFromRow);
+  }
+
+  private readDesktopTaskCandidates(ownerId: string, limit: number): DesktopTaskCandidate[] {
+    return this.store
+      .allRows(
+        `SELECT * FROM desktop_task_candidates
+         WHERE owner_id = ?
+         ORDER BY status = 'pending' DESC, created_at_ms DESC
+         LIMIT ?`,
+        [ownerId, limit],
+      )
+      .map(desktopTaskCandidateFromRow);
+  }
+
+  private readDesktopAttentionOverrides(ownerId: string): DesktopAttentionOverride[] {
+    return this.store
+      .allRows("SELECT * FROM desktop_attention_overrides WHERE owner_id = ?", [ownerId])
+      .map(desktopAttentionOverrideFromRow);
+  }
+
+  private readDesktopQueueRuns(ownerId: string, limit: number): QueueRunInput[] {
+    return this.store
+      .allRows(
+        `SELECT r.*, s.owner_id, s.title, s.external_ref_kind, s.external_ref_id
+         FROM runs r
+         JOIN sessions s ON s.session_id = r.session_id
+         WHERE s.owner_id = ?
+         ORDER BY r.updated_at_ms DESC
+         LIMIT ?`,
+        [ownerId, limit],
+      )
+      .map((row) => ({
+        runId: stringValue(row.run_id),
+        sessionId: stringValue(row.session_id),
+        ownerId: stringValue(row.owner_id),
+        status: stringValue(row.status) as RunStatus,
+        title: nullableString(row.title),
+        goalText: queueRunGoalText(row),
+        completedAtMs: nullableNumber(row.completed_at_ms),
+        updatedAtMs: numberValue(row.updated_at_ms),
+        createdAtMs: numberValue(row.created_at_ms),
+        visibleUserGoal: true,
+        reusable: stringValue(row.status) === "succeeded" || stringValue(row.status) === "cancelled",
+      }));
+  }
+
+  private desktopIntentSessionCandidates(ownerId: string, surfaceKind: string, taskId: string | null): DesktopIntentSessionCandidate[] {
+    const rows = this.store.allRows(
+      `SELECT s.*, r.run_id, r.status AS run_status, r.updated_at_ms AS run_updated_at_ms
+       FROM sessions s
+       LEFT JOIN runs r ON r.run_id = (
+         SELECT run_id FROM runs latest
+         WHERE latest.session_id = s.session_id
+         ORDER BY latest.updated_at_ms DESC
+         LIMIT 1
+       )
+       WHERE s.owner_id = ?
+       ORDER BY s.last_activity_at_ms DESC
+       LIMIT 50`,
+      [ownerId],
+    );
+    return rows.map((row) => {
+      const candidateTaskId = nullableString(row.external_ref_kind) === "task" ? nullableString(row.external_ref_id) : null;
+      const runStatus = nullableString(row.run_status);
+      const runUpdatedAtMs = numberValue(row.run_updated_at_ms);
+      const staleAfterMs = 30 * 60 * 1000;
+      const relevance =
+        taskId && candidateTaskId === taskId
+          ? 1
+          : stringValue(row.surface_kind) === surfaceKind
+            ? 0.7
+            : 0.2;
+      return {
+        sessionId: stringValue(row.session_id),
+        runId: nullableString(row.run_id),
+        surfaceKind: stringValue(row.surface_kind),
+        taskId: candidateTaskId,
+        title: nullableString(row.title),
+        status: intentCandidateStatus(runStatus, runUpdatedAtMs, Date.now(), staleAfterMs),
+        relevance,
+        lastActivityAtMs: numberValue(row.last_activity_at_ms),
+      };
+    });
+  }
+
   private delegationDepth(parentRunId: string): number {
     const row = this.store.getRow(
       `WITH RECURSIVE ancestors(run_id, depth) AS (
@@ -2242,6 +2681,12 @@ function isStaleBindingError(error: unknown): boolean {
   return error instanceof StaleAdapterBindingError || (error instanceof Error && error.name === "StaleAdapterBindingError");
 }
 
+function queueRunGoalText(row: Record<string, unknown>): string | null {
+  const input = parseJsonObject(nullableString(row.input_json));
+  const prompt = input.prompt;
+  return typeof prompt === "string" && prompt.trim() ? prompt : null;
+}
+
 function messageFrom(error: unknown): string {
   if (error instanceof AdapterRuntimeError) {
     return error.failure.userMessage;
@@ -2264,6 +2709,200 @@ function nullableNumber(value: unknown): number | null {
 function boundedLimit(value: number | undefined, fallback: number, max: number): number {
   if (value === undefined || !Number.isFinite(value)) return fallback;
   return Math.max(1, Math.min(max, Math.floor(value)));
+}
+
+function stringValue(value: unknown): string {
+  return text(value);
+}
+
+function numberValue(value: unknown): number {
+  return Number(value ?? 0);
+}
+
+function nullableString(value: unknown): string | null {
+  return nullableText(value);
+}
+
+function desktopDispatchFromRow(row: Record<string, unknown>): DesktopCoordinatorDispatch {
+  return {
+    dispatchId: text(row.dispatch_id),
+    ownerId: text(row.owner_id),
+    kind: text(row.kind) as DesktopCoordinatorDispatch["kind"],
+    priority: Number(row.priority),
+    status: text(row.status) as DesktopCoordinatorDispatch["status"],
+    title: text(row.title),
+    decisionPrompt: text(row.decision_prompt),
+    recommendedDefault: nullableText(row.recommended_default),
+    sourceSessionId: nullableText(row.source_session_id),
+    sourceRunId: nullableText(row.source_run_id),
+    sourceAttemptId: nullableText(row.source_attempt_id),
+    sourceArtifactId: nullableText(row.source_artifact_id),
+    capability: nullableText(row.capability),
+    operation: nullableText(row.operation),
+    resourceRef: nullableText(row.resource_ref),
+    payloadJson: text(row.payload_json),
+    createdAtMs: Number(row.created_at_ms),
+    expiresAtMs: nullableNumber(row.expires_at_ms),
+    resolvedAtMs: nullableNumber(row.resolved_at_ms),
+    resolvedBy: nullableText(row.resolved_by),
+    resolutionJson: nullableText(row.resolution_json),
+  };
+}
+
+function desktopArtifactDeliveryFromRow(row: Record<string, unknown>): DesktopArtifactDelivery {
+  return {
+    deliveryId: text(row.delivery_id),
+    artifactId: text(row.artifact_id),
+    ownerId: text(row.owner_id),
+    sourceSessionId: text(row.source_session_id),
+    sourceRunId: nullableText(row.source_run_id),
+    sourceAttemptId: nullableText(row.source_attempt_id),
+    intendedSurface: text(row.intended_surface),
+    targetKind: text(row.target_kind) as DesktopArtifactDelivery["targetKind"],
+    targetRef: nullableText(row.target_ref),
+    contentHash: nullableText(row.content_hash),
+    reviewStatus: text(row.review_status) as DesktopArtifactDelivery["reviewStatus"],
+    deliveryStatus: text(row.delivery_status) as DesktopArtifactDelivery["deliveryStatus"],
+    attemptCount: Number(row.attempt_count),
+    receiptJson: nullableText(row.receipt_json),
+    errorJson: nullableText(row.error_json),
+    createdAtMs: Number(row.created_at_ms),
+    updatedAtMs: Number(row.updated_at_ms),
+    deliveredAtMs: nullableNumber(row.delivered_at_ms),
+  };
+}
+
+function desktopMemoryCandidateFromRow(row: Record<string, unknown>): DesktopMemoryCandidate {
+  return {
+    candidateId: text(row.candidate_id),
+    ownerId: text(row.owner_id),
+    sourceSessionId: text(row.source_session_id),
+    sourceRunId: nullableText(row.source_run_id),
+    sourceArtifactId: nullableText(row.source_artifact_id),
+    proposedFact: text(row.proposed_fact),
+    evidenceRefsJson: text(row.evidence_refs_json),
+    confidence: Number(row.confidence),
+    sensitivityTier: text(row.sensitivity_tier),
+    status: text(row.status) as DesktopCandidateStatus,
+    createdAtMs: Number(row.created_at_ms),
+    resolvedAtMs: nullableNumber(row.resolved_at_ms),
+  };
+}
+
+function desktopTaskCandidateFromRow(row: Record<string, unknown>): DesktopTaskCandidate {
+  return {
+    candidateId: text(row.candidate_id),
+    ownerId: text(row.owner_id),
+    sourceSessionId: nullableText(row.source_session_id),
+    sourceRunId: nullableText(row.source_run_id),
+    action: text(row.action) as DesktopTaskCandidate["action"],
+    taskRef: nullableText(row.task_ref),
+    proposedChangeJson: text(row.proposed_change_json),
+    evidenceRefsJson: text(row.evidence_refs_json),
+    confidence: Number(row.confidence),
+    requiresApproval: Number(row.requires_approval) === 1 ? 1 : 0,
+    status: text(row.status) as DesktopCandidateStatus,
+    createdAtMs: Number(row.created_at_ms),
+    resolvedAtMs: nullableNumber(row.resolved_at_ms),
+  };
+}
+
+function desktopAttentionOverrideFromRow(row: Record<string, unknown>): DesktopAttentionOverride {
+  return {
+    ownerId: text(row.owner_id),
+    subjectKind: text(row.subject_kind),
+    subjectId: text(row.subject_id),
+    hiddenUntilMs: nullableNumber(row.hidden_until_ms),
+    dismissedAtMs: nullableNumber(row.dismissed_at_ms),
+    reason: nullableText(row.reason),
+    createdAtMs: Number(row.created_at_ms),
+  };
+}
+
+function dispatchToQueueInput(dispatch: DesktopCoordinatorDispatch): QueueDispatchInput {
+  return {
+    dispatchId: dispatch.dispatchId,
+    ownerId: dispatch.ownerId,
+    kind: dispatch.kind,
+    status: dispatch.status,
+    title: dispatch.title,
+    priority: dispatch.priority,
+    createdAtMs: dispatch.createdAtMs,
+    expiresAtMs: dispatch.expiresAtMs,
+    sourceSessionId: dispatch.sourceSessionId,
+    sourceRunId: dispatch.sourceRunId,
+  };
+}
+
+function deliveryToQueueInput(delivery: DesktopArtifactDelivery): QueueArtifactDeliveryInput {
+  return {
+    deliveryId: delivery.deliveryId,
+    artifactId: delivery.artifactId,
+    ownerId: delivery.ownerId,
+    sourceSessionId: delivery.sourceSessionId,
+    sourceRunId: delivery.sourceRunId,
+    deliveryStatus: delivery.deliveryStatus,
+    reviewStatus: delivery.reviewStatus,
+    createdAtMs: delivery.createdAtMs,
+    updatedAtMs: delivery.updatedAtMs,
+    targetKind: delivery.targetKind,
+  };
+}
+
+function memoryCandidateToQueueInput(candidate: DesktopMemoryCandidate): QueueCandidateInput {
+  return {
+    candidateId: candidate.candidateId,
+    ownerId: candidate.ownerId,
+    kind: "memory_candidate",
+    status: candidate.status,
+    createdAtMs: candidate.createdAtMs,
+    sourceSessionId: candidate.sourceSessionId,
+    sourceRunId: candidate.sourceRunId,
+  };
+}
+
+function taskCandidateToQueueInput(candidate: DesktopTaskCandidate): QueueCandidateInput {
+  return {
+    candidateId: candidate.candidateId,
+    ownerId: candidate.ownerId,
+    kind: "task_candidate",
+    status: candidate.status,
+    createdAtMs: candidate.createdAtMs,
+    sourceSessionId: candidate.sourceSessionId,
+    sourceRunId: candidate.sourceRunId,
+  };
+}
+
+function overrideToQueueInput(override: DesktopAttentionOverride): QueueOverrideInput {
+  return {
+    ownerId: override.ownerId,
+    subjectKind: override.subjectKind,
+    subjectId: override.subjectId,
+    hiddenUntilMs: override.hiddenUntilMs,
+    dismissedAtMs: override.dismissedAtMs,
+  };
+}
+
+function intentCandidateStatus(
+  status: string | null,
+  runUpdatedAtMs?: number,
+  nowMs?: number,
+  staleAfterMs?: number,
+): DesktopIntentSessionCandidate["status"] {
+  if (status === "failed" || status === "timed_out") return "failed";
+  if (status === "orphaned") return "orphaned";
+  if (status === "cancelled") return "closed";
+  // An active run that has not advanced within the stale threshold should be
+  // classified as stale so the router forks instead of resuming into a hung run.
+  if (
+    runUpdatedAtMs !== undefined &&
+    nowMs !== undefined &&
+    staleAfterMs !== undefined &&
+    ACTIVE_STATUSES.includes((status ?? "") as RunStatus)
+  ) {
+    if (nowMs - runUpdatedAtMs >= staleAfterMs) return "stale";
+  }
+  return "healthy";
 }
 
 function sessionFromRow(row: Record<string, unknown>): AgentSession {

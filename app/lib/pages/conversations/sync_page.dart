@@ -12,7 +12,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/sync_confirmation.dart';
@@ -116,7 +116,8 @@ class WalListItem extends StatelessWidget {
         final timeStr = dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
         final duration = secondsToHumanReadable(wal.seconds, context);
         final source = _sourceLabel(context);
-        final showBar = wal.isSyncing &&
+        final showBar =
+            wal.isSyncing &&
             wal.status != WalStatus.synced &&
             wal.syncStartedAt != null &&
             wal.storage != WalStorage.flashPage;
@@ -536,8 +537,9 @@ class _SyncPageState extends State<SyncPage> {
           break;
       }
     } else if (syncProvider.isRateLimited) {
-      title =
-          syncProvider.rateLimitReason == RateLimitReason.backendBusy ? l.syncCardBackendBusy : l.syncCardRateLimited;
+      title = syncProvider.rateLimitReason == RateLimitReason.backendBusy
+          ? l.syncCardBackendBusy
+          : l.syncCardRateLimited;
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
@@ -1042,16 +1044,9 @@ class _PendingListItem {
   final int? count;
   final Wal? wal;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count)
-      : isHeader = true,
-        wal = null;
+  _PendingListItem.header(this.label, this.icon, this.color, this.count) : isHeader = true, wal = null;
 
-  _PendingListItem.wal(this.wal)
-      : isHeader = false,
-        label = null,
-        icon = null,
-        color = null,
-        count = null;
+  _PendingListItem.wal(this.wal) : isHeader = false, label = null, icon = null, color = null, count = null;
 }
 
 class _ManageStorageSheet extends StatelessWidget {

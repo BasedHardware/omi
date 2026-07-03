@@ -1,15 +1,30 @@
 import { z } from "zod";
 import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
-import { AgentRuntimeKernel } from "./kernel.js";
+import { AgentRuntimeKernel, type DesktopAwarenessSnapshot } from "./kernel.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./compatibility-facade.js";
+import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
+import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
-const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"]);
+const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
 const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
+const desktopCoordinatorBundleSchema = z.enum([
+  "desktop.agent_control.read",
+  "desktop.agent_control.manage",
+  "desktop.context.local_read",
+  "desktop.context.screen_summary",
+  "desktop.context.screenshot_image",
+  "desktop.tasks.readwrite",
+  "desktop.artifacts.manage",
+  "desktop.automation.read",
+  "desktop.automation.act_dev_only",
+  "external.write_prepare",
+  "external.write_send",
+]);
 const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 
 const listAgentSessionsSchema = strictObject({
@@ -25,6 +40,130 @@ const getAgentRunSchema = strictObject({
   ownerId: z.string().min(1).optional(),
   includeEvents: z.boolean().default(true),
   eventLimit: z.coerce.number().int().positive().max(500).default(100),
+});
+
+const buildDesktopAwarenessSnapshotSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+});
+
+const listDesktopActionQueueSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  staleAfterMs: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+});
+
+const getDesktopOpenLoopsSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+});
+
+const contextSnippetSchema = strictObject({
+  snippetId: z.string().min(1),
+  sourceKind: z.enum([
+    "omi_db",
+    "rewind_timeline",
+    "screen_current",
+    "screenshot_image",
+    "local_agent_api",
+    "automation_bridge",
+    "chat_surface",
+    "task_chat",
+  ]),
+  operation: z.string().min(1),
+  provenance: z.record(z.string(), z.unknown()).default({}),
+  content: z.string().optional(),
+  redactedContent: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  sensitivityTier: z.string().min(1),
+  policyDecision: z.enum(["allowed", "denied", "dispatch_created"]).optional(),
+  dispatchId: z.string().min(1).nullable().optional(),
+  selected: z.boolean().optional(),
+  tokenEstimate: z.coerce.number().int().positive().optional(),
+});
+
+const buildDesktopContextPacketSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  sessionId: z.string().min(1).nullable().optional(),
+  runId: z.string().min(1).nullable().optional(),
+  surfaceKind: z.string().min(1),
+  objective: z.string().min(1),
+  packetJson: strictObject({
+    snippets: z.array(contextSnippetSchema).default([]),
+    selectedToolBundles: z.array(desktopCoordinatorBundleSchema).default([]),
+    constraints: z.array(z.string()).default([]),
+    evidenceRequired: z.array(z.string()).default([]),
+    boundaryPolicy: z.record(z.string(), z.unknown()).default({}),
+  }),
+  ttlMs: z.coerce.number().int().positive(),
+  retentionClass: z.enum(["ephemeral", "debug", "core"]),
+});
+
+const routeDesktopIntentSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  utterance: z.string().min(1),
+  surfaceKind: z.string().min(1),
+  taskId: z.string().min(1).nullable().optional(),
+});
+
+const evaluateDesktopToolPolicySchema = strictObject({
+  toolName: z.string().min(1).optional(),
+  selectedBundles: z.array(desktopCoordinatorBundleSchema),
+  requestedBundles: z.array(desktopCoordinatorBundleSchema).optional(),
+  sql: z.string().optional(),
+  operation: z.string().optional(),
+  resourceRef: z.string().optional(),
+  includesScreenshotImageBytes: z.boolean().optional(),
+  broadScreenHistory: z.boolean().optional(),
+  externalSend: z.boolean().optional(),
+  persistentGrant: z.boolean().optional(),
+  isDevBundle: z.boolean().optional(),
+});
+
+const createDesktopDispatchSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  kind: z.enum([
+    "approval",
+    "routing_choice",
+    "failure_recovery",
+    "artifact_review",
+    "memory_candidate",
+    "task_candidate",
+    "external_draft",
+    "screen_context",
+  ]),
+  priority: z.coerce.number().int(),
+  title: z.string().min(1),
+  decisionPrompt: z.string().min(1),
+  recommendedDefault: z.string().nullable().optional(),
+  sourceSessionId: z.string().min(1).nullable().optional(),
+  sourceRunId: z.string().min(1).nullable().optional(),
+  sourceAttemptId: z.string().min(1).nullable().optional(),
+  sourceArtifactId: z.string().min(1).nullable().optional(),
+  capability: z.string().nullable().optional(),
+  operation: z.string().nullable().optional(),
+  resourceRef: z.string().nullable().optional(),
+  payload: z.record(z.string(), z.unknown()).default({}),
+  expiresAtMs: z.coerce.number().int().positive().nullable().optional(),
+});
+
+const resolveDesktopDispatchSchema = strictObject({
+  dispatchId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
+  status: z.enum(["resolved", "cancelled"]),
+  resolvedBy: z.string().nullable().optional(),
+  resolution: z.record(z.string(), z.unknown()).default({}),
+  grant: strictObject({
+    sessionId: z.string().min(1).optional(),
+    runId: z.string().min(1).nullable().optional(),
+    capability: z.string().min(1),
+    operation: z.string().min(1),
+    resourcePattern: z.string().min(1),
+    effect: z.enum(["allow", "deny"]).default("allow"),
+    source: z.enum(["legacy_default", "policy", "user", "system"]).default("user"),
+    constraintsJson: z.string().default("{}"),
+    expiresAtMs: z.coerce.number().int().positive().nullable().optional(),
+  }).optional(),
 });
 
 const cancelAgentRunSchema = strictObject({
@@ -70,6 +209,23 @@ const sendAgentMessageSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
+const spawnBackgroundAgentSchema = strictObject({
+  prompt: z.string().min(1),
+  title: z.string().min(1).optional(),
+  surfaceKind: z.literal("background_agent").default("background_agent"),
+  externalRefKind: z.string().min(1).optional(),
+  externalRefId: z.string().min(1).optional(),
+  ownerId: z.string().min(1).optional(),
+  adapterId: z.string().min(1).optional(),
+  defaultAdapterId: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  mode: runModeSchema.default("act"),
+  requestId: z.string().min(1).optional(),
+  clientId: z.string().min(1).default("omi-control-tools"),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
+
 const delegateAgentSchema = z
   .strictObject({
     mode: delegationModeSchema,
@@ -106,10 +262,19 @@ const delegateAgentSchema = z
 export const agentControlToolSchemas = {
   list_agent_sessions: listAgentSessionsSchema,
   get_agent_run: getAgentRunSchema,
+  build_desktop_awareness_snapshot: buildDesktopAwarenessSnapshotSchema,
+  list_desktop_action_queue: listDesktopActionQueueSchema,
+  get_desktop_open_loops: getDesktopOpenLoopsSchema,
+  build_desktop_context_packet: buildDesktopContextPacketSchema,
+  route_desktop_intent: routeDesktopIntentSchema,
+  evaluate_desktop_tool_policy: evaluateDesktopToolPolicySchema,
+  create_desktop_dispatch: createDesktopDispatchSchema,
+  resolve_desktop_dispatch: resolveDesktopDispatchSchema,
   cancel_agent_run: cancelAgentRunSchema,
   inspect_agent_artifacts: inspectAgentArtifactsSchema,
   update_agent_artifact_lifecycle: updateAgentArtifactLifecycleSchema,
   send_agent_message: sendAgentMessageSchema,
+  spawn_background_agent: spawnBackgroundAgentSchema,
   delegate_agent: delegateAgentSchema,
 } as const;
 
@@ -133,6 +298,7 @@ export const agentControlToolDefinitions: AgentControlToolDefinition[] = agentCo
 
 export interface AgentControlToolContext {
   kernel: AgentRuntimeKernel;
+  trustedUserControl?: boolean;
   getOwnerId?: () => string;
   buildMcpServers?: (
     mode: "ask" | "act",
@@ -263,6 +429,15 @@ export async function handleAgentControlToolCall(
   if (!isAgentControlToolName(name)) {
     return JSON.stringify({ ok: false, error: { code: "unknown_control_tool", message: `Unknown control tool: ${name}` } });
   }
+  if (name === "resolve_desktop_dispatch" && !context.trustedUserControl) {
+    return JSON.stringify({
+      ok: false,
+      error: {
+        code: "policy_denied",
+        message: "resolve_desktop_dispatch requires trusted user control",
+      },
+    });
+  }
 
   try {
     switch (name) {
@@ -281,6 +456,97 @@ export async function handleAgentControlToolCall(
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
         return stringifyToolResult(serializeRunDetails(details));
+      }
+      case "build_desktop_awareness_snapshot": {
+        const parsed = agentControlToolSchemas.build_desktop_awareness_snapshot.parse(input);
+        const snapshot = context.kernel.buildDesktopAwarenessSnapshot({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+        });
+        return stringifyToolResult({ snapshot: serializeAwarenessSnapshot(snapshot) });
+      }
+      case "list_desktop_action_queue": {
+        const parsed = agentControlToolSchemas.list_desktop_action_queue.parse(input);
+        const actionQueue = context.kernel.listDesktopActionQueue({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+        });
+        return stringifyToolResult({ actionQueue });
+      }
+      case "get_desktop_open_loops": {
+        const parsed = agentControlToolSchemas.get_desktop_open_loops.parse(input);
+        const openLoops = context.kernel.getDesktopOpenLoops({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+        });
+        return stringifyToolResult({ openLoops });
+      }
+      case "build_desktop_context_packet": {
+        const parsed = agentControlToolSchemas.build_desktop_context_packet.parse(input);
+        const built = context.kernel.persistDesktopContextPacket({
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          sessionId: parsed.sessionId ?? null,
+          runId: parsed.runId ?? null,
+          surfaceKind: parsed.surfaceKind,
+          objective: parsed.objective,
+          snippets: parsed.packetJson.snippets,
+          selectedToolBundles: parsed.packetJson.selectedToolBundles,
+          constraints: parsed.packetJson.constraints,
+          evidenceRequired: parsed.packetJson.evidenceRequired,
+          boundaryPolicy: parsed.packetJson.boundaryPolicy,
+          ttlMs: parsed.ttlMs,
+          retentionClass: parsed.retentionClass,
+        });
+        return stringifyToolResult({
+          packet: {
+            ...built.packet,
+            packetJson: built.packet.packetJson,
+            redactedPreviewJson: built.packet.redactedPreviewJson,
+          },
+          accessLogs: built.accessLogs,
+        });
+      }
+      case "route_desktop_intent": {
+        const parsed = agentControlToolSchemas.route_desktop_intent.parse(input);
+        const route = context.kernel.routeDesktopIntent({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          taskId: parsed.taskId ?? null,
+        });
+        return stringifyToolResult({ route });
+      }
+      case "evaluate_desktop_tool_policy": {
+        const parsed = agentControlToolSchemas.evaluate_desktop_tool_policy.parse(input);
+        const policy = evaluateDesktopToolPolicy({
+          ...parsed,
+          selectedBundles: parsed.selectedBundles as DesktopCoordinatorBundle[],
+          requestedBundles: parsed.requestedBundles as DesktopCoordinatorBundle[] | undefined,
+        });
+        return stringifyToolResult({ policy });
+      }
+      case "create_desktop_dispatch": {
+        const parsed = agentControlToolSchemas.create_desktop_dispatch.parse(input);
+        const dispatch = context.kernel.createDesktopDispatch({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          payloadJson: JSON.stringify(parsed.payload),
+        });
+        return stringifyToolResult({ dispatch });
+      }
+      case "resolve_desktop_dispatch": {
+        const parsed = agentControlToolSchemas.resolve_desktop_dispatch.parse(input);
+        const result = context.kernel.resolveDesktopDispatch(parsed.dispatchId, {
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          status: parsed.status,
+          resolvedBy: parsed.resolvedBy ?? "user",
+          resolutionJson: JSON.stringify(parsed.resolution),
+          grant: parsed.grant,
+        });
+        return stringifyToolResult({
+          dispatch: result.dispatch,
+          grant: result.grant,
+          event: result.event ? serializeEvent(result.event) : null,
+        });
       }
       case "cancel_agent_run": {
         const parsed = agentControlToolSchemas.cancel_agent_run.parse(input);
@@ -340,6 +606,33 @@ export async function handleAgentControlToolCall(
           adapterSessionId: result.adapterSessionId,
           terminalStatus: result.terminalStatus,
           text: result.text,
+        });
+      }
+      case "spawn_background_agent": {
+        const parsed = agentControlToolSchemas.spawn_background_agent.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `background-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? "acp";
+        const result = await context.kernel.spawnBackgroundAgent({
+          ...parsed,
+          adapterId,
+          defaultAdapterId: adapterId,
+          ownerId,
+          requestId,
+          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          mcpServers: buildControlRunMcpServers(context, {
+            mode: parsed.mode,
+            cwd: parsed.cwd,
+            ownerId,
+            requestId,
+            clientId: parsed.clientId,
+            adapterId,
+          }),
+        });
+        return stringifyToolResult({
+          session: serializeSession(result.session),
+          run: serializeRun(result.run),
+          attempt: result.attempt ? serializeAttempt(result.attempt) : null,
         });
       }
       case "delegate_agent": {
@@ -514,6 +807,21 @@ function serializeRunDetails(details: {
     events: details.events.map(serializeEvent),
     parentDelegations: details.parentDelegations.map(serializeDelegation),
     childDelegations: details.childDelegations.map(serializeDelegation),
+  };
+}
+
+function serializeAwarenessSnapshot(snapshot: DesktopAwarenessSnapshot): Record<string, unknown> {
+  return {
+    ownerId: snapshot.ownerId,
+    generatedAtMs: snapshot.generatedAtMs,
+    sessions: snapshot.sessions.map(serializeSessionSummary),
+    runs: snapshot.runs.map(serializeRun),
+    dispatches: snapshot.dispatches,
+    artifactDeliveries: snapshot.artifactDeliveries,
+    memoryCandidates: snapshot.memoryCandidates,
+    taskCandidates: snapshot.taskCandidates,
+    actionQueue: snapshot.actionQueue,
+    runtime: snapshot.runtime,
   };
 }
 

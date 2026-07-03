@@ -134,6 +134,7 @@ actor AgentRuntimeProcess {
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
+  private var advertisedAgentControlTools: Set<String> = []
   private var isRestarting = false
 
   var isAlive: Bool { isRunning }
@@ -154,6 +155,7 @@ actor AgentRuntimeProcess {
     clients[clientId] = registration
 
     if isRunning {
+      try await waitForInit(timeout: 30.0)
       return
     }
 
@@ -269,6 +271,9 @@ actor AgentRuntimeProcess {
       throw BridgeError.agentError("Agent control requires a signed-in owner")
     }
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    guard advertisedAgentControlTools.contains(name) else {
+      throw BridgeError.agentError("Agent runtime does not advertise direct control tool \(name)")
+    }
 
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -430,6 +435,7 @@ actor AgentRuntimeProcess {
     closePipes()
     lastExitWasOOM = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
 
     guard let nodePath = findNodeBinary() else {
       throw BridgeError.nodeNotFound
@@ -652,6 +658,7 @@ actor AgentRuntimeProcess {
     closePipes()
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: BridgeError.stopped)
     resumeInitContinuations(throwing: BridgeError.stopped)
   }
@@ -718,6 +725,7 @@ actor AgentRuntimeProcess {
     oomDiagnosticLatch.reset(generation: processGeneration)
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -779,6 +787,8 @@ actor AgentRuntimeProcess {
     switch message.kind {
     case .initMessage:
       log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")
+      let tools = message.payload["agentControlTools"] as? [String] ?? []
+      advertisedAgentControlTools = Set(tools)
       receivedInit = true
       resolveInitContinuations()
 
@@ -1016,6 +1026,7 @@ actor AgentRuntimeProcess {
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     closePipes()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)

@@ -4,7 +4,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
-const sdcardChunkSizeSecs = 60;
+const sdcardChunkSizeSecs = 180;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
@@ -198,8 +198,9 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage:
-          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      originalStorage: json['original_storage'] != null
+          ? WalStorage.values.asNameMap()[json['original_storage']]
+          : null,
       conversationId: json['conversation_id'],
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,

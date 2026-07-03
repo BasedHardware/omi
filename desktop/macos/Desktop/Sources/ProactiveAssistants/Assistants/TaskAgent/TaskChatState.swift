@@ -264,11 +264,19 @@ class TaskChatState: ObservableObject {
             guard let bridge = agentBridge else {
                 throw BridgeError.notRunning
             }
-            // If task context is provided (first message), prepend it to the prompt
-            // so the AI gets full task details. The user's displayed message stays clean.
+            let contextPacketSummary = await buildContextPacketSummary(
+                bridge: bridge,
+                taskContext: taskContext,
+                userMessage: trimmedText
+            )
+
             let fullPrompt: String
-            if let ctx = taskContext {
-                fullPrompt = "# Task Context\n\n\(ctx)\n\n---\n\n# User Message\n\n\(trimmedText)"
+            if let contextPacketSummary {
+                if let taskContext, !taskContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    fullPrompt = "\(contextPacketSummary)\n\n# Task Context\n\n\(taskContext)\n\n---\n\n# User Message\n\n\(trimmedText)"
+                } else {
+                    fullPrompt = "\(contextPacketSummary)\n\n# User Message\n\n\(trimmedText)"
+                }
             } else {
                 fullPrompt = trimmedText
             }
@@ -399,6 +407,73 @@ class TaskChatState: ObservableObject {
         if let followUp = pendingFollowUpText {
             pendingFollowUpText = nil
             await sendMessage(followUp, isFollowUp: true)
+        }
+    }
+
+    private func buildContextPacketSummary(
+        bridge: AgentBridge,
+        taskContext: String?,
+        userMessage: String
+    ) async -> String? {
+        guard let taskContext, !taskContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let redactedPreview = String(taskContext.prefix(1_200))
+        let input: [String: Any] = [
+            "surfaceKind": "task_chat",
+            "objective": userMessage,
+            "retentionClass": "ephemeral",
+            "ttlMs": 15 * 60 * 1_000,
+            "packetJson": [
+                "snippets": [
+                    [
+                        "snippetId": "task_context",
+                        "sourceKind": "task_chat",
+                        "operation": "selected_task_context",
+                        "provenance": ["taskId": taskId],
+                        "content": taskContext,
+                        "redactedContent": redactedPreview,
+                        "sensitivityTier": "local_private",
+                    ],
+                    [
+                        "snippetId": "current_user_message",
+                        "sourceKind": "task_chat",
+                        "operation": "current_user_message",
+                        "provenance": ["taskId": taskId],
+                        "content": userMessage,
+                        "redactedContent": userMessage,
+                        "sensitivityTier": "low",
+                    ],
+                ],
+                "selectedToolBundles": ["desktop.context.local_read", "desktop.tasks.readwrite"],
+                "constraints": ["Use the persisted context packet and the model-visible task context; cite task evidence before claiming completion."],
+                "evidenceRequired": ["Cite task state or artifact evidence before claiming completion."],
+                "boundaryPolicy": ["taskMutations": "candidate_or_dispatch"],
+            ],
+        ]
+
+        do {
+            let raw = try await bridge.controlTool(name: "build_desktop_context_packet", input: input)
+            guard let data = raw.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["ok"] as? Bool == true,
+                  let packet = object["packet"] as? [String: Any],
+                  let packetId = packet["packetId"] as? String,
+                  let preview = packet["redactedPreviewJson"] as? [String: Any] else {
+                return "# Context Packet\n\nA scoped task-chat context packet was requested but could not be parsed."
+            }
+            let previewData = try? JSONSerialization.data(withJSONObject: preview, options: [.sortedKeys])
+            let previewText = previewData.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            return """
+            # Context Packet
+
+            Persisted DesktopContextPacket `\(packetId)` audits the scoped task context. The full task context is included below in the prompt. Redacted preview:
+
+            \(previewText)
+            """
+        } catch {
+            logError("TaskChatState[\(taskId)]: failed to build context packet", error: error)
+            return nil
         }
     }
 

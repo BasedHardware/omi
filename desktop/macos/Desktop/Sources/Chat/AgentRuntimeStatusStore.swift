@@ -22,7 +22,7 @@ struct AgentSurfaceReference: Hashable, Sendable {
   }
 
   static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
-    AgentSurfaceReference(surfaceKind: "floating_pill", externalRefKind: "pill", externalRefId: pillId.uuidString)
+    AgentSurfaceReference(surfaceKind: "background_agent", externalRefKind: "pill", externalRefId: pillId.uuidString)
   }
 }
 
@@ -129,6 +129,23 @@ final class AgentRuntimeStatusStore: ObservableObject {
     sessionIdBySurface[surface.key]
   }
 
+  func clear(surface: AgentSurfaceReference) {
+    if let existing = projectionsBySurface.removeValue(forKey: surface.key) {
+      if let runId = existing.runId {
+        projectionByRunId.removeValue(forKey: runId)
+      }
+      if let sessionId = existing.sessionId {
+        projectionBySessionId.removeValue(forKey: sessionId)
+      }
+    }
+    if let runId = runIdBySurface.removeValue(forKey: surface.key) {
+      projectionByRunId.removeValue(forKey: runId)
+    }
+    if let sessionId = sessionIdBySurface.removeValue(forKey: surface.key) {
+      projectionBySessionId.removeValue(forKey: sessionId)
+    }
+  }
+
   func beginRequest(surface: AgentSurfaceReference, statusText: String? = "Starting...") {
     clearTerminalProjectionForNewRun(surface: surface)
     update(surface: surface, status: .starting, statusText: statusText, terminal: false)
@@ -158,8 +175,15 @@ final class AgentRuntimeStatusStore: ObservableObject {
     update(surface: surface, status: .cancelled, statusText: nil, errorMessage: message, terminal: true)
   }
 
-  func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil) {
-    update(surface: surface, status: .succeeded, statusText: statusText, terminal: true)
+  func recordAcceptedRun(surface: AgentSurfaceReference, sessionId: String, runId: String, attemptId: String?, statusText: String?) {
+    var payload: [String: Any] = [
+      "sessionId": sessionId,
+      "runId": runId,
+    ]
+    if let attemptId, !attemptId.isEmpty {
+      payload["attemptId"] = attemptId
+    }
+    update(surface: surface, status: .running, statusText: statusText, terminal: false, payload: payload)
   }
 
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
