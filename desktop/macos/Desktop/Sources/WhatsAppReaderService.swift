@@ -162,18 +162,27 @@ actor WhatsAppReaderService {
       // (awaiting a reply), one row per chat. Ranking on the latest message of any
       // direction and filtering to inbound-last only afterwards let outbound-heavy
       // threads consume the LIMIT budget and crowd genuine awaiting-reply threads out
-      // of the inbox. The HAVING clause keeps only chats where the newest message is
-      // inbound, so the LIMIT is spent entirely on repliable threads.
+      // of the inbox.
+      //
+      // The latest message is identified by MAX(Z_PK) (monotonic insertion order), not
+      // by MAX(ZMESSAGEDATE): ZMESSAGEDATE is coarse enough that an inbound and outbound
+      // message can share a timestamp, so a date-equality test could wrongly classify a
+      // chat you already replied to as awaiting. SQLite's documented min/max rule makes
+      // the other bare columns (ZISFROMME, ZMESSAGEDATE) take their values from the row
+      // with MAX(Z_PK), so `latest_from_me` deterministically reflects the actual newest
+      // message; the outer query keeps only inbound-latest chats.
       let chatRows = try Row.fetchAll(
         db,
         sql: """
-            SELECT s.ZCONTACTJID AS chat_jid, MAX(m.ZMESSAGEDATE) AS max_date,
-                   MAX(CASE WHEN m.ZISFROMME = 0 THEN m.ZMESSAGEDATE END) AS max_in_date
-            \(SQL.from)
-            WHERE m.ZMESSAGEDATE >= ?
-              AND \(SQL.baseWhere)
-            GROUP BY s.ZCONTACTJID
-            HAVING max_in_date IS NOT NULL AND max_in_date = max_date
+            SELECT chat_jid, max_date FROM (
+              SELECT s.ZCONTACTJID AS chat_jid, MAX(m.Z_PK) AS max_pk,
+                     m.ZMESSAGEDATE AS max_date, m.ZISFROMME AS latest_from_me
+              \(SQL.from)
+              WHERE m.ZMESSAGEDATE >= ?
+                AND \(SQL.baseWhere)
+              GROUP BY s.ZCONTACTJID
+            )
+            WHERE latest_from_me = 0
             ORDER BY max_date DESC LIMIT ?
           """,
         arguments: [cutoffSeconds, maxThreads]

@@ -160,20 +160,27 @@ actor IMessageReaderService {
       // (i.e. awaiting a reply), one row per chat. Ranking on the latest message of
       // any direction and filtering to inbound-last only afterwards let outbound-heavy
       // threads consume the LIMIT budget and crowd genuine awaiting-reply threads out
-      // of the inbox. The HAVING clause keeps only chats where the newest non-tapback
-      // message is inbound, so the LIMIT is spent entirely on repliable threads.
+      // of the inbox.
+      //
+      // The latest message is identified by MAX(ROWID) (monotonic insertion order)
+      // rather than a timestamp comparison, so ties never misclassify a chat. SQLite's
+      // documented min/max rule makes the bare columns (is_from_me, date) take their
+      // values from the MAX(ROWID) row, so `latest_from_me` reflects the actual newest
+      // non-tapback message; the outer query keeps only inbound-latest chats.
       let chatRows = try Row.fetchAll(
         db,
         sql: """
-            SELECT c.guid AS chat_guid, MAX(m.date) AS max_date,
-                   MAX(CASE WHEN m.is_from_me = 0 THEN m.date END) AS max_in_date
-            FROM message m
-            JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-            JOIN chat c ON c.ROWID = cmj.chat_id
-            WHERE m.date >= ?
-              AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
-            GROUP BY c.guid
-            HAVING max_in_date IS NOT NULL AND max_in_date = max_date
+            SELECT chat_guid, max_date FROM (
+              SELECT c.guid AS chat_guid, MAX(m.ROWID) AS max_rowid,
+                     m.date AS max_date, m.is_from_me AS latest_from_me
+              FROM message m
+              JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+              JOIN chat c ON c.ROWID = cmj.chat_id
+              WHERE m.date >= ?
+                AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
+              GROUP BY c.guid
+            )
+            WHERE latest_from_me = 0
             ORDER BY max_date DESC LIMIT ?
           """,
         arguments: [cutoffNanos, maxThreads]

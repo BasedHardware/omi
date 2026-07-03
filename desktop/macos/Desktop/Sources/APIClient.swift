@@ -430,6 +430,11 @@ enum APIError: LocalizedError {
   case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
   case unsupportedTierScopedBulkMutation(String)
+  /// A well-formed 200 response whose body reported a business-level failure
+  /// (`success: false`). Distinct from `invalidResponse`/`decodingError`, which mean
+  /// the response was malformed or unparseable, so callers can tell a backend
+  /// operation failure apart from a transport/decoding problem.
+  case operationFailed(String)
 
   var detail: String? {
     if case .httpError(_, let detail) = self { return detail }
@@ -449,6 +454,8 @@ enum APIError: LocalizedError {
       return "Failed to decode response: \(error.localizedDescription)"
     case .unsupportedTierScopedBulkMutation(let operation):
       return "Layer-scoped bulk memory \(operation) is not supported yet."
+    case .operationFailed(let operation):
+      return "The server could not complete \(operation)."
     }
   }
 }
@@ -5627,9 +5634,10 @@ extension APIClient {
   func imessageSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
     let body = IMessageContactsSyncRequestPayload(contacts: contacts)
     let resp: IMessageContactsSyncResponsePayload = try await post("v1/imessage/contacts/sync", body: body)
-    // A 200 with success:false is a backend-level partial failure; surface it instead
-    // of returning 0, which is indistinguishable from a genuine zero-upsert success.
-    guard resp.success else { throw APIError.invalidResponse }
+    // A 200 with success:false is a backend-level partial failure; surface it as a
+    // business-failure error (not invalidResponse, which means a malformed response)
+    // instead of returning 0, which is indistinguishable from a genuine zero-upsert.
+    guard resp.success else { throw APIError.operationFailed("iMessage contact sync") }
     return resp.peopleUpserted
   }
 
@@ -5705,9 +5713,10 @@ extension APIClient {
   func whatsappSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
     let body = IMessageContactsSyncRequestPayload(contacts: contacts)
     let resp: WhatsAppContactsSyncResponsePayload = try await post("v1/whatsapp/contacts/sync", body: body)
-    // A 200 with success:false is a backend-level partial failure; surface it instead
-    // of returning 0, which is indistinguishable from a genuine zero-upsert success.
-    guard resp.success else { throw APIError.invalidResponse }
+    // A 200 with success:false is a backend-level partial failure; surface it as a
+    // business-failure error (not invalidResponse, which means a malformed response)
+    // instead of returning 0, which is indistinguishable from a genuine zero-upsert.
+    guard resp.success else { throw APIError.operationFailed("WhatsApp contact sync") }
     return resp.peopleUpserted
   }
 }
