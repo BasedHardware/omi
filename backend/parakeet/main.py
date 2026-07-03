@@ -231,6 +231,9 @@ async def transcribe(file: UploadFile = File(...)):
 async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
+    min_speakers: Optional[int] = Query(None),
+    max_speakers: Optional[int] = Query(None),
+    num_speakers: Optional[int] = Query(None),
 ):
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
@@ -260,11 +263,28 @@ async def transcribe_v2(
             gpu_result = await batch_engine.submit(file_path, timestamps=True, owns_file=False)
             PENDING_REQUESTS.set(len(batch_engine._pending))
             result = await loop.run_in_executor(
-                _diarize_pool, functools.partial(transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize)
+                _diarize_pool,
+                functools.partial(
+                    transcribe_file_v2,
+                    file_path,
+                    gpu_result=gpu_result,
+                    diarize=diarize,
+                    min_speakers=min_speakers,
+                    max_speakers=max_speakers,
+                    num_speakers=num_speakers,
+                ),
             )
         else:
             result = await loop.run_in_executor(
-                _diarize_pool, functools.partial(transcribe_file_v2, file_path, diarize=diarize)
+                _diarize_pool,
+                functools.partial(
+                    transcribe_file_v2,
+                    file_path,
+                    diarize=diarize,
+                    min_speakers=min_speakers,
+                    max_speakers=max_speakers,
+                    num_speakers=num_speakers,
+                ),
             )
         return result
     except QueueFullError:

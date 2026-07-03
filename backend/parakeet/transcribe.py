@@ -159,14 +159,27 @@ def _transcribe_via_gpu_worker(file_path: str):
     return {"text": "", "segments": []}
 
 
-def transcribe_file_v2(file_path: str, gpu_result: dict = None, diarize: bool = True):
+def transcribe_file_v2(
+    file_path: str,
+    gpu_result: dict = None,
+    diarize: bool = True,
+    min_speakers: int = None,
+    max_speakers: int = None,
+    num_speakers: int = None,
+):
     if gpu_result is not None:
         base = _transcribe_from_gpu_result(gpu_result)
     else:
         base = transcribe_file(file_path)
 
     if diarize:
-        base = _diarize_segments(file_path, base)
+        base = _diarize_segments(
+            file_path,
+            base,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers,
+            num_speakers=num_speakers,
+        )
     else:
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
@@ -225,7 +238,13 @@ def _transcribe_nim(file_path: str):
         raise
 
 
-def _diarize_segments(file_path: str, base: dict) -> dict:
+def _diarize_segments(
+    file_path: str,
+    base: dict,
+    min_speakers: int = None,
+    max_speakers: int = None,
+    num_speakers: int = None,
+) -> dict:
     if not SPEAKER_EMBEDDING_URL and not has_builtin_embedding():
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
