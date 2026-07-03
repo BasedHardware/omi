@@ -62,8 +62,12 @@ def _fence(text: Optional[str]) -> str:
     An inbound message (or contact-derived context) containing a literal
     ``</conversation>`` could otherwise close the data block and inject
     instructions. HTML-escaping ``&<>`` makes it impossible to forge any of our
-    delimiter tags while staying readable to the model (``&lt;`` etc.)."""
-    return html.escape(text or '', quote=False)
+    delimiter tags while staying readable to the model (``&lt;`` etc.).
+
+    Coerces non-str content to str first: Firestore is schemaless, so a malformed
+    record could have a non-string ``content``/field, and html.escape() TypeErrors on
+    non-str. ``str(text) if text else ''`` keeps the old falsy→'' behavior."""
+    return html.escape(str(text) if text else '', quote=False)
 
 
 def _safe_name(name: Optional[str]) -> str:

@@ -568,6 +568,14 @@ def get_people(uid: str):
 
 
 def get_person_by_name(uid: str, name: str):
+    """DEPRECATED — returns an ARBITRARY single match for a display name (`.limit(1)`).
+
+    Display names are not unique, so resolving a name to one person can silently pick the
+    wrong contact (a cross-contact privacy risk). New code MUST use `get_people_by_name`
+    and disambiguate when it returns more than one. Retained only for the existing
+    speaker-detection callers (routers/transcribe.py, routers/sync.py, routers/users.py);
+    do not add new call sites.
+    """
     people_ref = db.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
     docs = list(query.stream())

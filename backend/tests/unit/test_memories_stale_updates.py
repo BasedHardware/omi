@@ -142,7 +142,13 @@ def test_get_memories_by_subject_entity_orders_by_recency():
     docs = [_doc('old', 1), _doc('new', 20), _doc('mid', 10)]  # deliberately unordered
 
     class _Q:
+        applied_limit = None
+
         def where(self, **kwargs):
+            return self
+
+        def limit(self, n):
+            _Q.applied_limit = n  # the function now bounds the read with an over-fetch limit
             return self
 
         def stream(self):
@@ -161,6 +167,8 @@ def test_get_memories_by_subject_entity_orders_by_recency():
 
     out = memories.get_memories_by_subject_entity('u', 'sid', limit=10, firestore_client=_Client())
     assert [m['id'] for m in out] == ['new', 'mid', 'old']
+    # The Firestore read is bounded (over-fetch), not an unbounded stream of every fact.
+    assert _Q.applied_limit is not None and _Q.applied_limit >= 10
 
     # The limit slice keeps the newest N, not an arbitrary subset.
     out2 = memories.get_memories_by_subject_entity('u', 'sid', limit=2, firestore_client=_Client())

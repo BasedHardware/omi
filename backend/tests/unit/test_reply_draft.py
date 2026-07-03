@@ -560,3 +560,12 @@ def test_parse_selection_index():
     assert rd._parse_selection_index("", 5) is None
     assert rd._parse_selection_index("option ten", 5) is None
     assert rd._parse_selection_index("9", 5) is None  # out of range -> None (observable fallback)
+
+
+def test_fence_coerces_non_string_content():
+    # Firestore is schemaless: a malformed record could carry non-str content. _fence
+    # must not raise (html.escape TypeErrors on non-str).
+    assert rd._fence(5) == "5"
+    assert rd._fence(None) == ""
+    assert rd._fence({"a": 1}) == rd._fence(str({"a": 1}))
+    assert rd._fence("<b>") == "&lt;b&gt;"

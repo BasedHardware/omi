@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 memories_collection = 'memories'
 users_collection = 'users'
 
+# Floor for the per-subject-entity over-fetch in get_memories_by_subject_entity: bounds
+# Firestore reads while leaving ample headroom above the ~15-30 active facts callers want.
+_SUBJECT_ENTITY_OVER_FETCH = 200
+
 
 def _get_db(firestore_client=None):
     return firestore_client if firestore_client is not None else get_firestore_client()
@@ -197,9 +201,16 @@ def get_memories_by_subject_entity(uid: str, subject_entity_id: str, limit: int 
     """
     database = _get_db(firestore_client)
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
-    # Do not limit at the query level: freshness/validity are filtered in Python below,
-    # so a raw .limit() could return fewer active facts than requested. Slice after filtering.
-    memories_ref = memories_ref.where(filter=FieldFilter('subject_entity_id', '==', subject_entity_id))
+    # We can't order_by/filter validity at the query level without a composite index
+    # (and legacy docs lack invalid_at), so validity/recency are handled in Python
+    # below. But bound the read with an over-fetch limit so a contact with a very large
+    # memory history doesn't stream thousands of docs just to return `limit` active
+    # facts (Firestore read cost + latency). The over-fetch covers facts filtered out as
+    # inactive; a contact with more than OVER_FETCH memories is far beyond any real case.
+    over_fetch = max(limit * 10, _SUBJECT_ENTITY_OVER_FETCH)
+    memories_ref = memories_ref.where(filter=FieldFilter('subject_entity_id', '==', subject_entity_id)).limit(
+        over_fetch
+    )
     memories = [doc.to_dict() for doc in memories_ref.stream()]
     active = [
         memory for memory in memories if memory.get('user_review') is not False and memory.get('invalid_at') is None

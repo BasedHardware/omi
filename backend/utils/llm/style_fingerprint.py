@@ -13,6 +13,7 @@ relative to them.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import FrozenSet, List, Tuple
 
@@ -31,13 +32,29 @@ _EMOJI_RE = re.compile(
     "]"
 )
 
-# Unicode-aware word tokenizer: `[^\W\d_]` matches alphabetic characters in ANY
-# script (Latin, Cyrillic, Arabic, accented Latin, …), with internal apostrophes for
-# contractions. The old ASCII-only `[A-Za-z']+` matched nothing in non-Latin scripts,
-# so a whole message collapsed to 1 word via the `or 1` fallback and skewed avg_words /
-# word_band / vocabulary for multilingual users. (Space-less scripts like CJK still
-# tokenize a run as one word — a narrower follow-up if needed.)
-_WORD_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
+
+def _tokenize_words(text):
+    """Word tokens across scripts. A token is a run of letters (Unicode category L) and
+    their combining marks (category M) — so accented/decomposed Latin AND Indic/Thai/
+    Arabic (where vowel signs attach to a base letter) stay as one word — with internal
+    apostrophes kept for contractions. Category-based rather than a regex because
+    Python's stdlib `re` has no Unicode-property classes, so `[^\\W\\d_]` would drop
+    combining marks (Mn/Mc) and split those words. (A prior ASCII-only `[A-Za-z']+`
+    matched nothing in non-Latin scripts, collapsing whole messages to 1 word.)"""
+    words = []
+    cur = []
+    for ch in text or "":
+        if unicodedata.category(ch)[0] in ("L", "M"):
+            cur.append(ch)
+        elif ch in "'’" and cur:  # internal apostrophe (don't, y'all)
+            cur.append(ch)
+        elif cur:
+            words.append("".join(cur))
+            cur = []
+    if cur:
+        words.append("".join(cur))
+    return words
+
 
 # Em dash, en dash, or a double-hyphen used as a dash. One of the loudest "AI
 # tells" — but still judged corpus-relatively: only forbidden for users whose own
@@ -124,14 +141,14 @@ def compute_fingerprint(samples: List[str]) -> StyleFingerprint:
     total_emoji = sum(count_emojis(s) for s in cleaned)
     emoji_rate = total_emoji / n
 
-    word_counts = sorted(len(_WORD_RE.findall(s)) or 1 for s in cleaned)
+    word_counts = sorted(len(_tokenize_words(s)) or 1 for s in cleaned)
     avg_words = sum(word_counts) / n
     word_band = (max(1, _percentile(word_counts, 10)), max(1, _percentile(word_counts, 90)))
 
     terminal = sum(1 for s in cleaned if s[-1] in ".!?")
     periods = sum(1 for s in cleaned if s[-1] == ".")
 
-    vocabulary = frozenset(w.lower() for s in cleaned for w in _WORD_RE.findall(s))
+    vocabulary = frozenset(w.lower() for s in cleaned for w in _tokenize_words(s))
 
     return StyleFingerprint(
         sample_count=n,
@@ -225,6 +242,6 @@ def length_soft_fail(draft: str, fp: StyleFingerprint) -> bool:
     longer/shorter reply is common, so this is advisory (widened band), not a hard fail."""
     if fp.cold_start:
         return False
-    words = len(_WORD_RE.findall(draft or "")) or 1
+    words = len(_tokenize_words(draft or "")) or 1
     lo, hi = fp.word_band
     return words < max(1, lo // 2) or words > hi * 3

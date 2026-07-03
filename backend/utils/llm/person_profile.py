@@ -44,8 +44,11 @@ _PROFILE_STRING_FIELDS = ('relationship', 'profile_summary', 'tone_notes')
 def _fence(text: Optional[str]) -> str:
     """Escape untrusted content (transcripts, facts, contact name) before it goes
     inside a <...> data block, so a message containing a literal ``</conversations>``
-    cannot close the block and inject instructions."""
-    return html.escape(text or '', quote=False)
+    cannot close the block and inject instructions.
+
+    Coerces non-str content to str first (Firestore is schemaless — a malformed record
+    could have a non-string field, and html.escape() TypeErrors on non-str)."""
+    return html.escape(str(text) if text else '', quote=False)
 
 
 def _needs_refresh(person: dict) -> bool:
@@ -95,8 +98,10 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
     if not force and not _needs_refresh(person):
         return False
 
-    # name is contact-derived (untrusted): sanitize before it enters the prompt.
-    name = _fence(' '.join((person.get('name') or 'this person').split()))
+    # name is contact-derived (untrusted) and Firestore is schemaless (a malformed
+    # record could store a non-str name): coerce to str before .split() so profile
+    # generation degrades gracefully instead of raising AttributeError.
+    name = _fence(' '.join(str(person.get('name') or 'this person').split()))
     convos = conversations_db.get_conversations_by_person_id(uid, person_id, limit=15)
     facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person_id), limit=30)
 
