@@ -62,6 +62,7 @@ import {
 } from "./runtime/adapter-selection.js";
 import {
   activeControlToolOwnerId,
+  AGENT_CONTROL_TOOL_NAMES,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
@@ -77,14 +78,6 @@ import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
-  "list_agent_sessions",
-  "get_agent_run",
-  "cancel_agent_run",
-  "inspect_agent_artifacts",
-  "update_agent_artifact_lifecycle",
-]);
 
 // Resolve paths to bundled tools
 const playwrightCli = join(
@@ -675,7 +668,7 @@ function withControlRunCorrelation(
   input: Record<string, unknown>,
   fallbackClientId: string | undefined
 ): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
-  if (name !== "send_agent_message" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "delegate_agent") {
     return { input };
   }
   const requestId = randomUUID();
@@ -692,7 +685,7 @@ function withControlRunCorrelation(
 }
 
 function controlRunAdapterId(name: string, input: Record<string, unknown>, defaultAdapterId: string): string | undefined {
-  if (name !== "send_agent_message" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "delegate_agent") {
     return undefined;
   }
   const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
@@ -702,7 +695,7 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
-  return name === "delegate_agent" && input.mode === "spawn";
+  return name === "spawn_background_agent" || (name === "delegate_agent" && input.mode === "spawn");
 }
 
 function controlToolResultOk(result: string): boolean {
@@ -976,7 +969,7 @@ async function main(): Promise<void> {
   };
 
   // 3. Signal readiness
-  send({ type: "init", sessionId: "" });
+  send({ type: "init", sessionId: "", agentControlTools: AGENT_CONTROL_TOOL_NAMES });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
@@ -1170,6 +1163,7 @@ async function main(): Promise<void> {
                 const toolResult = await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
+                    trustedUserControl: false,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
@@ -1245,7 +1239,7 @@ async function main(): Promise<void> {
           break;
         }
         const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control);
-        if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
+        if (!isAgentControlToolName(control.name)) {
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -1314,6 +1308,7 @@ async function main(): Promise<void> {
               ? await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
+                    trustedUserControl: true,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () => controlContext.activeOwnerId,
                   },

@@ -15,14 +15,10 @@ from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
-from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction, StructuredExtraction
-from .clients import get_llm, parser
+from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
+from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from utils.byok import has_byok_keys
-from utils.llm.gateway_client import (
-    BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
-    invoke_chat_structured_gateway,
-    record_chat_extraction_gateway_result,
-)
+from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 import logging
@@ -50,17 +46,17 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def _invoke_gateway_unless_byok(
-    prompt: str,
-    output_model: type[BaseModel],
-    *,
-    feature: str,
-    timeout_seconds: float = BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
-) -> BaseModel | None:
+def _invoke_gateway_shadow_chain(chain, values: dict, *, feature: str) -> BaseModel | None:
     if has_byok_keys():
         record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
         return None
-    return invoke_chat_structured_gateway(prompt, output_model, feature=feature, timeout_seconds=timeout_seconds)
+    try:
+        response = chain.invoke(values)
+    except Exception:
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='unexpected_error')
+        return None
+    record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
+    return response
 
 
 def _word_count(text: str) -> int:
@@ -248,7 +244,7 @@ def _length_ratio_bucket(left: object, right: object) -> str:
 
 
 def _record_conversation_structure_shadow_comparison(
-    gateway_response: ConversationStructureExtraction | None,
+    gateway_response: Structured | None,
     legacy_response: Structured,
 ) -> None:
     if gateway_response is None:
@@ -373,21 +369,27 @@ def _record_conversation_action_items_shadow_comparison(
     )
 
 
-def _run_conversation_structure_shadow(prompt: str, legacy_response: Structured) -> None:
-    gateway_response = _invoke_gateway_unless_byok(
-        prompt,
-        ConversationStructureExtraction,
+def _run_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
+    gateway_chain = prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser
+    gateway_response = _invoke_gateway_shadow_chain(
+        gateway_chain,
+        prompt_values,
         feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
     )
-    _record_conversation_structure_shadow_comparison(gateway_response, legacy_response)
+    _record_conversation_structure_shadow_comparison(_coerce_structured(gateway_response), legacy_response)
 
 
 def _run_conversation_action_items_shadow(
-    prompt: str, legacy_response: List[ActionItem], user_tz, now: datetime
+    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
 ) -> None:
-    gateway_response = _invoke_gateway_unless_byok(
-        prompt,
-        ActionItemsExtraction,
+    gateway_chain = (
+        prompt
+        | get_llm_gateway_chat_structured(cache_key='omi-extract-actions')
+        | PydanticOutputParser(pydantic_object=ActionItemsExtraction)
+    )
+    gateway_response = _invoke_gateway_shadow_chain(
+        gateway_chain,
+        prompt_values,
         feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
     )
     _record_conversation_action_items_shadow_comparison(gateway_response, legacy_response, user_tz=user_tz, now=now)
@@ -424,24 +426,26 @@ def _submit_gateway_shadow(
     future.add_done_callback(_log_shadow_failure)
 
 
-def _submit_conversation_structure_shadow(prompt: str, legacy_response: Structured) -> None:
+def _submit_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
     _submit_gateway_shadow(
         _run_conversation_structure_shadow,
         CONVERSATION_STRUCTURE_SHADOW_FEATURE,
         'conversation_structure',
         prompt,
+        prompt_values,
         legacy_response,
     )
 
 
 def _submit_conversation_action_items_shadow(
-    prompt: str, legacy_response: List[ActionItem], user_tz, now: datetime
+    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
 ) -> None:
     _submit_gateway_shadow(
         _run_conversation_action_items_shadow,
         CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
         'conversation_action_items',
         prompt,
+        prompt_values,
         legacy_response,
         user_tz,
         now,
@@ -521,14 +525,6 @@ Content:
         'duration_context': duration_context,
         'format_instructions': custom_parser.get_format_instructions(),
     }
-
-    gateway_response = _invoke_gateway_unless_byok(
-        prompt_template.format(**prompt_values),
-        DiscardConversation,
-        feature='conversation_discard.should_discard',
-    )
-    if gateway_response is not None:
-        return gateway_response.discard
 
     prompt = ChatPromptTemplate.from_messages([prompt_template])
     chain = prompt | get_llm('conv_discard') | custom_parser
@@ -855,8 +851,6 @@ def extract_action_items(
         'existing_items_context': existing_items_context,
     }
 
-    shadow_prompt = f'{instructions_text.format(**prompt_values)}\n\n{context_message.format(**prompt_values)}'
-
     try:
         response = chain.invoke(prompt_values)
         action_items = _coerce_action_items(response)
@@ -871,7 +865,7 @@ def extract_action_items(
         _normalize_action_item_due_dates(action_items, user_tz=user_tz, now=now, log_past_due_clears=True)
 
         if _should_run_conversation_action_items_shadow('conversation_action_items', started_at, conversation_context):
-            _submit_conversation_action_items_shadow(shadow_prompt, action_items, user_tz, now)
+            _submit_conversation_action_items_shadow(prompt, prompt_values, action_items, user_tz, now)
 
         return action_items
 
@@ -972,13 +966,9 @@ def get_transcript_structure(
 
     response = _coerce_structured(chain.invoke(legacy_prompt_values))
     if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
-        structure_shadow_parser = PydanticOutputParser(pydantic_object=ConversationStructureExtraction)
-        shadow_prompt_values = {
-            **legacy_prompt_values,
-            'format_instructions': structure_shadow_parser.get_format_instructions(),
-        }
         _submit_conversation_structure_shadow(
-            f'{instructions_text.format(**shadow_prompt_values)}\n\n{context_message.format(**shadow_prompt_values)}',
+            prompt,
+            legacy_prompt_values,
             response,
         )
 

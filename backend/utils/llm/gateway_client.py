@@ -19,6 +19,9 @@ LLM_GATEWAY_URL_ENV_VAR = 'OMI_LLM_GATEWAY_URL'
 DEFAULT_LLM_GATEWAY_URL = 'http://127.0.0.1:9080'
 LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
+LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
+LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
+LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
 LLM_GATEWAY_CALLER = 'backend'
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
@@ -41,6 +44,49 @@ def get_llm_gateway_service_token() -> str | None:
 
 def is_auto_lane_id(model_or_lane: object) -> bool:
     return isinstance(model_or_lane, str) and model_or_lane.startswith(LLM_GATEWAY_AUTO_LANE_PREFIX)
+
+
+def feature_auto_lane_id(feature: str) -> str:
+    return f"{LLM_GATEWAY_AUTO_LANE_PREFIX}{feature.replace('_', '-')}"
+
+
+def should_route_features_through_gateway() -> bool:
+    enabled = os.getenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes', 'gateway'}
+    if not enabled:
+        return False
+    if _is_local_or_dev_runtime():
+        return True
+    if os.getenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, '').strip().lower() not in {'1', 'true', 'yes'}:
+        raise RuntimeError(
+            f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway is blocked outside dev/local unless '
+            f'{LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR}=true is set'
+        )
+    if not os.getenv(LLM_GATEWAY_URL_ENV_VAR, '').strip():
+        raise RuntimeError(
+            f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway outside dev/local requires {LLM_GATEWAY_URL_ENV_VAR}'
+        )
+    return True
+
+
+def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> None:
+    if not should_route_features_through_gateway():
+        return
+    if os.getenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}:
+        return
+    raise RuntimeError(
+        f'{surface} is a direct provider LLM surface and is blocked while '
+        f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
+        f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
+    )
+
+
+def _is_local_or_dev_runtime() -> bool:
+    explicit_stage = os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or os.getenv('APP_ENV')
+    if explicit_stage:
+        return explicit_stage.strip().lower() in {'dev', 'development', 'local', 'test'}
+    if os.getenv('K_SERVICE') or os.getenv('KUBERNETES_SERVICE_HOST'):
+        return False
+    return True
 
 
 def invoke_chat_structured_gateway(
@@ -113,6 +159,10 @@ def _gateway_headers() -> dict[str, str]:
     if service_token is not None:
         headers['Authorization'] = f'Bearer {service_token}'
     return headers
+
+
+def llm_gateway_headers() -> dict[str, str]:
+    return _gateway_headers()
 
 
 def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> dict:
@@ -237,3 +287,35 @@ def _validate_output_model(
 ) -> StructuredOutput:
     validate_json_schema(instance=decoded, schema=_strict_model_json_schema(output_model))
     return output_model.model_validate(decoded)
+
+
+def generate_image_via_gateway(
+    *,
+    model: str,
+    prompt: str,
+    size: str,
+    quality: str,
+    n: int,
+    response_format: str,
+    timeout_seconds: float = 120.0,
+) -> Mapping[str, object]:
+    """Call the gateway-owned image generation surface."""
+
+    with httpx.Client(timeout=timeout_seconds) as client:
+        response = client.post(
+            f'{get_llm_gateway_base_url()}/v1/images/generations',
+            headers=_gateway_headers(),
+            json={
+                'model': model,
+                'prompt': prompt,
+                'size': size,
+                'quality': quality,
+                'n': n,
+                'response_format': response_format,
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+    if not isinstance(body, Mapping):
+        raise ValueError('gateway image response must be an object')
+    return body

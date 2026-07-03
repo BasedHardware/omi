@@ -111,6 +111,8 @@ env:
         key: OPENAI_API_KEY
   - name: OMI_LLM_GATEWAY_URL
     value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
+  - name: OMI_ENV_STAGE
+    value: "dev"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
     value: "true"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
@@ -118,6 +120,10 @@ env:
   - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED
     value: "true"
   - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE
+    value: "1.0"
+  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED
+    value: "true"
+  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE
     value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:

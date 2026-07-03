@@ -214,6 +214,7 @@ llm_clients_stub.parser = MagicMock()
 llm_clients_stub.llm_high = MagicMock()
 llm_clients_stub.llm_medium_experiment = MagicMock()
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
 
 # Stub utils.llm.conversation_folder (conversation_processing imports from it after a recent refactor)
 conv_folder_stub = _stub_module("utils.llm.conversation_folder")

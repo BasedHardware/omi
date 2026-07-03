@@ -115,6 +115,9 @@ final class RealtimeHubSession: NSObject {
   /// one. Set on activityEnd (commit); cleared on this turn's `turnComplete`, on a
   /// server `interrupted`, or when a new turn interrupts (beginInputTurn interrupting).
   private var geminiResponsePending = false
+  private var pendingOpenAIToolCallIds = Set<String>()
+  private var pendingGeminiToolCallIds = Set<String>()
+  private var geminiSyntheticToolCallCounter = 0
 
   // Per-turn token usage for managed (ephemeral) billing — client-reported. Reset at
   // commit, reported at finishTurn (only for ephemeral sessions; BYOK pays the provider
@@ -221,6 +224,7 @@ final class RealtimeHubSession: NSObject {
           self.openAIResponseActive = false
           self.openAIResponseCreatePending = false
           self.openAIActiveResponseID = nil
+          self.pendingOpenAIToolCallIds.removeAll()
         }
         // Drop any uncommitted mic input so it can't leak into the next turn.
         self.send(json: ["type": "input_audio_buffer.clear"])
@@ -276,6 +280,7 @@ final class RealtimeHubSession: NSObject {
       // Gemini events that arrive before replacement or on non-provider interruptions.
       if interrupting {
         self.geminiResponsePending = false
+        self.pendingGeminiToolCallIds.removeAll()
       }
       guard !self.activityOpen else { return }
       self.activityOpen = true
@@ -296,9 +301,11 @@ final class RealtimeHubSession: NSObject {
       log("\(self.tag): turn committed")
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.removeAll()
         self.send(json: ["type": "input_audio_buffer.commit"])
         self.requestResponse(audio: true)
       case .gemini:
+        self.pendingGeminiToolCallIds.removeAll()
         self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         self.activityOpen = false
         self.geminiResponsePending = true  // expect a spoken reply for THIS turn
@@ -316,8 +323,10 @@ final class RealtimeHubSession: NSObject {
       self.geminiResponsePending = false
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.removeAll()
         self.send(json: ["type": "input_audio_buffer.clear"])
       case .gemini:
+        self.pendingGeminiToolCallIds.removeAll()
         if self.activityOpen, self.isOpen {
           self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         }
@@ -334,12 +343,18 @@ final class RealtimeHubSession: NSObject {
       guard let self else { return }
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.remove(callId)
         self.send(json: [
           "type": "conversation.item.create",
           "item": ["type": "function_call_output", "call_id": callId, "output": output],
         ])
-        self.requestResponse(audio: true)
+        if self.pendingOpenAIToolCallIds.isEmpty {
+          self.requestResponse(audio: true)
+        } else {
+          log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
+        }
       case .gemini:
+        self.pendingGeminiToolCallIds.remove(callId)
         self.send(json: [
           "toolResponse": [
             "functionResponses": [["id": callId, "name": name, "response": ["result": output]]]
@@ -481,6 +496,12 @@ final class RealtimeHubSession: NSObject {
           "generationConfig": [
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
+            // Pin the spoken voice — with no speechConfig Gemini picks its own default,
+            // which differs from the OpenAI hub voice (marin) and can change across
+            // model revisions. Charon: deep, calm, "informative" — closest match to marin.
+            "speechConfig": [
+              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Charon"]]
+            ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
@@ -749,6 +770,7 @@ final class RealtimeHubSession: NSObject {
         continue
       }
       dispatchedToolItems.insert(callId)
+      pendingOpenAIToolCallIds.insert(callId)
       let name = (item["name"] as? String) ?? openAIFunctionNames[callId] ?? ""
       let argsStr = (item["arguments"] as? String) ?? "{}"
       if !name.isEmpty {
@@ -782,8 +804,10 @@ final class RealtimeHubSession: NSObject {
       }
       for call in calls {
         let name = call["name"] as? String ?? ""
-        // Gemini may omit id for single calls; synthesize one for our bookkeeping.
-        let callId = call["id"] as? String ?? name
+        // Gemini may omit ids; synthesize unique ones so same-name calls in one turn
+        // do not collapse controller/session pending-tool bookkeeping.
+        let callId = call["id"] as? String ?? nextGeminiSyntheticToolCallId(name: name)
+        pendingGeminiToolCallIds.insert(callId)
         let args = call["args"] as? [String: Any] ?? [:]
         let argsJSON =
           (try? JSONSerialization.data(withJSONObject: args)).flatMap {
@@ -798,6 +822,7 @@ final class RealtimeHubSession: NSObject {
       // Barge-in: drop the pending reply so its trailing audio + bookkeeping turnComplete
       // are ignored; the new turn (already started via activityStart) re-arms on commit.
       geminiResponsePending = false
+      pendingGeminiToolCallIds.removeAll()
       log("\(tag): server confirmed interrupt")
     }
     // NOTE: do NOT finish on generationComplete — Gemini sends it while the spoken audio
@@ -822,6 +847,10 @@ final class RealtimeHubSession: NSObject {
       }
     }
     if (sc["turnComplete"] as? Bool) == true {
+      guard pendingGeminiToolCallIds.isEmpty else {
+        log("\(tag): deferring Gemini turnComplete with \(pendingGeminiToolCallIds.count) tool result(s) pending")
+        return
+      }
       // Only finish the turn we're actually awaiting a reply for. A turnComplete that
       // closes an interrupted/abandoned generation (pending=false) is ignored, so it
       // can't prematurely end the live turn.
@@ -831,6 +860,11 @@ final class RealtimeHubSession: NSObject {
         finishTurn()
       }
     }
+  }
+
+  private func nextGeminiSyntheticToolCallId(name: String) -> String {
+    geminiSyntheticToolCallCounter += 1
+    return "\(name):\(geminiSyntheticToolCallCounter)"
   }
 
   // MARK: - Send (on q)
