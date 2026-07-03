@@ -252,6 +252,7 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedApp' in generated
     assert 'class GeneratedAppCatalogResponse' in generated
     assert 'class GeneratedAppSearchResponse' in generated
+    assert 'class GeneratedConversationSuggestedAppsResponse' in generated
     assert 'class GeneratedAppApiKeyResponse' in generated
     assert 'id: _required(_readFieldValue<String>' in generated
     assert 'app: _required(_readFieldValue<GeneratedAppDraftGenerationResponse>' in generated

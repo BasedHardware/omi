@@ -562,6 +562,58 @@ class GeneratedConversation {
   }
 }
 
+class GeneratedConversationTestPromptResponse {
+  final String summary;
+
+  const GeneratedConversationTestPromptResponse({
+    required this.summary,
+  });
+
+  factory GeneratedConversationTestPromptResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationTestPromptResponse(
+      summary: _required(_readFieldValue<String>(_readField(json, const ["summary"]), "summary", _readString, requiredField: true, nullable: false), "summary"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'summary': summary,
+    };
+  }
+}
+
+class GeneratedMergeConversationsResponse {
+  final List<String> conversationIds;
+  final String message;
+  final String status;
+  final String? warning;
+
+  const GeneratedMergeConversationsResponse({
+    required this.conversationIds,
+    this.message = "Merge started",
+    this.status = "merging",
+    this.warning,
+  });
+
+  factory GeneratedMergeConversationsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMergeConversationsResponse(
+      conversationIds: _required(_readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: true, nullable: false), "conversation_ids"),
+      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: false, defaultValue: "Merge started"), "message"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "merging"), "status"),
+      warning: _readFieldValue<String>(_readField(json, const ["warning"]), "warning", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_ids': conversationIds,
+      'message': message,
+      'status': status,
+      'warning': warning,
+    };
+  }
+}
+
 class GeneratedSearchConversationsResponse {
   final int currentPage;
   final List<Map<String, dynamic>> items;

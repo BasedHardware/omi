@@ -19,11 +19,17 @@ class CreateConversationResponse {
   CreateConversationResponse({required this.messages, required this.conversation});
 
   factory CreateConversationResponse.fromJson(Map<String, dynamic> json) {
+    return CreateConversationResponse.fromGeneratedWireJson(json);
+  }
+
+  factory CreateConversationResponse.fromGeneratedWireJson(Map<String, dynamic> json) {
     return CreateConversationResponse(
-      messages: ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
+      messages: ((json['messages'] ?? []) as List<dynamic>)
+          .map((message) => ServerMessage.fromGeneratedWireJson(message as Map<String, dynamic>))
+          .toList(),
       conversation: json['conversation'] != null
-          ? ServerConversation.fromJson(json['conversation'])
-          : (json['memory'] != null ? ServerConversation.fromJson(json['memory']) : null),
+          ? ServerConversation.fromJson(json['conversation'] as Map<String, dynamic>)
+          : (json['memory'] != null ? ServerConversation.fromJson(json['memory'] as Map<String, dynamic>) : null),
     );
   }
 }

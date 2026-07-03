@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
+import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
@@ -22,7 +23,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   if (response == null) return null;
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateConversationResponse.fromJson(jsonDecode(response.body));
+    return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
   } else {
     // TODO: Server returns 304 doesn't recover
     PlatformManager.instance.crashReporter.reportCrash(
@@ -284,12 +285,24 @@ class TranscriptsResponse {
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
+    return TranscriptsResponse.fromGeneratedWireJson(json);
+  }
+
+  factory TranscriptsResponse.fromGeneratedWireJson(Map<String, dynamic> json) {
+    List<TranscriptSegment> readSegments(String key) {
+      final segments = json[key];
+      if (segments is! List) return [];
+      return segments
+          .map((segment) => TranscriptSegment.fromGenerated(
+              wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>)))
+          .toList();
+    }
+
     return TranscriptsResponse(
-      deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics:
-          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      deepgram: readSegments('deepgram'),
+      soniox: readSegments('soniox'),
+      whisperx: readSegments('whisperx'),
+      speechmatics: readSegments('speechmatics'),
     );
   }
 }
@@ -304,8 +317,7 @@ Future<TranscriptsResponse> getConversationTranscripts(String conversationId) as
   if (response == null) return TranscriptsResponse();
   Logger.debug('getConversationTranscripts: ${response.body}');
   if (response.statusCode == 200) {
-    var transcripts = (jsonDecode(response.body) as Map<String, dynamic>);
-    return TranscriptsResponse.fromJson(transcripts);
+    return TranscriptsResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
   return TranscriptsResponse();
 }
@@ -576,7 +588,8 @@ Future<String> testConversationPrompt(String prompt, String conversationId) asyn
   );
   if (response == null) return '';
   if (response.statusCode == 200) {
-    return jsonDecode(response.body)['summary'];
+    return wire.GeneratedConversationTestPromptResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>)
+        .summary;
   } else {
     return '';
   }
@@ -627,8 +640,9 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
   if (response == null) return [];
   Logger.debug('getConversationSuggestedApps: ${response.body}');
   if (response.statusCode == 200) {
-    var data = jsonDecode(response.body);
-    return (data['suggested_apps'] as List<dynamic>).map((appData) => App.fromJson(appData)).toList();
+    final data = apps_wire.GeneratedConversationSuggestedAppsResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+    return data.suggestedApps.map(App.fromGeneratedDetail).toList();
   }
   return [];
 }
@@ -652,11 +666,15 @@ class MergeConversationsResponse {
   });
 
   factory MergeConversationsResponse.fromJson(Map<String, dynamic> json) {
+    return MergeConversationsResponse.fromGenerated(wire.GeneratedMergeConversationsResponse.fromJson(json));
+  }
+
+  factory MergeConversationsResponse.fromGenerated(wire.GeneratedMergeConversationsResponse generated) {
     return MergeConversationsResponse(
-      status: json['status'] ?? 'merging',
-      message: json['message'] ?? 'Merge started',
-      warning: json['warning'],
-      conversationIds: List<String>.from(json['conversation_ids'] ?? []),
+      status: generated.status,
+      message: generated.message,
+      warning: generated.warning,
+      conversationIds: generated.conversationIds,
     );
   }
 }
@@ -680,7 +698,9 @@ Future<MergeConversationsResponse?> mergeConversations(List<String> conversation
   Logger.debug('mergeConversations: ${response.body}');
 
   if (response.statusCode == 200) {
-    return MergeConversationsResponse.fromJson(jsonDecode(response.body));
+    return MergeConversationsResponse.fromGenerated(
+      wire.GeneratedMergeConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   } else {
     Logger.debug('mergeConversations error: ${response.statusCode} - ${response.body}');
     return null;

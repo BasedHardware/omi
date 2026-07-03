@@ -1230,6 +1230,30 @@ class GeneratedAppSearchResponse {
   }
 }
 
+class GeneratedConversationSuggestedAppsResponse {
+  final String conversationId;
+  final List<GeneratedApp> suggestedApps;
+
+  const GeneratedConversationSuggestedAppsResponse({
+    required this.conversationId,
+    required this.suggestedApps,
+  });
+
+  factory GeneratedConversationSuggestedAppsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationSuggestedAppsResponse(
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      suggestedApps: _required(_readFieldValue<List<GeneratedApp>>(_readField(json, const ["suggested_apps"]), "suggested_apps", (value) => _readObjectList(value, GeneratedApp.fromJson), requiredField: true, nullable: false), "suggested_apps"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'suggested_apps': suggestedApps.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
 class GeneratedAppApiKeyResponse {
   final DateTime? createdAt;
   final String id;

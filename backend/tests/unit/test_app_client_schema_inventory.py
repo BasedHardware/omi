@@ -183,12 +183,11 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert any(
         item['path'] == 'app/lib/backend/schema/conversation.dart'
         and item['kind'] == 'fromJson'
-        and 'CreateConversationResponse.fromJson' in item['snippet']
+        and 'ConversationExternalData.fromJson' in item['snippet']
         for item in report['raw_dart_decode_sites']
     )
     assert any(
-        item['path'] == 'app/lib/backend/http/api/conversations.dart'
-        and item['kind'] in {'jsonDecode', 'field_access', 'cast'}
+        item['path'] == 'app/lib/backend/http/api/apps.dart' and item['kind'] in {'jsonDecode', 'field_access', 'cast'}
         for item in report['raw_dart_decode_sites']
     )
 

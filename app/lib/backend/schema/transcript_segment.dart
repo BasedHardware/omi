@@ -70,6 +70,10 @@ class TranscriptSegment {
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedTranscriptSegment.fromJson(json);
+    return TranscriptSegment.fromGenerated(generated);
+  }
+
+  factory TranscriptSegment.fromGenerated(wire.GeneratedTranscriptSegment generated) {
     return TranscriptSegment(
       id: generated.id ?? '',
       text: generated.text,
@@ -81,7 +85,7 @@ class TranscriptSegment {
       translations: (generated.translations ?? const []).map((translation) {
         return Translation(lang: translation.lang, text: translation.text);
       }).toList(),
-      speechProfileProcessed: generated.speechProfileProcessed ?? true,
+      speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
     );
   }
