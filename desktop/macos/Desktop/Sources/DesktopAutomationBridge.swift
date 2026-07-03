@@ -382,6 +382,22 @@ final class DesktopAutomationActionRegistry {
       return await harness.run(timeoutSeconds: timeout)
     }
 
+    // Run the post-scan local-file memory import exactly as onboarding does
+    // (indexed-files snapshot → aggregate drafts → import evidence service
+    // with legacy batch fallback). Lets agents verify the import pipeline
+    // without driving the onboarding UI or the cursor.
+    register(
+      name: "onboarding_local_file_import",
+      summary: "Run the post-scan local-file memory import from the indexed snapshot; returns saved count"
+    ) { _ in
+      let coordinator = OnboardingPagedIntroCoordinator()
+      await coordinator.refreshSnapshotIfAvailable()
+      return [
+        "saved": String(coordinator.localFileMemoriesSaved),
+        "file_count": String(coordinator.scanSnapshot?.fileCount ?? 0),
+      ]
+    }
+
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.

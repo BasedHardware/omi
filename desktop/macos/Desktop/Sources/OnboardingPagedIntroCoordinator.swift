@@ -1394,70 +1394,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       )
     }
 
-    for fileName in snapshot.recentFiles.prefix(8) {
-      drafts.append(
-        MemoryDraft(
-          content: "A recently modified local file is named \(fileName).",
-          tags: ["local_files", "onboarding", "recent_file"],
-          source: "local_files",
-          headline: fileName
-        )
-      )
-    }
-
-    if let dbQueue = await RewindDatabase.shared.getDatabaseQueue() {
-      do {
-        let projectDrafts = try await dbQueue.read { db -> [MemoryDraft] in
-          let sql = """
-            SELECT path, filename, fileExtension, folder
-            FROM indexed_files
-            WHERE folder IN ('Projects', 'Documents', 'Downloads')
-              AND filename NOT LIKE 'CleanShot %'
-              AND filename NOT LIKE '.DS_Store'
-              AND path NOT LIKE '%/node_modules/%'
-              AND path NOT LIKE '%/.git/%'
-              AND path NOT LIKE '%/.build/%'
-              AND path NOT LIKE '%/build/%'
-              AND path NOT LIKE '%/DerivedData/%'
-              AND path NOT LIKE '%/Pods/%'
-              AND (
-                fileExtension IN ('swift','dart','py','ts','tsx','js','jsx','md','mdx','json',
-                                  'yaml','yml','toml','sh','txt','html','css','scss','sql',
-                                  'go','rs','kt','java','cpp','c','h','hpp','ipynb','pdf')
-                OR fileExtension IS NULL
-              )
-            ORDER BY modifiedAt DESC
-            LIMIT 2800
-            """
-
-          let rows = try Row.fetchAll(db, sql: sql)
-          return rows.compactMap { row in
-            guard let path: String = row["path"], let filename: String = row["filename"] else {
-              return nil
-            }
-
-            let folder: String = row["folder"] ?? "Files"
-            let fileExtension: String = row["fileExtension"] ?? ""
-            let normalizedPath = Self.normalizedLocalFilePath(path)
-            let extensionSuffix = fileExtension.isEmpty ? "" : " (\(fileExtension))"
-
-            return MemoryDraft(
-              content:
-                "The user's local \(folder.lowercased()) include \(normalizedPath)\(extensionSuffix).",
-              tags: [
-                "local_files", "onboarding", folder.lowercased(), Self.sanitizedTag(fileExtension),
-              ],
-              source: "local_files",
-              headline: filename
-            )
-          }
-        }
-        drafts.append(contentsOf: projectDrafts)
-      } catch {
-        log(
-          "OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
-      }
-    }
+    // Deliberately no per-file drafts here. An earlier version emitted one
+    // memory per indexed file (up to 2800 "The user's local projects include
+    // <path>" entries, plus per-file "recently modified" facts); those
+    // drowned out real memories for every user who ran the scan and were
+    // bulk-purged server-side. Only aggregate facts (count, project names,
+    // technologies) carry durable signal.
 
     var seen = Set<MemoryDraft>()
     return drafts.filter { seen.insert($0).inserted }
@@ -1471,11 +1413,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       return "~/" + path.dropFirst(home.count + 1)
     }
     return path
-  }
-
-  nonisolated private static func sanitizedTag(_ tag: String) -> String {
-    let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return trimmed.isEmpty ? "unknown" : trimmed.replacingOccurrences(of: " ", with: "_")
   }
 
   private func heuristicGoalTitle(_ text: String) -> String {
