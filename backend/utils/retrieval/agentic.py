@@ -51,6 +51,7 @@ from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_mess
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
+from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
@@ -616,6 +617,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
     anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid, tz=tz))
+
+    raise_if_gateway_feature_mode_blocks_direct_model_surface('chat_agent.anthropic_stream')
 
     callback = AsyncStreamingCallback()
 

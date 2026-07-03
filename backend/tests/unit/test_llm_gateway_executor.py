@@ -46,6 +46,68 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
 
 
 @pytest.mark.asyncio
+async def test_executor_forwards_prompt_parser_request_without_response_format():
+    config = config_with_active_route(active_route_with_fallbacks([]))
+    request = valid_request()
+    request.pop('response_format')
+    resolved = resolve_chat_completion_route(config, request)
+    active_primary = resolved.active_route.primary
+    provider = FakeChatCompletionProvider([fake_success_response(active_primary, content='{"answer":"primary"}')])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    assert 'response_format' not in provider.calls[0].request
+
+
+@pytest.mark.asyncio
+async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
+    active_route = active_route_with_fallbacks([]).model_copy(
+        update={
+            'provider_options': {'temperature': 0.9},
+            'rollout': RolloutPolicy(stage=RolloutStage.SHADOW, percent=0),
+        }
+    )
+    lkg_route = (
+        load_gateway_config(prod_mode=True)
+        .route_artifacts[LKG_ROUTE]
+        .model_copy(update={'provider_options': {'temperature': 0.1}})
+    )
+    config = config_with_routes(active_route, lkg_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.last_known_good_route.primary)])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['temperature'] == 0.1
+
+
+@pytest.mark.asyncio
+async def test_executor_maps_gemini_thinking_budget_before_provider_call():
+    active_route = active_route_with_fallbacks([]).model_copy(update={'provider_options': {'thinking_budget': 0}})
+    config = config_with_active_route(active_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['reasoning_effort'] == 'none'
+    assert 'thinking_budget' not in provider.calls[0].request
+
+
+@pytest.mark.asyncio
 async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
     config = config_with_active_route(active_route_with_fallbacks([fallback_ref]))

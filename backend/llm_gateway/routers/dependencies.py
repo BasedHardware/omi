@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
 from llm_gateway.gateway.executor import ProviderRegistry
-from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
+from llm_gateway.gateway.providers import AnthropicMessagesProvider, OpenAICompatibleChatCompletionProvider
 
 
 @lru_cache(maxsize=1)
@@ -14,7 +14,25 @@ def get_gateway_config() -> GatewayConfig:
 
 @lru_cache(maxsize=1)
 def get_provider_registry() -> ProviderRegistry:
-    return ProviderRegistry({'openai': OpenAICompatibleChatCompletionProvider()})
+    return ProviderRegistry(
+        {
+            'openai': OpenAICompatibleChatCompletionProvider(),
+            'openrouter': OpenAICompatibleChatCompletionProvider(
+                api_key_env='OPENROUTER_API_KEY',
+                base_url='https://openrouter.ai/api/v1',
+                default_headers={'X-Title': 'Omi Chat'},
+            ),
+            'perplexity': OpenAICompatibleChatCompletionProvider(
+                api_key_env='PERPLEXITY_API_KEY',
+                base_url='https://api.perplexity.ai',
+            ),
+            'gemini': OpenAICompatibleChatCompletionProvider(
+                api_key_env='GEMINI_API_KEY',
+                base_url='https://generativelanguage.googleapis.com/v1beta/openai',
+            ),
+            'anthropic': AnthropicMessagesProvider(),
+        }
+    )
 
 
 async def close_provider_registry() -> None:

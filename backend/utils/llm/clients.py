@@ -49,6 +49,52 @@ from utils.llm.providers import (
     get_or_create_openai_compatible_llm,
     _llm_cache,
 )
+
+try:
+    from utils.llm.providers import get_or_create_omi_gateway_llm
+except ImportError as exc:
+    if exc.name != 'utils.llm.providers' and 'get_or_create_omi_gateway_llm' not in str(exc):
+        raise
+
+    def get_or_create_omi_gateway_llm(*_args, **_kwargs):
+        raise RuntimeError('Omi gateway LangChain client is unavailable')
+
+
+try:
+    from utils.llm.gateway_client import (
+        BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
+        CHAT_STRUCTURED_AUTO_LANE_ID,
+        feature_auto_lane_id,
+        raise_if_gateway_feature_mode_blocks_direct_model_surface,
+        should_route_features_through_gateway,
+    )
+except ImportError as exc:
+    if exc.name != 'utils.llm.gateway_client':
+        raise
+
+    BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+    CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
+
+    def feature_auto_lane_id(feature: str) -> str:
+        return f"omi:auto:{feature.replace('_', '-')}"
+
+    def should_route_features_through_gateway() -> bool:
+        return False
+
+    def raise_if_gateway_feature_mode_blocks_direct_model_surface(_surface: str) -> None:
+        return None
+
+
+try:
+    from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
+except ImportError as exc:
+    if exc.name != 'utils.llm.gateway_shadow':
+        raise
+
+    def maybe_wrap_dev_gateway_shadow(*, legacy_model, **_kwargs):
+        return legacy_model
+
+
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -270,22 +316,24 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     providers. Returns a BaseChatModel. For Anthropic/Perplexity, use
     get_model(feature) to get the model string and the provider-specific client.
     """
-    if is_anthropic_only_feature(feature):
+    gateway_feature_mode = should_route_features_through_gateway()
+
+    if is_anthropic_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
         )
-    if is_perplexity_only_feature(feature):
+    if is_perplexity_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
 
     model, provider = _get_model_config(feature)
 
-    if provider == 'anthropic':
+    if provider == 'anthropic' and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
         )
-    if provider == 'perplexity':
+    if provider == 'perplexity' and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
         )
@@ -311,6 +359,9 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             model, provider = byok_model, byok_prov
             byok_key = byok_key_for_profile
 
+    if byok_key and gateway_feature_mode:
+        raise_if_gateway_feature_mode_blocks_direct_model_surface(f'get_llm.{feature}.byok')
+
     if byok_key:
         byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
         result = (
@@ -318,10 +369,47 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             if byok_client is not None
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
+    elif gateway_feature_mode:
+        result = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming)
     else:
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
 
+    result = maybe_wrap_dev_gateway_shadow(
+        feature=feature,
+        model=model,
+        provider=provider,
+        streaming=streaming,
+        legacy_model=result,
+    )
+
     if cache_key and supports_prompt_cache(model):
+        return result.bind(prompt_cache_key=cache_key)
+    return result
+
+
+def get_llm_gateway_chat_structured(
+    streaming: bool = False,
+    cache_key: Optional[str] = None,
+    request_timeout: float | None = None,
+) -> BaseChatModel:
+    """Return the gateway chat-structured lane as a LangChain chat model.
+
+    Use this for shadow/eval comparisons that must preserve the existing
+    LangChain prompt and parser chain shape. Live feature routing should still
+    go through ``get_llm(feature)`` until an explicit rollout promotes the
+    gateway provider for that feature.
+    """
+
+    result = get_or_create_omi_gateway_llm(
+        CHAT_STRUCTURED_AUTO_LANE_ID,
+        streaming,
+        options={
+            'request_timeout': (
+                request_timeout if request_timeout is not None else BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
+            )
+        },
+    )
+    if cache_key:
         return result.bind(prompt_cache_key=cache_key)
     return result
 
