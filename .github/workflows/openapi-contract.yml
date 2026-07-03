@@ -44,3 +44,7 @@ jobs:
       - name: Check committed OpenAPI contract
         working-directory: backend
         run: scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+
+      - name: Report backend route policy inventory
+        working-directory: backend
+        run: scripts/openapi_runner.sh scripts/route_policy_inventory.py --manifest route_policy_manifest.yaml --check --report-only
