@@ -21,6 +21,7 @@ from typing import List, Optional
 import database.vector_db as vector_db
 from database import conversations as conversations_db
 from database import memories as memories_db
+from database import users as users_db
 from database._client import db as firestore_db
 from database.entities import person_entity_id
 from models.conversation_enums import ConversationSource
@@ -88,26 +89,54 @@ def _thread_query(thread: List[dict]) -> str:
 
 
 def _relevant_context(uid: str, thread: List[dict]) -> str:
-    """Context Omi has that is RELEVANT to the current conversation — semantic
-    search over the user's memories and past conversations keyed off what's being
-    discussed, instead of a blunt dump of whatever's most recent. Lets the drafter
-    answer truthfully when it genuinely knows something, without inventing.
+    """Context Omi has that grounds the draft in who the user actually is and what
+    they've been doing. Facts are grounded through a three-tier chain so no user
+    ever gets an ungrounded draft:
+      1. RELEVANT (semantic): memories keyed off what's being discussed.
+      2. DURABLE: the user's most important memories, read straight from Firestore
+         (no search index needed) — used when semantic search misses or is down.
+      3. AI PROFILE: the cached high-level profile synthesized from all their data —
+         used when the user has few or no discrete memory atoms.
+    Plus recent + relevant conversations Omi captured.
 
     Degrades gracefully: any lookup that fails or returns nothing is skipped."""
     query = _thread_query(thread)
-    if not query:
-        return ""
 
     bits: List[str] = []
 
-    # Facts Omi knows about the user, relevant to the topic.
-    try:
-        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=10)
-        facts = [m.memory.content for m in matches if getattr(m.memory, 'content', None)]
-        if facts:
-            bits.append("WHAT OMI KNOWS ABOUT YOU (relevant to this chat):\n" + "\n".join(f"- {f}" for f in facts))
-    except Exception as e:
-        logger.warning(f"reply_draft: relevant memory search failed uid={uid}: {e}")
+    # Facts Omi knows about the user. Prefer topic-relevant matches (semantic
+    # search); if that returns nothing — a short/off-topic thread, or a cold or
+    # unavailable vector+keyword index — fall back to the user's most important
+    # durable memories. MemoryService.read resolves the user's memory system
+    # (canonical/legacy) and needs no search index, so every user stays grounded in
+    # their real memories regardless of environment.
+    facts: List[str] = []
+    if query:
+        try:
+            matches = MemoryService(db_client=firestore_db).search(uid, query, limit=10)
+            facts = [m.memory.content for m in matches if getattr(m.memory, 'content', None)]
+        except Exception as e:
+            logger.warning(f"reply_draft: relevant memory search failed uid={uid}: {e}")
+    if not facts:
+        try:
+            durable = MemoryService(db_client=firestore_db).read(uid, limit=15)
+            facts = [c for c in (getattr(m, 'content', None) for m in durable) if c]
+        except Exception as e:
+            logger.warning(f"reply_draft: durable memory fallback failed uid={uid}: {e}")
+    if facts:
+        bits.append("WHAT OMI KNOWS ABOUT YOU (relevant to this chat):\n" + "\n".join(f"- {f}" for f in facts))
+    else:
+        # Final fallback: some users have few or no discrete memory atoms, but Omi
+        # keeps a cached high-level AI profile synthesized from ALL their data. Read
+        # it straight from Firestore so the draft is grounded in who the user is even
+        # when both memory paths come back empty — no user gets an ungrounded draft.
+        try:
+            profile = users_db.get_ai_user_profile(uid)
+            profile_text = profile.get('profile_text') if isinstance(profile, dict) else None
+            if isinstance(profile_text, str) and profile_text.strip():
+                bits.append("WHAT OMI KNOWS ABOUT YOU:\n" + profile_text.strip())
+        except Exception as e:
+            logger.warning(f"reply_draft: user profile fallback failed uid={uid}: {e}")
 
     # Conversations Omi captured — BOTH the topic-relevant ones (semantic) AND the
     # most recent ones. Something referenced in the chat could be an audio
@@ -136,10 +165,11 @@ def _relevant_context(uid: str, thread: List[dict]) -> str:
         except Exception as e:
             logger.warning(f"reply_draft: recent conversation lookup failed uid={uid}: {e}")
 
-        cids = vector_db.query_vectors(query=query, uid=uid, k=4)
-        if cids:
-            for c in conversations_db.get_conversations_by_id(uid, cids):
-                _add(c)
+        if query:
+            cids = vector_db.query_vectors(query=query, uid=uid, k=4)
+            if cids:
+                for c in conversations_db.get_conversations_by_id(uid, cids):
+                    _add(c)
 
         if lines:
             bits.append(

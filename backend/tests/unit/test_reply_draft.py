@@ -360,3 +360,103 @@ def test_group_message_not_for_user_abstains():
 
     assert out.get('abstain') is True
     assert out['draft'] == ''
+
+
+# --- Universal memory grounding: durable fallback when semantic search misses ----
+
+
+class _FakeMemoryService:
+    """Stands in for MemoryService: `.search()` is the semantic (index-backed) path
+    that can come back empty; `.read()` is the plain-Firestore durable read that
+    resolves canonical/legacy and always works."""
+
+    def __init__(self, *, search_results, read_results, db_client=None):
+        self._search_results = search_results
+        self._read_results = read_results
+
+    def search(self, uid, query, *, limit=5, device_scope_request=None):
+        return list(self._search_results)
+
+    def read(self, uid, *, limit=100, offset=0, device_scope_request=None):
+        return list(self._read_results)
+
+
+def _mem_match(content):
+    return SimpleNamespace(memory=SimpleNamespace(content=content))
+
+
+def _mem_db(content):
+    return SimpleNamespace(content=content)
+
+
+def test_relevant_context_falls_back_to_durable_memories_when_search_empty():
+    """The regression this guards: when the semantic index returns nothing (cold,
+    unavailable, or an off-topic thread), the draft must still be grounded in the
+    user's REAL durable memories instead of going in blind. Works for every user in
+    every environment because the fallback is a plain Firestore read."""
+    thread = [{'text': 'what have you been up to?', 'is_from_me': False}]
+    fake = _FakeMemoryService(
+        search_results=[],  # index miss / unavailable
+        read_results=[_mem_db('User founded GetEventful.com.'), _mem_db('User lives in San Francisco.')],
+    )
+    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
+        rd.conversations_db, 'get_conversations', return_value=[]
+    ), patch.object(rd.vector_db, 'query_vectors', return_value=[]):
+        out = rd._relevant_context('uid', thread)
+
+    assert 'WHAT OMI KNOWS ABOUT YOU' in out
+    assert 'GetEventful.com' in out
+    assert 'San Francisco' in out
+
+
+def test_relevant_context_prefers_semantic_matches_over_durable_fallback():
+    """When semantic search DOES return topic-relevant memories, those are used and
+    the durable fallback read is not surfaced — relevance beats a blunt dump."""
+    thread = [{'text': 'are we still on for dinner friday?', 'is_from_me': False}]
+    fake = _FakeMemoryService(
+        search_results=[_mem_match('User has dinner plans Friday at 7.')],
+        read_results=[_mem_db('DURABLE_ONLY_SENTINEL fact that should not appear.')],
+    )
+    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
+        rd.conversations_db, 'get_conversations', return_value=[]
+    ), patch.object(rd.vector_db, 'query_vectors', return_value=[]):
+        out = rd._relevant_context('uid', thread)
+
+    assert 'dinner plans Friday' in out
+    assert 'DURABLE_ONLY_SENTINEL' not in out
+
+
+def test_relevant_context_grounds_even_when_no_inbound_query():
+    """Even when the latest messages are all from the user (empty thread query), the
+    draft should still be grounded in durable memories rather than returning ''."""
+    thread = [{'text': 'hey', 'is_from_me': True}]  # nothing inbound -> empty query
+    fake = _FakeMemoryService(
+        search_results=[_mem_match('should not be used, query is empty')],
+        read_results=[_mem_db('User is 20 years old.')],
+    )
+    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
+        rd.conversations_db, 'get_conversations', return_value=[]
+    ), patch.object(rd.vector_db, 'query_vectors', return_value=[]):
+        out = rd._relevant_context('uid', thread)
+
+    assert 'User is 20 years old.' in out
+
+
+def test_relevant_context_falls_back_to_ai_profile_when_memories_empty():
+    """Covers users whose discrete memory atoms are empty but who have a cached AI
+    profile synthesized from all their data (a common real-world state). The draft
+    must still be grounded in who they are — never ungrounded — via a plain
+    Firestore profile read."""
+    thread = [{'text': 'where are you based again?', 'is_from_me': False}]
+    fake = _FakeMemoryService(search_results=[], read_results=[])  # both memory paths empty
+    profile = {'profile_text': "- User founded GetEventful.com.\n- User lives in San Francisco."}
+    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
+        rd.users_db, 'get_ai_user_profile', return_value=profile
+    ), patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
+        rd.vector_db, 'query_vectors', return_value=[]
+    ):
+        out = rd._relevant_context('uid', thread)
+
+    assert 'WHAT OMI KNOWS ABOUT YOU' in out
+    assert 'GetEventful.com' in out
+    assert 'San Francisco' in out
