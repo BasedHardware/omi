@@ -168,6 +168,11 @@ enum WhatsAppSenderService {
       throw WhatsAppSenderError.sendFailed(message)
     }
 
+    // Return has fired against the verified target — restore the user's foreground app
+    // now, before the DB confirmation poll (which reads sqlite and doesn't need WhatsApp
+    // frontmost), so a send doesn't hijack their window for the whole confirm window.
+    restoreFrontmost(priorFront)
+
     // Return was pressed against the verified target. Ground-truth proof it landed: an
     // outbound row matching the reply in this chat (by `@lid` JID or phone session),
     // created after our baseline. If it doesn't appear in the window the send probably
@@ -213,7 +218,8 @@ enum WhatsAppSenderService {
       if poll == settleReprefillPoll {
         try? prefill(text: reply, phone: phone)  // nudge once if it hasn't landed yet
       }
-      if let app = runningWhatsApp(), let value = composeBoxValue(pid: app.processIdentifier),
+      if let app = runningWhatsApp(),
+        let value = await readComposeValueOffMain(pid: app.processIdentifier),
         composeMatches(value, reply)
       {
         return true
@@ -230,7 +236,8 @@ enum WhatsAppSenderService {
     activateWhatsApp()
     for _ in 0..<activateMaxPolls {
       if let app = runningWhatsApp(), app.isActive,
-        let value = composeBoxValue(pid: app.processIdentifier), composeMatches(value, reply)
+        let value = await readComposeValueOffMain(pid: app.processIdentifier),
+        composeMatches(value, reply)
       {
         return true
       }
@@ -239,13 +246,28 @@ enum WhatsAppSenderService {
     return false
   }
 
+  /// Reads the compose value off the main thread. The AX tree walk is synchronous
+  /// cross-process IPC that can block on WhatsApp's AX messaging timeout if the app is
+  /// unresponsive; running it on a background queue keeps that from stalling the UI
+  /// during the poll loops. AX APIs are not main-thread-bound, and the walk touches no
+  /// main-actor state.
+  private static func readComposeValueOffMain(pid: pid_t) async -> String? {
+    await withCheckedContinuation { continuation in
+      DispatchQueue.global(qos: .userInitiated).async {
+        continuation.resume(returning: composeBoxValue(pid: pid))
+      }
+    }
+  }
+
   private static func composeMatches(_ composeValue: String, _ reply: String) -> Bool {
     composeValue.trimmingCharacters(in: .whitespacesAndNewlines)
       == reply.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   /// Reads WhatsApp's compose box value: the `AXTextArea` whose `AXDescription` contains
-  /// "Compose message". Returns nil when it can't be found (no chat open) or is empty.
+  /// "Compose message". Returns nil when the element can't be found (no chat open); an
+  /// empty box reads back as nil or an empty string depending on WhatsApp — either way it
+  /// won't match a non-empty reply, so the recipient guard keeps polling.
   private static func composeBoxValue(pid: pid_t) -> String? {
     findComposeValue(AXUIElementCreateApplication(pid), depth: 0)
   }
