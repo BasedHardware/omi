@@ -2,6 +2,51 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.0",
+      "date": "2026-07-03",
+      "changes": [
+        "Major desktop reliability release: rolls up the beta improvements since 0.11.507, including safer updates, cleaner recording recovery, stronger sign-in diagnostics, and fewer stale UI states.",
+        "Unified the floating chat and subagent experience across notched and non-notched Macs, including improved agent rows, chat surfaces, scroll behavior, and settings controls.",
+        "Improved ChatGPT, Claude, OpenClaw, and Hermes connector setup with accepted public OAuth clients, clearer guided setup cards, one-click copy values, and more reliable MCP wiring.",
+        "Hardened Gmail, Google Calendar, Apple Notes, and browser-session connector probes so existing connections are detected more accurately and failures explain the required recovery step.",
+        "Improved push-to-talk and recording reliability with silent-audio recovery, delayed-reply fixes, durable cloud recording reconciliation, and clearer diagnostics for realtime voice issues.",
+        "Improved desktop chat and agent reliability, including clearer failed-agent transcripts, safer tool-call rendering, better follow-up handling, and fixed quota accounting for internal tool loops.",
+        "Improved onboarding and memory import reliability with batched imports, Enter-to-continue support, better second-brain setup flows, and fixes for stale or incorrect memory labels.",
+        "Fixed legacy memory loading issues for long-time accounts, including memory_id alias conflicts and stale Short-term / Long-term labels after backend sync.",
+        "Improved desktop update behavior with stuck-update recovery, foreground-safe relaunch behavior, older-version update prompts, and clearer manual-download guidance.",
+        "Improved Rewind and screen capture reliability with more efficient screenshot history, immediate Capture button state updates, and safer transcript/conversation rendering.",
+        "Fixed home and Apps surfaces, including wearable-connected status, Ask Omi placement, Installed/category filters, cached filter switching, compact menu bar visuals, and one-line memory export text.",
+        "Fixed a crash that could occur when loading conversations or copying a transcript if the account had duplicate speaker profiles."
+      ]
+    },
+    {
+      "version": "0.11.598",
+      "date": "2026-07-03",
+      "changes": [
+        "Fixed the chat jump-to-latest button so it disappears when scrolling reaches the latest message.",
+        "Fixed the notch floating bar settings button so it opens settings reliably",
+        "Fixed OpenClaw memory setup so Omi reloads OpenClaw MCP after wiring Omi memory, uses the current streamable HTTP MCP transport, and tells OpenClaw to call the Omi MCP tools instead of local memory tools"
+      ]
+    },
+    {
+      "version": "0.11.597",
+      "date": "2026-07-02",
+      "changes": [
+        "Apps: fixed Installed and category filters and cached filter results for faster switching",
+        "Displays without a notch now get the full subagent experience: a status gem on the idle pill, an agents row on hover, and the same agent list and chat surface as notched displays",
+        "Onboarding: pressing Enter now activates available Continue actions",
+        "Unified the floating chat experience across notched and non-notched displays while keeping the compact pill on displays without a notch",
+        "Fixed memory labels appearing incorrectly after stale fetches or local cache updates"
+      ]
+    },
+    {
+      "version": "0.11.596",
+      "date": "2026-07-02",
+      "changes": [
+        "Home: moved Ask Omi to the top of the memory export list"
+      ]
+    },
+    {
       "version": "0.11.595",
       "date": "2026-07-02",
       "changes": [

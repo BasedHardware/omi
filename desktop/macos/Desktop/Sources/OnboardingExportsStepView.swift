@@ -36,6 +36,7 @@ struct OnboardingExportsStepView: View {
           onContinue()
         }
         .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .keyboardShortcut(.defaultAction)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {

@@ -6,7 +6,6 @@ import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -34,10 +33,9 @@ from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.import_write_guard import import_write_block_mode, import_write_violation
 from utils.memory.memory_api_contract import (
     MemoryApiExposure,
-    memory_api_payload,
-    memory_api_payloads,
     memory_write_payload,
 )
+from utils.memory.memory_api_response import memory_batch_response, memory_item_response, memory_list_response
 from utils.memory.memory_system import MemorySystem
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
@@ -192,26 +190,19 @@ def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
     legacy response takes the same field contract.
     """
 
-    body = jsonable_encoder(memory_api_payloads(memories, MemoryApiExposure.LEGACY))
-    return JSONResponse(
-        content=body,
+    return memory_list_response(
+        memories,
+        MemoryApiExposure.LEGACY,
         headers={'X-Omi-Memory-Device-Scope-Supported': 'false'},
     )
 
 
 def _legacy_memory_response(memory: MemoryDB) -> JSONResponse:
-    return JSONResponse(content=jsonable_encoder(memory_api_payload(memory, MemoryApiExposure.LEGACY)))
+    return memory_item_response(memory, MemoryApiExposure.LEGACY)
 
 
 def _legacy_batch_memories_response(memories: List[MemoryDB]) -> JSONResponse:
-    return JSONResponse(
-        content=jsonable_encoder(
-            {
-                'memories': memory_api_payloads(memories, MemoryApiExposure.LEGACY),
-                'created_count': len(memories),
-            }
-        )
-    )
+    return memory_batch_response(memories, MemoryApiExposure.LEGACY, created_count=len(memories))
 
 
 def _apply_memory_response_headers(http_response: Response, memory_response: V3ComposedResponse) -> None:
@@ -602,10 +593,7 @@ def get_memories(
         _raise_memory_http_exception(memory_response)
     headers = _memory_allowlisted_headers(memory_response)
     headers['Cache-Control'] = 'no-store'
-    return JSONResponse(
-        content=jsonable_encoder(memory_api_payloads(memory_response.body or [], MemoryApiExposure.CANONICAL)),
-        headers=headers,
-    )
+    return memory_list_response(memory_response.body or [], MemoryApiExposure.CANONICAL, headers=headers)
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'])

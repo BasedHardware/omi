@@ -3,7 +3,8 @@ import os
 import sys
 import tempfile
 import time
-from unittest.mock import MagicMock, AsyncMock, patch
+from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,32 +13,64 @@ os.environ.setdefault("PARAKEET_DEVICE", "cpu")
 os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
 os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 
-_torch = MagicMock()
-_torch.cuda.is_available.return_value = False
-_torch.cuda.memory_allocated.return_value = 0
-_torch_props = MagicMock()
-_torch_props.total_memory = 16 * 1024**3
-_torch.cuda.get_device_properties.return_value = _torch_props
-_torch.cuda.empty_cache = MagicMock()
-_torch.inference_mode = lambda: (lambda fn: fn)
-_torch.compile = lambda m: m
-_torch.backends.cudnn = MagicMock()
-sys.modules["torch"] = _torch
+from testing.import_isolation import load_module_fresh, stub_modules
 
-_nemo_asr = MagicMock()
-_nemo = MagicMock()
-_nemo.collections.asr = _nemo_asr
-sys.modules["nemo"] = _nemo
-sys.modules["nemo.collections"] = _nemo.collections
-sys.modules["nemo.collections.asr"] = _nemo_asr
+_PARAKEET_DIR = Path(__file__).resolve().parents[2] / "parakeet"
 
-for _mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
-    sys.modules.setdefault(_mod, MagicMock())
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
+def _make_torch_stub():
+    _torch = MagicMock()
+    _torch.cuda.is_available.return_value = False
+    _torch.cuda.memory_allocated.return_value = 0
+    _torch_props = MagicMock()
+    _torch_props.total_memory = 16 * 1024**3
+    _torch.cuda.get_device_properties.return_value = _torch_props
+    _torch.cuda.empty_cache = MagicMock()
+    _torch.inference_mode = lambda: (lambda fn: fn)
+    _torch.compile = lambda m: m
+    _torch.backends.cudnn = MagicMock()
+    return _torch
 
-from batch_engine import BatchEngine, QueueFullError, _unlink_safe
-from gpu_worker import GPUWorker, WorkItem, WorkType
+
+@pytest.fixture(scope="module", autouse=True)
+def _parakeet_modules():
+    """Load batch_engine + gpu_worker fresh against stubbed torch/nemo/pyannote deps.
+
+    gpu_worker performs ``import torch`` at module top level, so the torch fake must
+    be active before the module is exec'd. Sanctioned Tier-2 "fake must precede
+    import" case (see backend/docs/test_isolation.md).
+    """
+    _nemo_asr = MagicMock()
+    _nemo = MagicMock()
+    _nemo.collections.asr = _nemo_asr
+    fakes = {
+        "torch": _make_torch_stub(),
+        "nemo": _nemo,
+        "nemo.collections": _nemo.collections,
+        "nemo.collections.asr": _nemo_asr,
+        "pyannote": MagicMock(),
+        "pyannote.audio": MagicMock(),
+        "pyannote.audio.core": MagicMock(),
+        "pyannote.audio.core.model": MagicMock(),
+    }
+    sys.path.insert(0, str(_PARAKEET_DIR))
+    try:
+        with stub_modules(fakes):
+            gpu_worker = load_module_fresh("gpu_worker", str(_PARAKEET_DIR / "gpu_worker.py"))
+            batch_engine = load_module_fresh("batch_engine", str(_PARAKEET_DIR / "batch_engine.py"))
+            _g = globals()
+            _g["GPUWorker"] = gpu_worker.GPUWorker
+            _g["WorkItem"] = gpu_worker.WorkItem
+            _g["WorkType"] = gpu_worker.WorkType
+            _g["BatchEngine"] = batch_engine.BatchEngine
+            _g["QueueFullError"] = batch_engine.QueueFullError
+            _g["_unlink_safe"] = batch_engine._unlink_safe
+            yield
+    finally:
+        try:
+            sys.path.remove(str(_PARAKEET_DIR))
+        except ValueError:
+            pass
 
 
 def _make_mock_gpu_worker(results_fn=None):

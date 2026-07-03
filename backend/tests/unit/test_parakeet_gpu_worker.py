@@ -15,38 +15,67 @@ os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 os.environ.setdefault("PARAKEET_GC_INTERVAL", "3")
 os.environ.setdefault("PARAKEET_GPU_POLL_TIMEOUT", "0.01")
 
-_torch = MagicMock()
-_torch.cuda.is_available.return_value = False
-_torch.cuda.memory_allocated.return_value = 0
-_torch_props = MagicMock()
-_torch_props.total_memory = 16 * 1024**3
-_torch.cuda.get_device_properties.return_value = _torch_props
-_torch.cuda.empty_cache = MagicMock()
-_torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
-_torch.inference_mode = lambda: (lambda fn: fn)
-_torch.compile = lambda m: m
-_torch.backends.cudnn = MagicMock()
-sys.modules["torch"] = _torch
+_PARAKEET_DIR = os.path.join(os.path.dirname(__file__), "../../parakeet")
+if _PARAKEET_DIR not in sys.path:
+    sys.path.insert(0, _PARAKEET_DIR)
 
-_nemo_asr = MagicMock()
-_nemo = MagicMock()
-_nemo.collections.asr = _nemo_asr
-sys.modules["nemo"] = _nemo
-sys.modules["nemo.collections"] = _nemo.collections
-sys.modules["nemo.collections.asr"] = _nemo_asr
+from testing.import_isolation import load_module_fresh, stub_modules
 
-_pyannote = MagicMock()
-_pyannote_audio = MagicMock()
-_pyannote_audio_core = MagicMock()
-_pyannote_audio_core_model = MagicMock()
-sys.modules.setdefault("pyannote", _pyannote)
-sys.modules.setdefault("pyannote.audio", _pyannote_audio)
-sys.modules.setdefault("pyannote.audio.core", _pyannote_audio_core)
-sys.modules.setdefault("pyannote.audio.core.model", _pyannote_audio_core_model)
+_GPU_WORKER_PATH = os.path.join(_PARAKEET_DIR, "gpu_worker.py")
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
-from gpu_worker import GPUWorker, WorkItem, WorkType, AudioDurationExceededError, _safe_set_result, _safe_set_exception
+@pytest.fixture(scope="module", autouse=True)
+def _gpu_worker_module():
+    """Load gpu_worker fresh against stubbed torch/nemo/pyannote chains.
+
+    torch/nemo/pyannote are not installed in the test environment, so fake modules
+    must be active in ``sys.modules`` before ``gpu_worker`` is exec'd (it binds
+    ``torch`` at import). ``stub_modules`` keeps the fakes active for the whole
+    module and evicts them (and the freshly-loaded ``gpu_worker``) on teardown,
+    so nothing leaks to later test files.
+    """
+    _torch = MagicMock()
+    _torch.cuda.is_available.return_value = False
+    _torch.cuda.memory_allocated.return_value = 0
+    _torch_props = MagicMock()
+    _torch_props.total_memory = 16 * 1024**3
+    _torch.cuda.get_device_properties.return_value = _torch_props
+    _torch.cuda.empty_cache = MagicMock()
+    _torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
+    _torch.inference_mode = lambda: (lambda fn: fn)
+    _torch.compile = lambda m: m
+    _torch.backends.cudnn = MagicMock()
+
+    _nemo_asr = MagicMock()
+    _nemo = MagicMock()
+    _nemo.collections.asr = _nemo_asr
+
+    _pyannote = MagicMock()
+    _pyannote_audio = MagicMock()
+    _pyannote_audio_core = MagicMock()
+    _pyannote_audio_core_model = MagicMock()
+
+    fakes = {
+        "torch": _torch,
+        "nemo": _nemo,
+        "nemo.collections": _nemo.collections,
+        "nemo.collections.asr": _nemo_asr,
+        "pyannote": _pyannote,
+        "pyannote.audio": _pyannote_audio,
+        "pyannote.audio.core": _pyannote_audio_core,
+        "pyannote.audio.core.model": _pyannote_audio_core_model,
+    }
+    with stub_modules(fakes):
+        gw = load_module_fresh("gpu_worker", _GPU_WORKER_PATH)
+        g = globals()
+        g["GPUWorker"] = gw.GPUWorker
+        g["WorkItem"] = gw.WorkItem
+        g["WorkType"] = gw.WorkType
+        g["AudioDurationExceededError"] = gw.AudioDurationExceededError
+        g["_safe_set_result"] = gw._safe_set_result
+        g["_safe_set_exception"] = gw._safe_set_exception
+        g["_torch"] = _torch
+        yield gw
 
 
 def _get_nemo_asr():
