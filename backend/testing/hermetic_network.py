@@ -46,13 +46,15 @@ def block_outbound_network() -> Iterator[None]:
     original_gethostbyname = socket.gethostbyname
     original_gethostbyname_ex = socket.gethostbyname_ex
 
+    af_unix = getattr(socket, 'AF_UNIX', None)
+
     def guarded_connect(sock: socket.socket, address: object):
-        if sock.family != socket.AF_UNIX and not is_local_address(_host_from_address(address)):
+        if (af_unix is None or sock.family != af_unix) and not is_local_address(_host_from_address(address)):
             raise BlockedNetworkError(f'Blocked outbound network connection to {address!r}')
         return original_connect(sock, address)
 
     def guarded_connect_ex(sock: socket.socket, address: object):
-        if sock.family != socket.AF_UNIX and not is_local_address(_host_from_address(address)):
+        if (af_unix is None or sock.family != af_unix) and not is_local_address(_host_from_address(address)):
             raise BlockedNetworkError(f'Blocked outbound network connection to {address!r}')
         return original_connect_ex(sock, address)
 

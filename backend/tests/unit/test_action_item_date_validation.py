@@ -629,7 +629,7 @@ class TestExtractActionItemsPostValidation:
 
     def test_extract_action_items_passes_user_name_to_prompt(self):
         """extract_action_items should accept user_name and ground prompt instructions on it."""
-        from models.structured import ActionItemsExtraction
+        from models.structured_extraction import ActionItemsExtraction
 
         mock_response = ActionItemsExtraction(action_items=[])
         mock_chain = MagicMock()
