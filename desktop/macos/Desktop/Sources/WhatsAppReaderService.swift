@@ -158,16 +158,22 @@ actor WhatsAppReaderService {
     let cutoffSeconds = cutoffDate.timeIntervalSinceReferenceDate
 
     let byChat: [String: [WhatsAppRecord]] = try await dbQueue.read { db in
-      // Phase 1: the most recently active chats within the window (one row per
-      // chat), so a single noisy thread can't starve other recent threads.
+      // Phase 1: the most recently active chats **whose latest message is inbound**
+      // (awaiting a reply), one row per chat. Ranking on the latest message of any
+      // direction and filtering to inbound-last only afterwards let outbound-heavy
+      // threads consume the LIMIT budget and crowd genuine awaiting-reply threads out
+      // of the inbox. The HAVING clause keeps only chats where the newest message is
+      // inbound, so the LIMIT is spent entirely on repliable threads.
       let chatRows = try Row.fetchAll(
         db,
         sql: """
-            SELECT s.ZCONTACTJID AS chat_jid, MAX(m.ZMESSAGEDATE) AS max_date
+            SELECT s.ZCONTACTJID AS chat_jid, MAX(m.ZMESSAGEDATE) AS max_date,
+                   MAX(CASE WHEN m.ZISFROMME = 0 THEN m.ZMESSAGEDATE END) AS max_in_date
             \(SQL.from)
             WHERE m.ZMESSAGEDATE >= ?
               AND \(SQL.baseWhere)
             GROUP BY s.ZCONTACTJID
+            HAVING max_in_date IS NOT NULL AND max_in_date = max_date
             ORDER BY max_date DESC LIMIT ?
           """,
         arguments: [cutoffSeconds, maxThreads]

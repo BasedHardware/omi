@@ -210,13 +210,15 @@ private struct ChatDetailView: View {
   }
 
   /// A real user caption to show alongside an image, if any. When a message has no
-  /// text the reader synthesizes a placeholder ("📷 Photo") — don't render that as a
-  /// caption below the image it already represents.
+  /// text the reader synthesizes a placeholder ("📷 Photo") flagged as such — don't
+  /// render that as a caption below the image it already represents. Keyed on the
+  /// synthetic flag (not a string match) so a genuine caption equal to a placeholder
+  /// string is still shown.
   private func caption(for bubble: IMessageChatBubble) -> String? {
     guard imagePath(for: bubble) != nil else { return nil }
-    let placeholders: Set<String> = ["📷 Photo", "🎥 Video", "🎤 Audio", "📎 Attachment"]
+    guard !bubble.isPlaceholderText else { return nil }
     let trimmed = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty, !placeholders.contains(trimmed) else { return nil }
+    guard !trimmed.isEmpty else { return nil }
     return bubble.text
   }
 
@@ -231,13 +233,13 @@ private struct ChatDetailView: View {
     return prev.isFromMe || prev.senderName != bubble.senderName
   }
 
-  private func generateDraft(force: Bool = false) async {
-    if !force && !draft.isEmpty { return }
+  private func generateDraft() async {
+    if !draft.isEmpty { return }
     // Don't auto-draft if you already replied (you sent the last message) — there's
     // nothing to respond to.
-    if !force, let last = chat.bubbles.last, last.isFromMe { return }
+    if let last = chat.bubbles.last, last.isFromMe { return }
     // Use a reply the background watcher already pre-drafted, if any (instant).
-    if !force, let ready = store.preDrafts[chat.id], !ready.isEmpty {
+    if let ready = store.preDrafts[chat.id], !ready.isEmpty {
       draft = ready
       return
     }
@@ -277,7 +279,7 @@ private struct ChatDetailView: View {
     errorText = nil
     defer { isSending = false }
     do {
-      try IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
+      try await IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
       store.appendSent(text)
       draft = ""
     } catch {

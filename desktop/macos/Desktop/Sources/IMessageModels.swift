@@ -182,6 +182,18 @@ struct IMessageDraftResponsePayload: Decodable {
   /// True when the drafter judged the latest group message wasn't directed at the
   /// user: `draft` is empty and no draft should be shown. Defaults false.
   var abstain: Bool = false
+
+  enum CodingKeys: String, CodingKey { case draft, ambiguous, abstain }
+
+  // Swift's synthesized Decodable ignores property defaults and would throw
+  // `keyNotFound` when an older backend omits `ambiguous`/`abstain`. Decode them
+  // as optional-with-fallback so responses without the fields still parse.
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    draft = try c.decode(String.self, forKey: .draft)
+    ambiguous = try c.decodeIfPresent(Bool.self, forKey: .ambiguous) ?? false
+    abstain = try c.decodeIfPresent(Bool.self, forKey: .abstain) ?? false
+  }
 }
 
 /// A thread whose latest message is inbound (awaiting a reply), shown in the Replies inbox.
@@ -207,6 +219,10 @@ struct IMessageChatBubble: Identifiable, Sendable {
   var senderImage: Data? = nil  // group sender's contact photo
   var attachmentPath: String? = nil  // resolved file path if this message is an attachment
   var attachmentMime: String? = nil  // e.g. "image/jpeg", "video/quicktime"
+  /// True when `text` is a synthesized attachment placeholder ("📷 Photo", etc.) rather
+  /// than real message text, so the UI can suppress it without string-matching (which
+  /// would also drop a genuine user caption that happens to equal a placeholder).
+  var isPlaceholderText: Bool = false
 }
 
 /// A full conversation with its recent message history.

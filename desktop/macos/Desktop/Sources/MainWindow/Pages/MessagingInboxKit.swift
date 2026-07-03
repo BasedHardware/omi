@@ -32,18 +32,30 @@ enum MessagingInbox {
     return palette[Int(h % UInt64(palette.count))]
   }
 
+  // Cached formatters: `DateFormatter` init is expensive (locale/calendar setup) and
+  // shortTime() runs on the conversation-row render path (re-invoked on every
+  // selection change), so allocating one per call was needless churn.
+  private static let timeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a"
+    return f
+  }()
+  private static let dayFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "MMM d"
+    return f
+  }()
+
   /// Compact chat-list timestamp: time today, "Yesterday", else "MMM d".
   static func shortTime(_ date: Date) -> String {
     let cal = Calendar.current
-    let f = DateFormatter()
     if cal.isDateInToday(date) {
-      f.dateFormat = "h:mm a"
+      return timeFormatter.string(from: date)
     } else if cal.isDateInYesterday(date) {
       return "Yesterday"
     } else {
-      f.dateFormat = "MMM d"
+      return dayFormatter.string(from: date)
     }
-    return f.string(from: date)
   }
 }
 

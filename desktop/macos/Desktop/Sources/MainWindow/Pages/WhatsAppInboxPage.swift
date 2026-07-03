@@ -223,12 +223,12 @@ private struct ChatDetailView: View {
     return prev.isFromMe || prev.senderName != bubble.senderName
   }
 
-  private func generateDraft(force: Bool = false) async {
-    if !force && !draft.isEmpty { return }
+  private func generateDraft() async {
+    if !draft.isEmpty { return }
     // Don't auto-draft if you already replied (you sent the last message).
-    if !force, let last = chat.bubbles.last, last.isFromMe { return }
+    if let last = chat.bubbles.last, last.isFromMe { return }
     // Use a reply the background watcher already pre-drafted, if any (instant).
-    if !force, let ready = store.preDrafts[chat.id], !ready.isEmpty {
+    if let ready = store.preDrafts[chat.id], !ready.isEmpty {
       draft = ready
       return
     }

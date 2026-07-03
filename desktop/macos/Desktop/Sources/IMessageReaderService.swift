@@ -156,18 +156,24 @@ actor IMessageReaderService {
     let cutoffNanos = Int64(cutoffDate.timeIntervalSinceReferenceDate * 1_000_000_000)
 
     let byChat: [String: [IMessageRecord]] = try await dbQueue.read { db in
-      // Phase 1: the most recently active chats within the window (one row per
-      // chat), so a single noisy thread can't starve other recent threads.
+      // Phase 1: the most recently active chats **whose latest message is inbound**
+      // (i.e. awaiting a reply), one row per chat. Ranking on the latest message of
+      // any direction and filtering to inbound-last only afterwards let outbound-heavy
+      // threads consume the LIMIT budget and crowd genuine awaiting-reply threads out
+      // of the inbox. The HAVING clause keeps only chats where the newest non-tapback
+      // message is inbound, so the LIMIT is spent entirely on repliable threads.
       let chatRows = try Row.fetchAll(
         db,
         sql: """
-            SELECT c.guid AS chat_guid, MAX(m.date) AS max_date
+            SELECT c.guid AS chat_guid, MAX(m.date) AS max_date,
+                   MAX(CASE WHEN m.is_from_me = 0 THEN m.date END) AS max_in_date
             FROM message m
             JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
             JOIN chat c ON c.ROWID = cmj.chat_id
             WHERE m.date >= ?
               AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
             GROUP BY c.guid
+            HAVING max_in_date IS NOT NULL AND max_in_date = max_date
             ORDER BY max_date DESC LIMIT ?
           """,
         arguments: [cutoffNanos, maxThreads]
@@ -449,11 +455,13 @@ actor IMessageReaderService {
           attPath = (fn as NSString).expandingTildeInPath
         }
 
-        let displayText = text.isEmpty ? Self.attachmentPlaceholder(mime: r.attachmentMime) : text
+        let isPlaceholder = text.isEmpty
+        let displayText = isPlaceholder ? Self.attachmentPlaceholder(mime: r.attachmentMime) : text
         bubbles.append(
           IMessageChatBubble(
             id: r.guid, text: displayText, isFromMe: r.isFromMe, date: r.date, senderName: sender,
-            senderImage: senderImg, attachmentPath: attPath, attachmentMime: r.attachmentMime))
+            senderImage: senderImg, attachmentPath: attPath, attachmentMime: r.attachmentMime,
+            isPlaceholderText: isPlaceholder))
       }
 
       if bubbles.isEmpty { continue }

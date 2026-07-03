@@ -233,12 +233,17 @@ struct WhatsAppDraftResponsePayload: Decodable {
   /// user: `draft` is empty and no draft should be shown. Defaults false.
   var abstain: Bool = false
 
-  enum CodingKeys: String, CodingKey { case draft, ambiguous }
+  enum CodingKeys: String, CodingKey { case draft, ambiguous, abstain }
 
+  // Decode each field with a fallback so responses that omit `ambiguous`/`abstain`
+  // still parse (Swift's synthesized Decodable would throw keyNotFound instead of
+  // using the property default). Previously `abstain` was left out of CodingKeys
+  // entirely, so a backend abstain signal was silently ignored.
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     draft = (try? c.decode(String.self, forKey: .draft)) ?? ""
     ambiguous = (try? c.decode(Bool.self, forKey: .ambiguous)) ?? false
+    abstain = (try? c.decode(Bool.self, forKey: .abstain)) ?? false
   }
 }
 
