@@ -142,18 +142,65 @@ actor WhatsAppReaderService {
     }
   }
 
-  /// Ground-truth proof that a reply was actually sent to the intended chat.
+  /// The DB-wide highest message row id (`MAX(Z_PK)`), captured just before a send as a
+  /// baseline so `confirmSent` can recognise *only* the message created afterwards.
+  func maxMessageRowID() throws -> Int64 {
+    let dbQueue = try openDatabase()
+    return try dbQueue.read { db in
+      (try Int64.fetchOne(db, sql: "SELECT MAX(Z_PK) FROM \(SQL.message)")) ?? 0
+    }
+  }
+
+  /// Ground-truth proof that the just-sent reply actually landed in the intended chat.
   ///
-  /// Returns true when WhatsApp's own database contains an outbound (`ZISFROMME = 1`)
-  /// text row whose body equals `text`, in the chat identified by `chatID` (its
-  /// `ZCONTACTJID`), dated at/after `sinceReferenceSeconds` (seconds since the 2001
-  /// reference date, matching `ZMESSAGEDATE`). Because the row is keyed by the chat's
-  /// JID, a match proves both that the message physically left AND that it landed in
-  /// the correct conversation — independent of the UI keystroke path that fired it.
-  /// `WhatsAppSenderService` uses this as the post-send confirmation before reporting
-  /// a reply as sent. The `sinceReferenceSeconds` floor (set just before the send)
-  /// prevents matching a pre-existing identical outbound message.
-  func confirmSent(text: String, chatID: String, sinceReferenceSeconds: Double) throws -> Bool {
+  /// Polls (on a single read connection) until WhatsApp's own database contains an
+  /// outbound (`ZISFROMME = 1`) text row whose body equals `text`, in the chat
+  /// identified by `chatID` (its `ZCONTACTJID`), with `Z_PK > afterRowID` — i.e. a row
+  /// created *after* the pre-send baseline. Row-identity (not a time window) means it
+  /// can never match a pre-existing identical message, and `Z_PK > ?` uses the primary
+  /// key index so each poll is a narrow range scan rather than a full-table scan.
+  /// Because the row is keyed by the chat's JID, a match proves both that the message
+  /// physically left AND that it landed in the correct conversation — independent of the
+  /// UI keystroke path that fired it.
+  func confirmSent(
+    text: String, chatID: String, afterRowID: Int64, pollNanos: UInt64, maxPolls: Int
+  ) async -> Bool {
+    let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !needle.isEmpty, !chatID.isEmpty, let dbQueue = try? openDatabase() else { return false }
+    let sql = """
+        SELECT COUNT(*)
+        \(SQL.from)
+        WHERE m.ZISFROMME = 1
+          AND m.Z_PK > ?
+          AND s.ZCONTACTJID = ?
+          AND TRIM(m.ZTEXT) = ?
+      """
+    for _ in 0..<maxPolls {
+      if (try? Self.outboundExists(dbQueue, sql: sql, afterRowID: afterRowID, chatID: chatID, needle: needle))
+        == true
+      {
+        return true
+      }
+      try? await Task.sleep(nanoseconds: pollNanos)
+    }
+    return false
+  }
+
+  /// One synchronous read on `dbQueue` for the `confirmSent` poll loop (kept non-async
+  /// so it reuses the single connection rather than opening one per poll).
+  private static func outboundExists(
+    _ dbQueue: DatabaseQueue, sql: String, afterRowID: Int64, chatID: String, needle: String
+  ) throws -> Bool {
+    try dbQueue.read { db in
+      (try Int.fetchOne(db, sql: sql, arguments: [afterRowID, chatID, needle]) ?? 0) > 0
+    }
+  }
+
+  /// Idempotency lookback: true if `text` was already sent to `chatID` at/after
+  /// `sinceReferenceSeconds` (seconds since the 2001 reference date, matching
+  /// `ZMESSAGEDATE`). Checked *before* sending so that a retry — after a real send
+  /// whose confirmation was slow/failed — doesn't deliver the same reply twice.
+  func alreadySent(text: String, chatID: String, sinceReferenceSeconds: Double) throws -> Bool {
     let dbQueue = try openDatabase()
     let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !needle.isEmpty, !chatID.isEmpty else { return false }
@@ -162,13 +209,13 @@ actor WhatsAppReaderService {
           SELECT COUNT(*)
           \(SQL.from)
           WHERE m.ZISFROMME = 1
-            AND s.ZCONTACTJID = ?
             AND m.ZMESSAGEDATE >= ?
+            AND s.ZCONTACTJID = ?
             AND TRIM(m.ZTEXT) = ?
         """
       let count =
         try Int.fetchOne(
-          db, sql: sql, arguments: [chatID, sinceReferenceSeconds, needle]) ?? 0
+          db, sql: sql, arguments: [sinceReferenceSeconds, chatID, needle]) ?? 0
       return count > 0
     }
   }

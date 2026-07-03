@@ -72,9 +72,13 @@ enum WhatsAppSenderService {
   // Post-send DB proof.
   private static let confirmPollNanos: UInt64 = 400_000_000  // 0.4s
   private static let confirmMaxPolls = 15  // ~6.0s for WhatsApp to persist the outbound row
-  /// Clock skew subtracted from the pre-send timestamp so the DB proof can't match a
-  /// pre-existing identical outbound message, while still catching the one we just sent.
-  private static let confirmSkewSeconds: Double = 3.0
+  /// Idempotency lookback window. If this exact reply already reached the chat within
+  /// this many seconds — e.g. a prior attempt's keystroke landed but its database row
+  /// was slow to appear and we reported it unconfirmed — we skip re-sending so a retry
+  /// can't deliver a duplicate. Comfortably covers a user pressing Send again after the
+  /// ~6s confirm timeout, while staying short enough not to swallow a genuinely intended
+  /// resend of identical text.
+  private static let dedupWindowSeconds: Double = 60.0
   /// The `AXTextArea` for WhatsApp's compose box carries this in its `AXDescription`
   /// (verified live 2026-07-03; the real value has a leading LTR mark, so match a
   /// substring rather than the whole string).
@@ -137,8 +141,20 @@ enum WhatsAppSenderService {
     let priorFront = NSWorkspace.shared.frontmostApplication
     defer { restoreFrontmost(priorFront) }
 
-    // Floor for the post-send DB proof, in WhatsApp's reference-date seconds.
-    let sinceRef = Date().timeIntervalSinceReferenceDate - confirmSkewSeconds
+    // Idempotency: if this exact reply already reached this chat within the dedup window
+    // (e.g. a prior attempt's keystroke landed but its database row was slow to appear,
+    // so we reported it unconfirmed and the user/caller retried), it's already delivered
+    // — report success without sending again.
+    let dedupSince = Date().timeIntervalSinceReferenceDate - dedupWindowSeconds
+    if (try? await WhatsAppReaderService.shared.alreadySent(
+      text: reply, chatID: chatID, sinceReferenceSeconds: dedupSince)) == true
+    {
+      return
+    }
+
+    // Row-id baseline for the post-send proof: only a message created after this counts
+    // as the one we're about to send (so the proof can't match a pre-existing message).
+    let baselineRowID = (try? await WhatsAppReaderService.shared.maxMessageRowID()) ?? 0
 
     try prefill(text: reply, phone: phone)
 
@@ -162,8 +178,13 @@ enum WhatsAppSenderService {
       throw WhatsAppSenderError.sendFailed(message)
     }
 
-    // Ground-truth proof the reply landed in the target chat's JID.
-    guard await confirmSent(reply: reply, chatID: chatID, sinceRef: sinceRef) else {
+    // Ground-truth proof the reply landed in the target chat's JID (a row created after
+    // our baseline). Until it does, we do NOT report success.
+    guard
+      await WhatsAppReaderService.shared.confirmSent(
+        text: reply, chatID: chatID, afterRowID: baselineRowID, pollNanos: confirmPollNanos,
+        maxPolls: confirmMaxPolls)
+    else {
       throw WhatsAppSenderError.notConfirmed
     }
   }
@@ -258,22 +279,6 @@ enum WhatsAppSenderService {
       AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &value) == .success
     else { return [] }
     return (value as? [AXUIElement]) ?? []
-  }
-
-  // MARK: - Post-send proof
-
-  /// Polls `ChatStorage.sqlite` (via the reader) until the outbound row for this send
-  /// appears in the target chat's JID, or times out.
-  private static func confirmSent(reply: String, chatID: String, sinceRef: Double) async -> Bool {
-    for _ in 0..<confirmMaxPolls {
-      if let confirmed = try? await WhatsAppReaderService.shared.confirmSent(
-        text: reply, chatID: chatID, sinceReferenceSeconds: sinceRef), confirmed
-      {
-        return true
-      }
-      try? await Task.sleep(nanoseconds: confirmPollNanos)
-    }
-    return false
   }
 
   // MARK: - Helpers
