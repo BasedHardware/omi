@@ -6,8 +6,6 @@ import Foundation
 actor CommitmentService {
   static let shared = CommitmentService()
 
-  private var isProcessing = false
-
   private init() {}
 
   // MARK: - Extraction (after conversation is finalized)
@@ -137,11 +135,10 @@ actor CommitmentService {
   /// 1. Check follow-through on existing commitments
   /// 2. Extract new commitments
   /// 3. Check for newly overdue commitments
+  ///
+  /// No global guard — different sessions can be processed concurrently.
+  /// Per-session dedup is handled by `processSessionIfNeeded` via `hasProcessedSession`.
   func processFinalizedSession(sessionId: Int64) async {
-    guard !isProcessing else { return }
-    isProcessing = true
-    defer { isProcessing = false }
-
     await processFollowThrough(sessionId: sessionId)
     await processSessionIfNeeded(sessionId: sessionId)
     await checkOverdueCommitments()

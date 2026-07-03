@@ -65,6 +65,9 @@ class CommitmentsStore: ObservableObject {
     guard let id = commitment.id else { return }
     do {
       try await CommitmentStorage.shared.updateStatus(id: id, status: .pending)
+      if commitment.deadline != nil {
+        CommitmentNotificationScheduler.shared.scheduleReminder(for: commitment)
+      }
       await loadCommitments()
     } catch {
       log("CommitmentsStore: markPending failed: \(error.localizedDescription)")
@@ -75,8 +78,10 @@ class CommitmentsStore: ObservableObject {
     guard let id = commitment.id else { return }
     do {
       try await CommitmentStorage.shared.updateDeadline(id: id, deadline: deadline)
+      var updated = commitment
+      updated.deadline = deadline
       if let deadline = deadline {
-        CommitmentNotificationScheduler.shared.scheduleReminder(for: commitment)
+        CommitmentNotificationScheduler.shared.scheduleReminder(for: updated)
       } else {
         CommitmentNotificationScheduler.shared.cancelReminder(commitmentId: id)
       }
