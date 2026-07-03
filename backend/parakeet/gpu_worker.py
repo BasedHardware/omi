@@ -30,6 +30,11 @@ except ImportError:
     ASRRequestOptions = None
 
 try:
+    from omegaconf import OmegaConf
+except ImportError:
+    OmegaConf = None
+
+try:
     import pyannote.audio.core.model as pam
     from pyannote.audio import Inference as PyannoteInference
     from pyannote.audio import Model as PyannoteModel
@@ -294,18 +299,24 @@ class GPUWorker:
                 self._process_stream_item(item)
                 processed_stream += 1
 
-            try:
-                item = self._queue.get(timeout=self._poll_timeout)
-            except queue.Empty:
-                if processed_stream == 0:
+            if processed_stream > 0:
+                try:
+                    item = self._queue.get_nowait()
+                except queue.Empty:
+                    continue
+            else:
+                try:
+                    item = self._stream_queue.get(timeout=self._poll_timeout)
+                except queue.Empty:
                     try:
-                        item = self._stream_queue.get(timeout=self._poll_timeout)
+                        item = self._queue.get_nowait()
                     except queue.Empty:
                         continue
-                    if item.work_type == WorkType.SHUTDOWN:
-                        break
+                if item.work_type == WorkType.SHUTDOWN:
+                    break
+                if item.work_type in (WorkType.STREAM_OPEN, WorkType.STREAM_CHUNK, WorkType.STREAM_CLOSE):
                     self._process_stream_item(item)
-                continue
+                    continue
             if item.work_type == WorkType.SHUTDOWN:
                 break
             self._process_batch_item(item)
@@ -566,8 +577,9 @@ class GPUWorker:
         if PipelineBuilder is None:
             logger.warning("NeMo streaming inference API not available — streaming disabled")
             return
-
-        from omegaconf import OmegaConf
+        if OmegaConf is None:
+            logger.warning("omegaconf not available — streaming disabled")
+            return
 
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
         device_parts = device.split(":")
@@ -661,11 +673,6 @@ class GPUWorker:
         session["audio_buffer"].extend(audio_chunk.astype(np.float32).tobytes())
         session["buffer_samples"] += len(audio_chunk)
 
-        if session["buffer_samples"] > self._MAX_BUFFER_SAMPLES:
-            excess = session["buffer_samples"] - self._MAX_BUFFER_SAMPLES
-            session["audio_buffer"] = session["audio_buffer"][excess * 4 :]
-            session["buffer_samples"] = self._MAX_BUFFER_SAMPLES
-
         partial = ""
         final = ""
         chunk_bytes = self._stream_chunk_samples * 4
@@ -701,6 +708,11 @@ class GPUWorker:
                     session["committed_text"] += " " + step_final
                 if partial:
                     session["last_partial"] = partial
+
+        if session["buffer_samples"] > self._MAX_BUFFER_SAMPLES:
+            excess = session["buffer_samples"] - self._MAX_BUFFER_SAMPLES
+            session["audio_buffer"] = session["audio_buffer"][excess * 4 :]
+            session["buffer_samples"] = self._MAX_BUFFER_SAMPLES
 
         return {
             "stream_id": stream_id,
