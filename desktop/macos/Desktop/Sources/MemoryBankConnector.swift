@@ -62,6 +62,7 @@ enum MemoryBankConnector {
     }
 
     let alreadyWired = try ensureOpenClawMCPConfig(configURL: config, key: key, cliPath: cliPath)
+    try reloadOpenClawMCP(cliPath: cliPath, configURL: config)
     let noteAdded = try ensureOpenClawSoulNote(workspace: workspace)
 
     if alreadyWired {
@@ -70,6 +71,20 @@ enum MemoryBankConnector {
         : "OpenClaw already connected — Omi MCP in openclaw.json, note in SOUL.md."
     }
     return "Connected OpenClaw — added the Omi MCP to openclaw.json and a 'search Omi first' note to SOUL.md."
+  }
+
+  private static func reloadOpenClawMCP(cliPath: String, configURL: URL) throws {
+    do {
+      _ = try runOpenClawCLI(
+        cliPath: cliPath,
+        configURL: configURL,
+        arguments: ["mcp", "reload"]
+      )
+    } catch {
+      let message = sanitizeOpenClawError(error.localizedDescription)
+      throw ConnectError.invalidConfig(
+        "OpenClaw MCP config was updated, but OpenClaw rejected MCP reload for \(displayPath(for: configURL)): \(message)")
+    }
   }
 
   private static func openClawConfiguredWorkspace(configURL: URL, cliPath: String) -> URL? {
@@ -289,7 +304,7 @@ enum MemoryBankConnector {
     [
       "enabled": true,
       "url": mcpURL,
-      "transport": "sse",
+      "transport": "streamable-http",
       "headers": [
         "Authorization": "Bearer \(key)"
       ],
@@ -357,7 +372,7 @@ enum MemoryBankConnector {
     """
     <!-- \(marker) -->
     ## OMI memory (search FIRST)
-    Omi is your memory bank. Before any task, search Omi memory first for context, then save durable new facts back to it. The `omi-memory` MCP server is configured for you — use it.
+    Omi is your memory bank. Before any task, call the OpenClaw MCP tool `omi-memory__search_memories` for context. Use `omi-memory__get_conversations`, `omi-memory__get_daily_summaries`, or `omi-memory__get_screen_activity` when the user asks about activity/history. Save durable new facts with `omi-memory__create_memory`. Do not substitute OpenClaw's local `memory_search` or `memory_get` tools for Omi memory.
     <!-- /\(marker) -->
     """
   }
