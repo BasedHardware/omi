@@ -79,6 +79,9 @@ mock_get_available_apps = MagicMock(return_value=[])
 mock_is_trial_paywalled = MagicMock(return_value=False)
 
 mock_get_freq = MagicMock(return_value=3)
+# Quiet hours off by default so process_mentor_notification exercises the buffering path
+# unchanged (an enabled window would suppress and return None before buffering).
+mock_get_quiet_hours = MagicMock(return_value={'enabled': False, 'start_hour': 22, 'end_hour': 7, 'time_zone': None})
 mock_get_dev_keys = MagicMock(return_value=[])
 mock_send_notification = MagicMock()
 
@@ -117,6 +120,10 @@ def _apply_fakes(monkeypatch):
     monkeypatch.setattr(notifications_db, 'get_mentor_notification_frequency', mock_get_freq)
     monkeypatch.setattr(app_int, 'get_mentor_notification_frequency', mock_get_freq)
     mock_get_freq.return_value = 3
+
+    # process_mentor_notification now consults the quiet-hours window after the frequency gate.
+    # Keep it disabled here so these tests exercise the buffering path without touching the cache.
+    monkeypatch.setattr(mentor_mod, 'get_quiet_hours', mock_get_quiet_hours)
 
     # proactive_notification.get_llm -> mock_llm_mini (so the real evaluate_relevance /
     # generate_notification / validate_notification / evaluate_proactive_notification
