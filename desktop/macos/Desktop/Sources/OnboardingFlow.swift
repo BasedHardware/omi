@@ -55,7 +55,10 @@ enum OnboardingFlow {
     4: 2,   // ScreenRecording → Screen & Files
     7: 3,   // Microphone → Audio & Control
     10: 4,  // FloatingBarShortcut → Shortcuts
+    14: 6,  // DataSources → connectedContext
+    15: 6,  // Exports → connectedContext
     16: 5,  // Goal → Your Goal
+    17: 6,  // BringYourOwnKeys → connectedContext
     18: 7,  // Tasks → Ready
   ]
 

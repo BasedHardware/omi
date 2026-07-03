@@ -80,10 +80,16 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(result, 0)
   }
 
-  func testMigrationMapsDataSourcesToGoal() {
-    // Old step 14 = DataSources (removed) → should map to preceding mapped step (Goal → Your Goal)
+  func testMigrationMapsDataSourcesToConnectedContext() {
+    // Old step 14 = DataSources → should map to connectedContext (6)
     let result = OnboardingFlow.migrateTo8Step(oldStep: 14)
-    XCTAssertEqual(result, 5)
+    XCTAssertEqual(result, 6)
+  }
+
+  func testMigrationMapsBringYourOwnKeysToConnectedContext() {
+    // Old step 17 = BringYourOwnKeys → should map to connectedContext (6)
+    let result = OnboardingFlow.migrateTo8Step(oldStep: 17)
+    XCTAssertEqual(result, 6)
   }
 
   func testLegacyApiCallsNewMigration() {

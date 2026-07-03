@@ -268,8 +268,11 @@ def _diarize_segments(
 
             emb = _get_embedding(seg_wav)
             if emb is not None:
-                embeddings.append(np.squeeze(emb))
-                valid_indices.append(idx)
+                emb_squeezed = np.squeeze(emb)
+                if emb_squeezed.ndim == 1 and np.isfinite(emb_squeezed).all() and len(emb_squeezed) > 0:
+                    if not embeddings or emb_squeezed.shape == embeddings[0].shape:
+                        embeddings.append(emb_squeezed)
+                        valid_indices.append(idx)
         except Exception as e:
             logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {type(e).__name__}")
 
@@ -285,49 +288,55 @@ def _diarize_segments(
             seg["speaker"] = "SPEAKER_0"
         return base
 
-    X = np.vstack(embeddings)
-    Z = linkage(X, method='average', metric='cosine')
+    try:
+        X = np.vstack(embeddings)
+        Z = linkage(X, method='average', metric='cosine')
 
-    if num_speakers is not None:
-        n_clust = min(num_speakers, len(embeddings))
-        labels = fcluster(Z, t=n_clust, criterion='maxclust')
-    else:
-        labels = fcluster(Z, t=SPEAKER_MATCH_THRESHOLD, criterion='distance')
-        num_clusters = len(np.unique(labels))
-        if min_speakers is not None and num_clusters < min_speakers:
-            n_clust = min(min_speakers, len(embeddings))
+        if num_speakers is not None:
+            n_clust = min(num_speakers, len(embeddings))
             labels = fcluster(Z, t=n_clust, criterion='maxclust')
-        elif max_speakers is not None and num_clusters > max_speakers:
-            n_clust = max_speakers
-            labels = fcluster(Z, t=n_clust, criterion='maxclust')
-
-    unique_labels = sorted(list(set(labels)))
-    label_map = {old: new for new, old in enumerate(unique_labels)}
-    mapped_labels = [label_map[l] for l in labels]
-
-    valid_labels = {}
-    for idx, label in zip(valid_indices, mapped_labels):
-        valid_labels[idx] = label
-
-    def get_center(s):
-        return (s["start"] + s["end"]) / 2.0
-
-    assigned_labels = {}
-    for j in range(len(base["segments"])):
-        if j in valid_labels:
-            assigned_labels[j] = valid_labels[j]
         else:
-            center_j = get_center(base["segments"][j])
-            closest_idx = min(valid_indices, key=lambda v: abs(get_center(base["segments"][v]) - center_j))
-            assigned_labels[j] = valid_labels[closest_idx]
+            labels = fcluster(Z, t=SPEAKER_MATCH_THRESHOLD, criterion='distance')
+            num_clusters = len(np.unique(labels))
+            if min_speakers is not None and num_clusters < min_speakers:
+                n_clust = min(min_speakers, len(embeddings))
+                labels = fcluster(Z, t=n_clust, criterion='maxclust')
+            elif max_speakers is not None and num_clusters > max_speakers:
+                n_clust = max_speakers
+                labels = fcluster(Z, t=n_clust, criterion='maxclust')
 
-    for j, seg in enumerate(base["segments"]):
-        seg["speaker"] = f"SPEAKER_{assigned_labels[j]}"
+        unique_labels = sorted(list(set(labels)))
+        label_map = {old: new for new, old in enumerate(unique_labels)}
+        mapped_labels = [label_map[l] for l in labels]
 
-    embeddings.clear()
-    valid_indices.clear()
-    valid_labels.clear()
-    assigned_labels.clear()
+        valid_labels = {}
+        for idx, label in zip(valid_indices, mapped_labels):
+            valid_labels[idx] = label
+
+        def get_center(s):
+            return (s["start"] + s["end"]) / 2.0
+
+        assigned_labels = {}
+        for j in range(len(base["segments"])):
+            if j in valid_labels:
+                assigned_labels[j] = valid_labels[j]
+            else:
+                center_j = get_center(base["segments"][j])
+                closest_idx = min(valid_indices, key=lambda v: abs(get_center(base["segments"][v]) - center_j))
+                assigned_labels[j] = valid_labels[closest_idx]
+
+        for j, seg in enumerate(base["segments"]):
+            seg["speaker"] = f"SPEAKER_{assigned_labels[j]}"
+
+        valid_labels.clear()
+        assigned_labels.clear()
+    except Exception as e:
+        logger.error(f"Global Agglomerative Hierarchical Clustering failed, falling back to SPEAKER_0: {e}")
+        for seg in base["segments"]:
+            seg["speaker"] = "SPEAKER_0"
+    finally:
+        embeddings.clear()
+        valid_indices.clear()
 
     return base
 
