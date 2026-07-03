@@ -803,7 +803,7 @@ def main() -> int:
             print('No action requested; use --print, --write-inventory, or --check.', file=sys.stderr)
             return 2
         return 0
-    except (RoutePolicyError, export_openapi.OpenAPIContractError) as e:
+    except (RoutePolicyError, export_openapi.OpenAPIContractError, yaml.YAMLError) as e:
         print(f'Route policy inventory check failed: {e}', file=sys.stderr)
         return 1
 

@@ -1,4 +1,5 @@
 import re
+import sys
 import textwrap
 from pathlib import Path
 
@@ -377,3 +378,28 @@ def test_problem_detail_limiter_keeps_header_and_reports_hidden_count():
         """).strip()
 
     assert inventory.limit_problem_details(problem, max_lines=3).endswith('  ... 1 more not shown')
+
+
+def test_main_reports_malformed_yaml_without_traceback(tmp_path, monkeypatch, capsys):
+    manifest_path = tmp_path / 'route_policy_manifest.yaml'
+    manifest_path.write_text('routes:\n  - [unterminated\n')
+    monkeypatch.setattr(
+        inventory,
+        'generate_backend_route_inventory',
+        lambda: {'service': inventory.SERVICE, 'schema_version': inventory.SCHEMA_VERSION, 'routes': []},
+    )
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'route_policy_inventory.py',
+            '--manifest',
+            str(manifest_path),
+            '--check',
+        ],
+    )
+
+    assert inventory.main() == 1
+    captured = capsys.readouterr()
+    assert 'Route policy inventory check failed:' in captured.err
+    assert 'Traceback' not in captured.err
