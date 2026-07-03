@@ -11,6 +11,7 @@ final class AgentDelegationExecutor {
         let spokenAck: String?
         let directedProvider: AgentPillsManager.DirectedProvider?
         let harnessOverride: AgentHarnessMode?
+        let validateAgainstOriginalUserText: Bool
 
         init(
             originalUserText: String,
@@ -18,7 +19,8 @@ final class AgentDelegationExecutor {
             title: String?,
             spokenAck: String?,
             directedProvider: AgentPillsManager.DirectedProvider?,
-            harnessOverride: AgentHarnessMode? = nil
+            harnessOverride: AgentHarnessMode? = nil,
+            validateAgainstOriginalUserText: Bool = true
         ) {
             self.originalUserText = originalUserText
             self.brief = brief
@@ -26,6 +28,7 @@ final class AgentDelegationExecutor {
             self.spokenAck = spokenAck
             self.directedProvider = directedProvider
             self.harnessOverride = harnessOverride
+            self.validateAgainstOriginalUserText = validateAgainstOriginalUserText
         }
     }
 
@@ -39,7 +42,7 @@ final class AgentDelegationExecutor {
     ) -> AgentPill? {
         guard DelegationBriefValidator.isStructurallyAcceptable(
             brief: task.brief,
-            rawIntent: task.originalUserText
+            rawIntent: task.validateAgainstOriginalUserText ? task.originalUserText : nil
         ) else {
             log("AgentDelegationExecutor: refused spawn with non-self-contained brief")
             return nil

@@ -213,7 +213,7 @@ const spawnBackgroundAgentSchema = strictObject({
   prompt: z.string().min(1),
   title: z.string().min(1).optional(),
   surfaceKind: z.literal("background_agent").default("background_agent"),
-  externalRefKind: z.literal("pill").optional(),
+  externalRefKind: z.string().min(1).optional(),
   externalRefId: z.string().min(1).optional(),
   ownerId: z.string().min(1).optional(),
   adapterId: z.string().min(1).optional(),

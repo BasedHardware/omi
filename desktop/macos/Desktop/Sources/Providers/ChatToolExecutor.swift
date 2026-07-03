@@ -565,7 +565,8 @@ class ChatToolExecutor {
         brief: brief,
         title: (title?.isEmpty == false) ? title : directedProvider?.displayName,
         spokenAck: nil,
-        directedProvider: directedProvider
+        directedProvider: directedProvider,
+        validateAgainstOriginalUserText: false
       ),
       model: model,
       fromVoice: false

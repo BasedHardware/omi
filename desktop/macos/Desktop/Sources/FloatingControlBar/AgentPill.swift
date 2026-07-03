@@ -700,10 +700,15 @@ final class AgentPillsManager: ObservableObject {
                     harnessMode: bridgeHarnessOverride,
                     cwd: workingDirectory
                 )
-                guard !Task.isCancelled else { return }
                 pill.canonicalSessionId = accepted.sessionId
                 pill.canonicalRunId = accepted.runId
                 pill.canonicalAttemptId = accepted.attemptId
+                if Task.isCancelled || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
+                    Task {
+                        _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
+                    }
+                    return
+                }
                 pill.title = accepted.title
                 pill.status = .running
                 pill.completedAt = nil

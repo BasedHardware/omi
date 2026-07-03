@@ -193,6 +193,42 @@ describe("desktop action queue", () => {
     expect(queue.some((item) => item.subjectId === "orphaned-story-run")).toBe(false);
   });
 
+  it("uses completion time instead of reconciliation update time when suppressing covered orphaned goals", () => {
+    const queue = buildDesktopActionQueue({
+      nowMs: 20_000,
+      runs: [
+        {
+          runId: "orphaned-story-run",
+          sessionId: "session-orphaned",
+          ownerId: "owner-1",
+          status: "orphaned",
+          title: "Create Memory Story",
+          goalText: "Search recent memories and write a short story idea.",
+          createdAtMs: 1_000,
+          completedAtMs: 2_000,
+          updatedAtMs: 19_000,
+          visibleUserGoal: true,
+        },
+        {
+          runId: "successful-story-run",
+          sessionId: "session-success",
+          ownerId: "owner-1",
+          status: "succeeded",
+          title: "Analyze Memories For Storyline",
+          goalText: "Search recent memories and write a short story idea.",
+          createdAtMs: 3_000,
+          completedAtMs: 4_000,
+          updatedAtMs: 4_000,
+          visibleUserGoal: true,
+          reusable: true,
+        },
+      ],
+    });
+
+    expect(queue.map((item) => item.kind)).toEqual(["reusable_session"]);
+    expect(queue.some((item) => item.subjectId === "orphaned-story-run")).toBe(false);
+  });
+
   it("still surfaces orphaned visible goals when newer successes are unrelated", () => {
     const queue = buildDesktopActionQueue({
       nowMs: 10_000,

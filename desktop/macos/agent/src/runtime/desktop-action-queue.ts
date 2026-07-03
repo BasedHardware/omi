@@ -51,6 +51,7 @@ export interface QueueRunInput {
   status: RunStatus;
   title?: string | null;
   goalText?: string | null;
+  completedAtMs?: number | null;
   updatedAtMs: number;
   createdAtMs: number;
   visibleUserGoal?: boolean;
@@ -273,9 +274,13 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
 function isCoveredByNewerSuccessfulRun(run: QueueRunInput, successfulRuns: readonly QueueRunInput[]): boolean {
   return successfulRuns.some((candidate) => {
     if (candidate.ownerId !== run.ownerId) return false;
-    if (candidate.updatedAtMs <= run.updatedAtMs) return false;
+    if (runRecencyMs(candidate) <= runRecencyMs(run)) return false;
     return visibleGoalsOverlap(run, candidate);
   });
+}
+
+function runRecencyMs(run: QueueRunInput): number {
+  return run.completedAtMs ?? run.createdAtMs;
 }
 
 function visibleGoalsOverlap(left: QueueRunInput, right: QueueRunInput): boolean {

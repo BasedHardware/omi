@@ -2550,6 +2550,7 @@ export class AgentRuntimeKernel {
         status: stringValue(row.status) as RunStatus,
         title: nullableString(row.title),
         goalText: queueRunGoalText(row),
+        completedAtMs: nullableNumber(row.completed_at_ms),
         updatedAtMs: numberValue(row.updated_at_ms),
         createdAtMs: numberValue(row.created_at_ms),
         visibleUserGoal: true,

@@ -19,6 +19,9 @@ final class AgentDelegationResolverTests: XCTestCase {
     XCTAssertTrue(DelegationBriefValidator.isStructurallyAcceptable(
       brief: "Using OpenClaw, search for current AI trends on X and summarize the newest notable findings.",
       rawIntent: "do another search"))
+    XCTAssertTrue(DelegationBriefValidator.isStructurallyAcceptable(
+      brief: "Search local database",
+      rawIntent: nil))
   }
 
   func testResolverPromptRequiresSelfContainedChildBriefsAndStructuredAgentContext() throws {
