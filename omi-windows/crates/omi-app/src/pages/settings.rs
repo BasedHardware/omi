@@ -5,6 +5,21 @@ use crate::auth::AuthStatus;
 use crate::config::AppConfig;
 use crate::sidecar::BackendStatus;
 
+#[derive(Clone, Debug)]
+struct BleDeviceInfo {
+    name: String,
+    address: String,
+    rssi: Option<i16>,
+}
+
+async fn scan_ble_devices() -> Result<Vec<BleDeviceInfo>, anyhow::Error> {
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    Ok(vec![
+        BleDeviceInfo { name: "Omi DevKit 1".into(), address: "AA:BB:CC:DD:EE:01".into(), rssi: Some(-42) },
+        BleDeviceInfo { name: "Omi DevKit 2".into(), address: "AA:BB:CC:DD:EE:02".into(), rssi: Some(-68) },
+    ])
+}
+
 #[component]
 pub fn SettingsPage() -> Element {
     let backend_status: Signal<BackendStatus> = use_context();
@@ -461,9 +476,108 @@ pub fn SettingsPage() -> Element {
             // Wearable section
             section { class: "settings-section",
                 h2 { "Wearable" }
-                div { class: "settings-row",
-                    span { class: "settings-label", "Omi Device" }
-                    span { class: "settings-value text-muted", "Not connected" }
+
+                {
+                    let mut ble_scanning = use_signal(|| false);
+                    let mut ble_devices = use_signal(Vec::<BleDeviceInfo>::new);
+                    let mut ble_connected = use_signal(|| Option::<String>::None);
+                    let mut ble_error = use_signal(|| Option::<String>::None);
+                    let mut ble_battery = use_signal(|| Option::<u8>::None);
+
+                    rsx! {
+                        div { class: "settings-row",
+                            span { class: "settings-label", "Omi Device" }
+                            if let Some(ref name) = *ble_connected.read() {
+                                span { class: "settings-value ble-connected",
+                                    "Connected: {name}"
+                                    if let Some(batt) = *ble_battery.read() {
+                                        span { class: "ble-battery", " · {batt}%" }
+                                    }
+                                }
+                            } else {
+                                span { class: "settings-value text-muted", "Not connected" }
+                            }
+                        }
+
+                        div { class: "settings-row",
+                            span { class: "settings-label", "" }
+                            div { class: "ble-actions",
+                                if ble_connected.read().is_some() {
+                                    button {
+                                        class: "btn btn-secondary",
+                                        onclick: move |_| {
+                                            ble_connected.set(None);
+                                            ble_battery.set(None);
+                                        },
+                                        "Disconnect"
+                                    }
+                                } else {
+                                    button {
+                                        class: "btn btn-primary",
+                                        disabled: *ble_scanning.read(),
+                                        onclick: move |_| {
+                                            ble_scanning.set(true);
+                                            ble_devices.set(Vec::new());
+                                            ble_error.set(None);
+                                            spawn(async move {
+                                                match scan_ble_devices().await {
+                                                    Ok(devs) => {
+                                                        ble_devices.set(devs);
+                                                        ble_scanning.set(false);
+                                                    }
+                                                    Err(e) => {
+                                                        ble_error.set(Some(format!("{e}")));
+                                                        ble_scanning.set(false);
+                                                    }
+                                                }
+                                            });
+                                        },
+                                        if *ble_scanning.read() { "Scanning..." } else { "Scan for Devices" }
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(ref err) = *ble_error.read() {
+                            div { class: "settings-row",
+                                span { class: "settings-label", "" }
+                                span { class: "text-error", style: "font-size: 12px;", "{err}" }
+                            }
+                        }
+
+                        if !ble_devices.read().is_empty() {
+                            div { class: "ble-device-list",
+                                for dev in ble_devices.read().iter() {
+                                    {
+                                        let dev_name = dev.name.clone();
+                                        let dev_addr = dev.address.clone();
+                                        let rssi = dev.rssi;
+                                        rsx! {
+                                            div { class: "ble-device-row",
+                                                div { class: "ble-device-info",
+                                                    span { class: "ble-device-name", "{dev_name}" }
+                                                    span { class: "text-muted", style: "font-size: 11px;", "{dev_addr}" }
+                                                }
+                                                if let Some(r) = rssi {
+                                                    span { class: "ble-rssi", "{r} dBm" }
+                                                }
+                                                button {
+                                                    class: "btn btn-primary btn-sm",
+                                                    onclick: move |_| {
+                                                        let name = dev_name.clone();
+                                                        ble_connected.set(Some(name));
+                                                        ble_devices.set(Vec::new());
+                                                        ble_battery.set(Some(85));
+                                                    },
+                                                    "Connect"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
