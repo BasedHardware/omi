@@ -280,7 +280,10 @@ private struct ChatDetailView: View {
       case .invalidTarget, .permissionRequired, .sendUnconfirmed:
         // Not a hard failure — the reply is prefilled/likely sent; guide the user (open
         // the chat, grant the one-time permission, or check WhatsApp before resending).
-        // Keep the draft so nothing is lost and no duplicate is forced.
+        // The draft is intentionally kept here (unlike the auto-reply path, which drops a
+        // .sendUnconfirmed reply): a person is watching and reads the info text, so they
+        // can decide whether to resend after checking — rather than silently losing a
+        // reply that may not have gone through.
         infoText = error.errorDescription
       case .notConfirmed, .sendFailed:
         // Nothing was sent — keep the draft so the user can try again.

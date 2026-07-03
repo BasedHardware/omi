@@ -146,6 +146,20 @@ enum WhatsAppSenderService {
       throw WhatsAppSenderError.notConfirmed
     }
 
+    // Stale-draft guard: the recipient guard trusts "compose == reply" as proof the deep
+    // link navigated to the target. That's only sound if the reply text wasn't ALREADY in
+    // some chat's compose box — e.g. a stale draft a prior failed attempt left behind. If
+    // the same reply is then sent again and the deep link fails to navigate away from that
+    // chat, the stale text would satisfy the guard for the wrong recipient. So if a chat
+    // already shows this exact reply before we prefill, fail closed — don't send. This is
+    // non-destructive (we never clear the user's text) and biases to not-sending over
+    // wrong-sending. Skipped when WhatsApp is closed (nothing stale can be open).
+    if let app = runningWhatsApp(),
+      let pre = await readComposeValueOffMain(pid: app.processIdentifier), composeMatches(pre, reply)
+    {
+      throw WhatsAppSenderError.notConfirmed
+    }
+
     // Prefill launches WhatsApp if it's closed, opens the target 1:1, and fills the
     // compose box; the guard below then waits for it to come up and navigate.
     try prefill(text: reply, phone: phone)
@@ -189,17 +203,18 @@ enum WhatsAppSenderService {
   }
 
   /// Opens the WhatsApp deep link that switches to the 1:1 chat and prefills the compose
-  /// box with `text` (percent-encoded). Does not send.
+  /// box with `text`. Does not send.
+  ///
+  /// The text is percent-encoded with a set that also encodes `&`, `+`, `=`, `?`, `#`
+  /// and `%` — `URLComponents.queryItems` leaves those literal (they're in
+  /// `urlQueryAllowed`), which corrupts the prefill (`"a & b"` → only `"a"`, `+` → space)
+  /// and would make the recipient guard's exact `compose == reply` check never match.
   @MainActor
   static func prefill(text: String, phone: String) throws {
-    var components = URLComponents()
-    components.scheme = "whatsapp"
-    components.host = "send"
-    components.queryItems = [
-      URLQueryItem(name: "phone", value: phone),
-      URLQueryItem(name: "text", value: text),
-    ]
-    guard let url = components.url else {
+    var allowed = CharacterSet.urlQueryAllowed
+    allowed.remove(charactersIn: "&+=?#%")
+    let encodedText = text.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+    guard let url = URL(string: "whatsapp://send?phone=\(phone)&text=\(encodedText)") else {
       throw WhatsAppSenderError.sendFailed("Couldn't build the WhatsApp deep link.")
     }
     NSWorkspace.shared.open(url)
