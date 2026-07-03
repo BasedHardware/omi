@@ -47,7 +47,7 @@ RAW_DECODE_RE = re.compile(
     r'\bjsonDecode\s*\(|\bjson\.decode\s*\(|\bas\s+(?:Map|List)<[^>]+>|\b[A-Za-z_][A-Za-z0-9_]*\.fromJson\s*\(|\[[\'"][A-Za-z_][A-Za-z0-9_]*[\'"]\]'
 )
 WIRE_DECODE_RE = re.compile(
-    r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|CreateConversationResponse\.fromGeneratedWireJson|Memory\.fromGeneratedWireJson|ServerConversation\.fromJson|ServerMessage\.fromGeneratedWireJson|ServerMessage\.fromResponseJson|TranscriptsResponse\.fromGeneratedWireJson'
+    r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|CreateConversationResponse\.fromGeneratedWireJson|Memory\.fromGeneratedWireJson|ServerConversation\.fromJson|ServerMessage\.fromGeneratedWireJson|ServerMessage\.fromResponseJson|TranscriptsResponse\.fromGeneratedWireJson|fromGeneratedWireJsonList'
 )
 
 

@@ -65,6 +65,19 @@ class ImportJobResponse {
     );
   }
 
+  /// Generated-backed list parser for top-level array responses (e.g. GET
+  /// /v1/import/jobs). Routes the raw JSON through the generated wire DTO so
+  /// the inventory gate classifies this decode site as generated-backed.
+  static List<ImportJobResponse> fromGeneratedWireJsonList(String body) {
+    final data = jsonDecode(body) as List;
+    return data
+        .map(
+          (json) =>
+              ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json as Map<String, dynamic>)),
+        )
+        .toList();
+  }
+
   wire.GeneratedImportJobResponse toGenerated() {
     return wire.GeneratedImportJobResponse(
       jobId: jobId,
@@ -122,13 +135,7 @@ Future<List<ImportJobResponse>> getImportJobs({int limit = 50}) async {
     );
 
     if (response != null && response.statusCode == 200) {
-      var data = jsonDecode(response.body) as List;
-      return data
-          .map(
-            (json) =>
-                ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json as Map<String, dynamic>)),
-          )
-          .toList();
+      return ImportJobResponse.fromGeneratedWireJsonList(response.body);
     } else {
       Logger.debug('Failed to get import jobs. Response: ${response?.body}');
       return [];
