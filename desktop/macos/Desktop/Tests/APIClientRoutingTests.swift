@@ -128,6 +128,16 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "https://api.omiapi.com/")
     }
 
+    func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
+        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: nil)
+        XCTAssertEqual(url, "https://api.omi.me/")
+    }
+
+    func testAuthBackendCanBeExplicitlyOverridden() {
+        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: "http://localhost:8080")
+        XCTAssertEqual(url, "http://localhost:8080/")
+    }
+
     func testStableProductionBundleKeepsProductionPythonBackend() {
         let url = DesktopBackendEnvironment.pythonBaseURL(
             useDevelopmentBackends: false,

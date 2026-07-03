@@ -40,6 +40,15 @@ enum CredentialFailureClass: Equatable {
     case .unknown: return "unknown"
     }
   }
+
+  var httpStatusCode: Int? {
+    switch self {
+    case .backendTransient(let statusCode):
+      return statusCode
+    default:
+      return nil
+    }
+  }
 }
 
 struct CredentialRecoveryIssue: Equatable {

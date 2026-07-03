@@ -615,20 +615,27 @@ extension PostHogManager {
 
     // MARK: - Update Events
 
-    func updateAvailable(version: String) {
-        track("Update Available", properties: [
-            "version": version
-        ])
+    func updateAvailable(version: String, context: UpdateAnalyticsContext, item: UpdateItemAnalytics) {
+        track("Update Available", properties: updateProperties(version: version, context: context, item: item))
     }
 
-    func updateInstalled(version: String) {
-        track("Update Installed", properties: [
-            "version": version
-        ])
+    func updateInstalled(version: String, context: UpdateAnalyticsContext, item: UpdateItemAnalytics) {
+        track("Update Installed", properties: updateProperties(version: version, context: context, item: item))
     }
 
     func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {
         track("Update Check Failed", properties: diagnostics.analyticsProperties)
+    }
+
+    private func updateProperties(
+        version: String,
+        context: UpdateAnalyticsContext,
+        item: UpdateItemAnalytics
+    ) -> [String: Any] {
+        var properties = context.properties
+        properties.merge(item.properties) { _, new in new }
+        properties["version"] = version
+        return properties
     }
 
     // MARK: - Notification Events

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
     errors.extend(check_python_cli_release_version_source())
     errors.extend(check_react_native_release_tags())
@@ -39,6 +40,15 @@ def check_desktop_codemagic_release() -> list[str]:
 
     if "omi-desktop-swift-release:" not in text:
         errors.append("codemagic.yaml is missing the omi-desktop-swift-release workflow")
+
+    planner = ROOT / ".github/scripts/plan-desktop-release.py"
+    planner_text = planner.read_text(encoding="utf-8")
+    if "AUTO_RELEASE_QUIET_SECONDS = 10 * 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep a 10 minute quiet window before auto-tagging")
+    if "latest_change_age is None" not in planner_text:
+        errors.append("desktop auto-release planner must fail closed when latest change age cannot be determined")
+    if "RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep the recent-tag lease for Codemagic checks")
 
     if "os.environ['BUILD_NAME']" in text or 'os.environ["BUILD_NAME"]' in text:
         errors.append("desktop Firestore bridge reads BUILD_NAME, but desktop release sets VERSION")
@@ -66,6 +76,47 @@ def check_desktop_codemagic_release() -> list[str]:
     for required_file in required_files:
         if not (ROOT / required_file).exists():
             errors.append(f"desktop release references missing file: {required_file}")
+
+    return errors
+
+
+def check_mobile_codemagic_release_triggers() -> list[str]:
+    errors: list[str] = []
+    codemagic = ROOT / "codemagic.yaml"
+    codemagic_text = codemagic.read_text(encoding="utf-8")
+
+    for workflow_id in ("ios-internal-auto", "android-internal-auto"):
+        pattern = rf"\n  {re.escape(workflow_id)}:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n|\Z)"
+        match = re.search(pattern, codemagic_text, flags=re.DOTALL)
+        if match is None:
+            errors.append(f"codemagic.yaml is missing {workflow_id}")
+            continue
+        body = match.group("body")
+        if re.search(r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b", body, flags=re.DOTALL):
+            errors.append(f"{workflow_id} must not directly trigger on push; GitHub paths filtering dispatches it")
+
+    workflow = ROOT / ".github/workflows/mobile_internal_auto.yml"
+    if not workflow.exists():
+        errors.append("mobile internal auto deploys must be dispatched by .github/workflows/mobile_internal_auto.yml")
+        return errors
+
+    workflow_text = workflow.read_text(encoding="utf-8")
+    if not re.search(r"(?m)^\s*-\s*['\"]?app/\*\*['\"]?\s*$", workflow_text):
+        errors.append("mobile_internal_auto.yml must gate pushes to app/** paths")
+    if "group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}" not in workflow_text:
+        errors.append("mobile_internal_auto.yml must give each matrix workflow its own concurrency group")
+    token_check_index = workflow_text.find("Validate Codemagic API token")
+    debounce_index = workflow_text.find("Debounce mobile internal deploys")
+    if token_check_index == -1 or debounce_index == -1 or token_check_index > debounce_index:
+        errors.append("mobile_internal_auto.yml must validate CODEMAGIC_API_TOKEN before the push debounce")
+    for required in (
+        "paths:",
+        "https://api.codemagic.io/builds",
+        "ios-internal-auto",
+        "android-internal-auto",
+    ):
+        if required not in workflow_text:
+            errors.append(f"mobile_internal_auto.yml is missing required release guard fragment: {required}")
 
     return errors
 

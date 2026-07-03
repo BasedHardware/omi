@@ -404,7 +404,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: error.failureClass.logValue,
-          phase: "warm")
+          phase: "warm",
+          httpStatusCode: error.failureClass.httpStatusCode)
         if error.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
         } else if !self.failoverToAlternateProvider() {
@@ -522,6 +523,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       } catch let error as CredentialHealthError {
         self.minting = false
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: error.failureClass.logValue,
+          phase: "barge_in_replacement",
+          httpStatusCode: error.failureClass.httpStatusCode)
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
         if self.shouldFailoverToAlternate(for: error.failureClass), self.failoverToAlternateProvider() {
           return
@@ -531,6 +537,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return
       } catch {
         self.minting = false
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: "backend_transient",
+          phase: "barge_in_replacement")
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
         log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
         return
@@ -1514,7 +1524,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       provider: providerTag,
       category: closeCategory?.rawValue,
       aliveFor: aliveFor,
-      activeTurn: hasActiveTurn)
+      activeTurn: hasActiveTurn,
+      authMode: authMode,
+      failureClass: credentialFailureClass)
     if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
       logError("RealtimeHub: session error —\(categoryText) provider=\(providerTag)\(safeMessage)")
     } else {

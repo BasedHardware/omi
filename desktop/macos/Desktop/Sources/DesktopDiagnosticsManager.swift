@@ -9,6 +9,7 @@ enum DesktopHealthEventName: String {
   case pttAudioCaptureDeviceRouteChanged = "ptt_audio_capture_device_route_changed"
   case pttCommitted = "ptt_committed"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
+  case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
 }
@@ -124,28 +125,62 @@ final class DesktopDiagnosticsManager {
       ])
   }
 
-  func recordRealtimeTokenMintFailed(provider: String, reason: String, phase: String) {
+  func recordRealtimeTokenMintFailed(
+    provider: String,
+    reason: String,
+    phase: String,
+    httpStatusCode: Int? = nil
+  ) {
+    var properties: [String: Any] = [
+      "provider": safeProvider(provider),
+      "reason": reason,
+      "phase": phase,
+    ]
+    if let httpStatusCode {
+      properties["http_status_code"] = httpStatusCode
+    }
     record(
       .realtimeTokenMintFailed,
-      properties: [
-        "provider": safeProvider(provider),
-        "reason": reason,
-        "phase": phase,
-      ])
+      properties: properties)
   }
 
-  func recordRealtimeProviderClose(provider: String, category: String?, aliveFor: TimeInterval, activeTurn: Bool) {
-    let event: DesktopHealthEventName = category == RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue
-      ? .realtimeProviderPolicyClose
-      : .realtimeProviderSessionError
+  func recordRealtimeProviderClose(
+    provider: String,
+    category: String?,
+    aliveFor: TimeInterval,
+    activeTurn: Bool,
+    authMode: CredentialAuthMode?,
+    failureClass: CredentialFailureClass?
+  ) {
+    let normalizedCategory = category ?? failureClass?.logValue ?? "unclassified"
+    let event: DesktopHealthEventName
+    switch normalizedCategory {
+    case RealtimeHubCloseCategory.expectedIdleTeardown.rawValue:
+      event = .realtimeProviderExpectedIdleTeardown
+    case RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue,
+      CredentialFailureClass.providerPolicyClose(provider: .openai).logValue:
+      event = .realtimeProviderPolicyClose
+    default:
+      event = .realtimeProviderSessionError
+    }
+    var properties: [String: Any] = [
+      "provider": safeProvider(provider),
+      "category": normalizedCategory,
+      "alive_for_seconds": Int(aliveFor),
+      "active_turn": activeTurn,
+    ]
+    if let authMode {
+      properties["auth_mode"] = authMode.rawValue
+    }
+    if let failureClass {
+      properties["failure_class"] = failureClass.logValue
+      if let httpStatusCode = failureClass.httpStatusCode {
+        properties["http_status_code"] = httpStatusCode
+      }
+    }
     record(
       event,
-      properties: [
-        "provider": safeProvider(provider),
-        "category": category ?? "unclassified",
-        "alive_for_seconds": Int(aliveFor),
-        "active_turn": activeTurn,
-      ])
+      properties: properties)
   }
 
   func currentSnapshotsForSentry() -> [[String: Any]] {
