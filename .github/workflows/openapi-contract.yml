@@ -77,6 +77,10 @@ jobs:
         working-directory: backend
         run: scripts/openapi_runner.sh scripts/export_openapi.py --surface integration-public --check ../docs/api-reference/integration-public-openapi.json
 
+      - name: Report backend route policy inventory
+        working-directory: backend
+        run: scripts/openapi_runner.sh scripts/route_policy_inventory.py --manifest route_policy_manifest.yaml --check --report-only
+
       - name: Check generated app-client Dart schemas
         run: python backend/scripts/generate_dart_models.py --all --check
 

@@ -118,6 +118,12 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -174,6 +180,12 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -229,6 +241,12 @@ environments:
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -319,6 +337,12 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -356,6 +380,12 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -392,6 +422,12 @@ environments:
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
