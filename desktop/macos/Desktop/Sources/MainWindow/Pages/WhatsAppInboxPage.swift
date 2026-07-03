@@ -4,6 +4,9 @@ import SwiftUI
 /// conversation, with an Omi-drafted reply pre-filled in the compose bar that you
 /// review, edit, and send. Per 1:1 chat, an opt-in "Auto-reply" switch lets Omi
 /// draft and send replies to new inbound messages automatically (off by default).
+///
+/// Shared row/header/bubble/compose UI lives in `MessagingInboxKit` so this tab,
+/// iMessage, and Telegram look and behave identically.
 struct WhatsAppInboxPage: View {
   @ObservedObject private var store = WhatsAppInboxStore.shared
 
@@ -21,7 +24,6 @@ struct WhatsAppInboxPage: View {
           Divider()
           if let chat = store.selectedChat {
             ChatDetailView(chat: chat, store: store, accent: Self.whatsappGreen)
-              .id(chat.id)
           } else {
             emptyDetail
           }
@@ -72,12 +74,12 @@ struct WhatsAppInboxPage: View {
         ScrollView {
           LazyVStack(spacing: 0) {
             ForEach(Array(store.chats.enumerated()), id: \.element.id) { idx, chat in
-              ConversationRow(
-                chat: chat, isSelected: chat.id == store.selectedChatID,
-                accent: Self.whatsappGreen,
-                draftReady: store.preDrafts[chat.id] != nil
+              InboxConversationRow(
+                name: chat.displayName, preview: chat.lastPreview, time: chat.lastDate,
+                avatarData: chat.avatarImageData, isSelected: chat.id == store.selectedChatID,
+                awaitingReply: chat.awaitingReply, draftReady: store.preDrafts[chat.id] != nil,
+                accent: Self.whatsappGreen
               )
-              .contentShape(Rectangle())
               .onTapGesture { store.selectedChatID = chat.id }
               if idx < store.chats.count - 1 {
                 Divider().overlay(OmiColors.textTertiary.opacity(0.18)).padding(.leading, 62)
@@ -117,64 +119,6 @@ struct WhatsAppInboxPage: View {
   }
 }
 
-// MARK: - Conversation row
-
-private struct ConversationRow: View {
-  let chat: WhatsAppChat
-  let isSelected: Bool
-  let accent: Color
-  var draftReady: Bool = false
-
-  var body: some View {
-    HStack(spacing: 10) {
-      Avatar(name: chat.displayName, size: 40, imageData: chat.avatarImageData)
-      VStack(alignment: .leading, spacing: 2) {
-        HStack {
-          Text(chat.displayName)
-            .scaledFont(size: 14, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-            .lineLimit(1)
-          Spacer()
-          Text(shortTime(chat.lastDate))
-            .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        HStack(spacing: 6) {
-          Text(chat.lastPreview)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textSecondary)
-            .lineLimit(2)
-          if chat.awaitingReply {
-            Text(draftReady ? "Draft ready" : "Draft")
-              .scaledFont(size: 9, weight: .semibold)
-              .foregroundColor(draftReady ? .white : accent)
-              .padding(.horizontal, 5)
-              .padding(.vertical, 1)
-              .background(draftReady ? accent : accent.opacity(0.15))
-              .clipShape(Capsule())
-          }
-        }
-      }
-    }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .background(isSelected ? OmiColors.backgroundSecondary : Color.clear)
-  }
-
-  private func shortTime(_ date: Date) -> String {
-    let cal = Calendar.current
-    let f = DateFormatter()
-    if cal.isDateInToday(date) {
-      f.dateFormat = "h:mm a"
-    } else if cal.isDateInYesterday(date) {
-      return "Yesterday"
-    } else {
-      f.dateFormat = "MMM d"
-    }
-    return f.string(from: date)
-  }
-}
-
 // MARK: - Chat detail (bubbles + compose)
 
 private struct ChatDetailView: View {
@@ -190,24 +134,11 @@ private struct ChatDetailView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      // Header — contact centered, per-chat auto-reply toggle trailing (1:1 only).
-      ZStack {
-        VStack(spacing: 2) {
-          Avatar(name: chat.displayName, size: 30, imageData: chat.avatarImageData)
-          Text(chat.displayName)
-            .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-        }
-        .frame(maxWidth: .infinity)
+      InboxChatHeader(name: chat.displayName, avatarData: chat.avatarImageData) {
         if store.canAutoReply(chat.chatID) {
-          HStack {
-            Spacer()
-            autoReplyToggle
-          }
+          autoReplyToggle
         }
       }
-      .padding(.vertical, 8)
-      .background(OmiColors.backgroundPrimary.opacity(0.98))
       Divider()
 
       // Bubbles
@@ -215,9 +146,13 @@ private struct ChatDetailView: View {
         ScrollView {
           LazyVStack(spacing: 2) {
             ForEach(Array(chat.bubbles.enumerated()), id: \.element.id) { idx, bubble in
-              ChatBubbleView(
-                bubble: bubble, isGroup: chat.isGroup,
-                showSender: shouldShowSender(at: idx), accent: accent
+              InboxBubble(
+                text: bubble.text, isFromMe: bubble.isFromMe, accent: accent,
+                reserveGutter: chat.isGroup && !bubble.isFromMe,
+                senderName: shouldShowSender(at: idx) ? bubble.senderName : nil,
+                senderAvatarData: bubble.senderImage,
+                imagePath: bubble.imagePath,
+                caption: (bubble.imagePath != nil && !bubble.text.isEmpty) ? bubble.text : nil
               )
               .id(bubble.id)
             }
@@ -227,15 +162,29 @@ private struct ChatDetailView: View {
           .padding(.vertical, 10)
         }
         .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
+        .onChange(of: chat.id) { _, _ in
+          proxy.scrollTo("bottom", anchor: .bottom)
+        }
         .onChange(of: chat.bubbles.count) { _, _ in
           withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
         }
       }
 
-      composeBar
+      InboxComposeBar(
+        text: $draft, placeholder: "Message", accent: accent, canSend: canSend,
+        onSend: { Task { await send() } }, isDrafting: isDrafting,
+        errorText: errorText, infoText: infoText
+      )
     }
     .background(OmiColors.backgroundPrimary)
-    .task(id: chat.id) { await generateDraft() }
+    // Reset the composer for the newly-opened chat, then draft. Keyed on chat.id so
+    // switching chats re-runs without recreating the whole detail view (snappier).
+    .task(id: chat.id) {
+      draft = ""
+      errorText = nil
+      infoText = nil
+      await generateDraft()
+    }
   }
 
   /// Per-chat auto-reply switch. When on, Omi sends a drafted reply automatically
@@ -256,75 +205,7 @@ private struct ChatDetailView: View {
     .controlSize(.mini)
     .tint(accent)
     .fixedSize()
-    .padding(.trailing, 12)
     .help("When on, Omi automatically drafts and sends a reply to new messages in this chat.")
-  }
-
-  private var composeBar: some View {
-    VStack(spacing: 6) {
-      if let errorText {
-        Text(errorText).scaledFont(size: 11).foregroundColor(.orange)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      if let infoText {
-        Text(infoText).scaledFont(size: 11).foregroundColor(accent)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      HStack(alignment: .bottom, spacing: 10) {
-        Button { Task { await generateDraft(force: true) } } label: {
-          Image(systemName: "sparkles")
-            .font(.system(size: 15))
-            .foregroundColor(isDrafting ? OmiColors.textTertiary : accent)
-            .frame(width: 32, height: 32)
-            .background(Circle().fill(accent.opacity(0.12)))
-        }
-        .buttonStyle(.plain)
-        .help("Draft a reply with Omi")
-        .disabled(isDrafting)
-
-        ZStack(alignment: .leading) {
-          if draft.isEmpty && !isDrafting {
-            Text("Message").scaledFont(size: 13).foregroundColor(OmiColors.textTertiary)
-              .padding(.leading, 14)
-          }
-          if isDrafting {
-            HStack(spacing: 6) {
-              ProgressView().controlSize(.small)
-              Text("Omi is drafting…").scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
-            }.padding(.leading, 14)
-          }
-          TextEditor(text: $draft)
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textPrimary)
-            .scrollContentBackground(.hidden)
-            .frame(minHeight: 17, maxHeight: 68)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 10)
-            .opacity(isDrafting ? 0 : 1)
-        }
-        .padding(.vertical, 4)
-        .background(
-          RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(OmiColors.backgroundSecondary)
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(OmiColors.textTertiary.opacity(0.15), lineWidth: 1)
-        )
-
-        Button { Task { await send() } } label: {
-          Image(systemName: "arrow.up.circle.fill")
-            .font(.system(size: 26))
-            .foregroundColor(canSend ? accent : OmiColors.textTertiary.opacity(0.5))
-        }
-        .buttonStyle(.plain)
-        .disabled(!canSend)
-      }
-    }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 8)
-    .background(OmiColors.backgroundPrimary)
-    .overlay(alignment: .top) { Divider().overlay(OmiColors.textTertiary.opacity(0.15)) }
   }
 
   private var canSend: Bool {
@@ -399,162 +280,5 @@ private struct ChatDetailView: View {
     } catch {
       errorText = error.localizedDescription
     }
-  }
-}
-
-// MARK: - Bubble
-
-private struct ChatBubbleView: View {
-  let bubble: WhatsAppChatBubble
-  let isGroup: Bool
-  let showSender: Bool
-  let accent: Color
-
-  @State private var loadedImage: NSImage?
-
-  private var showGutter: Bool { isGroup && !bubble.isFromMe }
-
-  var body: some View {
-    HStack(alignment: .bottom, spacing: 6) {
-      if bubble.isFromMe { Spacer(minLength: 60) }
-      if showGutter {
-        // Avatar gutter for group senders — shown at the start of a run, else a
-        // spacer keeps consecutive bubbles aligned under it.
-        if showSender {
-          Avatar(name: bubble.senderName ?? "?", size: 26, imageData: bubble.senderImage)
-        } else {
-          Color.clear.frame(width: 26, height: 26)
-        }
-      }
-      VStack(alignment: bubble.isFromMe ? .trailing : .leading, spacing: 2) {
-        if showSender, let sender = bubble.senderName {
-          Text(sender)
-            .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(Self.senderColor(for: sender))
-            .padding(.leading, 4)
-        }
-        if let path = bubble.imagePath {
-          imageAttachment(path: path)
-          if !bubble.text.isEmpty { messageBubble(bubble.text) }
-        } else {
-          messageBubble(bubble.text)
-        }
-      }
-      if !bubble.isFromMe { Spacer(minLength: 60) }
-    }
-  }
-
-  /// Stable, readable per-sender color so "who said what" is clear at a glance in
-  /// group chats. Deterministic from the name so a sender keeps the same color.
-  private static func senderColor(for name: String) -> Color {
-    let palette: [Color] = [
-      Color(red: 0.40, green: 0.71, blue: 1.00), Color(red: 0.53, green: 0.85, blue: 0.55),
-      Color(red: 1.00, green: 0.71, blue: 0.40), Color(red: 0.98, green: 0.55, blue: 0.60),
-      Color(red: 0.72, green: 0.64, blue: 0.98), Color(red: 0.42, green: 0.86, blue: 0.82),
-      Color(red: 0.96, green: 0.80, blue: 0.36),
-    ]
-    let h = abs(name.hashValue)
-    return palette[h % palette.count]
-  }
-
-  @ViewBuilder
-  private func imageAttachment(path: String) -> some View {
-    Group {
-      if let img = loadedImage {
-        Image(nsImage: img)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(maxWidth: 220, maxHeight: 260)
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-      } else {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .fill(Color(red: 0.17, green: 0.17, blue: 0.19))
-          .frame(width: 160, height: 160)
-          .overlay(
-            Image(systemName: "photo")
-              .font(.system(size: 28))
-              .foregroundColor(OmiColors.textTertiary)
-          )
-      }
-    }
-    .task(id: path) {
-      loadedImage = await WhatsAppAttachmentImageCache.shared.image(atPath: path)
-    }
-  }
-
-  @ViewBuilder
-  private func messageBubble(_ text: String) -> some View {
-    Text(text)
-      .scaledFont(size: 13)
-      .foregroundColor(bubble.isFromMe ? .white : OmiColors.textPrimary)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
-      .background(bubble.isFromMe ? accent : Color(red: 0.17, green: 0.17, blue: 0.19))
-      .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-  }
-}
-
-// MARK: - Attachment image cache
-
-/// Loads and caches WhatsApp attachment images off the SwiftUI render path
-/// (actor + NSCache), mirroring the iMessage attachment cache.
-private actor WhatsAppAttachmentImageCache {
-  static let shared = WhatsAppAttachmentImageCache()
-
-  private let cache: NSCache<NSString, NSImage> = {
-    let cache = NSCache<NSString, NSImage>()
-    cache.countLimit = 200
-    cache.totalCostLimit = 100 * 1024 * 1024  // 100MB
-    return cache
-  }()
-
-  func image(atPath path: String) -> NSImage? {
-    let key = path as NSString
-    if let cached = cache.object(forKey: key) { return cached }
-    if Task.isCancelled { return nil }
-    guard let image = NSImage(contentsOfFile: path) else { return nil }
-    cache.setObject(image, forKey: key, cost: Self.decodedByteCost(of: image))
-    return image
-  }
-
-  private static func decodedByteCost(of image: NSImage) -> Int {
-    var pixels = 0
-    for rep in image.representations {
-      pixels = max(pixels, rep.pixelsWide * rep.pixelsHigh)
-    }
-    if pixels == 0 {
-      pixels = Int(image.size.width * image.size.height)
-    }
-    return max(1, pixels * 4)
-  }
-}
-
-// MARK: - Avatar
-
-private struct Avatar: View {
-  let name: String
-  let size: CGFloat
-  var imageData: Data? = nil
-
-  var body: some View {
-    Group {
-      if let data = imageData, let nsImage = NSImage(data: data) {
-        Image(nsImage: nsImage)
-          .resizable()
-          .aspectRatio(contentMode: .fill)
-      } else {
-        // WhatsApp-style default display picture (gray person silhouette) for anyone
-        // without a photo, rather than initials of an opaque code.
-        Circle()
-          .fill(OmiColors.backgroundSecondary)
-          .overlay(
-            Image(systemName: "person.fill")
-              .font(.system(size: size * 0.5))
-              .foregroundColor(OmiColors.textTertiary)
-          )
-      }
-    }
-    .frame(width: size, height: size)
-    .clipShape(Circle())
   }
 }
