@@ -30,7 +30,11 @@ from utils.memory.canonical_memory_adapter import (
 )
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.required_promotion import required_promotion_payload
-from utils.memory.import_write_guard import import_write_block_mode, import_write_violation
+from utils.memory.import_write_guard import (
+    import_write_block_mode,
+    import_write_violation,
+    is_per_file_local_import_tags,
+)
 from utils.memory.memory_api_contract import (
     MemoryApiExposure,
     memory_write_payload,
@@ -307,6 +311,14 @@ async def create_memory(
     manually_added = memory.category == MemoryCategory.manual
     memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
 
+    # Old desktop builds fan out one create per indexed local file during
+    # onboarding (up to 2800 path facts). Acknowledge without persisting:
+    # a 4xx would make those clients surface/retry a failure for traffic we
+    # simply do not want stored.
+    if is_per_file_local_import_tags(memory.tags):
+        logger.info("memory_import.per_file_item_dropped endpoint=/v3/memories uid=%s", uid)
+        return _legacy_memory_response(memory_db)
+
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
     payload = memory_db.model_dump()
@@ -387,13 +399,29 @@ async def create_memories_batch(
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
+    # Drop per-file local-file import items (one memory per indexed file, up
+    # to 2800 per onboarding scan) regardless of block mode: they buried real
+    # memories for every user who ran the scan and old desktop builds in the
+    # wild still send them. Aggregate local_files facts pass through.
+    accepted_memories = [m for m in request.memories if not is_per_file_local_import_tags(m.tags)]
+    dropped_count = len(request.memories) - len(accepted_memories)
+    if dropped_count:
+        logger.info(
+            "memory_import.per_file_items_dropped endpoint=/v3/memories/batch uid=%s dropped=%d kept=%d",
+            uid,
+            dropped_count,
+            len(accepted_memories),
+        )
+    if not accepted_memories:
+        return BatchMemoriesResponse(memories=[], created_count=0)
+
     # Honor each item's category (defaults to `interesting` per the Memory
     # model). Desktop import/extraction paths send `system`/`interesting` so
     # they land under "About You"/"Insights"; only user-typed memories send
     # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
-    for memory in request.memories:
+    for memory in accepted_memories:
         manually_added = memory.category == MemoryCategory.manual
         memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
         memory_dbs.append(memory_db)

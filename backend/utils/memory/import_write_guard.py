@@ -42,11 +42,35 @@ IMPORT_METADATA_KEYS = frozenset(
 )
 
 
+# Tags that mark one-memory-per-indexed-file items from the desktop local-file
+# onboarding scan: the folder tag the scanner attached (projects/documents/
+# downloads) or the per-file "recently modified" variant. Aggregate local_files
+# facts use profile/project/technology tags instead and are not matched.
+PER_FILE_LOCAL_IMPORT_TAGS = frozenset({"projects", "documents", "downloads", "recent_file"})
+
+
 def normalized_import_marker(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
     marker = "_".join(value.strip().lower().replace("-", "_").split())
     return marker or None
+
+
+def is_per_file_local_import_tags(tags: Any) -> bool:
+    """True for per-file local_files import items (one memory per indexed file).
+
+    These carry no durable signal — up to 2800 path facts per onboarding scan —
+    and historically buried users' real memories (bulk-purged server-side in
+    July 2026). They are dropped unconditionally, independent of
+    MEMORY_IMPORT_WRITE_BLOCK_MODE, so desktop clients released before the
+    scanner stopped emitting them cannot recreate the spam.
+    """
+    if not isinstance(tags, list):
+        return False
+    normalized = {normalized_import_marker(tag) for tag in tags} - {None}
+    if not {"local_files", "onboarding"} <= normalized:
+        return False
+    return bool(normalized & PER_FILE_LOCAL_IMPORT_TAGS)
 
 
 def import_write_violation(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
