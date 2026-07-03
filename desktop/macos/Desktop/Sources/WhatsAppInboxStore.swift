@@ -259,30 +259,45 @@ final class WhatsAppInboxStore: ObservableObject {
       NSLog("WhatsApp auto-reply cancelled for \(chat.chatID) before send (toggled off mid-draft)")
       return
     }
-    do {
-      try await WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: phone)
-      // Only reflect the send once WhatsApp's database confirms it (send() throws
-      // otherwise), so auto-reply never optimistically shows an unsent message.
-      appendSent(text, to: chat.id)
-    } catch is CancellationError {
-      // Auto-reply was toggled off (or the task cancelled) mid-send — nothing was sent
-      // and the user opted out, so don't leave a draft behind.
-      NSLog("WhatsApp auto-reply cancelled mid-send for \(chat.chatID)")
-    } catch {
-      // The send wasn't confirmed. This is either nothing-sent (permission missing,
-      // recipient unverifiable) or .sendUnconfirmed (Return fired but no confirming row
-      // appeared). Since the confirm window far exceeds WhatsApp's normal persist latency,
-      // an unconfirmed result more likely means the reply did NOT go out than "delivered
-      // but slow" — so keep it as a draft rather than silently dropping a possibly-unsent
-      // reply. Auto-reply never auto-resends a draft, so this can't create an automatic
-      // duplicate; it just surfaces the reply for the user to complete. (Mirrors the
-      // manual path, which keeps the draft and warns.)
-      if case WhatsAppSenderError.sendUnconfirmed = error {
-        NSLog("WhatsApp auto-reply unconfirmed for \(chat.chatID); keeping draft")
-      } else {
-        NSLog("WhatsApp auto-reply not sent for \(chat.chatID): \(error.localizedDescription)")
+    // Auto-reply should reliably SEND on draft. `.notConfirmed` means the recipient
+    // guard couldn't verify the target chat and NOTHING was sent (fail-closed) — often a
+    // transient miss on an unattended reply (WhatsApp slow to open the chat). Retry once;
+    // a fresh prefill usually settles, and because nothing was sent a retry can't
+    // duplicate. Any other outcome is terminal (see the catch).
+    let maxSendAttempts = 2
+    for attempt in 1...maxSendAttempts {
+      do {
+        try await WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: phone)
+        // Only reflect the send once WhatsApp's database confirms it (send() throws
+        // otherwise), so auto-reply never optimistically shows an unsent message.
+        appendSent(text, to: chat.id)
+        return
+      } catch is CancellationError {
+        // Auto-reply was toggled off (or the task cancelled) mid-send — nothing was sent
+        // and the user opted out, so don't leave a draft behind.
+        NSLog("WhatsApp auto-reply cancelled mid-send for \(chat.chatID)")
+        return
+      } catch WhatsAppSenderError.notConfirmed
+      where attempt < maxSendAttempts && !Task.isCancelled && autoReplyChats.contains(chat.chatID) {
+        NSLog("WhatsApp auto-reply not confirmed for \(chat.chatID); retrying (attempt \(attempt + 1))")
+        continue
+      } catch {
+        // The send wasn't confirmed after our attempt(s). Either nothing-sent (permission
+        // missing, recipient still unverifiable) or `.sendUnconfirmed` (Return fired but no
+        // confirming row appeared). Since the confirm window far exceeds WhatsApp's normal
+        // persist latency, an unconfirmed result more likely means the reply did NOT go out
+        // — so keep it as a draft rather than silently dropping a possibly-unsent reply.
+        // Auto-reply never auto-resends a draft, so this can't create an automatic
+        // duplicate; it just surfaces the reply for the user to complete. (Mirrors the
+        // manual path, which keeps the draft and warns.)
+        if case WhatsAppSenderError.sendUnconfirmed = error {
+          NSLog("WhatsApp auto-reply unconfirmed for \(chat.chatID); keeping draft")
+        } else {
+          NSLog("WhatsApp auto-reply not sent for \(chat.chatID): \(error.localizedDescription)")
+        }
+        preDrafts[chat.id] = text
+        return
       }
-      preDrafts[chat.id] = text
     }
   }
 
