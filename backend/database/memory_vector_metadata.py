@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from models.memory_search_gateway import SearchDecision, SearchVectorHit
 from models.product_memory import MemoryTier, MemoryItem
@@ -120,7 +120,8 @@ def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
 
 
 def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorHit:
-    metadata = match.get("metadata") or {}
+    raw_metadata = match.get("metadata")
+    metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
@@ -148,7 +149,8 @@ def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorH
 
 
 def parse_search_vector_hit(match: Dict[str, Any]) -> ParsedVectorHit:
-    metadata = match.get("metadata") or {}
+    raw_metadata = match.get("metadata")
+    metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
