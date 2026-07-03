@@ -714,6 +714,12 @@ actor CalendarReaderService {
       process.standardError = errPipe
       do {
         try process.run()
+        // The keychain item ACL can pop a user prompt; if nobody answers (screen locked,
+        // background fetch), `security` never exits — terminate instead of hanging the
+        // actor forever. Same pattern as the Python fetch timeout below.
+        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(15)) {
+          if process.isRunning { process.terminate() }
+        }
         process.waitUntilExit()
         guard process.terminationStatus == 0 else { return nil }
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?

@@ -81,17 +81,38 @@ actor AICloneContextService {
     if let fixture = Self.loadFixtureEvents() {
       block = Self.renderCalendarBlock(events: fixture, now: now)
     } else {
-      do {
-        let events = try await CalendarReaderService.shared.readEvents(
+      // Hard deadline on the whole fetch: cookie decryption can stall on keychain
+      // prompts, and a reply must never wait on that. Timeout/failure → no block.
+      let events = await Self.withTimeout(seconds: 45) {
+        try await CalendarReaderService.shared.readEvents(
           daysBack: 1, daysForward: Self.calendarDaysForward, maxResults: 150)
+      }
+      if let events {
         block = Self.renderCalendarBlock(events: events, now: now)
-      } catch {
-        log("AICloneContextService: calendar fetch failed (replying without): \(error)")
+      } else {
+        log("AICloneContextService: calendar fetch failed or timed out (replying without)")
         block = nil
       }
     }
     calendarCache = (block, now)
     return block
+  }
+
+  /// Race `work` against a deadline; nil on timeout or error. The loser is cancelled,
+  /// though a fetch blocked in a subprocess only dies when its own process timeout fires.
+  private static func withTimeout<T: Sendable>(
+    seconds: TimeInterval, _ work: @escaping @Sendable () async throws -> T
+  ) async -> T? {
+    await withTaskGroup(of: T?.self) { group in
+      group.addTask { try? await work() }
+      group.addTask {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        return nil
+      }
+      let first = await group.next() ?? nil
+      group.cancelAll()
+      return first
+    }
   }
 
   /// Pure renderer: filters to [now, now+14d], sorts ascending, caps line count, and
