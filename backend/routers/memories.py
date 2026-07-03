@@ -605,6 +605,23 @@ def list_memory_review_queue(
     return review_queue.list_review_conflicts(uid, status=status, limit=limit)
 
 
+@router.get('/v3/memories/review-queue/{review_id}', tags=['memories'])
+def get_memory_review_item(
+    review_id: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),
+):
+    """Fetch a single memory review conflict by id.
+
+    The list endpoint only returns conflicts in the 'pending' status, so once a conflict is
+    resolved it can no longer be retrieved. This fetches any of the user's review conflicts
+    by id regardless of status, returning 404 if it does not exist.
+    """
+    conflict = review_queue.get_review_conflict(uid, review_id)
+    if conflict is None:
+        raise HTTPException(status_code=404, detail='Review item not found')
+    return conflict
+
+
 @router.post('/v3/memories/review-queue/{review_id}/resolve', tags=['memories'])
 def resolve_memory_review_item(
     review_id: str,
