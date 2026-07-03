@@ -34,6 +34,7 @@ from utils.llm.style_fingerprint import (
     render_fingerprint_lines,
     style_hard_fails,
 )
+from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import MemoryService
 from utils.retrieval.tool_services.person_service import resolve_person, is_ambiguous
 
@@ -536,6 +537,24 @@ def _generate_candidates(system_prompt: str, user_prompt: str) -> List[str]:
     return [single] if single else []
 
 
+def _parse_selection_index(content: str, num_candidates: int) -> Optional[int]:
+    """Parse the self-selection reply into a valid candidate index, or None.
+
+    Prefers a standalone integer at the START of the response (the model was asked to
+    reply with only the number); otherwise the first standalone integer anywhere. The
+    old bare ``\\d+`` search grabbed any digit run — so rationale like "100% clarity, so
+    pick 2" yielded 100 (out of range → silent fallback). Returns None when nothing in
+    range is found so the caller can log the fallback instead of masking it."""
+    text = (content or '').strip()
+    if not text:
+        return None
+    m = re.match(r'#?\s*(\d+)', text) or re.search(r'(?<!\d)(\d+)(?!\d)', text)
+    if not m:
+        return None
+    idx = int(m.group(1))
+    return idx if 0 <= idx < num_candidates else None
+
+
 def _select_best(name: str, style_block: str, thread_text: str, candidates: List[str]) -> str:
     """Self-select the best candidate with a single plain call (ask for the index).
     With 0/1 candidate there's nothing to judge."""
@@ -547,11 +566,15 @@ def _select_best(name: str, style_block: str, thread_text: str, candidates: List
     system_prompt += "\n\nReply with ONLY the number of the best candidate, nothing else."
     try:
         content = _invoke_memories(system_prompt, user_prompt)
-        m = re.search(r'\d+', content or '')
-        if m:
-            idx = int(m.group())
-            if 0 <= idx < len(candidates):
-                return candidates[idx]
+        idx = _parse_selection_index(content, len(candidates))
+        if idx is not None:
+            return candidates[idx]
+        # Fallback is a real event (self-selection bypassed → ordering bias), so make it
+        # observable rather than silent.
+        logger.warning(
+            "reply_draft: self-selection returned no in-range index; using first survivor. "
+            f"raw={sanitize_pii((content or '').strip()[:200])!r}"
+        )
     except Exception as e:
         logger.warning(f"reply_draft: self-selection failed, using first survivor: {e}")
     return candidates[0]

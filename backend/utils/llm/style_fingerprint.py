@@ -31,7 +31,13 @@ _EMOJI_RE = re.compile(
     "]"
 )
 
-_WORD_RE = re.compile(r"[A-Za-z']+")
+# Unicode-aware word tokenizer: `[^\W\d_]` matches alphabetic characters in ANY
+# script (Latin, Cyrillic, Arabic, accented Latin, …), with internal apostrophes for
+# contractions. The old ASCII-only `[A-Za-z']+` matched nothing in non-Latin scripts,
+# so a whole message collapsed to 1 word via the `or 1` fallback and skewed avg_words /
+# word_band / vocabulary for multilingual users. (Space-less scripts like CJK still
+# tokenize a run as one word — a narrower follow-up if needed.)
+_WORD_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
 
 # Em dash, en dash, or a double-hyphen used as a dash. One of the loudest "AI
 # tells" — but still judged corpus-relatively: only forbidden for users whose own
@@ -132,7 +138,10 @@ def compute_fingerprint(samples: List[str]) -> StyleFingerprint:
         lowercase_ratio=lowercase_ratio,
         uses_capitalization=lowercase_ratio < 0.5,
         emoji_rate=emoji_rate,
-        uses_emoji=emoji_rate > 0.05,
+        # `>=` so a user exactly at the threshold (e.g. 1 emoji in 20 messages) counts
+        # as using emoji — otherwise style_hard_fails would reject their emoji drafts
+        # with "never uses emoji", contradicting their own sampled corpus.
+        uses_emoji=emoji_rate >= 0.05,
         avg_words=avg_words,
         word_band=word_band,
         terminal_punct_rate=terminal / n,

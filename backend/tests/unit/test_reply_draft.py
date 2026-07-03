@@ -551,3 +551,12 @@ def test_profile_fallback_text_is_length_capped():
     assert 'WHAT OMI KNOWS ABOUT YOU' in out
     # Only the capped number of profile chars survive (the profile is all 'x').
     assert out.count('x') == rd.PROFILE_TEXT_CHAR_CAP
+
+
+def test_parse_selection_index():
+    assert rd._parse_selection_index("2", 5) == 2
+    assert rd._parse_selection_index("#3 is best", 5) == 3
+    assert rd._parse_selection_index("The best candidate is 1.", 5) == 1
+    assert rd._parse_selection_index("", 5) is None
+    assert rd._parse_selection_index("option ten", 5) is None
+    assert rd._parse_selection_index("9", 5) is None  # out of range -> None (observable fallback)
