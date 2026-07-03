@@ -48,6 +48,20 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     return KnowledgeGraphResponse(nodes=graph.get('nodes', []), edges=graph.get('edges', []))
 
 
+@router.get('/v1/knowledge-graph/nodes/{node_id}', tags=['knowledge_graph'])
+def get_knowledge_graph_node(node_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Fetch a single knowledge-graph node by id.
+
+    The full-graph endpoint returns every node and edge; this fetches one node directly (for
+    example to expand or refresh a single node without reloading the whole graph), returning
+    404 if it does not exist.
+    """
+    node = kg_db.get_knowledge_node(uid, node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail='Node not found')
+    return node
+
+
 def _rebuild_graph_task(uid: str, user_name: str):
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
