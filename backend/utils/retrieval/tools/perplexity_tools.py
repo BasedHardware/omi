@@ -2,7 +2,6 @@
 Tools for performing web searches using Perplexity AI.
 """
 
-import httpx
 from langchain_core.tools import tool
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -69,19 +68,10 @@ async def perplexity_web_search_tool(
     except APIConnectionError as e:
         logger.error(f"❌ perplexity_web_search_tool - Request error: {e}")
         return f"Error: Failed to connect to Perplexity API. {str(e)}"
-    except httpx.HTTPStatusError as e:
-        logger.error(f"❌ perplexity_web_search_tool - API error: {e.response.status_code}")
-        return f"Error: Perplexity API returned status {e.response.status_code}. Please try again later."
     except (IndexError, KeyError, TypeError):
         logger.error("⚠️ perplexity_web_search_tool - Unexpected response format")
         return "Error: Unexpected response format from Perplexity API"
 
-    except httpx.TimeoutException:
-        logger.warning("❌ perplexity_web_search_tool - Request timeout")
-        return "Error: Request to Perplexity API timed out. Please try again later."
-    except httpx.HTTPError as e:
-        logger.error(f"❌ perplexity_web_search_tool - Request error: {e}")
-        return f"Error: Failed to connect to Perplexity API. {str(e)}"
     except Exception as e:
         logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}")
         return f"Error: An unexpected error occurred while searching: {str(e)}"

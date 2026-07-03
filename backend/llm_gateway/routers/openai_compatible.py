@@ -161,6 +161,13 @@ def _get_image_generation_client() -> httpx.AsyncClient:
     return _image_generation_client
 
 
+async def close_image_generation_client() -> None:
+    global _image_generation_client
+    if _image_generation_client is not None:
+        await _image_generation_client.aclose()
+        _image_generation_client = None
+
+
 def _streaming_response(resolved_route, credentials, provider_registry: ProviderRegistry) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
 

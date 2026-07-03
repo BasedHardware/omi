@@ -2,8 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from llm_gateway.routers.dependencies import close_provider_registry
 from llm_gateway.routers import health, metrics, openai_compatible
+from llm_gateway.routers.dependencies import close_provider_registry
 
 
 @asynccontextmanager
@@ -11,6 +11,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await openai_compatible.close_image_generation_client()
         await close_provider_registry()
 
 

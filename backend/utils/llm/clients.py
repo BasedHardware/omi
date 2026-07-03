@@ -403,7 +403,11 @@ def get_llm_gateway_chat_structured(
     result = get_or_create_omi_gateway_llm(
         CHAT_STRUCTURED_AUTO_LANE_ID,
         streaming,
-        options={'request_timeout': request_timeout or BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS},
+        options={
+            'request_timeout': (
+                request_timeout if request_timeout is not None else BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
+            )
+        },
     )
     if cache_key:
         return result.bind(prompt_cache_key=cache_key)

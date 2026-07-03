@@ -65,7 +65,7 @@ async def test_executor_forwards_prompt_parser_request_without_response_format()
 
 
 @pytest.mark.asyncio
-async def test_executor_uses_executing_route_provider_options_for_lkg_fallback():
+async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
     active_route = active_route_with_fallbacks([]).model_copy(
         update={
             'provider_options': {'temperature': 0.9},
