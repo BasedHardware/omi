@@ -4,12 +4,15 @@ import json
 import re
 from pathlib import Path
 
-from omi_cli.models import MemoryCategory
+from omi_cli.models import GoalType, MemoryCategory
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 PUBLIC_OPENAPI_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'openapi.json'
 
 
+# Every backend REST route the CLI hardcodes. Auth/key minting is included
+# because the CLI depends on the route existing. /v1/local/* routes are local
+# agent-VM protocols and intentionally out of scope.
 CLI_ROUTES = {
     ('GET', '/v1/dev/user/action-items'),
     ('POST', '/v1/dev/user/action-items'),
@@ -32,6 +35,7 @@ CLI_ROUTES = {
     ('POST', '/v1/dev/user/memories'),
     ('PATCH', '/v1/dev/user/memories/{memory_id}'),
     ('DELETE', '/v1/dev/user/memories/{memory_id}'),
+    ('POST', '/v1/dev/keys'),
 }
 
 
@@ -67,3 +71,37 @@ def test_cli_memory_category_enum_matches_public_openapi():
     actual = {item.value for item in MemoryCategory}
 
     assert actual == expected
+
+
+def test_cli_goal_type_enum_matches_public_openapi():
+    spec = load_public_openapi()
+    goal_type_schema = spec['components']['schemas'].get('GoalType')
+    assert goal_type_schema and 'enum' in goal_type_schema, (
+        'GoalType enum missing from public OpenAPI; the CLI mirrors it for '
+        'goal create/update validation.'
+    )
+    expected = set(goal_type_schema['enum'])
+    actual = {item.value for item in GoalType}
+
+    assert actual == expected
+
+
+def test_cli_local_only_enums_are_documented():
+    """CLI enums that are NOT in the public spec must be documented here.
+
+    MemoryVisibility and ConversationTextSource are CLI-local request-body
+    enums; the backend types the corresponding fields as plain strings, so they
+    do not surface as named enums in the public OpenAPI. Pinning them here
+    ensures a future backend change that DOES publish them gets noticed.
+    """
+    spec = load_public_openapi()
+    schemas = spec['components']['schemas']
+    assert 'MemoryVisibility' not in schemas, (
+        'MemoryVisibility now exists in public OpenAPI — replace the CLI-local '
+        'enum with a contract check against the published schema.'
+    )
+    assert 'ConversationTextSource' not in schemas, (
+        'ConversationTextSource now exists in public OpenAPI — replace the '
+        'CLI-local enum with a contract check against the published schema.'
+    )
+
