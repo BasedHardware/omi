@@ -41,6 +41,16 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.executors import db_executor, run_blocking
 from utils import social
+from utils.integration_telemetry import (
+    IntegrationTelemetryContext,
+    X,
+    emit_auth_refresh_attempted,
+    emit_auth_refresh_failed,
+    emit_auth_refresh_succeeded,
+    emit_sync_attempted,
+    emit_sync_failed,
+    emit_sync_succeeded,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +235,8 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
     refresh = integ.get('refresh_token')
     if not refresh:
         return integ['access_token']  # best effort; may be expired
+    telemetry_context = IntegrationTelemetryContext(integration_name=X, operation='refresh_token', uid=uid)
+    emit_auth_refresh_attempted(telemetry_context)
     try:
         token_resp = await _refresh(refresh)
         await run_blocking(
@@ -235,9 +247,11 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
             handle=integ.get('handle'),
             x_user_id=integ.get('x_user_id'),
         )
+        emit_auth_refresh_succeeded(telemetry_context)
         return token_resp['access_token']
     except Exception as e:
         logger.warning(f'x_connector: token refresh failed for uid={uid}: {e}')
+        emit_auth_refresh_failed(telemetry_context, e)
         return None
 
 
@@ -389,6 +403,8 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
 
 async def sync_x_for_user(uid: str) -> Dict:
     """Pull new X posts, store raw, extract memories. Returns a summary dict."""
+    sync_context = IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid)
+    emit_sync_attempted(sync_context)
     integ = await run_blocking(db_executor, users_db.get_integration, uid, INTEGRATION_KEY) or {}
     # Mark syncing so the desktop can show live progress while this runs in the
     # background (the OAuth callback kicks this off as a background task).
@@ -422,12 +438,22 @@ async def sync_x_for_user(uid: str) -> Dict:
                 source = 'oauth'
         except Exception as e:
             logger.warning(f'x_connector: official API sync failed for uid={uid}, falling back: {e}')
+            emit_sync_failed(
+                IntegrationTelemetryContext(
+                    integration_name=X,
+                    operation='fetch_oauth_posts',
+                    uid=uid,
+                    sync_source='oauth',
+                ),
+                e,
+            )
 
     # Fallback: RapidAPI public timeline by handle.
     if source is None:
         handle = integ.get('handle')
         if not handle:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+            emit_sync_failed(sync_context, 'not_connected')
             return {'success': False, 'error': 'not_connected', 'new_posts': 0, 'memories_created': 0}
         try:
             timeline = await social.get_twitter_timeline(handle)
@@ -444,6 +470,16 @@ async def sync_x_for_user(uid: str) -> Dict:
         except Exception as e:
             logger.error(f'x_connector: RapidAPI fallback failed for uid={uid}: {e}')
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+            emit_sync_failed(
+                IntegrationTelemetryContext(
+                    integration_name=X,
+                    operation='fetch_tweets',
+                    uid=uid,
+                    sync_source='rapidapi',
+                ),
+                e,
+            )
+            emit_sync_failed(sync_context, e)
             return {'success': False, 'error': 'fetch_failed', 'new_posts': 0, 'memories_created': 0}
 
     written = await run_blocking(db_executor, x_posts_db.save_x_posts, uid, new_posts)
@@ -474,6 +510,11 @@ async def sync_x_for_user(uid: str) -> Dict:
             'memory_count': int(integ.get('memory_count', 0)) + memories_created,
             'syncing': False,
         },
+    )
+    emit_sync_succeeded(
+        IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid, sync_source=source),
+        item_count=written,
+        memories_created=memories_created,
     )
     return {
         'success': True,

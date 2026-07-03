@@ -11,6 +11,13 @@ import httpx
 import database.users as users_db
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
+from utils.integration_telemetry import (
+    GOOGLE_CALENDAR,
+    IntegrationTelemetryContext,
+    emit_auth_refresh_attempted,
+    emit_auth_refresh_failed,
+    emit_auth_refresh_succeeded,
+)
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -61,8 +68,15 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
         New access token or None if refresh failed
     """
     refresh_token = integration.get('refresh_token')
+    telemetry_context = IntegrationTelemetryContext(
+        integration_name=GOOGLE_CALENDAR,
+        operation='refresh_token',
+        uid=uid,
+    )
+    emit_auth_refresh_attempted(telemetry_context)
     if not refresh_token:
         logger.warning(f"🔄 No refresh_token stored for uid={uid}, cannot refresh")
+        emit_auth_refresh_failed(telemetry_context, 'missing_token')
         return None
 
     client_id = os.getenv('GOOGLE_CLIENT_ID')
@@ -70,6 +84,7 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
 
     if not all([client_id, client_secret]):
         logger.error("🔄 Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET env vars")
+        emit_auth_refresh_failed(telemetry_context, 'missing_oauth_config')
         return None
 
     try:
@@ -95,6 +110,7 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
                 integration['access_token'] = new_access_token
                 await run_blocking(db_executor, users_db.set_integration, uid, 'google_calendar', integration)
                 logger.info(f"🔄 Successfully refreshed Google token for uid={uid}")
+                emit_auth_refresh_succeeded(telemetry_context)
                 return new_access_token
 
         # Detect token revocation (invalid_grant) — user revoked access in Google settings
@@ -108,12 +124,18 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
             logger.error(
                 f"🔄 Google token refresh failed for uid={uid}: " f"status={response.status_code}, body={error_body}"
             )
+        emit_auth_refresh_failed(
+            telemetry_context, response.text or 'token_refresh_failed', provider_status_code=response.status_code
+        )
     except httpx.TimeoutException:
         logger.error(f"🔄 Timeout refreshing Google token for uid={uid}")
+        emit_auth_refresh_failed(telemetry_context, 'timeout')
     except httpx.ConnectError:
         logger.error(f"🔄 Network error refreshing Google token for uid={uid}")
+        emit_auth_refresh_failed(telemetry_context, 'connect_error')
     except Exception as e:
         logger.error(f"🔄 Unexpected error refreshing Google token for uid={uid}: {e}")
+        emit_auth_refresh_failed(telemetry_context, e)
 
     return None
 
