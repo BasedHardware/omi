@@ -18,9 +18,7 @@ class KnowledgeGraphApi {
     );
 
     if (response != null && response.statusCode == 200) {
-      return wire.GeneratedKnowledgeGraphResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>,
-      ).toJson();
+      return wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     } else {
       throw Exception('Failed to load knowledge graph: ${response?.body}');
     }

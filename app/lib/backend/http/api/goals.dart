@@ -119,7 +119,8 @@ class GoalSuggestion {
 
   factory GoalSuggestion.fromJson(Map<String, dynamic> json) {
     return GoalSuggestion.fromGenerated(
-        wire.GeneratedGoalSuggestionResponse.fromJson(_goalSuggestionJsonWithDefaults(json)));
+      wire.GeneratedGoalSuggestionResponse.fromJson(_goalSuggestionJsonWithDefaults(json)),
+    );
   }
 
   factory GoalSuggestion.fromGenerated(wire.GeneratedGoalSuggestionResponse generated) {

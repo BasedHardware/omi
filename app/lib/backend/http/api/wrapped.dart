@@ -90,10 +90,10 @@ Future<Wrapped2025Response?> generateWrapped2025() async {
       status: generated.status == 'done'
           ? WrappedStatus.done
           : generated.status == 'processing'
-              ? WrappedStatus.processing
-              : generated.status == 'error'
-                  ? WrappedStatus.error
-                  : WrappedStatus.notGenerated,
+          ? WrappedStatus.processing
+          : generated.status == 'error'
+          ? WrappedStatus.error
+          : WrappedStatus.notGenerated,
     );
   }
   return null;

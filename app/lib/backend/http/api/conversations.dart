@@ -293,8 +293,11 @@ class TranscriptsResponse {
       final segments = json[key];
       if (segments is! List) return [];
       return segments
-          .map((segment) => TranscriptSegment.fromGenerated(
-              wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>)))
+          .map(
+            (segment) => TranscriptSegment.fromGenerated(
+              wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>),
+            ),
+          )
           .toList();
     }
 
@@ -588,8 +591,9 @@ Future<String> testConversationPrompt(String prompt, String conversationId) asyn
   );
   if (response == null) return '';
   if (response.statusCode == 200) {
-    return wire.GeneratedConversationTestPromptResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>)
-        .summary;
+    return wire.GeneratedConversationTestPromptResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).summary;
   } else {
     return '';
   }
@@ -641,7 +645,8 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
   Logger.debug('getConversationSuggestedApps: ${response.body}');
   if (response.statusCode == 200) {
     final data = apps_wire.GeneratedConversationSuggestedAppsResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
     return data.suggestedApps.map(App.fromGeneratedDetail).toList();
   }
   return [];

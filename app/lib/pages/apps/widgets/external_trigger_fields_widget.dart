@@ -175,7 +175,8 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                                                       ),
                                                       const Spacer(),
                                                       Checkbox(
-                                                        value: provider.triggerEvent ==
+                                                        value:
+                                                            provider.triggerEvent ==
                                                             provider.getTriggerEvents()[index].id,
                                                         onChanged: (value) {
                                                           provider.setTriggerEvent(

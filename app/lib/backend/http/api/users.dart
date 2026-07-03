@@ -199,7 +199,8 @@ Future<Person?> createPerson(String name) async {
   Logger.debug('createPerson response: ${response.body}');
   if (response.statusCode == 200) {
     return Person.fromGenerated(
-        people_wire.GeneratedPerson.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
+      people_wire.GeneratedPerson.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   return null;
 }

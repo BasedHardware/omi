@@ -206,8 +206,9 @@ class FeatureContent {
   factory FeatureContent.fromJson(Map<String, dynamic> json) {
     return FeatureContent(
       title: json['title'] as String,
-      steps:
-          (json['steps'] as List<dynamic>).map((item) => FeatureStep.fromJson(item as Map<String, dynamic>)).toList(),
+      steps: (json['steps'] as List<dynamic>)
+          .map((item) => FeatureStep.fromJson(item as Map<String, dynamic>))
+          .toList(),
     );
   }
 
