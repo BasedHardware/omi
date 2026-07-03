@@ -1834,6 +1834,7 @@ struct FilterToggle: View {
                     .scaledFont(size: 12)
                 Text(label)
                     .scaledFont(size: 13)
+                    .lineLimit(1)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -1844,6 +1845,7 @@ struct FilterToggle: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
             )
+            .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.plain)
     }
@@ -1868,11 +1870,13 @@ struct SmallHeaderButton: View {
                 Text(label)
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
+                    .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
             .cornerRadius(6)
+            .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
