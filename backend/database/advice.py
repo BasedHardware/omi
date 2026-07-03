@@ -89,6 +89,31 @@ def update_advice(uid: str, advice_id: str, is_read: bool = None, is_dismissed: 
     return result
 
 
+def set_advice_feedback(uid: str, advice_id: str, rating: int, reason: Optional[str] = None) -> Optional[dict]:
+    """Record the user's feedback on an advice item.
+
+    rating is 1 (helpful), -1 (not helpful), or 0 (clear any existing feedback). Returns the updated
+    advice dict, or None if the advice does not exist (or was deleted mid-update).
+    """
+    ref = _user_col(uid, 'advice').document(advice_id)
+    snap = ref.get()
+    if not snap.exists:
+        return None
+    now = datetime.now(timezone.utc)
+    feedback = None if rating == 0 else {'rating': rating, 'reason': reason, 'rated_at': now}
+    try:
+        ref.update({'feedback': feedback, 'updated_at': now})
+    except NotFound:
+        # The advice was deleted between the existence check and the update.
+        return None
+    result = ref.get().to_dict()
+    if result is None:
+        # The advice was deleted between the update and the re-read.
+        return None
+    result['id'] = advice_id
+    return result
+
+
 def delete_advice(uid: str, advice_id: str) -> bool:
     ref = _user_col(uid, 'advice').document(advice_id)
     if not ref.get().exists:

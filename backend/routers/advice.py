@@ -29,6 +29,11 @@ class UpdateAdviceRequest(BaseModel):
     is_dismissed: bool | None = None
 
 
+class AdviceFeedbackRequest(BaseModel):
+    rating: int = Field(..., ge=-1, le=1)  # 1 = helpful, -1 = not helpful, 0 = clear
+    reason: str | None = Field(None, max_length=500)
+
+
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
@@ -87,3 +92,15 @@ def delete_advice(
 def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
     count = advice_db.mark_all_advice_read(uid)
     return {'status': f'marked {count} as read'}
+
+
+@router.post('/v1/advice/{advice_id}/feedback', tags=['advice'])
+def submit_advice_feedback(
+    advice_id: str,
+    request: AdviceFeedbackRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    result = advice_db.set_advice_feedback(uid, advice_id, rating=request.rating, reason=request.reason)
+    if result is None:
+        raise HTTPException(status_code=404, detail='Advice not found')
+    return result
