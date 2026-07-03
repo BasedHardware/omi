@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Split desktop recording and reconciliation failures into dedicated PostHog events so phone mic reports no longer include desktop finalization errors"
+  ]
+}

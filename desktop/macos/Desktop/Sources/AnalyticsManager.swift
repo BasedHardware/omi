@@ -161,6 +161,28 @@ class AnalyticsManager {
     )
   }
 
+  func conversationReconciliationFailed(
+    error: String,
+    reason: String,
+    source: String?,
+    stage: String?,
+    retryCount: Int,
+    hasBackendId: Bool,
+    hasClientConversationId: Bool,
+    segmentCount: Int?
+  ) {
+    PostHogManager.shared.conversationReconciliationFailed(
+      error: error,
+      reason: reason,
+      source: source,
+      stage: stage,
+      retryCount: retryCount,
+      hasBackendId: hasBackendId,
+      hasClientConversationId: hasClientConversationId,
+      segmentCount: segmentCount
+    )
+  }
+
   // MARK: - Permission Events
 
   func permissionRequested(permission: String, extraProperties: [String: Any] = [:]) {
