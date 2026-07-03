@@ -41,6 +41,7 @@ EVENTS (stdout):
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -54,8 +55,23 @@ THREAD_CONTEXT_LIMIT = 25  # recent messages included per new_message thread sna
 
 # On-device cache for downloaded message media (photos), surfaced to the app as
 # absolute `image_path`s the inbox renders inline. Kept out of the session dir so
-# it can be cleared independently.
-MEDIA_CACHE_DIR = os.path.expanduser("~/Library/Caches/omi-telegram-media")
+# it can be cleared independently, but namespaced PER SESSION (see
+# `_init_media_cache`): chat ids and message ids are scoped to an account and can
+# collide across accounts, so a shared cache would serve one account's photo/avatar
+# to another after a session switch.
+MEDIA_CACHE_BASE = os.path.expanduser("~/Library/Caches/omi-telegram-media")
+MEDIA_CACHE_DIR = MEDIA_CACHE_BASE
+
+
+def _init_media_cache(session_file: str) -> None:
+    """Point MEDIA_CACHE_DIR at a per-session subdirectory derived from the session
+    file path, so each account's cached media stays isolated."""
+    global MEDIA_CACHE_DIR
+    if session_file:
+        key = hashlib.sha1(os.path.realpath(session_file).encode("utf-8")).hexdigest()[:16]
+        MEDIA_CACHE_DIR = os.path.join(MEDIA_CACHE_BASE, key)
+    else:
+        MEDIA_CACHE_DIR = MEDIA_CACHE_BASE
 
 
 async def _download_photo(message, chat_id) -> str:
@@ -527,6 +543,7 @@ def main() -> None:
         emit({"event": "error", "message": "missing --api-id/--api-hash/--session-file", "fatal": True})
         sys.exit(2)
 
+    _init_media_cache(args.session_file)
     helper = Helper(args.api_id, args.api_hash, args.session_file)
     asyncio.run(_run(helper))
 

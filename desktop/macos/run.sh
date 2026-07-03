@@ -759,6 +759,16 @@ if [ -n "$SIGN_IDENTITY" ]; then
         codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
     fi
 
+    # Sign the bundled Telegram helper too. Executables under Contents/Resources are
+    # treated as data (not nested code) by the outer bundle sign, so — like node above
+    # — it needs its own hardened-runtime signature or notarization/Gatekeeper can
+    # reject or fail to launch it.
+    TELEGRAM_HELPER_BIN="$APP_BUNDLE/Contents/Resources/omi-telegram-helper"
+    if [ -f "$TELEGRAM_HELPER_BIN" ]; then
+        substep "Signing bundled Telegram helper binary"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$TELEGRAM_HELPER_BIN"
+    fi
+
     # If local signing identity doesn't match embedded profile team, macOS rejects
     # restricted entitlements (notably com.apple.developer.applesignin) and launch
     # fails with RBS/launchd spawn errors. Fallback to a local dev entitlements set.
@@ -768,12 +778,14 @@ if [ -n "$SIGN_IDENTITY" ]; then
     EFFECTIVE_ENTITLEMENTS="Desktop/Omi.entitlements"
     PROFILE_PATH="$APP_BUNDLE/Contents/embedded.provisionprofile"
     USE_FALLBACK_ENTITLEMENTS=false
+    # Team ID embedded in the signing identity name, e.g. "Apple Development: x (TEAMID)".
+    # A truly self-signed local identity has no parenthesized team → empty string.
+    IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
 
     if [ "$IS_NAMED_BUNDLE" = true ]; then
         substep "Named bundle — stripping applesignin entitlement"
         USE_FALLBACK_ENTITLEMENTS=true
     elif [ -f "$PROFILE_PATH" ]; then
-        IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
         PROFILE_TEAM_ID=""
         PROFILE_TEAM_ID=$(security cms -D -i "$PROFILE_PATH" > /tmp/omi-dev-profile.plist 2>/dev/null && \
             /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/omi-dev-profile.plist 2>/dev/null || true)
@@ -792,14 +804,19 @@ if [ -n "$SIGN_IDENTITY" ]; then
         # Self-signed/local identities have no team, so hardened-runtime library
         # validation rejects the differently-signed embedded frameworks (Sparkle,
         # Sentry, …) and the app crashes at launch with "Library not loaded".
-        # Disable library validation for LOCAL DEV ONLY — production keeps the
-        # untouched Desktop/Omi.entitlements (validation stays on; frameworks are
-        # properly Developer-ID signed + notarized there).
-        # Do NOT mask the final Set: if neither Add nor Set writes the key, the
-        # bundle would ship signed WITHOUT the entitlement and crash at launch.
-        # Let a real failure abort the build (set -e) instead of silently continuing.
-        /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" /tmp/omi-local-dev.entitlements 2>/dev/null \
-            || /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation true" /tmp/omi-local-dev.entitlements
+        # Only disable library validation when the signing identity is genuinely
+        # team-less (self-signed local dev). A fallback path reached with a real
+        # Apple-team identity — e.g. a named bundle signed by a Developer cert — signs
+        # its embedded frameworks with that same identity, so validation passes and we
+        # must NOT strip it. Production keeps the untouched Desktop/Omi.entitlements.
+        if [ -z "$IDENTITY_TEAM_ID" ]; then
+            substep "Self-signed identity (no team) — disabling library validation for local dev"
+            # Do NOT mask the final Set: if neither Add nor Set writes the key, the
+            # bundle would ship signed WITHOUT the entitlement and crash at launch.
+            # Let a real failure abort the build (set -e) instead of silently continuing.
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" /tmp/omi-local-dev.entitlements 2>/dev/null \
+                || /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation true" /tmp/omi-local-dev.entitlements
+        fi
         rm -f "$PROFILE_PATH"
         EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
     fi
