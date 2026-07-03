@@ -36851,6 +36851,89 @@
         ]
       }
     },
+    "/v1/goals/completed": {
+      "get": {
+        "description": "Get the user's completed or archived goals (the inactive ones), most recent first.\n\nThe active-goal endpoints (/v1/goals and /v1/goals/all) only ever return active goals,\nso once a goal is ended or bumped out of the active set it can no longer be queried and\nthe user's goal history becomes invisible. This surfaces those inactive goals instead.",
+        "operationId": "get_completed_goals_v1_goals_completed_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Get Completed Goals V1 Goals Completed Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Completed Goals",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
     "/v1/goals/extract-progress": {
       "post": {
         "description": "Extract goal progress from conversation/chat text and update if found.\nUses LLM to understand context and extract numeric progress.",

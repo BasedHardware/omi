@@ -57,6 +57,25 @@ def get_all_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+@router.get('/v1/goals/completed', tags=['goals'])
+def get_completed_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
+    """Get the user's completed or archived goals (the inactive ones), most recent first.
+
+    The active-goal endpoints (/v1/goals and /v1/goals/all) only ever return active goals,
+    so once a goal is ended or bumped out of the active set it can no longer be queried and
+    the user's goal history becomes invisible. This surfaces those inactive goals instead.
+    """
+    completed = [g for g in goals_db.get_all_goals(uid, include_inactive=True) if not g.get('is_active')]
+
+    # Convert datetime objects to strings for JSON serialization (same as the sibling endpoints).
+    for goal in completed:
+        for field in ('created_at', 'updated_at', 'ended_at'):
+            if field in goal and hasattr(goal[field], 'isoformat'):
+                goal[field] = goal[field].isoformat()
+
+    return completed
+
+
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a durable goal without changing any other goal's focus or lifecycle."""

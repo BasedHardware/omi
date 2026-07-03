@@ -5870,6 +5870,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/goals/completed": {
+    get: {
+      operationId: "get_completed_goals_v1_goals_completed_get";
+      responses: {
+        "200": Array<Record<string, unknown>>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/goals/extract-progress": {
     post: {
       operationId: "extract_and_update_progress_v1_goals_extract_progress_post";
@@ -11293,6 +11303,25 @@ export async function create_canonical_goal_v1_goals_canonical_post(header: { Id
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_completed_goals_v1_goals_completed_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/completed`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function extract_and_update_progress_v1_goals_extract_progress_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ProgressExtractRequest, init?: OmiApiClientInit): Promise<ProgressExtractResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/extract-progress`;
@@ -15539,4 +15568,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 382 client methods generated.

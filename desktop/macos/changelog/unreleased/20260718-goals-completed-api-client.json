@@ -1,0 +1,3 @@
+{
+  "change": "Added a generated API client method for fetching completed goals, so past goals can be listed instead of disappearing once they end"
+}
