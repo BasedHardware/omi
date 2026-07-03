@@ -1,7 +1,7 @@
 import base64
 import json
 import os
-from typing import List, Union, Optional
+from typing import Any, Callable, List, Optional, TypeVar, Union
 from datetime import datetime, timedelta, timezone
 
 import redis
@@ -9,7 +9,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-r = redis.Redis(
+# redis.Redis is untyped under strict Pyright; treat the client as Any at this
+# SDK boundary. Downstream callers narrow results via the adapter pattern.
+r: Any = redis.Redis(
     host=os.getenv('REDIS_DB_HOST'),
     port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
     username='default',
@@ -18,8 +20,18 @@ r = redis.Redis(
 )
 
 
-def try_catch_decorator(func):
-    def wrapper(*args, **kwargs):
+T = TypeVar("T")
+
+
+def try_catch_decorator(func: Callable[..., T]) -> Callable[..., Optional[T]]:
+    """Wrap func so any exception is logged and returns None (fail-open).
+
+    The wrapped callable returns Optional[T] because a failure yields None even
+    when the underlying function's declared return type is T. Callers must narrow
+    away None before treating the result as T.
+    """
+
+    def wrapper(*args: Any, **kwargs: Any) -> Optional[T]:
         try:
             return func(*args, **kwargs)
         except Exception as e:

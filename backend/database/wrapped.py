@@ -3,7 +3,7 @@ Database operations for Wrapped (yearly recap) stored in users/{uid}/wrapped/{ye
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
 from ._client import db
 
@@ -18,7 +18,22 @@ class WrappedStatus:
     ERROR = 'error'
 
 
-def get_wrapped(uid: str, year: int) -> Optional[dict]:
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def _coerce_timestamp(value: Any) -> Optional[datetime]:
+    if hasattr(value, 'timestamp'):
+        return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    return None
+
+
+def get_wrapped(uid: str, year: int) -> Optional[Dict[str, Any]]:
     """
     Get the wrapped document for a user and year.
 
@@ -33,21 +48,22 @@ def get_wrapped(uid: str, year: int) -> Optional[dict]:
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
     doc = wrapped_ref.get()
 
-    if not doc.exists:
+    if not getattr(doc, "exists", False):
         return None
 
-    data = doc.to_dict()
+    data = _typed_doc(doc)
 
     # Convert Firestore timestamps to datetime objects
     for field in ['started_at', 'completed_at', 'updated_at']:
         if field in data and data[field]:
-            if hasattr(data[field], 'timestamp'):
-                data[field] = datetime.fromtimestamp(data[field].timestamp(), tz=timezone.utc)
+            coerced = _coerce_timestamp(data[field])
+            if coerced is not None:
+                data[field] = coerced
 
     return data
 
 
-def create_wrapped(uid: str, year: int) -> dict:
+def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
     """
     Create a new wrapped document with status=processing.
 
@@ -59,7 +75,7 @@ def create_wrapped(uid: str, year: int) -> dict:
         The created wrapped document data
     """
     now = datetime.now(timezone.utc)
-    wrapped_data = {
+    wrapped_data: Dict[str, Any] = {
         'year': year,
         'status': WrappedStatus.PROCESSING,
         'started_at': now,
@@ -81,7 +97,7 @@ def update_wrapped_status(
     uid: str,
     year: int,
     status: str,
-    result: Optional[dict] = None,
+    result: Optional[Dict[str, Any]] = None,
     error: Optional[str] = None,
 ) -> bool:
     """
@@ -100,11 +116,11 @@ def update_wrapped_status(
     user_ref = db.collection('users').document(uid)
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
 
-    if not wrapped_ref.get().exists:
+    if not getattr(wrapped_ref.get(), "exists", False):
         return False
 
     now = datetime.now(timezone.utc)
-    update_data = {
+    update_data: Dict[str, Any] = {
         'status': status,
         'updated_at': now,
     }
@@ -121,7 +137,7 @@ def update_wrapped_status(
     return True
 
 
-def update_wrapped_progress(uid: str, year: int, progress: dict) -> bool:
+def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bool:
     """
     Update the progress of a wrapped generation (heartbeat).
 
@@ -136,7 +152,7 @@ def update_wrapped_progress(uid: str, year: int, progress: dict) -> bool:
     user_ref = db.collection('users').document(uid)
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
 
-    if not wrapped_ref.get().exists:
+    if not getattr(wrapped_ref.get(), "exists", False):
         return False
 
     wrapped_ref.update(
@@ -148,7 +164,7 @@ def update_wrapped_progress(uid: str, year: int, progress: dict) -> bool:
     return True
 
 
-def reset_wrapped_for_regeneration(uid: str, year: int) -> dict:
+def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
     """
     Reset a stuck or errored wrapped document for regeneration.
 
@@ -160,7 +176,7 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> dict:
         The updated wrapped document data
     """
     now = datetime.now(timezone.utc)
-    wrapped_data = {
+    wrapped_data: Dict[str, Any] = {
         'year': year,
         'status': WrappedStatus.PROCESSING,
         'started_at': now,
@@ -179,7 +195,7 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> dict:
     return wrapped_data
 
 
-def is_wrapped_stuck(wrapped_data: dict, stale_minutes: int = 15) -> bool:
+def is_wrapped_stuck(wrapped_data: Dict[str, Any], stale_minutes: int = 15) -> bool:
     """
     Check if a wrapped generation is stuck (no heartbeat for stale_minutes).
 
@@ -193,15 +209,13 @@ def is_wrapped_stuck(wrapped_data: dict, stale_minutes: int = 15) -> bool:
     if wrapped_data.get('status') != WrappedStatus.PROCESSING:
         return False
 
-    updated_at = wrapped_data.get('updated_at')
-    if not updated_at:
+    updated_at_raw = wrapped_data.get('updated_at')
+    if not updated_at_raw:
         return True
 
-    # Ensure updated_at is a datetime
-    if hasattr(updated_at, 'timestamp'):
-        updated_at = datetime.fromtimestamp(updated_at.timestamp(), tz=timezone.utc)
-    elif updated_at.tzinfo is None:
-        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    updated_at = _coerce_timestamp(updated_at_raw)
+    if updated_at is None:
+        return True
 
     now = datetime.now(timezone.utc)
     elapsed = (now - updated_at).total_seconds() / 60
