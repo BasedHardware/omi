@@ -177,9 +177,14 @@ enum WhatsAppSenderService {
     }
 
     // Restore the user's frontmost app whatever the outcome, so sending never leaves
-    // WhatsApp stealing focus.
+    // WhatsApp stealing focus. Restore exactly once: explicitly right after the keystroke
+    // (below) on the happy path, otherwise here on an early exit. Restoring again after
+    // the ~8s confirm poll could yank focus from an app the user moved to meanwhile.
     let priorFront = NSWorkspace.shared.frontmostApplication
-    defer { restoreFrontmost(priorFront) }
+    var didRestoreFront = false
+    defer {
+      if !didRestoreFront { restoreFrontmost(priorFront) }
+    }
 
     // Row-id baseline for the post-send proof: only a message created after this counts
     // as the one we're about to send (so the proof can't match a pre-existing message).
@@ -233,6 +238,7 @@ enum WhatsAppSenderService {
     // now, before the DB confirmation poll (which reads sqlite and doesn't need WhatsApp
     // frontmost), so a send doesn't hijack their window for the whole confirm window.
     restoreFrontmost(priorFront)
+    didRestoreFront = true
 
     // Return was pressed against the verified target. Ground-truth proof it landed: an
     // outbound row matching the reply in this chat (by `@lid` JID or phone session),
