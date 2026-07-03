@@ -268,8 +268,8 @@ private struct ChatDetailView: View {
     infoText = nil
     defer { isSending = false }
     do {
-      try WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: chat.dialablePhone)
-      // Auto-send scheduled (1:1 + Accessibility). Optimistically reflect it.
+      try await WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: chat.dialablePhone)
+      // Only reflect a sent message once the Return keystroke actually fired.
       store.appendSent(text)
       draft = ""
     } catch let error as WhatsAppSenderError {

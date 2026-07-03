@@ -1,0 +1,3 @@
+{
+  "change": "Fixed WhatsApp replies that prefilled in WhatsApp but never actually sent — Omi now confirms the send fired and, if it needs Automation permission, tells you to press Enter instead of silently marking it sent"
+}

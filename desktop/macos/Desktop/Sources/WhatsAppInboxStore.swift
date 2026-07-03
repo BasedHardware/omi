@@ -223,7 +223,7 @@ final class WhatsAppInboxStore: ObservableObject {
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
     do {
-      try WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: phone)
+      try await WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: phone)
       appendSent(text, to: chat.id)
     } catch {
       NSLog("WhatsApp auto-reply send failed for \(chat.chatID): \(error.localizedDescription)")

@@ -36,7 +36,16 @@ enum WhatsAppSenderService {
 
   /// Delay before pressing Return, giving WhatsApp time to open the chat and focus
   /// the prefilled compose box.
-  private static let returnPressDelay: TimeInterval = 1.2
+  private static let returnPressDelay: TimeInterval = 1.5
+
+  /// Outcome of the Return keystroke that actually sends the prefilled reply.
+  private enum ReturnPress {
+    case ok
+    /// Automation/Accessibility permission missing — the reply is prefilled but we
+    /// can't press Enter for the user.
+    case notAuthorized
+    case failed(String)
+  }
 
   /// Bare phone digits usable in a `whatsapp://send?phone=` deep link, or nil for
   /// group (`@g.us`) / opaque (`@lid`) chats that have no dialable number.
@@ -61,7 +70,7 @@ enum WhatsAppSenderService {
   /// in the session's identifier, not the JID — can still be sent to. Runs on the
   /// main actor because NSWorkspace/CGEvent prefer the main run loop.
   @MainActor
-  static func send(text: String, toChatID chatID: String, phone explicitPhone: String? = nil) throws {
+  static func send(text: String, toChatID chatID: String, phone explicitPhone: String? = nil) async throws {
     let digits = explicitPhone?.filter { $0.isNumber }
     guard let phone = (digits?.count ?? 0) >= 7 ? digits : phoneDigits(forChatID: chatID) else {
       // Group / no number — can't deep-link a 1:1 send. Bring WhatsApp forward
@@ -72,13 +81,19 @@ enum WhatsAppSenderService {
 
     try prefill(text: text, phone: phone)
 
-    // Send by driving System Events (via osascript) to press Return in WhatsApp's
-    // focused compose box — this needs Automation permission for the bundle, which
-    // macOS prompts for on first use (not the app's own Accessibility trust, which
-    // only mattered for the old CGEvent path). Let WhatsApp open the chat + focus
-    // the prefilled box first.
-    DispatchQueue.main.asyncAfter(deadline: .now() + returnPressDelay) {
-      _ = pressReturnInWhatsApp()
+    // Let WhatsApp open the chat and focus the prefilled compose box, then press
+    // Return via System Events (osascript) to actually send. We AWAIT the result so
+    // the UI only marks the reply sent when it truly was — a prefill-without-send
+    // (missing Automation permission, etc.) surfaces as manualSendRequired instead
+    // of a silent "sent" that never left the compose box.
+    try? await Task.sleep(nanoseconds: UInt64(returnPressDelay * 1_000_000_000))
+    switch await pressReturnInWhatsApp() {
+    case .ok:
+      return
+    case .notAuthorized:
+      throw WhatsAppSenderError.manualSendRequired
+    case .failed(let message):
+      throw WhatsAppSenderError.sendFailed(message)
     }
   }
 
@@ -118,23 +133,45 @@ enum WhatsAppSenderService {
   /// activates WhatsApp, lets the prefilled compose field focus, then keys Return.
   /// Requires Accessibility (already required) and Automation permission for the
   /// bundle to control System Events/WhatsApp. Fire-and-forget.
-  @MainActor
-  @discardableResult
-  private static func pressReturnInWhatsApp() -> Bool {
-    let script = """
-      tell application "WhatsApp" to activate
-      delay 0.6
-      tell application "System Events" to key code 36
-      """
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-    proc.arguments = ["-e", script]
-    do {
-      try proc.run()
-      return true
-    } catch {
-      NSLog("WhatsApp send: osascript keystroke failed: \(error.localizedDescription)")
-      return false
+  private static func pressReturnInWhatsApp() async -> ReturnPress {
+    await withCheckedContinuation { continuation in
+      DispatchQueue.global(qos: .userInitiated).async {
+        let script = """
+          tell application "WhatsApp" to activate
+          delay 0.8
+          tell application "System Events" to key code 36
+          """
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        proc.arguments = ["-e", script]
+        let errPipe = Pipe()
+        proc.standardError = errPipe
+        do {
+          try proc.run()
+          proc.waitUntilExit()
+        } catch {
+          NSLog("WhatsApp send: osascript launch failed: \(error.localizedDescription)")
+          continuation.resume(returning: .failed(error.localizedDescription))
+          return
+        }
+        let errText =
+          String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        if proc.terminationStatus == 0 {
+          continuation.resume(returning: .ok)
+          return
+        }
+        NSLog("WhatsApp send: osascript failed status=\(proc.terminationStatus) err=\(errText)")
+        let lower = errText.lowercased()
+        // -1743 / "not allowed"/"not authorized"/"assistive" all mean the app lacks
+        // Automation (AppleEvents) permission to drive System Events / WhatsApp.
+        if errText.contains("-1743") || lower.contains("not allow") || lower.contains("not authoriz")
+          || lower.contains("assistive")
+        {
+          continuation.resume(returning: .notAuthorized)
+        } else {
+          continuation.resume(returning: .failed("Couldn't press Enter in WhatsApp. \(errText)"))
+        }
+      }
     }
   }
 }
