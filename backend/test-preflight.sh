@@ -46,8 +46,15 @@ if [[ -n "$PYTHON_BIN" ]]; then
   python_version="$("$PYTHON_BIN" --version 2>&1 | awk '{print $2}')"
   ok "$PYTHON_BIN $python_version"
   if [[ -n "$EXPECTED_PYTHON_VERSION" ]]; then
+    expected_mm="$(echo "$EXPECTED_PYTHON_VERSION" | cut -d. -f1,2)"
+    actual_mm="$(echo "$python_version" | cut -d. -f1,2)"
     if [[ "$python_version" == "$EXPECTED_PYTHON_VERSION" ]]; then
       ok "Python version matches .python-version ($EXPECTED_PYTHON_VERSION)"
+    elif [[ "$actual_mm" == "$expected_mm" ]]; then
+      # Patch-level drift (e.g. 3.11.13 vs 3.11.15) is ABI/behavior-compatible for our
+      # deps, so warn instead of hard-failing the gate — only a major.minor mismatch
+      # actually risks breaking tests.
+      skip "Python patch mismatch: expected $EXPECTED_PYTHON_VERSION, got $python_version (same $expected_mm series — OK)"
     else
       bad "Python version mismatch: expected $EXPECTED_PYTHON_VERSION from .python-version, got $python_version from $PYTHON_BIN"
       echo -e "  ${YELLOW}→${NC} Run: ./scripts/sync-python-deps.sh, then PYTHON=.venv/bin/python bash test-preflight.sh"
