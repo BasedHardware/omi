@@ -290,6 +290,13 @@ final class WhatsAppInboxStore: ObservableObject {
         // Auto-reply never auto-resends a draft, so this can't create an automatic
         // duplicate; it just surfaces the reply for the user to complete. (Mirrors the
         // manual path, which keeps the draft and warns.)
+        // If the user opted out mid-send (the recipient-guard poll swallows cancellation
+        // and surfaces as .notConfirmed rather than CancellationError), don't leave a
+        // draft behind — matches the explicit-cancellation branch.
+        guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {
+          NSLog("WhatsApp auto-reply opted out mid-send for \(chat.chatID); dropping draft")
+          return
+        }
         if case WhatsAppSenderError.sendUnconfirmed = error {
           NSLog("WhatsApp auto-reply unconfirmed for \(chat.chatID); keeping draft")
         } else {
