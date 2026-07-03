@@ -27,8 +27,8 @@ Create via gcloud:
 
 import logging
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, cast
 
 from google.cloud import firestore
 
@@ -42,25 +42,26 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def get_fair_use_state(uid: str) -> dict:
+def get_fair_use_state(uid: str) -> Dict[str, Any]:
     """Get the current fair-use enforcement state for a user."""
     ref = db.collection('users').document(uid).collection('fair_use_state').document('current')
     doc = ref.get()
-    if doc.exists:
-        return doc.to_dict()
+    if getattr(doc, "exists", False):
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     return {}
 
 
-def update_fair_use_state(uid: str, updates: dict) -> None:
+def update_fair_use_state(uid: str, updates: Dict[str, Any]) -> None:
     """Update fair-use state atomically."""
     ref = db.collection('users').document(uid).collection('fair_use_state').document('current')
-    updates['updated_at'] = datetime.utcnow()
+    updates['updated_at'] = datetime.now(timezone.utc)
     ref.set(updates, merge=True)
 
 
-def set_fair_use_stage(uid: str, stage: str, **kwargs) -> None:
+def set_fair_use_stage(uid: str, stage: str, **kwargs: Any) -> None:
     """Set enforcement stage with optional extra fields."""
-    updates = {'stage': stage, **kwargs}
+    updates: Dict[str, Any] = {'stage': stage, **kwargs}
     update_fair_use_state(uid, updates)
 
 
@@ -78,31 +79,32 @@ def _generate_case_ref() -> str:
     return f'FU-{uuid.uuid4().hex[:12].upper()}'
 
 
-def create_fair_use_event(uid: str, event_data: dict) -> str:
+def create_fair_use_event(uid: str, event_data: Dict[str, Any]) -> str:
     """Create a new fair-use violation event. Returns the event ID."""
     ref = db.collection('users').document(uid).collection('fair_use_events').document()
-    event_data['created_at'] = datetime.utcnow()
+    event_data['created_at'] = datetime.now(timezone.utc)
     event_data['case_ref'] = _generate_case_ref()
     ref.set(event_data)
-    return ref.id
+    return str(ref.id)
 
 
-def get_fair_use_events(uid: str, limit: int = 50) -> list:
+def get_fair_use_events(uid: str, limit: int = 50) -> List[Dict[str, Any]]:
     """Get recent fair-use events for a user, newest first."""
     ref = db.collection('users').document(uid).collection('fair_use_events')
     docs = ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).stream()
-    events = []
+    events: List[Dict[str, Any]] = []
     for doc in docs:
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         data['id'] = doc.id
         events.append(data)
     return events
 
 
-def get_violation_counts(uid: str) -> dict:
+def get_violation_counts(uid: str) -> Dict[str, int]:
     """Count violations in the last 7 and 30 days."""
     ref = db.collection('users').document(uid).collection('fair_use_events')
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     count_7d = 0
     count_30d = 0
@@ -111,12 +113,13 @@ def get_violation_counts(uid: str) -> dict:
 
     docs = ref.where('created_at', '>=', cutoff_30d).stream()
     for doc in docs:
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         created = data.get('created_at')
         if created:
-            # Normalize to naive UTC for comparison (Firestore may return aware datetimes)
-            if isinstance(created, datetime) and created.tzinfo is not None:
-                created = created.replace(tzinfo=None)
+            # Normalize to aware UTC for comparison (Firestore may return aware datetimes)
+            if isinstance(created, datetime) and created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
             count_30d += 1
             if created >= cutoff_7d:
                 count_7d += 1
@@ -130,7 +133,7 @@ def resolve_fair_use_event(uid: str, event_id: str, admin_uid: str, notes: str =
     ref.update(
         {
             'resolved': True,
-            'resolved_at': datetime.utcnow(),
+            'resolved_at': datetime.now(timezone.utc),
             'resolved_by': admin_uid,
             'admin_notes': notes,
         }
@@ -151,7 +154,7 @@ def reset_fair_use_state(uid: str, admin_uid: str) -> None:
             'last_classifier_score': 0.0,
             'last_classifier_type': 'none',
             'reset_by': admin_uid,
-            'reset_at': datetime.utcnow(),
+            'reset_at': datetime.now(timezone.utc),
         },
     )
 
@@ -161,7 +164,7 @@ def reset_fair_use_state(uid: str, admin_uid: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_flagged_users(stage_filter: Optional[str] = None, limit: int = 100) -> list:
+def get_flagged_users(stage_filter: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
     """Get users with active fair-use enforcement, for admin dashboard."""
     # Query all users who have fair_use_state with stage != 'none'
     # This requires a collection group query on fair_use_state
@@ -175,9 +178,10 @@ def get_flagged_users(stage_filter: Optional[str] = None, limit: int = 100) -> l
 
     query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(limit)
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         # Extract uid from document path: users/{uid}/fair_use_state/current
         path_parts = doc.reference.path.split('/')
         if len(path_parts) >= 2:

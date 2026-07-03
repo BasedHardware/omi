@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Union, cast
 
 from google.cloud import firestore
 
@@ -11,13 +11,16 @@ logger = logging.getLogger(__name__)
 SCREEN_ACTIVITY_COLLECTION = 'screen_activity'
 USERS_COLLECTION = 'users'
 
+# Date inputs may arrive as datetime or as pre-formatted 'YYYY-MM-DD HH:MM:SS.mmm' strings.
+DateInput = Union[datetime, str]
+
 
 def get_screen_activity_ids(uid: str) -> List[str]:
     """Return all screen activity document IDs for a user (IDs-only projection).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
     coll = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
-    return [doc.id for doc in coll.select([]).stream()]
+    return [str(doc.id) for doc in coll.select([]).stream()]
 
 
 def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
@@ -49,8 +52,8 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
 
 def get_screen_activity(
     uid: str,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[DateInput] = None,
+    end_date: Optional[DateInput] = None,
     app_filter: Optional[str] = None,
     limit: int = 500,
 ) -> List[Dict[str, Any]]:
@@ -61,19 +64,20 @@ def get_screen_activity(
 
     if start_date:
         # Timestamps stored as 'YYYY-MM-DD HH:MM:SS.mmm' strings — must match format for comparison
-        ts = start_date.strftime('%Y-%m-%d %H:%M:%S.000') if isinstance(start_date, datetime) else start_date
+        ts = start_date.strftime('%Y-%m-%d %H:%M:%S.000') if isinstance(start_date, datetime) else str(start_date)
         query = query.where(filter=firestore.FieldFilter('timestamp', '>=', ts))
     if end_date:
-        ts = end_date.strftime('%Y-%m-%d %H:%M:%S.999') if isinstance(end_date, datetime) else end_date
+        ts = end_date.strftime('%Y-%m-%d %H:%M:%S.999') if isinstance(end_date, datetime) else str(end_date)
         query = query.where(filter=firestore.FieldFilter('timestamp', '<=', ts))
     if app_filter:
         query = query.where(filter=firestore.FieldFilter('appName', '==', app_filter))
 
     query = query.limit(limit)
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         data['id'] = doc.id
         results.append(data)
 
@@ -82,8 +86,8 @@ def get_screen_activity(
 
 def get_screen_activity_summary(
     uid: str,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[DateInput] = None,
+    end_date: Optional[DateInput] = None,
 ) -> Dict[str, Any]:
     """Get aggregated app usage summary — groups by appName, counts screenshots, estimates time."""
     rows = get_screen_activity(uid, start_date=start_date, end_date=end_date, limit=5000)
@@ -99,13 +103,14 @@ def get_screen_activity_summary(
                 'count': 0,
                 'first_seen': row.get('timestamp'),
                 'last_seen': row.get('timestamp'),
-                'window_titles': set(),
+                'window_titles': set[Any](),
             }
         apps[app_name]['count'] += 1
         apps[app_name]['last_seen'] = row.get('timestamp')
         title = row.get('windowTitle', '')
         if title:
-            apps[app_name]['window_titles'].add(title)
+            titles: set[Any] = apps[app_name]['window_titles']
+            titles.add(title)
 
     # Convert sets to lists for serialization
     for app_name in apps:

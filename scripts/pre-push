@@ -354,6 +354,12 @@ check_backend_typecheck_if_needed() {
     'backend/database/notifications.py' \
     'backend/database/phone_call_config.py' \
     'backend/database/phone_calls.py' \
+    'backend/database/advice.py' \
+    'backend/database/fair_use.py' \
+    'backend/database/focus_sessions.py' \
+    'backend/database/folders.py' \
+    'backend/database/llm_usage.py' \
+    'backend/database/screen_activity.py' \
     'backend/database/auth.py' \
     'backend/database/cache_manager.py' \
     'backend/database/memory_vector_repair_outbox.py' \
