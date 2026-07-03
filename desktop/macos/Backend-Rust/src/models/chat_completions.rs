@@ -182,9 +182,20 @@ pub struct AnthropicRequest {
     pub temperature: Option<f64>,
     pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<AnthropicTool>>,
+    pub tools: Option<Vec<AnthropicToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
+}
+
+/// A tool definition in an Anthropic request: either a client-executed custom
+/// tool (translated from the OpenAI request) or an Anthropic server-side tool
+/// (e.g. web_search) that Anthropic executes during generation without any
+/// client round-trip.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum AnthropicToolDef {
+    Custom(AnthropicTool),
+    Server(serde_json::Value),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,6 +263,14 @@ pub enum AnthropicContentBlock {
         name: String,
         input: serde_json::Value,
     },
+    /// Server-side tool invocation (e.g. web_search) — executed by Anthropic
+    /// during generation. Never surfaced to the OpenAI client.
+    #[serde(rename = "server_tool_use")]
+    ServerToolUse { id: String, name: String },
+    /// Result of a server-side web search — consumed by the model upstream.
+    /// Never surfaced to the OpenAI client.
+    #[serde(rename = "web_search_tool_result")]
+    WebSearchToolResult {},
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -264,6 +283,16 @@ pub struct AnthropicUsage {
     pub cache_creation_input_tokens: i64,
     #[serde(default)]
     pub cache_read_input_tokens: i64,
+    /// Server-side tool usage (web search request count) — billed per request,
+    /// so it must survive into cost computation.
+    #[serde(default)]
+    pub server_tool_use: Option<AnthropicServerToolUsage>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct AnthropicServerToolUsage {
+    #[serde(default)]
+    pub web_search_requests: i64,
 }
 
 // ── Anthropic streaming event types ─────────────────────────────────────────
@@ -310,6 +339,10 @@ pub enum AnthropicDelta {
     TextDelta { text: String },
     #[serde(rename = "input_json_delta")]
     InputJsonDelta { partial_json: String },
+    /// Citation metadata attached to text generated from web search results.
+    /// Dropped in translation — the OpenAI chunk format has no citation slot.
+    #[serde(rename = "citations_delta")]
+    CitationsDelta {},
 }
 
 #[derive(Debug, Clone, Deserialize)]
