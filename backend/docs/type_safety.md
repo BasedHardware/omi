@@ -56,6 +56,8 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `database/wrapped.py`
   - `database/phone_call_usage.py`
   - `database/dev_api_key.py`
+  - `database/cache.py`
+  - `database/redis_pubsub.py`
   - `database/auth.py`
   - `database/cache_manager.py`
   - `database/memory_vector_repair_outbox.py`
