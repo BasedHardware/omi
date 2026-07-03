@@ -26,6 +26,45 @@ install_canonical_write_runtime_stubs()
 install_ws_i_heavy_import_stubs()
 
 import utils.llm.reply_draft as rd  # noqa: E402
+import utils.llm.style_fingerprint as sf  # noqa: E402
+
+# Style samples for a formal, sentence-case, no-emoji, no-slang texter — the kind
+# of user the drafter was mis-serving before (getting "bet"/lowercase injected).
+_FORMAL_SAMPLES = [
+    'Sounds good, I will see you at 7.',
+    'That works for me.',
+    'I am not sure yet, I will confirm tomorrow.',
+    'Thanks for setting that up.',
+    'Please send the deck when you can.',
+    'I appreciate it.',
+]
+# A genuinely casual texter whose own voice includes slang/lowercase.
+_CASUAL_SAMPLES = ['bet', 'lmaooo', 'ye ill pull up', 'omw', 'idk lol', 'fr fr']
+
+
+class _FakeStructured:
+    def __init__(self, value):
+        self._value = value
+
+    def invoke(self, prompt):
+        return self._value
+
+
+class _FakeLLM:
+    """Stands in for get_llm('memories'): supports both the structured candidate/
+    selection calls and a plain .invoke fallback."""
+
+    def __init__(self, candidates, best_index=0):
+        self.candidates = candidates
+        self.best_index = best_index
+
+    def with_structured_output(self, model):
+        if model is rd._DraftCandidates:
+            return _FakeStructured(model(candidates=self.candidates))
+        return _FakeStructured(model(best_index=self.best_index))
+
+    def invoke(self, prompt):
+        return SimpleNamespace(content=self.candidates[0] if self.candidates else '')
 
 
 def test_draft_uses_profile_context_thread_and_intent():
@@ -149,3 +188,122 @@ def test_cold_start_falls_back_to_general_texting_style():
     # …the other person's line and voice-captured text are never used as style.
     assert 'you free later' not in p
     assert 'I spoke these words aloud' not in p
+
+
+# ---------------------------------------------------------------------------
+# Style fingerprint: corpus-derived, ZERO hardcoded word lists
+# ---------------------------------------------------------------------------
+def test_style_fingerprint_has_no_global_word_lists():
+    """The core design invariant: nothing about specific words is hardcoded. No
+    banned-slang list, no allowed-slang list, no AI-tell phrase list — those don't
+    generalize across users."""
+    assert not hasattr(sf, 'BANNED_SLANG')
+    assert not hasattr(sf, 'AI_TELLS')
+    assert not hasattr(sf, 'SLANG')
+
+
+def test_style_hard_fails_are_corpus_relative_not_word_based():
+    formal = sf.compute_fingerprint(_FORMAL_SAMPLES)
+    casual = sf.compute_fingerprint(_CASUAL_SAMPLES)
+
+    # Formal user: a lowercase-leading or emoji draft contradicts their measured
+    # style; a properly-capitalized, emoji-free one does not.
+    assert sf.style_hard_fails('sounds good, see you then', formal)
+    assert sf.style_hard_fails('Sounds good 🎉', formal)
+    assert sf.style_hard_fails('Sounds good, see you then.', formal) == []
+
+    # Casual user: "bet" is THEIR OWN word — never flagged (no word list exists).
+    assert sf.style_hard_fails('bet', casual) == []
+    assert sf.style_hard_fails('lmaooo ok', casual) == []
+    # …but capitalizing when they always text lowercase is an over-polish flag.
+    assert sf.style_hard_fails('Sounds good', casual)
+
+
+def test_fingerprint_measures_capitalization_and_emoji_per_user():
+    formal = sf.compute_fingerprint(_FORMAL_SAMPLES)
+    casual = sf.compute_fingerprint(_CASUAL_SAMPLES)
+    assert formal.uses_capitalization is True
+    assert formal.uses_emoji is False
+    assert casual.uses_capitalization is False
+
+
+# ---------------------------------------------------------------------------
+# Prompt rewrite: no hardcoded example slang, corpus-relative instructions
+# ---------------------------------------------------------------------------
+def test_build_reply_prompt_has_no_hardcoded_example_slang():
+    fp = sf.compute_fingerprint(_FORMAL_SAMPLES)
+    prompt = rd.build_reply_prompt(
+        name='Sam',
+        context_text='(no extra context)',
+        style_block='- Sounds good, see you at 7.',
+        fingerprint=fp,
+        omi_context='',
+        thread_text='Sam: you around?',
+        intent=None,
+        is_group=False,
+    )
+    low = prompt.lower()
+    # The old priming list ("u, ur, lol, ngl, bet, etc.") must be gone entirely.
+    assert 'ngl' not in low
+    assert 'lowkey' not in low
+    assert 'u, ur, lol' not in low
+    # Corpus-relative instruction + measured fingerprint are present instead.
+    assert 'use only words, abbreviations, and slang that appear in their samples' in low
+    assert 'sentence capitalization' in low  # rendered because this user capitalizes
+    # Guardrails present.
+    assert 'grounding' in low
+    assert 'commitments' in low
+
+
+def test_cold_start_prompt_is_neutral_plain_not_casual():
+    fp = sf.compute_fingerprint([])
+    assert fp.cold_start is True
+    prompt = rd.build_reply_prompt(
+        name='Sam',
+        context_text='(no extra context)',
+        style_block='(no samples yet)',
+        fingerprint=fp,
+        omi_context='',
+        thread_text='Sam: who is this?',
+        intent=None,
+        is_group=False,
+    )
+    low = prompt.lower()
+    assert 'neutral, plain' in low
+    assert 'do not adopt slang' in low
+
+
+# ---------------------------------------------------------------------------
+# Best-of-N: deterministic style filter drops corpus-violating candidates
+# ---------------------------------------------------------------------------
+def test_best_of_n_drops_style_violating_candidate():
+    # Six of the user's own formal messages in-thread → a formal fingerprint.
+    thread = [{'text': t, 'is_from_me': True} for t in _FORMAL_SAMPLES]
+    thread.append({'text': 'you around later?', 'is_from_me': False})
+
+    # The model returns one emoji+lowercase candidate (contradicts this user) and one
+    # clean one. Even though it "picks" index 0, the filter removes the violator first.
+    fake = _FakeLLM(candidates=['omw 🎉 pick me', 'Sure, I should be around.'], best_index=0)
+    with patch.object(rd, 'resolve_person', return_value=None), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(rd, 'get_llm', return_value=fake):
+        out = rd.draft_reply('uid', 'Sam', thread)
+
+    assert out['draft'] == 'Sure, I should be around.'
+
+
+def test_group_message_not_for_user_abstains():
+    thread = [
+        {'text': 'hey everyone', 'is_from_me': False, 'sender': 'Alex'},
+        {'text': 'Bob you coming tonight?', 'is_from_me': False, 'sender': 'Alex'},
+    ]
+    fake = _FakeLLM(candidates=[rd.ABSTAIN_SENTINEL] * rd.NUM_CANDIDATES)
+    with patch.object(rd, 'resolve_person', return_value=None), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
+        rd, 'get_llm', return_value=fake
+    ):
+        out = rd.draft_reply('uid', 'Alex', thread, is_group=True)
+
+    assert out.get('abstain') is True
+    assert out['draft'] == ''
