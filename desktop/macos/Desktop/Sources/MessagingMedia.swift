@@ -16,6 +16,10 @@ enum MessagingMedia {
   private static let cache: NSCache<NSString, NSString> = {
     let c = NSCache<NSString, NSString>()
     c.countLimit = 256
+    // Also bound by bytes, not just entry count: each value is a base64 JPEG up to a
+    // couple MB, so 256 entries could otherwise retain hundreds of MB. Matches the
+    // InboxAttachmentImageCache 100 MB ceiling.
+    c.totalCostLimit = 100 * 1024 * 1024
     return c
   }()
 
@@ -46,7 +50,7 @@ enum MessagingMedia {
     }
     guard let final = data, final.count <= maxBytes else { return nil }
     let b64 = final.base64EncodedString()
-    cache.setObject(b64 as NSString, forKey: cacheKey)
+    cache.setObject(b64 as NSString, forKey: cacheKey, cost: b64.utf8.count)
     return b64
   }
 }

@@ -30,6 +30,13 @@ enum IMessagePayloadFormat {
   static func string(from date: Date) -> String { iso.format(date) }
 }
 
+// Precision note: `timestamp` is millisecond-resolution, while chat.db dates are
+// nanosecond. Two messages in the same millisecond can therefore tie on the wire.
+// This is intentionally accepted, not a bug: the client emits the thread in true
+// chronological (ROWID) order, and the backend's `_order_thread` uses a STABLE sort
+// keyed on timestamp — so equal-timestamp messages keep the client's correct relative
+// order. If a strict monotonic key is ever needed, add rowid/guid as a secondary sort.
+
 /// `timestamp` is stored as a `Date` so callers can't accidentally pass a
 /// localized or non-ISO string; a custom `encode(to:)` emits the stable ISO8601
 /// string regardless of the shared encoder's date strategy.
