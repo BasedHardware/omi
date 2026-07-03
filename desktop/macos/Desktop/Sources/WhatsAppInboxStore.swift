@@ -261,17 +261,20 @@ final class WhatsAppInboxStore: ObservableObject {
       // Only reflect the send once WhatsApp's database confirms it (send() throws
       // otherwise), so auto-reply never optimistically shows an unsent message.
       appendSent(text, to: chat.id)
-    } catch WhatsAppSenderError.sendUnconfirmed {
-      // Return was pressed against the verified chat, so the reply was very likely
-      // delivered — just not DB-confirmed in time. Do NOT re-surface it as a draft: that
-      // would risk the user manually sending a duplicate. If it genuinely didn't send,
-      // the chat still shows as awaiting a reply on the next refresh.
-      NSLog("WhatsApp auto-reply unconfirmed (likely delivered) for \(chat.chatID)")
     } catch {
-      // Nothing was sent (permission missing, recipient unverifiable, etc.). Keep the
-      // composed reply as a draft so it's not lost and can be completed by the user —
-      // never silently mark it sent.
-      NSLog("WhatsApp auto-reply not sent for \(chat.chatID): \(error.localizedDescription)")
+      // The send wasn't confirmed. This is either nothing-sent (permission missing,
+      // recipient unverifiable) or .sendUnconfirmed (Return fired but no confirming row
+      // appeared). Since the confirm window far exceeds WhatsApp's normal persist latency,
+      // an unconfirmed result more likely means the reply did NOT go out than "delivered
+      // but slow" — so keep it as a draft rather than silently dropping a possibly-unsent
+      // reply. Auto-reply never auto-resends a draft, so this can't create an automatic
+      // duplicate; it just surfaces the reply for the user to complete. (Mirrors the
+      // manual path, which keeps the draft and warns.)
+      if case WhatsAppSenderError.sendUnconfirmed = error {
+        NSLog("WhatsApp auto-reply unconfirmed for \(chat.chatID); keeping draft")
+      } else {
+        NSLog("WhatsApp auto-reply not sent for \(chat.chatID): \(error.localizedDescription)")
+      }
       preDrafts[chat.id] = text
     }
   }

@@ -278,12 +278,10 @@ private struct ChatDetailView: View {
     } catch let error as WhatsAppSenderError {
       switch error {
       case .invalidTarget, .permissionRequired, .sendUnconfirmed:
-        // Not a hard failure — the reply is prefilled/likely sent; guide the user (open
-        // the chat, grant the one-time permission, or check WhatsApp before resending).
-        // The draft is intentionally kept here (unlike the auto-reply path, which drops a
-        // .sendUnconfirmed reply): a person is watching and reads the info text, so they
-        // can decide whether to resend after checking — rather than silently losing a
-        // reply that may not have gone through.
+        // Not a hard failure — the reply is prefilled or unconfirmed; guide the user (open
+        // the chat, grant the one-time permission, or check WhatsApp before resending) and
+        // keep the draft so a possibly-unsent reply isn't lost. (Both the manual and
+        // auto-reply paths keep the draft on .sendUnconfirmed.)
         infoText = error.errorDescription
       case .notConfirmed, .sendFailed:
         // Nothing was sent — keep the draft so the user can try again.

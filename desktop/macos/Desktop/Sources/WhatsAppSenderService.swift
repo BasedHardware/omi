@@ -2,6 +2,33 @@ import AppKit
 import ApplicationServices
 import Foundation
 
+/// Serializes WhatsApp sends. Every send drives the one shared WhatsApp UI (deep link →
+/// compose guard → keystroke), so two concurrent sends — e.g. auto-replies to two chats
+/// firing at once — would re-navigate WhatsApp out from under each other, causing
+/// premature/duplicate keystrokes and cross-matched confirmations. This mutex ensures only
+/// one send touches WhatsApp at a time; the others queue.
+private actor WhatsAppSendGate {
+  static let shared = WhatsAppSendGate()
+  private var busy = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func acquire() async {
+    if !busy {
+      busy = true
+      return
+    }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func release() {
+    if waiters.isEmpty {
+      busy = false
+    } else {
+      waiters.removeFirst().resume()
+    }
+  }
+}
+
 enum WhatsAppSenderError: LocalizedError {
   /// Group (`@g.us`) or opaque (`@lid`) chat with no dialable number — there's no 1:1
   /// deep link to open, so automated send is disabled and the user replies manually.
@@ -69,6 +96,12 @@ enum WhatsAppSenderError: LocalizedError {
 /// The recipient guard prevents a wrong send; the row-id `ChatStorage.sqlite` proof both
 /// confirms delivery and, keyed to the target chat, is the backstop that surfaces any
 /// unexpected outcome as unconfirmed rather than falsely "sent".
+///
+/// Scope of the guarantee: both the guard and the proof are keyed to the number we dial
+/// (`phone` — the JID digits, or the reader's `@lid` → phone mapping). They prove the
+/// reply reached *that number's* chat; they do not re-derive the contact's identity, so a
+/// wrong `phone`/`@lid` resolution upstream is out of scope here and must be trusted from
+/// the reader.
 enum WhatsAppSenderService {
 
   // Recipient-guard / settle timing.
@@ -81,9 +114,11 @@ enum WhatsAppSenderService {
   private static let confirmPollNanos: UInt64 = 400_000_000  // 0.4s
   private static let confirmMaxPolls = 20  // ~8.0s for WhatsApp to persist the outbound row
   /// The `AXTextArea` for WhatsApp's compose box carries this in its `AXDescription`
-  /// (verified live 2026-07-03; the real value has a leading LTR mark, so match a
-  /// substring rather than the whole string).
-  private static let composeDescriptionMarker = "Compose"
+  /// (verified live 2026-07-03: the real value is "Compose message" with a leading LTR
+  /// mark, so match this substring rather than the whole string). Using the full phrase
+  /// — not just "Compose" — avoids matching some other text area if WhatsApp's hierarchy
+  /// ever exposes one.
+  private static let composeDescriptionMarker = "Compose message"
 
   private enum ReturnPress {
     case ok
@@ -114,6 +149,10 @@ enum WhatsAppSenderService {
   /// osascript keystroke and the DB read are dispatched off-main so the UI stays live.
   @MainActor
   static func send(text: String, toChatID chatID: String, phone explicitPhone: String? = nil) async throws {
+    // Only one send may drive the shared WhatsApp UI at a time (see WhatsAppSendGate).
+    await WhatsAppSendGate.shared.acquire()
+    defer { Task { await WhatsAppSendGate.shared.release() } }
+
     let reply = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !reply.isEmpty else { throw WhatsAppSenderError.notConfirmed }
 
