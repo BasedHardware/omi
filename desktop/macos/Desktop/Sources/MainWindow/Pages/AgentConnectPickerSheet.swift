@@ -108,6 +108,9 @@ private struct ConnectOptionCard: View {
 
   private var primaryLabel: String {
     _ = permissionRefreshID
+    if isConnected {
+      return "Connected"
+    }
     switch destination.mcpExecuteKind {
     case .localAutonomous:
       return "Do it for me"
@@ -141,7 +144,7 @@ private struct ConnectOptionCard: View {
         // single-destination sheet uses, so the connect flow is consistent.
         Button(isRunning ? "Connecting…" : primaryLabel, action: run)
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-          .disabled(isRunning)
+          .disabled(isRunning || isConnected)
 
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
@@ -179,13 +182,8 @@ private struct ConnectOptionCard: View {
         .fill(OmiColors.backgroundSecondary)
     )
     .task {
-      if destination.requiresHostedMCPKeyForSetup {
-        if let stored = await MemoryExportService.shared.storedMCPKey() {
-          mcpKey = stored
-        } else {
-          mcpKey = try? await MemoryExportService.shared.ensureMCPKey()
-        }
-      }
+      statuses[destination] = await MemoryExportService.shared.status(for: destination)
+      await prepareMCPKeyIfNeeded()
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
@@ -199,6 +197,23 @@ private struct ConnectOptionCard: View {
   private func refreshPermissionStateIfNeeded() {
     guard MemoryExportExecutor.requiresAccessibilityPreflight(destination) else { return }
     permissionRefreshID += 1
+  }
+
+  private var isConnected: Bool {
+    MemoryBankConnector.handles(destination) && statuses[destination]?.hasConnection == true
+  }
+
+  private func prepareMCPKeyIfNeeded() async {
+    guard destination.requiresHostedMCPKeyForSetup else { return }
+    if let stored = await MemoryExportService.shared.storedMCPKey() {
+      mcpKey = stored
+      return
+    }
+    do {
+      mcpKey = try await MemoryExportService.shared.ensureMCPKey()
+    } catch {
+      resultMessage = error.localizedDescription
+    }
   }
 
   private func run() {

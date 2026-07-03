@@ -232,6 +232,7 @@ struct DashboardPage: View {
     @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
         forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
     @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
+    @State private var lastMemoryExportStatusRefreshAt: Date?
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -262,6 +263,7 @@ struct DashboardPage: View {
     }
 
     private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+    private static let memoryExportStatusActiveRefreshThrottle: TimeInterval = 30
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
@@ -328,7 +330,7 @@ struct DashboardPage: View {
             Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses() }
+            Task { await loadMemoryExportStatuses(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
@@ -337,7 +339,7 @@ struct DashboardPage: View {
             Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses() }
+            Task { await loadMemoryExportStatuses(force: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -799,7 +801,20 @@ struct DashboardPage: View {
         }
     }
 
-    private func loadMemoryExportStatuses() async {
+    private func loadMemoryExportStatuses(force: Bool) async {
+        let shouldRefresh = await MainActor.run {
+            let now = Date()
+            if !force,
+               let lastMemoryExportStatusRefreshAt,
+               now.timeIntervalSince(lastMemoryExportStatusRefreshAt)
+                   < Self.memoryExportStatusActiveRefreshThrottle {
+                return false
+            }
+            lastMemoryExportStatusRefreshAt = now
+            return true
+        }
+        guard shouldRefresh else { return }
+
         let statuses = await MemoryExportService.shared.allStatuses()
         await MainActor.run {
             memoryExportStatuses = statuses

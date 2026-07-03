@@ -124,10 +124,10 @@ private struct MemoryExportRow: View {
 
   private var actionTitle: String {
     if destination.supportsAgentSetup {
-      return status.isConfigured ? "Manage" : "Connect"
+      return status.hasConnection ? "Connected" : "Connect"
     }
     if destination.supportsMCP {
-      return status.isConfigured ? "Manage" : "Connect"
+      return status.hasConnection ? "Connected" : "Connect"
     }
     switch destination {
     case .obsidian:
@@ -287,7 +287,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       case .assisted:
         statusMessage = outcome.taskTitle
       case .completed:
-        // Deterministic local write (OpenClaw/Hermes) — show the result directly.
+        // Deterministic local write — show the result directly.
         statusMessage = outcome.taskTitle
       }
     } catch {
@@ -486,7 +486,8 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
-      if destination.requiresHostedMCPKeyForSetup && destination == .claude && model.mcpKey == nil {
+      statuses[destination] = await MemoryExportService.shared.status(for: destination)
+      if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
         await model.generateMCPKey()
       }
     }
@@ -654,6 +655,9 @@ struct MemoryExportDestinationSheet: View {
 
   private var executeButtonTitle: String {
     _ = permissionRefreshID
+    if isConnected {
+      return "Connected"
+    }
     switch destination.mcpExecuteKind {
     case .localAutonomous:
       return "Do it for me"
@@ -723,8 +727,12 @@ struct MemoryExportDestinationSheet: View {
         }
       }
       .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-      .disabled(model.isExecuting)
+      .disabled(model.isExecuting || isConnected)
     }
+  }
+
+  private var isConnected: Bool {
+    MemoryBankConnector.handles(destination) && statuses[destination]?.hasConnection == true
   }
 
   /// Labeled header that makes the automatic (MCP) vs manual (pack) choice obvious.
