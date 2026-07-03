@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/phone_calls_wire.g.dart' as wire;
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/env/env.dart';
@@ -26,9 +27,9 @@ Future<Map<String, dynamic>?> verifyPhoneNumber(String phoneNumber) async {
     return generated.toJson();
   }
   try {
-    var body = jsonDecode(response.body);
-    if (body['detail'] != null) {
-      return {'error': body['detail']};
+    final body = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (body.detail != null) {
+      return {'error': body.detail};
     }
   } catch (_) {}
   return null;

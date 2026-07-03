@@ -134,6 +134,32 @@ class GeneratedSpeechProfileMutationResponse {
   }
 }
 
+class GeneratedExpandedSpeechProfileSamplesResponse {
+  final List<String> items;
+
+  const GeneratedExpandedSpeechProfileSamplesResponse({
+    required this.items,
+  });
+
+  factory GeneratedExpandedSpeechProfileSamplesResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedExpandedSpeechProfileSamplesResponse(
+      items: _required(_readFieldValue<List<String>>(_readField(json, const ["items"]), "items", _readStringList, requiredField: true, nullable: false), "items"),
+    );
+  }
+
+  factory GeneratedExpandedSpeechProfileSamplesResponse.fromJsonList(List<dynamic> json) {
+    return GeneratedExpandedSpeechProfileSamplesResponse(
+      items: _required(_readStringList(json), "items"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'items': items,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;

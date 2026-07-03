@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -75,8 +76,8 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
   }
   if (response.statusCode == 400) {
     try {
-      final errorBody = jsonDecode(response.body);
-      return {'error': true, 'detail': errorBody['detail']};
+      final errorBody = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return {'error': true, 'detail': errorBody.detail};
     } catch (_) {
       return {'error': true};
     }

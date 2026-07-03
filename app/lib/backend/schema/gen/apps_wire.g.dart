@@ -1286,6 +1286,32 @@ class GeneratedAppApiKeyResponse {
   }
 }
 
+class GeneratedEnabledAppsResponse {
+  final List<String> items;
+
+  const GeneratedEnabledAppsResponse({
+    required this.items,
+  });
+
+  factory GeneratedEnabledAppsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedEnabledAppsResponse(
+      items: _required(_readFieldValue<List<String>>(_readField(json, const ["items"]), "items", _readStringList, requiredField: true, nullable: false), "items"),
+    );
+  }
+
+  factory GeneratedEnabledAppsResponse.fromJsonList(List<dynamic> json) {
+    return GeneratedEnabledAppsResponse(
+      items: _required(_readStringList(json), "items"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'items': items,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;

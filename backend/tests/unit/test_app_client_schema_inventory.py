@@ -276,7 +276,7 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     assert 'app/lib/backend/schema/app.dart:31' in result.stdout
 
 
-def test_inventory_route_raw_decode_gate_fails_with_operation_context():
+def test_inventory_route_raw_decode_gate_passes_after_openapi_route_migration():
     result = subprocess.run(
         [
             sys.executable,
@@ -290,10 +290,8 @@ def test_inventory_route_raw_decode_gate_fails_with_operation_context():
         check=False,
     )
 
-    assert result.returncode == 1
-    assert 'OpenAPI route functions with raw Dart decode sites:' in result.stdout
-    assert 'raw response sites' in result.stdout
-    assert 'app/lib/backend/http/api/apps.dart' in result.stdout
+    assert result.returncode == 0
+    assert 'OpenAPI route functions with raw Dart decode sites:' not in result.stdout
 
 
 def test_inventory_route_raw_decode_gate_can_target_operation_ids():
@@ -311,7 +309,7 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
         text=True,
         check=False,
     )
-    dirty_result = subprocess.run(
+    formerly_dirty_result = subprocess.run(
         [
             sys.executable,
             'scripts/inventory_app_client_schemas.py',
@@ -327,6 +325,6 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
     )
 
     assert clean_result.returncode == 0
-    assert dirty_result.returncode == 1
+    assert formerly_dirty_result.returncode == 0
     assert 'getApps' not in clean_result.stdout
-    assert 'app/lib/backend/http/api/apps.dart GET /v1/apps/enabled' in dirty_result.stdout
+    assert 'OpenAPI route functions with raw Dart decode sites:' not in formerly_dirty_result.stdout

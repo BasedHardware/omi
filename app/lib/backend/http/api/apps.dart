@@ -6,6 +6,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -196,7 +197,7 @@ Future<List<String>> getEnabledAppsServer() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/enabled', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return [];
-    return (jsonDecode(response.body) as List).cast<String>();
+    return wire.GeneratedEnabledAppsResponse.fromJsonList(jsonDecode(response.body) as List<dynamic>).items;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -358,7 +359,8 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
     } else {
       Logger.debug('Failed to submit app. Status code: ${response.statusCode}');
       if (response.body.isNotEmpty) {
-        return (false, jsonDecode(response.body)['detail'] as String, null);
+        final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+        return (false, error.detail is String ? error.detail as String : 'Failed to submit app', null);
       } else {
         return (false, 'Failed to submit app. Please try again later', '');
       }
@@ -483,7 +485,9 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   try {
     if (response == null || response.statusCode != 200) return null;
     log('getAppDetailsServer: ${response.body}');
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    wire.GeneratedApp.fromJson(data);
+    return data;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -718,8 +722,8 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
     }
     // Return error detail
     try {
-      var errorData = jsonDecode(response.body);
-      return {'error': errorData['detail'] ?? 'Failed to add MCP server'};
+      final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return {'error': error.detail is String ? error.detail : 'Failed to add MCP server'};
     } catch (_) {
       return {'error': 'Failed to add MCP server (${response.statusCode})'};
     }

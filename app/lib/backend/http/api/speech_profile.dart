@@ -62,10 +62,9 @@ Future<List<String>> getExpandedProfileSamples() async {
   if (response == null) return [];
   Logger.debug('getExpandedProfileSamples: ${response.body}');
   if (response.statusCode == 200) {
-    var data = jsonDecode(response.body);
-    if (data != null) {
-      return List<String>.from(data);
-    }
+    return wire.GeneratedExpandedSpeechProfileSamplesResponse.fromJsonList(
+      jsonDecode(response.body) as List<dynamic>,
+    ).items;
   }
   return [];
 }

@@ -190,6 +190,8 @@ def test_device_speech_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedSpeechProfileResponse' in generated
     assert 'class GeneratedSpeechProfileUploadResponse' in generated
     assert 'class GeneratedSpeechProfileMutationResponse' in generated
+    assert 'class GeneratedExpandedSpeechProfileSamplesResponse' in generated
+    assert 'factory GeneratedExpandedSpeechProfileSamplesResponse.fromJsonList' in generated
     assert 'this.isLegacySecureDfu = true' in generated
     assert 'hasProfile: _required(_readFieldValue<bool>' in generated
 
@@ -253,6 +255,8 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedAppCatalogResponse' in generated
     assert 'class GeneratedAppSearchResponse' in generated
     assert 'class GeneratedConversationSuggestedAppsResponse' in generated
+    assert 'class GeneratedEnabledAppsResponse' in generated
+    assert 'factory GeneratedEnabledAppsResponse.fromJsonList' in generated
     assert 'class GeneratedAppApiKeyResponse' in generated
     assert 'id: _required(_readFieldValue<String>' in generated
     assert 'app: _required(_readFieldValue<GeneratedAppDraftGenerationResponse>' in generated

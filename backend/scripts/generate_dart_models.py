@@ -122,6 +122,13 @@ SCHEMA_GROUPS = {
             'SpeechProfileUploadResponse',
             'SpeechProfileMutationResponse',
         ),
+        'operation_wrappers': (
+            (
+                'ExpandedSpeechProfileSamplesResponse',
+                'get_extra_speech_profile_samples_v3_speech_profile_expand_get',
+                'items',
+            ),
+        ),
     },
     'misc': {
         'output': DEFAULT_OUTPUT_DIR / 'misc_wire.g.dart',
@@ -183,6 +190,13 @@ SCHEMA_GROUPS = {
             'AppSearchResponse',
             'ConversationSuggestedAppsResponse',
             'AppApiKeyResponse',
+        ),
+        'operation_wrappers': (
+            (
+                'EnabledAppsResponse',
+                'get_user_enabled_apps_v1_apps_enabled_get',
+                'items',
+            ),
         ),
     },
     'users': {
@@ -580,7 +594,7 @@ def fields_for_schema(
     return fields
 
 
-def emit_class(schema_name: str, fields: list[Field]) -> str:
+def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool = False) -> str:
     class_name = generated_class_name(schema_name)
     lines = [f'class {class_name} {{']
     for field in fields:
@@ -624,6 +638,16 @@ def emit_class(schema_name: str, fields: list[Field]) -> str:
         lines.append(f'      {field.dart_name}: {read_expr(field)},')
     lines.append('    );')
     lines.append('  }')
+    if emit_list_factory and len(fields) == 1 and fields[0].dart_type.list_item:
+        field = fields[0]
+        lines.append('')
+        lines.append(f'  factory {class_name}.fromJsonList(List<dynamic> json) {{')
+        lines.append(f'    return {class_name}(')
+        lines.append(
+            f'      {field.dart_name}: _required({converter_name(field.dart_type)}(json), {json.dumps(field.wire_name)}),'
+        )
+        lines.append('    );')
+        lines.append('  }')
     lines.append('')
     lines.append('  Map<String, dynamic> toJson() {')
     lines.append('    return {')
@@ -758,12 +782,46 @@ List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;
 '''.strip()
 
 
+def response_schema_for_operation(spec: dict[str, Any], operation_id: str) -> dict[str, Any]:
+    for methods in spec.get('paths', {}).values():
+        for operation in methods.values():
+            if not isinstance(operation, dict) or operation.get('operationId') != operation_id:
+                continue
+            schema = (
+                operation.get('responses', {})
+                .get('200', {})
+                .get('content', {})
+                .get('application/json', {})
+                .get('schema')
+            )
+            if not isinstance(schema, dict):
+                raise ValueError(f'operation {operation_id} does not have an object response schema')
+            return schema
+    raise ValueError(f'operation not found in OpenAPI spec: {operation_id}')
+
+
+def operation_wrapper_schemas(spec: dict[str, Any], group: str) -> dict[str, dict[str, Any]]:
+    wrappers: dict[str, dict[str, Any]] = {}
+    for schema_name, operation_id, field_name in SCHEMA_GROUPS[group].get('operation_wrappers', ()):
+        wrappers[schema_name] = {
+            'type': 'object',
+            'required': [field_name],
+            'properties': {
+                field_name: response_schema_for_operation(spec, operation_id),
+            },
+        }
+    return wrappers
+
+
 def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
     if group not in SCHEMA_GROUPS:
         raise ValueError(f'unknown Dart generation group: {group}')
-    target_schemas = SCHEMA_GROUPS[group]['schemas']
+    wrapper_schemas = operation_wrapper_schemas(spec, group)
+    wrapper_schema_names = set(wrapper_schemas)
+    target_schemas = (*SCHEMA_GROUPS[group]['schemas'], *wrapper_schemas)
     schemas = spec.get('components', {}).get('schemas', {})
-    missing = [name for name in target_schemas if name not in schemas]
+    schemas = {**schemas, **wrapper_schemas}
+    missing = [name for name in SCHEMA_GROUPS[group]['schemas'] if name not in schemas]
     if missing:
         raise ValueError('missing OpenAPI schemas: ' + ', '.join(missing))
 
@@ -775,7 +833,11 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
     ]
     for schema_name in target_schemas:
         chunks.append(
-            emit_class(schema_name, fields_for_schema(schema_name, schemas[schema_name], target_schemas, schemas))
+            emit_class(
+                schema_name,
+                fields_for_schema(schema_name, schemas[schema_name], target_schemas, schemas),
+                emit_list_factory=schema_name in wrapper_schema_names,
+            )
         )
         chunks.append('')
     chunks.append(emit_helpers())
