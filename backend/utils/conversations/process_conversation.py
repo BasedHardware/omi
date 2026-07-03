@@ -145,6 +145,7 @@ def _get_structured(
     try:
         tz = notification_db.get_user_time_zone(uid)
         user_language = users_db.get_user_language_preference(uid) or language_code
+        user_name = get_user_name(uid, use_default=False)
 
         # Extract calendar context from external_data
         calendar_context = None
@@ -177,6 +178,7 @@ def _get_structured(
                         existing_action_items=_fetch_dedup_candidates(uid, structured),
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
+                        user_name=user_name,
                     )
                 return structured, False
 
@@ -200,7 +202,6 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        user_name = get_user_name(uid, use_default=False)
         transcript_text = conversation.get_transcript(False, people=people, user_name=user_name)
 
         # For re-processing, we don't discard, just re-structure.
@@ -225,6 +226,7 @@ def _get_structured(
                     photos=conversation.photos,
                     existing_action_items=_fetch_dedup_candidates(uid, structured),
                     output_language_code=user_language,
+                    user_name=user_name,
                 )
             return structured, False
 
@@ -261,6 +263,7 @@ def _get_structured(
                 existing_action_items=_fetch_dedup_candidates(uid, structured),
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
+                user_name=user_name,
             )
         return structured, False
     except Exception as e:

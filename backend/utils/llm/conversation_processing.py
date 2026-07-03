@@ -601,6 +601,7 @@ def extract_action_items(
     existing_action_items: List[dict] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
     output_language_code: str = None,
+    user_name: Optional[str] = 'User',
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -690,6 +691,7 @@ def extract_action_items(
 
     CRITICAL CONTEXT:
     • These action items are primarily for the PRIMARY USER who is having/recording this conversation
+    • The primary user's name is {user_name}
     • The user is the person wearing the device or initiating the conversation
     • Focus on tasks the primary user needs to track and act upon
     • Include tasks for OTHER people ONLY if:
@@ -853,6 +855,7 @@ def extract_action_items(
         'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
         'tz': tz or 'UTC',
         'existing_items_context': existing_items_context,
+        'user_name': user_name or 'User',
     }
 
     shadow_prompt = f'{instructions_text.format(**prompt_values)}\n\n{context_message.format(**prompt_values)}'
