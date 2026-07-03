@@ -22,8 +22,14 @@ The first required surface covers migration-sensitive gateway, config, memory re
 - `scripts/render-backend-runtime-env.py`
 - `scripts/validate-backend-runtime-env.py`
 - `scripts/validate-llm-gateway-env.py`
+- `scripts/check_workflow_contracts.py`
+- `scripts/vector_search_provider_readiness.py`
+- `scripts/pinecone_repair_validation_readiness.py`
+- `scripts/rollout_schema_readiness.py`
 - `pusher/main.py`
 - adjacent memory boundaries:
+  - `database/document_ids.py`
+  - `database/firestore_cache_metrics.py`
   - `database/memory_app_key_grants.py`
   - `database/memory_imports.py`
   - `database/memory_collections.py`

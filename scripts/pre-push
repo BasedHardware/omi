@@ -330,7 +330,13 @@ check_backend_typecheck_if_needed() {
     'backend/scripts/render-backend-runtime-env.py' \
     'backend/scripts/validate-backend-runtime-env.py' \
     'backend/scripts/validate-llm-gateway-env.py' \
+    'backend/scripts/check_workflow_contracts.py' \
+    'backend/scripts/vector_search_provider_readiness.py' \
+    'backend/scripts/pinecone_repair_validation_readiness.py' \
+    'backend/scripts/rollout_schema_readiness.py' \
     'backend/pusher/main.py' \
+    'backend/database/document_ids.py' \
+    'backend/database/firestore_cache_metrics.py' \
     'backend/database/memory_app_key_grants.py' \
     'backend/database/memory_imports.py' \
     'backend/database/memory_collections.py' \
