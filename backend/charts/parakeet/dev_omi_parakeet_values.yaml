@@ -73,6 +73,8 @@ ingress:
           pathType: Prefix
         - path: /v3/stream
           pathType: Prefix
+        - path: /v4/stream
+          pathType: Prefix
         - path: /health
           pathType: Prefix
 
@@ -95,7 +97,13 @@ env:
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
   - name: PARAKEET_STREAM_MODEL
-    value: "nvidia/parakeet-rnnt-1.1b"
+    value: "nvidia/nemotron-3.5-asr-streaming-0.6b"
+  - name: PARAKEET_STREAM_LATENCY_MODE
+    value: "480ms"
+  - name: PARAKEET_MAX_CONCURRENT_STREAMS
+    value: "128"
+  - name: PARAKEET_STREAM_IDLE_TIMEOUT
+    value: "300"
   - name: PARAKEET_INFERENCE_MODE
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S
