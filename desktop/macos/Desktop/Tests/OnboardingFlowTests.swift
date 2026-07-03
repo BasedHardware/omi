@@ -3,97 +3,90 @@ import XCTest
 @testable import Omi_Computer
 
 final class OnboardingFlowTests: XCTestCase {
-  func testNewFlowUsesEightSteps() {
+  func testMergedFlowUsesEighteenSteps() {
     XCTAssertEqual(
       OnboardingFlow.steps,
-      ["welcome", "whatOmiNeeds", "screenAndFiles", "audioAndControl", "shortcuts", "yourGoal", "connectedContext", "ready"])
-    XCTAssertEqual(OnboardingFlow.lastStepIndex, 7)
+      [
+        "Name", "Language", "HowDidYouHear", "Trust", "ScreenRecording",
+        "FullDiskAccess", "FileScan", "Microphone", "Accessibility", "Automation",
+        "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo", "DataSources",
+        "Exports", "Goal", "Tasks",
+      ])
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 17)
   }
 
-  func testStepPhaseAssignment() {
-    XCTAssertEqual(OnboardingStep.welcome.phase, .meetOmi)
-    XCTAssertEqual(OnboardingStep.whatOmiNeeds.phase, .meetOmi)
-    XCTAssertEqual(OnboardingStep.screenAndFiles.phase, .unlock)
-    XCTAssertEqual(OnboardingStep.audioAndControl.phase, .unlock)
-    XCTAssertEqual(OnboardingStep.shortcuts.phase, .connect)
-    XCTAssertEqual(OnboardingStep.yourGoal.phase, .connect)
-    XCTAssertEqual(OnboardingStep.connectedContext.phase, .ready)
-    XCTAssertEqual(OnboardingStep.ready.phase, .ready)
+  func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
+    let migrated = OnboardingFlow.migratedStep(
+      currentStep: 4,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: false,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
+    )
+
+    XCTAssertEqual(migrated, 3)
   }
 
-  func testSkipAvailability() {
-    XCTAssertFalse(OnboardingStep.welcome.showsSkip)
-    XCTAssertFalse(OnboardingStep.whatOmiNeeds.showsSkip)
-    XCTAssertTrue(OnboardingStep.screenAndFiles.showsSkip)
-    XCTAssertTrue(OnboardingStep.audioAndControl.showsSkip)
-    XCTAssertTrue(OnboardingStep.shortcuts.showsSkip)
-    XCTAssertTrue(OnboardingStep.yourGoal.showsSkip)
-    XCTAssertFalse(OnboardingStep.connectedContext.showsSkip)
-    XCTAssertFalse(OnboardingStep.ready.showsSkip)
+  func testMigrationClampsOverflowToTasksStep() {
+    let migrated = OnboardingFlow.migratedStep(
+      currentStep: 99,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
+    )
+
+    XCTAssertEqual(migrated, OnboardingFlow.lastStepIndex)
   }
 
-  func testStepIndexOrder() {
-    XCTAssertEqual(OnboardingStep.allCases.map(\.index), [0, 1, 2, 3, 4, 5, 6, 7])
-  }
+  func testMigrationMapsRemovedResearchStepToDataSourcesAndShiftsLaterSteps() {
+    let migratedResearch = OnboardingFlow.migratedStep(
+      currentStep: 15,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
 
-  // MARK: - Legacy Migration
+    let migratedLegacyGoalAfterExportInsert = OnboardingFlow.migratedStep(
+      currentStep: 16,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: false,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
+    )
 
-  func testMigrationMapsNameToWelcome() {
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 0)
-    XCTAssertEqual(result, 0) // Welcome
-  }
-
-  func testMigrationMapsTrustToWhatOmiNeeds() {
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 3)
-    XCTAssertEqual(result, 1) // What Omi needs
-  }
-
-  func testMigrationMapsScreenRecordingToScreenAndFiles() {
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 4)
-    XCTAssertEqual(result, 2)
-  }
-
-  func testMigrationMapsGoalToYourGoal() {
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 16)
-    XCTAssertEqual(result, 5)
-  }
-
-  func testMigrationMapsTasksToReady() {
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 18)
-    XCTAssertEqual(result, 7)
-  }
-
-  func testMigrationClampsOverflow() {
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 99)
-    XCTAssertEqual(result, OnboardingFlow.lastStepIndex)
-  }
-
-  func testMigrationMapsRemovedStepToPreceding() {
-    // Old step 2 = HowDidYouHear (removed) → should map to preceding mapped step (Name → Welcome)
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 2)
-    XCTAssertEqual(result, 0)
-  }
-
-  func testMigrationMapsLanguageToWelcome() {
-    // Old step 1 = Language (removed) → should map to preceding mapped step (Name → Welcome)
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 1)
-    XCTAssertEqual(result, 0)
-  }
-
-  func testMigrationMapsDataSourcesToConnectedContext() {
-    // Old step 14 = DataSources → should map to connectedContext (6)
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 14)
-    XCTAssertEqual(result, 6)
-  }
-
-  func testMigrationMapsBringYourOwnKeysToConnectedContext() {
-    // Old step 17 = BringYourOwnKeys → should map to connectedContext (6)
-    let result = OnboardingFlow.migrateTo8Step(oldStep: 17)
-    XCTAssertEqual(result, 6)
-  }
-
-  func testLegacyApiCallsNewMigration() {
-    let result = OnboardingFlow.migratedStep(
+    let migratedGoal = OnboardingFlow.migratedStep(
       currentStep: 18,
       hasMigratedVideoStep: true,
       hasInsertedVoiceShortcutStep: true,
@@ -106,10 +99,29 @@ final class OnboardingFlowTests: XCTestCase {
       hasInsertedDataSourcesStep: true,
       hasInsertedExportsStep: true,
       hasInsertedSecondBrainStep: false,
-      hasRemovedResearchStep: true,
-      hasInsertedBYOKStep: true
+      hasRemovedResearchStep: false
     )
-    XCTAssertEqual(result, 7)
+
+    let migratedTasks = OnboardingFlow.migratedStep(
+      currentStep: 19,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    XCTAssertEqual(migratedResearch, 15)
+    XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
+    XCTAssertEqual(migratedGoal, 17)
+    XCTAssertEqual(migratedTasks, 17)
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
