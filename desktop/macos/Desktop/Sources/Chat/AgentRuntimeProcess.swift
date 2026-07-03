@@ -609,6 +609,19 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+
+    // Codex CLI has no native ACP mode; the zed-industries codex-acp bridge
+    // (installed alongside the codex CLI) speaks ACP over stdio and reuses
+    // the user's `codex login` credentials from ~/.codex. Omi's permission
+    // policy auto-denies external-adapter approval requests, so Codex must
+    // run approval-free inside its own workspace-write sandbox instead of
+    // escalating through Omi.
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let codexAcp = firstExecutable(named: "codex-acp", in: adapterSearchDirs)
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] =
+        "\(Self.shellQuote(codexAcp)) -c approval_policy=never -c sandbox_mode=workspace-write"
+    }
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
