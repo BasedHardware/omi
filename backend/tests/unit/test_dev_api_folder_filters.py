@@ -88,6 +88,13 @@ sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenErr
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
+# utils.other.endpoints is stubbed above, so with_rate_limit would be a MagicMock and the
+# rate-limited dev read routes would depend on a MagicMock instead of their real scope
+# dependency. Make it a transparent pass-through so the routes resolve to the underlying
+# scope dependency (which these tests override); the rate-limit wiring itself is covered by
+# test_dev_read_rate_limits.py.
+sys.modules['utils.other.endpoints'].with_rate_limit = lambda auth_dependency, policy_name: auth_dependency
+
 # ---- Mock populate_folder_names / populate_speaker_names ----
 # We patch these directly on routers.developer in each test class's setup_method,
 # so that the real utils.conversations.render module is never polluted regardless
