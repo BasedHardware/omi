@@ -220,6 +220,8 @@ struct DashboardPage: View {
     @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
+    @State private var selectedImportConnector: ImportConnector?
+    @State private var selectedExportDestination: MemoryExportDestination?
     @State private var isLoadingCitation = false
     @State private var screenshotCount: Int?
     // True totals for the "What omi knows" tiles. Without these the tiles showed
@@ -305,6 +307,27 @@ struct DashboardPage: View {
                 }
             )
             .frame(minWidth: 500, minHeight: 500)
+        }
+        .dismissableSheet(item: $selectedImportConnector) { connector in
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: importConnectorStatusStore,
+                onDismiss: {
+                    selectedImportConnector = nil
+                }
+            )
+            .frame(width: 520, height: 620)
+        }
+        .dismissableSheet(item: $selectedExportDestination) { destination in
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $memoryExportStatuses,
+                onDismiss: {
+                    selectedExportDestination = nil
+                }
+            )
+            .frame(width: 520, height: 620)
         }
         .overlay {
             if isLoadingCitation {
@@ -683,25 +706,11 @@ struct DashboardPage: View {
     }
 
     private func openImportConnector(_ connectorID: String) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenImportRequested,
-                object: nil,
-                userInfo: ["connector": connectorID]
-            )
-        }
+        selectedImportConnector = ImportConnector.all.first { $0.id == connectorID }
     }
 
     private func openExportDestination(_ destination: MemoryExportDestination) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenExportRequested,
-                object: nil,
-                userInfo: ["destination": destination.rawValue]
-            )
-        }
+        selectedExportDestination = destination
     }
 
     private func openReferFriend() {
