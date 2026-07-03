@@ -75,6 +75,22 @@ def test_same_speaker_across_segments_accumulates():
     assert r.speakers[0].word_count == 5
 
 
+def test_ordered_by_raw_duration_not_rounded_talk_seconds():
+    # Two speakers whose raw durations differ but round to the same displayed talk_seconds (10.0).
+    # The speaker with more raw talk time must come first even though it has fewer words. Ordering
+    # on the rounded value would collapse the two and (wrongly) fall through to the word-count tie-break.
+    conv = _conv(
+        [
+            _seg('a b', 0, 10.04, person_id='longer'),  # 10.04s -> rounds to 10.0, 2 words
+            _seg('a b c d e', 0, 10.02, person_id='wordier'),  # 10.02s -> rounds to 10.0, 5 words
+        ]
+    )
+    r = build_conversation_analytics(conv, {'longer': 'Longer', 'wordier': 'Wordier'})
+    assert [s.speaker for s in r.speakers] == ['Longer', 'Wordier']
+    # Both display the same rounded talk time, confirming the order came from the raw duration.
+    assert r.speakers[0].talk_seconds == r.speakers[1].talk_seconds == 10.0
+
+
 def test_zero_duration_segment_does_not_divide_by_zero():
     conv = _conv([_seg('hi', 5, 5, person_id='a')])
     r = build_conversation_analytics(conv, {'a': 'Alice'})

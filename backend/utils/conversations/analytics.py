@@ -53,24 +53,30 @@ def build_conversation_analytics(conversation, names: Dict[str, str]) -> Convers
     total_talk = sum(seconds.values())
     total_words = sum(words.values())
 
-    speakers = []
+    ranked = []
     for key in seconds:
         talk = seconds[key]
         wpm = round(words[key] / (talk / 60.0), 1) if talk > 0 else 0.0
         share = round(talk / total_talk, 3) if total_talk > 0 else 0.0
-        speakers.append(
-            SpeakerAnalytics(
-                speaker=labels[key],
-                person_id=person_ids[key],
-                is_user=is_user_flags[key],
-                talk_seconds=round(talk, 1),
-                word_count=words[key],
-                words_per_minute=wpm,
-                talk_share=share,
+        ranked.append(
+            (
+                talk,  # raw, unrounded duration used only for ordering
+                SpeakerAnalytics(
+                    speaker=labels[key],
+                    person_id=person_ids[key],
+                    is_user=is_user_flags[key],
+                    talk_seconds=round(talk, 1),
+                    word_count=words[key],
+                    words_per_minute=wpm,
+                    talk_share=share,
+                ),
             )
         )
-    # Most talk time first; word count then label break ties deterministically.
-    speakers.sort(key=lambda s: (-s.talk_seconds, -s.word_count, s.speaker))
+    # Most talk time first, ordered by the raw duration rather than the rounded display value
+    # (rounding would collapse speakers whose true durations are within 0.05s and reorder them
+    # by word count); word count then label break genuine ties deterministically.
+    ranked.sort(key=lambda item: (-item[0], -item[1].word_count, item[1].speaker))
+    speakers = [item[1] for item in ranked]
 
     overall_wpm = round(total_words / (total_talk / 60.0), 1) if total_talk > 0 else 0.0
     return ConversationAnalytics(
