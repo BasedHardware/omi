@@ -122,9 +122,11 @@ actor AICloneBacktestService {
       let leakKey = AICloneRetrievalService.instanceKey(
         them: pair.contactMessage, me: pair.actualReply, date: pair.turnDate)
       do {
+        // Live context (today's memories/calendar) stays OFF here: the eval replays
+        // historical exchanges, where current-world facts are anachronistic noise.
         sampled[index].predictedReply = try await AIClonePersonaService.shared.respond(
           as: persona, to: pair.contactMessage, context: pair.context,
-          excludingPairKeys: [leakKey])
+          excludingPairKeys: [leakKey], includeLiveContext: false)
       } catch {
         log("AICloneBacktest: prediction failed for a pair: \(error)")
         sampled[index].predictedReply = nil

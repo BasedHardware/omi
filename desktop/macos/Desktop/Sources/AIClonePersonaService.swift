@@ -180,11 +180,17 @@ actor AIClonePersonaService {
   /// backtest passes the held-out pair's own key so the clone can never be handed the
   /// answer it is being tested on.
   ///
+  /// `includeLiveContext` (default on) enriches generation with the user's real saved
+  /// Memories and — for scheduling-shaped messages — their real calendar, via
+  /// `AICloneContextService`. Read-only and best-effort: a failed fetch just drops the
+  /// block. The backtest turns it off because it replays historical exchanges, where
+  /// today's calendar/memories would be anachronistic noise in the eval.
+  ///
   /// Returns bubbles joined with "\n" (same shape as real multi-bubble replies in the
   /// history), so UI and judge treat predicted and real replies identically.
   func respond(
     as persona: ContactPersona, to incomingMessage: String, context: [ConversationTurn] = [],
-    excludingPairKeys: Set<String> = []
+    excludingPairKeys: Set<String> = [], includeLiveContext: Bool = true
   ) async throws -> String {
     let trimmed = incomingMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
@@ -195,10 +201,31 @@ actor AIClonePersonaService {
       contactId: persona.contactId, incoming: retrievalQuery, k: 10,
       excluding: excludingPairKeys)
 
+    // 1b. Live context enrichment: background facts always; real calendar only when the
+    // message (plus recent turns) looks scheduling-related. Nil blocks silently drop out.
+    var liveBlocks: [String] = []
+    if includeLiveContext {
+      var hasMemories = false
+      var hasCalendar = false
+      if let memoryBlock = await AICloneContextService.shared.memoryContext() {
+        liveBlocks.append(memoryBlock)
+        hasMemories = true
+      }
+      let scheduling = AICloneContextService.isSchedulingRelated(retrievalQuery)
+      if scheduling, let calendarBlock = await AICloneContextService.shared.calendarContext() {
+        liveBlocks.append(calendarBlock)
+        hasCalendar = true
+      }
+      log(
+        "AIClone respond: live context memories=\(hasMemories) scheduling=\(scheduling) calendar=\(hasCalendar)"
+      )
+    }
+
     // 2. Generate candidates.
     let generationPrompt = Self.buildGenerationPrompt(
       incoming: trimmed, context: context, examples: examples)
-    let generationSystem = persona.systemPrompt + "\n\n" + Self.candidateFormatInstruction
+    let generationSystem = ([persona.systemPrompt] + liveBlocks + [Self.candidateFormatInstruction])
+      .joined(separator: "\n\n")
 
     var candidates = try await generateCandidates(
       prompt: generationPrompt, system: generationSystem)

@@ -76,18 +76,23 @@ enum AICloneHarness {
     registry.register(
       name: "ai_clone_respond",
       summary: "Predict a reply to 'message' using the trained persona for contact 'rank'",
-      params: ["rank", "message"]
+      params: ["rank", "message", "live_context"]
     ) { params in
       let rank = Int(params["rank"] ?? "") ?? 1
       guard let message = params["message"], !message.isEmpty else {
         return ["error": "missing 'message'"]
       }
+      // live_context=false disables memory/calendar enrichment (before/after comparisons).
+      let liveContext = (params["live_context"] ?? "true") != "false"
       let contacts = try await IMessageReaderService.shared.topContacts(limit: rank)
       guard contacts.count >= rank else { return ["error": "no contact at rank \(rank)"] }
       let contact = contacts[rank - 1].asImportedContact()
       guard let persona = await AIClonePersonaService.shared.existingPersona(for: contact.id)
       else { return ["error": "no persona trained for \(contact.id)"] }
-      let reply = try await AIClonePersonaService.shared.respond(as: persona, to: message)
+      // Harness calls always re-read fixtures/live sources instead of cached blocks.
+      await AICloneContextService.shared.invalidateCaches()
+      let reply = try await AIClonePersonaService.shared.respond(
+        as: persona, to: message, includeLiveContext: liveContext)
       return ["reply": reply]
     }
   }
