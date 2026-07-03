@@ -11,7 +11,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Optional
 
 from database._client import db as default_db_client
 from utils.executors import db_executor, run_blocking
@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 MEMORY_CANONICAL_PROMOTION_CRON_ENABLED_ENV = "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED"
 MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS_ENV = "MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS"
 DEFAULT_CRON_INTERVAL_HOURS = 1
+
+
+def _empty_errors() -> list[str]:
+    return []
 
 
 def canonical_promotion_cron_enabled() -> bool:
@@ -59,7 +63,7 @@ class CanonicalShortTermMaintenanceCronSummary:
     promoted_total: int = 0
     vector_sync_failures_total: int = 0
     skipped_users: int = 0
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=_empty_errors)
 
 
 def _coerce_run_id(run_id: Optional[str], *, now: datetime) -> str:
@@ -84,7 +88,7 @@ def _promoted_count(report: CanonicalShortTermMaintenanceReport) -> int:
 
 def run_canonical_short_term_maintenance_for_cohort(
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
 ) -> CanonicalShortTermMaintenanceCronSummary:
@@ -149,7 +153,7 @@ def run_canonical_short_term_maintenance_for_cohort(
 
 async def run_canonical_short_term_maintenance_cron(
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
 ) -> CanonicalShortTermMaintenanceCronSummary:

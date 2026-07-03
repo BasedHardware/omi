@@ -7,7 +7,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 from jobs.l2_promotion_orchestrator import L2PromotionOrchestratorConfig, build_l2_promotion_work_items
 from jobs.l2_promotion_selector import PromotionWorkItem
 from utils.memory.l2_promotion_agent import run_l2_promotion_agent
-from utils.memory.promotion_bundle_builder import PromotionBundleConfig, build_promotion_bundle
+from utils.memory.promotion_bundle_builder import DurableFactsFetcher, PromotionBundleConfig, VectorSeedFetcher
+from utils.memory.promotion_bundle_builder import build_promotion_bundle
 from utils.memory.promotion_bundle_builder import enforce_grounded_promotion_bundle
 from utils.memory.promotion_bundle_builder import fetch_durable_facts_from_ledger
 from utils.memory.promotion_bundle_builder import make_vector_seed_fetcher
@@ -56,9 +57,9 @@ def run_l2_promotion_worker(
     config: L2PromotionWorkerConfig,
     candidate_fetcher: CandidateFetcher,
     l1_item_fetcher: L1ItemFetcher,
-    llm=None,
-    vector_seed_fetcher=None,
-    durable_facts_fetcher=fetch_durable_facts_from_ledger,
+    llm: Any = None,
+    vector_seed_fetcher: Optional[VectorSeedFetcher] = None,
+    durable_facts_fetcher: DurableFactsFetcher = fetch_durable_facts_from_ledger,
 ) -> L2PromotionWorkerReport:
     if not run_id or not run_id.strip():
         raise ValueError('run_id is required')

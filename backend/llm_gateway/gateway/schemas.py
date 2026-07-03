@@ -120,8 +120,8 @@ class Evidence(StrictBaseModel):
 class CredentialPolicy(StrictBaseModel):
     mode: CredentialMode
     allow_byok_to_omi_paid_fallback: bool = False
-    fallback_eligible_failure_classes: list[FailureClass] = Field(default_factory=list)
-    never_fallback_failure_classes: list[FailureClass] = Field(default_factory=list)
+    fallback_eligible_failure_classes: list[FailureClass] = Field(default_factory=list[FailureClass])
+    never_fallback_failure_classes: list[FailureClass] = Field(default_factory=list[FailureClass])
 
     @model_validator(mode='after')
     def validate_failure_class_sets(self):
@@ -133,8 +133,8 @@ class CredentialPolicy(StrictBaseModel):
 
 
 class FallbackPolicy(StrictBaseModel):
-    fallback_on: list[FailureClass] = Field(default_factory=list)
-    never_fallback_on: list[FailureClass] = Field(default_factory=list)
+    fallback_on: list[FailureClass] = Field(default_factory=list[FailureClass])
+    never_fallback_on: list[FailureClass] = Field(default_factory=list[FailureClass])
 
     @model_validator(mode='after')
     def validate_failure_class_sets(self):
@@ -160,7 +160,7 @@ class RouteArtifact(StrictBaseModel):
     lane_id: LaneId
     surface: Surface
     primary: ProviderRef
-    fallbacks: list[ProviderRef] = Field(default_factory=list)
+    fallbacks: list[ProviderRef] = Field(default_factory=list[ProviderRef])
     timeouts: TimeoutPolicy
     retry: RetryPolicy
     capabilities: Capabilities

@@ -1,7 +1,7 @@
 import logging
-from typing import List, Optional
+from collections.abc import Callable, Sequence
+from typing import Any, List, Optional, Protocol, cast
 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
@@ -12,19 +12,35 @@ from database.memory_non_active_routes import (
 )
 from models.memory_contracts import WorkingObservationArchiveItem, deterministic_contract_id
 
-try:
-    from .clients import get_llm
+GetLlm = Callable[[str], object]
+ChatMessage = tuple[str, str]
 
-    _CLIENT_IMPORT_ERROR = None
+
+class LlmInvoker(Protocol):
+    def invoke(self, messages: Sequence[ChatMessage]) -> object: ...
+
+
+try:
+    from .clients import get_llm as _imported_get_llm
+
+    get_llm: GetLlm | None = _imported_get_llm
+    _client_import_error: Exception | None = None
 except Exception as exc:
     get_llm = None
-    _CLIENT_IMPORT_ERROR = exc
+    _client_import_error = exc
+
+CLIENT_IMPORT_ERROR = _client_import_error
+_CLIENT_IMPORT_ERROR = CLIENT_IMPORT_ERROR
 
 logger = logging.getLogger(__name__)
 
 
+def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
+    return []
+
+
 class WorkingObservationBatch(BaseModel):
-    items: List[WorkingObservationArchiveItem] = Field(default_factory=list)
+    items: List[WorkingObservationArchiveItem] = Field(default_factory=_empty_archive_items)
 
 
 # Backward-compatible alias for callers/tests that still use the L1 name.
@@ -73,7 +89,7 @@ def _build_l1_messages(
     text: str,
     format_instructions: str,
     language_instruction: str = "",
-) -> list:
+) -> list[ChatMessage]:
     """Build L1 extraction messages with source-type-aware system prompt."""
     source_context = _source_type_instructions(source_type, user_name)
 
@@ -121,17 +137,17 @@ def _build_l1_messages(
     ]
 
 
-def _content_from_response(response) -> str:
+def _content_from_response(response: object) -> str:
     content = getattr(response, "content", response)
     if isinstance(content, list):
-        return "\n".join(str(part) for part in content)
+        return "\n".join(str(part) for part in cast(list[object], content))
     return str(content)
 
 
 def _with_deterministic_archive_ids(
     items: List[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
 ) -> List[WorkingObservationArchiveItem]:
-    normalized = []
+    normalized: list[WorkingObservationArchiveItem] = []
     for index, item in enumerate(items):
         updates = {
             "user_id": item.user_id or uid,
@@ -162,8 +178,8 @@ def extract_l1_memory_archive_items_from_text(
     language_instruction: str = "",
     run_id: Optional[str] = None,
     persist_route_outcomes: bool = True,
-    db_client=None,
-    llm=None,
+    db_client: Any = None,
+    llm: LlmInvoker | None = None,
 ) -> List[WorkingObservationArchiveItem]:
     stripped_text = text.strip() if text else ""
     low_text_is_security_relevant = source_type in {"screenshot_ocr", "ocr_screenshot_text", "desktop_rewind"}
@@ -183,7 +199,7 @@ def extract_l1_memory_archive_items_from_text(
     if llm is not None:
         model = llm
     elif get_llm is not None:
-        model = get_llm("memory_l1")
+        model = cast(LlmInvoker, get_llm("memory_l1"))
     else:
         logger.error("Error extracting memory L1 archive items: missing_llm_client")
         return []
@@ -215,7 +231,7 @@ def _persist_l1_archive_route_outcomes(
     source_type: str,
     run_id: Optional[str],
     items: List[WorkingObservationArchiveItem],
-    db_client=None,
+    db_client: Any = None,
 ) -> None:
     for item in items:
         outcome = NonActiveRouteOutcome(

@@ -66,9 +66,9 @@ class MemoryEvidence(BaseModel):
     source_id: Optional[str] = None
     source_version: Optional[str] = None
     conversation_id: Optional[str] = None
-    artifact_refs: List[ArtifactRef] = Field(default_factory=list)
+    artifact_refs: List[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     artifact_preservation: ArtifactPreservationState
-    quote_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    quote_refs: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
     content_hash: Optional[str] = None
     lineage_id: Optional[str] = None
     source_state: SourceState = SourceState.active

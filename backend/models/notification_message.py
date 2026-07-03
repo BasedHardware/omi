@@ -18,9 +18,9 @@ class NotificationMessage(BaseModel):
     @staticmethod
     def get_message_as_dict(
         message: 'NotificationMessage',
-    ) -> dict:
+    ) -> dict[str, object]:
 
-        message_dict = message.dict()
+        message_dict = message.model_dump()
 
         # Remove 'plugin_id' if it is None
         if message.plugin_id is None:

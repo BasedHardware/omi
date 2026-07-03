@@ -80,12 +80,7 @@ async def execute_chat_completion(
     # When the active route is in shadow/disabled rollout the LKG is already
     # the serving route — there is no separate LKG fallback to try.
     if serving_is_lkg:
-        if last_error is not None:
-            raise last_error
-        raise GatewayProviderFailureError(
-            'provider request failed',
-            failure_class=FailureClass.INVALID_CONFIG,
-        )
+        raise last_error
 
     if first_failure is not None and select_lkg_route_for_failure(resolved_route, first_failure) is not None:
         try:
@@ -100,12 +95,7 @@ async def execute_chat_completion(
         except GatewayError as exc:
             last_error = exc
 
-    if last_error is not None:
-        raise last_error
-    raise GatewayProviderFailureError(
-        'provider request failed',
-        failure_class=FailureClass.INVALID_CONFIG,
-    )
+    raise last_error
 
 
 def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
@@ -202,8 +192,13 @@ async def _execute_route(
                 credential_context,
             )
             if error is None:
+                if response is None:
+                    raise GatewayProviderFailureError(
+                        'provider request failed',
+                        failure_class=FailureClass.INVALID_CONFIG,
+                    )
                 return _executor_result(
-                    response,  # type: ignore[arg-type]
+                    response,
                     resolved_route=resolved_route,
                     route=route,
                     provider_ref=provider_ref,
@@ -253,7 +248,7 @@ async def _attempt_provider(
 
 
 def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
-    provider_request = {
+    provider_request: dict[str, Any] = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),
         'response_format': dict(resolved_route.validated_request.response_format),

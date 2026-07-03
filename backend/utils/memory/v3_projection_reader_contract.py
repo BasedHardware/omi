@@ -85,15 +85,3 @@ class V3ProjectionPage:
     projection_commit_id: str
     projection_version: str
     empty_projection: bool
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION = V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION
-V3_COMPATIBILITY_PROJECTION_SOURCE = V3_COMPATIBILITY_PROJECTION_SOURCE
-V3_COMPATIBILITY_PROJECTION_VERSION = V3_COMPATIBILITY_PROJECTION_VERSION
-V3ProjectionFailureReason = V3ProjectionFailureReason
-V3ProjectionReadError = V3ProjectionReadError
-V3ProjectionCursor = V3ProjectionCursor
-V3ProjectionReadRequest = V3ProjectionReadRequest
-V3ProjectionState = V3ProjectionState
-V3ProjectionPage = V3ProjectionPage

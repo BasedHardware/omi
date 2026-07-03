@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Any, Optional, List
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -233,7 +233,7 @@ def get_action_items(
     due_end_date: Optional[datetime] = None,
     limit: Optional[int] = None,
     offset: int = 0,
-) -> List[dict]:
+) -> List[dict[str, Any]]:
     """
     Get action items for a user with optional filters.
 

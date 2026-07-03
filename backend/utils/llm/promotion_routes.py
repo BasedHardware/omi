@@ -1,26 +1,40 @@
 import json
 import logging
 import re
-from typing import Any, Dict, Optional
+from collections.abc import Callable, Sequence
+from typing import Any, Dict, Optional, Protocol, cast
 
+from langchain_core.messages import BaseMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, ValidationError
 
 from models.memory_contracts import PromotionRoute
 
-try:
-    from .clients import get_llm
+GetLlm = Callable[[str], object]
 
-    _CLIENT_IMPORT_ERROR = None
+
+class LlmInvoker(Protocol):
+    def invoke(self, messages: Sequence[BaseMessage]) -> object: ...
+
+
+try:
+    from .clients import get_llm as _imported_get_llm
+
+    get_llm: GetLlm | None = _imported_get_llm
+    _client_import_error: Exception | None = None
 except Exception as exc:
     # Benchmark/product-module tests may run without Firestore ADC or optional provider deps.
     get_llm = None
-    _CLIENT_IMPORT_ERROR = exc
+    _client_import_error = exc
+
+CLIENT_IMPORT_ERROR = _client_import_error
+_CLIENT_IMPORT_ERROR = CLIENT_IMPORT_ERROR
 
 logger = logging.getLogger(__name__)
 
 _QUOTE_WRAPPER_RE = re.compile(r"^\s*User\s+(said|mentioned|stated|talked about|noted)\s+['\"]", re.IGNORECASE)
+QUOTE_WRAPPER_RE = _QUOTE_WRAPPER_RE
 
 
 class PromotionRouteResponse(BaseModel):
@@ -31,11 +45,13 @@ class PromotionRouteResponse(BaseModel):
 L2MemoryRouteResponse = PromotionRouteResponse
 
 
-promotion_route_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """
+promotion_route_prompt = cast(Any, ChatPromptTemplate).from_messages(
+    cast(
+        Any,
+        [
+            (
+                "system",
+                """
 You are Omi Layer 2 memory routing.
 
 Your only job is to classify one L2 evidence packet as exactly one route:
@@ -58,10 +74,10 @@ Rules:
 Return JSON matching:
 {format_instructions}
 """.strip(),
-        ),
-        (
-            "human",
-            """
+            ),
+            (
+                "human",
+                """
 Observed head commit id: {observed_head_commit_id}
 
 L2 evidence packet:
@@ -70,23 +86,30 @@ L2 evidence packet:
 Custom search replay artifact:
 {custom_search_json}
 """.strip(),
-        ),
-    ]
+            ),
+        ],
+    )
 )
 
 # Backward-compatible alias for callers/tests that still use the L2 name.
 l2_memory_route_prompt = promotion_route_prompt
 
 
-def _content_from_response(response) -> str:
+def _content_from_response(response: object) -> str:
     content = getattr(response, "content", response)
     if isinstance(content, list):
-        return "\n".join(str(part) for part in content)
+        return "\n".join(str(part) for part in cast(list[object], content))
     return str(content)
+
+
+content_from_response = _content_from_response
 
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+canonical_json = _canonical_json
 
 
 def _is_quote_wrapper(memory_text: Optional[str]) -> bool:
@@ -95,12 +118,15 @@ def _is_quote_wrapper(memory_text: Optional[str]) -> bool:
     return bool(_QUOTE_WRAPPER_RE.match(memory_text))
 
 
+is_quote_wrapper = _is_quote_wrapper
+
+
 def classify_l2_memory_route(
     *,
     packet: Dict[str, Any],
     custom_search_artifact: Dict[str, Any],
     observed_head_commit_id: Optional[str],
-    llm=None,
+    llm: LlmInvoker | None = None,
 ) -> Optional[PromotionRoute]:
     parser = PydanticOutputParser(pydantic_object=PromotionRouteResponse)
     messages = promotion_route_prompt.format_messages(
@@ -110,9 +136,9 @@ def classify_l2_memory_route(
         format_instructions=parser.get_format_instructions(),
     )
     if llm is not None:
-        model = llm
+        model: LlmInvoker = llm
     elif get_llm is not None:
-        model = get_llm("memory_l2")
+        model = cast(LlmInvoker, get_llm("memory_l2"))
     else:
         logger.error("Error classifying memory L2 memory route: missing_llm_client")
         return None

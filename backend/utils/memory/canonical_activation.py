@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from typing import Any
 
 from config.memory_rollout import MemoryRolloutConfig, MemoryRolloutMode
 from utils.memory.memory_system import MemorySystem, list_canonical_cohort_uids
@@ -28,7 +29,7 @@ class CanonicalWriteDecision:
     reason: str = "ok"
 
 
-def canonical_write_decision(uid: str, *, db_client) -> CanonicalWriteDecision:
+def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecision:
     """Resolve canonical write readiness without collapsing enrolled failures into legacy fallback."""
 
     if db_client is None:
@@ -88,7 +89,7 @@ def canonical_write_decision(uid: str, *, db_client) -> CanonicalWriteDecision:
     return CanonicalWriteDecision(enabled=True, memory_system=memory_system)
 
 
-def canonical_write_enabled(uid: str, *, db_client) -> bool:
+def canonical_write_enabled(uid: str, *, db_client: Any) -> bool:
     """Return true only when the user is in cohort and write gates are ready."""
     return canonical_write_decision(uid, db_client=db_client).enabled
 
@@ -96,7 +97,7 @@ def canonical_write_enabled(uid: str, *, db_client) -> bool:
 def canonical_read_enabled(
     uid: str,
     *,
-    db_client,
+    db_client: Any,
     source_decision: str | None = None,
     cursor_memory_read_requested: bool = False,
     archive_requested: bool = False,

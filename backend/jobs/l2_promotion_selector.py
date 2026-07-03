@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 DEFAULT_COMPLETION_INACTIVITY_MINUTES = 30
 DEFAULT_MAX_SESSIONS_PER_BATCH = 3
 DEFAULT_MAX_L1_ITEMS_PER_BATCH = 50
+
+
+def _empty_raw_record() -> Dict[str, Any]:
+    return {}
 
 
 @dataclass(frozen=True)
@@ -15,7 +19,7 @@ class PromotionSelectorConfig:
     max_l1_items_per_batch: int = DEFAULT_MAX_L1_ITEMS_PER_BATCH
     completion_inactivity_minutes: int = DEFAULT_COMPLETION_INACTIVITY_MINUTES
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.max_sessions_per_batch < 1:
             raise ValueError('max_sessions_per_batch must be positive')
         if self.max_l1_items_per_batch < 1:
@@ -35,7 +39,7 @@ class L1PromotionCandidate:
     promoted: bool = False
     session_status: Optional[str] = None
     session_completed_at: Optional[datetime] = None
-    raw: Dict[str, Any] = field(default_factory=dict)
+    raw: Dict[str, Any] = field(default_factory=_empty_raw_record)
 
 
 @dataclass(frozen=True)
@@ -63,7 +67,7 @@ def _coerce_datetime(value: Any, *, fallback: Optional[datetime] = None) -> date
     raise ValueError('timestamp is required')
 
 
-def candidate_from_record(record: Dict[str, Any]) -> L1PromotionCandidate:
+def candidate_from_record(record: Mapping[str, Any]) -> L1PromotionCandidate:
     uid = str(record.get('uid') or record.get('user_id') or '').strip()
     l1_item_id = str(record.get('l1_item_id') or record.get('memory_id') or record.get('id') or '').strip()
     session_id = str(
@@ -126,7 +130,7 @@ def select_promotion_work_items(
 ) -> List[PromotionWorkItem]:
     current_time = _utc(now or datetime.now(timezone.utc))
     cfg = config or PromotionSelectorConfig()
-    normalized = [
+    normalized: List[L1PromotionCandidate] = [
         candidate if isinstance(candidate, L1PromotionCandidate) else candidate_from_record(candidate)
         for candidate in candidates
     ]
@@ -136,7 +140,7 @@ def select_promotion_work_items(
     for item in pending:
         sessions.setdefault((item.uid, item.session_id), []).append(item)
 
-    completed_sessions = []
+    completed_sessions: List[tuple[str, str, List[L1PromotionCandidate]]] = []
     for (uid, session_id), items in sessions.items():
         ordered = sorted(items, key=lambda item: (item.created_at, item.l1_item_id))
         if _session_completed(ordered, now=current_time, config=cfg):
@@ -148,7 +152,7 @@ def select_promotion_work_items(
     batch_sessions: List[str] = []
     batch_l1_ids: List[str] = []
 
-    def flush():
+    def flush() -> None:
         nonlocal active_uid, batch_sessions, batch_l1_ids
         if active_uid and batch_sessions and batch_l1_ids:
             work_items.append(

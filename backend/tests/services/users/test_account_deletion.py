@@ -125,6 +125,11 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
     )
     monkeypatch.setattr(
         account_deletion.users_db,
+        'mark_user_deletion_wipe_intent',
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        account_deletion.users_db,
         'mark_user_deletion_wipe_started',
         MagicMock(),
     )
@@ -325,6 +330,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
     monkeypatch.setattr(
         account_deletion, 'delete_all_conversation_recordings', lambda uid: calls.append(('recordings', uid))
     )
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', lambda uid: None)
 
     result = account_deletion.purge_derived_user_data('uid1')
 
@@ -359,6 +365,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     monkeypatch.setattr(
         account_deletion, 'delete_all_conversation_recordings', MagicMock(side_effect=Exception('gcs down'))
     )
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
 
     result = account_deletion.purge_derived_user_data('uid1')
 

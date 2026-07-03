@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import importlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -23,6 +24,23 @@ from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from tests.unit.test_ws_i_write_convergence import _FakeDb, _trusted_account_generation
+
+
+def _refresh_canonical_runtime() -> None:
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    kg_promotion = importlib.import_module("utils.memory.canonical_kg_promotion")
+    globals().update(
+        {
+            "read_canonical_memories": canonical_adapter.read_canonical_memories,
+            "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+            "extract_kg_for_promoted_memory": kg_promotion.extract_kg_for_promoted_memory,
+        }
+    )
+
+
+@pytest.fixture(autouse=True)
+def _refresh_canonical_runtime_fixture():
+    _refresh_canonical_runtime()
 
 
 def _control_seed(uid: str) -> dict:

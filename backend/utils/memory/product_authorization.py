@@ -5,19 +5,24 @@ Neutral ``product_authorization`` is the source of truth. Canonical product auth
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, cast
 
-from database.memory_app_key_grants import read_app_key_memory_grants_state
+from database import memory_app_key_grants as app_key_grants_db
+from database.memory_app_key_grants import AppKeyMemoryGrantStateRead
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
+from utils.memory import default_read_rollout as default_read_rollout_mod
 from utils.memory.default_read_rollout import (
     DefaultReadRolloutDecision,
     GlobalReadGateDecision,
     MemoryReadDecision,
-    build_default_read_rollout_observability,
     read_archive_read_rollout,
     read_default_read_rollout,
     read_global_read_gate,
 )
+
+ObservabilityPayload = Dict[str, Any]
+GrantPayload = Dict[str, Any]
+GrantStatePayload = Dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -46,7 +51,7 @@ class ProductAuthorizationDecision:
     db_client: object
     read_decision: MemoryReadDecision
     reason: str
-    observability: dict
+    observability: ObservabilityPayload
     policy: Optional[MemoryAccessPolicy] = None
     global_gate: Optional[GlobalReadGateDecision] = None
     rollout: Optional[DefaultReadRolloutDecision] = None
@@ -66,7 +71,7 @@ class AppKeyScopeGrantDecision:
     operation: MemoryGrantOperation
     reason: str
     required_scope: str
-    observability: dict
+    observability: ObservabilityPayload
     policy: Optional[MemoryAccessPolicy] = None
     grant_path: Optional[str] = None
     status_code: int = 403
@@ -74,7 +79,7 @@ class AppKeyScopeGrantDecision:
 
 ReadGlobalGate = Callable[..., GlobalReadGateDecision]
 ReadRollout = Callable[..., DefaultReadRolloutDecision]
-ReadAppKeyGrantsState = Callable[..., object]
+ReadAppKeyGrantsState = Callable[..., AppKeyMemoryGrantStateRead]
 
 EXTERNAL_MEMORY_CONSUMERS = {'third_party', 'developer_api', 'mcp'}
 MEMORY_OPERATION_REQUIRED_SCOPES = {
@@ -84,7 +89,7 @@ MEMORY_OPERATION_REQUIRED_SCOPES = {
 }
 
 
-def _app_context_payload(context: ProductAuthorizationContext) -> dict:
+def _app_context_payload(context: ProductAuthorizationContext) -> ObservabilityPayload:
     return {
         'app_id': context.app_id,
         'key_id': context.key_id,
@@ -92,7 +97,9 @@ def _app_context_payload(context: ProductAuthorizationContext) -> dict:
     }
 
 
-def _global_read_gate_observability(gate: GlobalReadGateDecision, context: ProductAuthorizationContext) -> dict:
+def _global_read_gate_observability(
+    gate: GlobalReadGateDecision, context: ProductAuthorizationContext
+) -> ObservabilityPayload:
     return {
         'consumer': context.consumer,
         'surface': context.surface,
@@ -107,8 +114,14 @@ def _global_read_gate_observability(gate: GlobalReadGateDecision, context: Produ
     }
 
 
-def _rollout_observability(rollout: DefaultReadRolloutDecision, context: ProductAuthorizationContext) -> dict:
-    observability = build_default_read_rollout_observability(rollout)
+def _rollout_observability(
+    rollout: DefaultReadRolloutDecision, context: ProductAuthorizationContext
+) -> ObservabilityPayload:
+    build_observability = cast(
+        Callable[[DefaultReadRolloutDecision], ObservabilityPayload],
+        getattr(default_read_rollout_mod, 'build_default_read_rollout_observability'),
+    )
+    observability = build_observability(rollout)
     observability.update(
         {
             'surface': context.surface,
@@ -125,10 +138,10 @@ def _rollout_observability(rollout: DefaultReadRolloutDecision, context: Product
 def _deny(
     *,
     context: ProductAuthorizationContext,
-    db_client,
+    db_client: object,
     read_decision: MemoryReadDecision,
     reason: str,
-    observability: dict,
+    observability: ObservabilityPayload,
     global_gate: GlobalReadGateDecision | None = None,
     rollout: DefaultReadRolloutDecision | None = None,
 ) -> ProductAuthorizationDecision:
@@ -152,11 +165,11 @@ def _deny(
 def _allow(
     *,
     context: ProductAuthorizationContext,
-    db_client,
+    db_client: object,
     global_gate: GlobalReadGateDecision,
     rollout: DefaultReadRolloutDecision,
     policy: MemoryAccessPolicy,
-    observability: dict,
+    observability: ObservabilityPayload,
 ) -> ProductAuthorizationDecision:
     return ProductAuthorizationDecision(
         allowed=True,
@@ -178,7 +191,7 @@ def _grant_observability(
     required_scope: str,
     reason: str,
     grant_path: str | None = None,
-) -> dict:
+) -> ObservabilityPayload:
     return {
         'consumer': context.consumer,
         'surface': context.surface,
@@ -218,31 +231,37 @@ def _grant_decision(
 
 
 def _lookup_app_key_grant(
-    context: ProductAuthorizationContext, persisted_grant_state
-) -> tuple[dict | None, str | None, bool]:
+    context: ProductAuthorizationContext, persisted_grant_state: object
+) -> tuple[GrantPayload | None, str | None, bool]:
     if not isinstance(persisted_grant_state, dict):
         return None, None, False
-    grants = persisted_grant_state.get('grants')
+    state = cast(GrantStatePayload, persisted_grant_state)
+    grants = state.get('grants')
     if not isinstance(grants, dict):
         return None, None, False
-    consumer_grants = grants.get(context.consumer)
+    grant_map = cast(GrantPayload, grants)
+    consumer_grants = grant_map.get(context.consumer)
     if not isinstance(consumer_grants, dict):
         return None, None, True
-    apps = consumer_grants.get('apps')
+    consumer_grant = cast(GrantPayload, consumer_grants)
+    apps = consumer_grant.get('apps')
     if not isinstance(apps, dict):
         return None, None, False
-    app_grant = apps.get(context.app_id)
+    apps_by_id = cast(GrantPayload, apps)
+    app_grant = apps_by_id.get(context.app_id) if context.app_id is not None else None
     if not isinstance(app_grant, dict):
         return None, None, True
-    keys = app_grant.get('keys')
+    app_grant_payload = cast(GrantPayload, app_grant)
+    keys = app_grant_payload.get('keys')
     if not isinstance(keys, dict):
         return None, None, False
-    key_grant = keys.get(context.key_id)
+    keys_by_id = cast(GrantPayload, keys)
+    key_grant = keys_by_id.get(context.key_id) if context.key_id is not None else None
     if key_grant is None:
         return None, None, True
     if not isinstance(key_grant, dict):
         return None, None, False
-    return key_grant, f'grants.{context.consumer}.apps.{context.app_id}.keys.{context.key_id}', True
+    return cast(GrantPayload, key_grant), f'grants.{context.consumer}.apps.{context.app_id}.keys.{context.key_id}', True
 
 
 def _memory_consumer_for_context(context: ProductAuthorizationContext) -> MemoryConsumer:
@@ -255,7 +274,7 @@ def _memory_consumer_for_context(context: ProductAuthorizationContext) -> Memory
 def authorize_app_key_scope_memory_grant(
     context: ProductAuthorizationContext,
     *,
-    persisted_grant_state,
+    persisted_grant_state: object,
     operation: MemoryGrantOperation,
 ) -> AppKeyScopeGrantDecision:
     """Authorize memory memory access for external app/key/scope consumers.
@@ -310,8 +329,8 @@ def authorize_app_key_scope_memory_grant(
             grant_path=grant_path,
         )
 
-    grant_scopes = grant.get('scopes')
-    if not isinstance(grant.get('enabled'), bool) or not isinstance(grant_scopes, list):
+    grant_scopes_raw = grant.get('scopes')
+    if not isinstance(grant.get('enabled'), bool) or not isinstance(grant_scopes_raw, list):
         return _grant_decision(
             context=context,
             operation=operation,
@@ -319,6 +338,7 @@ def authorize_app_key_scope_memory_grant(
             reason='malformed_app_key_scope_grant',
             grant_path=grant_path,
         )
+    grant_scopes = cast(list[object], grant_scopes_raw)
     if not all(isinstance(scope, str) and scope for scope in grant_scopes):
         return _grant_decision(
             context=context,
@@ -335,7 +355,8 @@ def authorize_app_key_scope_memory_grant(
             reason='app_key_scope_grant_disabled',
             grant_path=grant_path,
         )
-    if required_scope not in set(grant_scopes):
+    typed_grant_scopes = [scope for scope in grant_scopes if isinstance(scope, str)]
+    if required_scope not in set(typed_grant_scopes):
         return _grant_decision(
             context=context,
             operation=operation,
@@ -383,8 +404,10 @@ def authorize_app_key_scope_memory_grant(
 def authorize_memory_external_default_memory_read(
     context: ProductAuthorizationContext,
     *,
-    db_client,
-    read_app_key_grants_state: ReadAppKeyGrantsState = read_app_key_memory_grants_state,
+    db_client: object,
+    read_app_key_grants_state: ReadAppKeyGrantsState = cast(
+        ReadAppKeyGrantsState, getattr(app_key_grants_db, 'read_app_key_memory_grants_state')
+    ),
 ) -> AppKeyScopeGrantDecision:
     """Compose authenticated external context with stored memory app/key grants.
 
@@ -410,8 +433,10 @@ def authorize_memory_external_default_memory_read(
 def authorize_memory_external_default_memory_write(
     context: ProductAuthorizationContext,
     *,
-    db_client,
-    read_app_key_grants_state: ReadAppKeyGrantsState = read_app_key_memory_grants_state,
+    db_client: object,
+    read_app_key_grants_state: ReadAppKeyGrantsState = cast(
+        ReadAppKeyGrantsState, getattr(app_key_grants_db, 'read_app_key_memory_grants_state')
+    ),
 ) -> AppKeyScopeGrantDecision:
     """Authorize an external memory write mutation (create/edit/delete).
 
@@ -436,7 +461,7 @@ def authorize_memory_external_default_memory_write(
 def authorize_memory_product_memory_route(
     context: ProductAuthorizationContext,
     *,
-    db_client,
+    db_client: object,
     read_global_gate: ReadGlobalGate = read_global_read_gate,
     read_default_rollout: ReadRollout = read_default_read_rollout,
     read_archive_rollout: ReadRollout = read_archive_read_rollout,
@@ -503,12 +528,3 @@ def authorize_memory_product_memory_route(
         policy=policy,
         observability=rollout_observability,
     )
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-ProductAuthorizationContext = ProductAuthorizationContext
-ProductAuthorizationDecision = ProductAuthorizationDecision
-AppKeyScopeGrantDecision = AppKeyScopeGrantDecision
-MemoryGrantOperation = MemoryGrantOperation
-MEMORY_OPERATION_REQUIRED_SCOPES = MEMORY_OPERATION_REQUIRED_SCOPES
-EXTERNAL_MEMORY_CONSUMERS = EXTERNAL_MEMORY_CONSUMERS

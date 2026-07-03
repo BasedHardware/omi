@@ -685,7 +685,7 @@ def test_mcp_validate_memory_uses_canonical_store_for_canonical_cohort():
     assert "fetch_memory_dict" in section
     memory_service_source = (BACKEND_DIR / "utils" / "memory" / "memory_service.py").read_text(encoding="utf-8")
     assert "MemorySystem.CANONICAL" in memory_service_source
-    assert "_read_canonical_memory_item" in memory_service_source
+    assert "read_canonical_memory_item" in memory_service_source
 
 
 _WRITER_FILES = [

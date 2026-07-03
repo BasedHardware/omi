@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+import importlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -45,6 +46,7 @@ def _cron_import_isolation():
     install_database_client_stub()
     install_canonical_write_runtime_stubs()
     yield
+    _clear_ws_b_runtime_modules()
     restore_sys_modules(saved)
 
 
@@ -63,6 +65,7 @@ from utils.memory.short_term_promotion import (
 )
 from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from tests.unit.test_ws_b_short_term_lifecycle import (
+    _clear_ws_b_runtime_modules,
     _canonical_db_with_control,
     _seed_canonical_short_term,
     _set_canonical_cohort,
@@ -74,10 +77,29 @@ CANONICAL_B = "uid-canonical-b"
 LEGACY_UID = "uid-legacy-only"
 
 
+def _refresh_cron_runtime() -> None:
+    cron = importlib.import_module("utils.memory.canonical_short_term_maintenance_cron")
+    memory_system = importlib.import_module("utils.memory.memory_system")
+    short_term_promotion = importlib.import_module("utils.memory.short_term_promotion")
+    cron.list_canonical_cohort_uids = memory_system.list_canonical_cohort_uids
+    cron.run_canonical_short_term_maintenance = short_term_promotion.run_canonical_short_term_maintenance
+    globals().update(
+        {
+            "run_canonical_short_term_maintenance_for_cohort": cron.run_canonical_short_term_maintenance_for_cohort,
+            "should_run_canonical_short_term_maintenance_cron": cron.should_run_canonical_short_term_maintenance_cron,
+            "list_canonical_cohort_uids": memory_system.list_canonical_cohort_uids,
+            "CanonicalShortTermMaintenanceReport": short_term_promotion.CanonicalShortTermMaintenanceReport,
+            "ShortTermPromotionReport": short_term_promotion.ShortTermPromotionReport,
+            "promotion_batch_threshold": short_term_promotion.promotion_batch_threshold,
+        }
+    )
+
+
 @pytest.fixture(autouse=True)
 def _clear_canonical_cohort(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
+    _refresh_cron_runtime()
     clear_canonical_cohort(monkeypatch)
     monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", raising=False)
     monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS", raising=False)

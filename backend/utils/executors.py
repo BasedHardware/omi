@@ -27,8 +27,12 @@ import functools
 import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Callable, ParamSpec, TypeVar
 
 logger = logging.getLogger(__name__)
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
@@ -79,7 +83,7 @@ _ALL_EXECUTORS = [
 ]
 
 
-async def run_blocking(executor: ThreadPoolExecutor, fn, *args, **kwargs):
+async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()
     ctx = contextvars.copy_context()
@@ -87,7 +91,9 @@ async def run_blocking(executor: ThreadPoolExecutor, fn, *args, **kwargs):
     return await loop.run_in_executor(executor, call)
 
 
-def submit_with_context(executor: ThreadPoolExecutor, fn, *args, **kwargs) -> Future:
+def submit_with_context(
+    executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+) -> Future[T]:
     """Submit *fn* to *executor*, propagating the current contextvars (BYOK keys, etc.)."""
     ctx = contextvars.copy_context()
     return executor.submit(ctx.run, fn, *args, **kwargs)

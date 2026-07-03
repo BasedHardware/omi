@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -29,8 +29,8 @@ class ImportJob(BaseModel):
     completed_at: Optional[datetime] = Field(default=None, description="When processing completed")
     error: Optional[str] = Field(default=None, description="Error message if failed")
 
-    def dict(self, **kwargs):
-        d = super().dict(**kwargs)
+    def dict(self, **kwargs: Any) -> dict[str, Any]:
+        d = self.model_dump(**kwargs)
         # Convert datetime objects to ISO format strings for Firestore
         if d.get('created_at'):
             d['created_at'] = d['created_at'].isoformat()

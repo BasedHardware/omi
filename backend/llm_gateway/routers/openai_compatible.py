@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -27,7 +28,7 @@ async def create_chat_completion(
     caller: ServiceAuthDependency,
     config: GatewayConfig = Depends(get_gateway_config),
     provider_registry: ProviderRegistry = Depends(get_provider_registry),
-):
+) -> JSONResponse:
     started_at = time_request()
     resolved_route = None
     try:
@@ -50,7 +51,7 @@ async def create_chat_completion(
         return _error_response(exc)
 
 
-def _safe_observe(fn: Any) -> None:
+def _safe_observe(fn: Callable[[], None]) -> None:
     """Emit metrics without risking request-handling failures."""
     try:
         fn()
@@ -65,20 +66,21 @@ async def _request_json(request: Request) -> dict[str, Any]:
         raise GatewayInvalidRequestError('request body must be valid JSON') from exc
     if not isinstance(body, dict):
         raise GatewayInvalidRequestError('request body must be an object')
-    return body
+    return cast(dict[str, Any], body)
 
 
 def _error_response(exc: GatewayError) -> JSONResponse:
+    content: dict[str, object] = {
+        'error': {
+            'message': exc.message,
+            'type': _error_type_for_code(exc.code),
+            'param': exc.param,
+            'code': exc.code.value,
+        }
+    }
     return JSONResponse(
         status_code=_status_code_for_error(exc),
-        content={
-            'error': {
-                'message': exc.message,
-                'type': _error_type_for_code(exc.code),
-                'param': exc.param,
-                'code': exc.code.value,
-            }
-        },
+        content=content,
     )
 
 

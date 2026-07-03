@@ -28,7 +28,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, cast
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -69,6 +69,22 @@ DEFAULT_PROMOTION_BATCH_THRESHOLD = 25
 PROMOTION_DAILY_INTERVAL = timedelta(hours=24)
 PROMOTION_BY = "canonical_short_term_promotion"
 MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED_ENV = "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED"
+Payload = Dict[str, Any]
+
+
+def _empty_str_list() -> List[str]:
+    return []
+
+
+def _empty_transition_records() -> List[ShortTermLifecycleTransitionRecord]:
+    return []
+
+
+def _snapshot_payload(snapshot: Any) -> Payload:
+    if not getattr(snapshot, "exists", False):
+        return {}
+    raw = snapshot.to_dict()
+    return cast(Payload, raw) if isinstance(raw, dict) else {}
 
 
 def promotion_fast_track_enabled() -> bool:
@@ -105,10 +121,10 @@ def is_promotable_short_term_item(item: MemoryItem, *, now: datetime) -> bool:
 def list_promotable_short_term_items(
     uid: str,
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     items = fetch_short_term_memory_items_firestore(uid=uid, db_client=client)
     promotable = [item for item in items if is_promotable_short_term_item(item, now=current_time)]
@@ -129,11 +145,11 @@ def list_required_promotion_items(items: List[MemoryItem]) -> List[MemoryItem]:
     return [item for item in items if is_required_promotion_item(item)]
 
 
-def _normalized_text(value: str) -> str:
+def _normalized_text(value: Optional[str]) -> str:
     return " ".join((value or "").strip().lower().split())
 
 
-def _exact_long_term_duplicate(uid: str, item: MemoryItem, *, db_client) -> Optional[MemoryItem]:
+def _exact_long_term_duplicate(uid: str, item: MemoryItem, *, db_client: Any) -> Optional[MemoryItem]:
     normalized_content = _normalized_text(item.content)
     if not normalized_content:
         return None
@@ -143,7 +159,10 @@ def _exact_long_term_duplicate(uid: str, item: MemoryItem, *, db_client) -> Opti
         .stream()
     )
     for snapshot in snapshots:
-        candidate = MemoryItem(**(snapshot.to_dict() or {}))
+        payload = _snapshot_payload(snapshot)
+        if not payload:
+            continue
+        candidate = MemoryItem(**payload)
         if candidate.uid != uid or candidate.status != MemoryItemStatus.active:
             continue
         if _normalized_text(candidate.content) != normalized_content:
@@ -167,7 +186,7 @@ def _merge_required_promotion_duplicate(
     run_id: str,
     trigger_reason: str,
     now: datetime,
-    db_client,
+    db_client: Any,
 ) -> tuple[MemoryItem, bool]:
     evidence_by_id = {evidence.evidence_id: evidence for evidence in existing.evidence}
     for evidence in item.evidence:
@@ -287,10 +306,10 @@ def _ensure_required_promotion_update_operation(
     uid: str,
     target_memory_id: str,
     evidence_ids: List[str],
-    logical_payload: Dict,
+    logical_payload: Payload,
     control: MemoryControlState,
     source_packet_id: str,
-    db_client,
+    db_client: Any,
 ) -> MemoryOperation:
     operation = MemoryOperation.new(
         uid=uid,
@@ -310,20 +329,20 @@ def _ensure_required_promotion_update_operation(
     return operation
 
 
-def _read_memory_item(uid: str, memory_id: str, *, db_client) -> Optional[MemoryItem]:
-    snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
-    if not getattr(snapshot, "exists", False):
+def _read_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+    payload = _snapshot_payload(db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get())
+    if not payload:
         return None
-    return MemoryItem(**(snapshot.to_dict() or {}))
+    return MemoryItem(**payload)
 
 
 def list_fast_track_promotable_items(
     uid: str,
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     return [
         item
@@ -360,18 +379,18 @@ def promotion_trigger_reason(
     return None
 
 
-def _read_control_state(uid: str, *, db_client) -> MemoryControlState:
+def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     ref = db_client.document(collections.memory_apply_control_state)
-    snapshot = ref.get()
-    if getattr(snapshot, "exists", False):
-        return MemoryControlState(**(snapshot.to_dict() or {}))
+    payload = _snapshot_payload(ref.get())
+    if payload:
+        return MemoryControlState(**payload)
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     ref.set(control.model_dump(mode="json"))
     return control
 
 
-def _persist_control_state(control: MemoryControlState, *, db_client) -> None:
+def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
     db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
         control.model_dump(mode="json")
     )
@@ -383,9 +402,9 @@ def _ensure_promotion_operation(
     item: MemoryItem,
     control: MemoryControlState,
     run_id: str,
-    db_client,
+    db_client: Any,
 ) -> MemoryOperation:
-    logical_payload = {
+    logical_payload: Payload = {
         "decision": DurablePatchDecision.update.value,
         "target_memory_id": item.memory_id,
         "memory_text": item.content,
@@ -417,7 +436,7 @@ def promote_short_term_item_via_apply(
     run_id: str,
     trigger_reason: str,
     now: datetime,
-    db_client=None,
+    db_client: Any = None,
 ) -> tuple[MemoryItem, bool, CanonicalKgPromotionResult, bool]:
     """Promote one short_term item to long_term through the authoritative apply path.
 
@@ -430,7 +449,7 @@ def promote_short_term_item_via_apply(
     if not is_promotable_short_term_item(item, now=now):
         raise ValueError(f"memory item {item.memory_id} is not promotable")
 
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         raise ValueError(f"promotion refused for non-canonical cohort uid={uid}")
     current_time = _coerce_aware_utc(now)
@@ -471,7 +490,7 @@ def promote_short_term_item_via_apply(
             "by": PROMOTION_BY,
         }
     )
-    patch_payload = {
+    patch_payload: Payload = {
         "patch_id": f"patch_promote_{idempotency_key[:24]}",
         "packet_id": f"promotion_{run_id}",
         "run_id": run_id,
@@ -497,9 +516,11 @@ def promote_short_term_item_via_apply(
 
     promoted = result.memory_items[0] if result.memory_items else item
     if result.status == ApplyStatus.idempotent_skip:
-        snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}").get()
-        if getattr(snapshot, "exists", False):
-            promoted = MemoryItem(**(snapshot.to_dict() or {}))
+        payload = _snapshot_payload(
+            client.document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}").get()
+        )
+        if payload:
+            promoted = MemoryItem(**payload)
 
     assert_legal_state(
         DomainMemoryLayer(promoted.tier.value),
@@ -543,8 +564,8 @@ class ShortTermPromotionReport:
     skipped_reason: Optional[str] = None
     trigger_reason: Optional[str] = None
     promotable_count: int = 0
-    promoted_memory_ids: List[str] = field(default_factory=list)
-    transition_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=list)
+    promoted_memory_ids: List[str] = field(default_factory=_empty_str_list)
+    transition_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=_empty_transition_records)
     vector_sync_failures: int = 0
     keyword_sync_failures: int = 0
     kg_extraction_failures: int = 0
@@ -578,7 +599,7 @@ class CanonicalShortTermMaintenanceReport:
 def run_canonical_short_term_promotion(
     uid: str,
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     batch_threshold: Optional[int] = None,
@@ -592,13 +613,14 @@ def run_canonical_short_term_promotion(
     - empty set: consolidation fired but failed or was watermark-blocked — defer all promotion.
     - non-empty set: consolidation completed cleanly — only batched survivors may promote.
     """
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return ShortTermPromotionReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     promotable = list_promotable_short_term_items(uid, db_client=client, now=current_time)
+    allowed: Optional[Set[str]] = None
     if consolidation_batched_ids is not None:
         if not consolidation_batched_ids:
             return ShortTermPromotionReport(
@@ -623,7 +645,7 @@ def run_canonical_short_term_promotion(
         promotable = required_promotion
     elif trigger is None and fast_track:
         trigger = "user_asserted_fast_track"
-        if consolidation_batched_ids is not None:
+        if allowed is not None:
             promotable = [item for item in fast_track if item.memory_id in allowed]
         else:
             promotable = fast_track
@@ -680,13 +702,13 @@ def run_canonical_short_term_promotion(
 def run_canonical_short_term_ttl_lifecycle(
     uid: str,
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     limit: Optional[int] = None,
 ) -> CanonicalShortTermLifecycleReport:
     """TTL/decay audit for canonical short_term via the existing lifecycle worker."""
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
@@ -724,13 +746,13 @@ def run_canonical_short_term_ttl_lifecycle(
 def run_canonical_short_term_maintenance(
     uid: str,
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Canonical-only wrapper: TTL audit → consolidation → batch-or-daily promotion."""
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
 
@@ -767,5 +789,5 @@ def run_canonical_short_term_maintenance(
     )
 
 
-def count_promotable_short_term_items(uid: str, *, db_client=None, now: Optional[datetime] = None) -> int:
+def count_promotable_short_term_items(uid: str, *, db_client: Any = None, now: Optional[datetime] = None) -> int:
     return len(list_promotable_short_term_items(uid, db_client=db_client, now=now))

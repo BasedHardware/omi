@@ -5,7 +5,6 @@ Neutral ``projections`` is the source of truth. Canonical projections module.
 
 import copy
 import hashlib
-import json
 from typing import Any, Dict, List
 
 
@@ -23,7 +22,7 @@ def _entity_id(value: Any) -> str:
 
 def _graph_projection(active_facts: List[Dict[str, Any]]) -> Dict[str, Any]:
     nodes: Dict[str, Dict[str, Any]] = {}
-    edges = []
+    edges: List[Dict[str, Any]] = []
     for fact in active_facts:
         subject = _entity_id(fact.get("subject_entity_id") or fact.get("subject") or "user")
         nodes.setdefault(subject, {"entity_id": subject, "source": "durable_fact_projection"})

@@ -5,7 +5,7 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import List
+from typing import Any, Dict, List
 
 from pinecone import Pinecone
 
@@ -229,8 +229,8 @@ def upsert_memory_vector(
     content: str,
     category: str,
     subject_entity_id: str | None = None,
-    projection_metadata: dict | None = None,
-):
+    projection_metadata: Dict[str, Any] | None = None,
+) -> List[float] | None:
     """
     Upsert a memory embedding to Pinecone.
     """
@@ -264,7 +264,7 @@ def upsert_memory_vector(
     return vector
 
 
-def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
+def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """
     Upsert many memory embeddings to Pinecone in a single request.
 
@@ -321,7 +321,7 @@ def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
 
 def find_similar_memories(
     uid: str, content: str, threshold: float = 0.85, limit: int = 5, subject_entity_id: str | None = None
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Find memories similar to the given content.
     Returns list of matches with similarity scores.
@@ -338,7 +338,7 @@ def find_similar_memories(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
     )
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for match in xc.get('matches', []):
         if match['score'] >= threshold:
             results.append(
@@ -702,7 +702,7 @@ def search_screen_activity_vectors(
     ]
 
 
-def delete_screen_activity_vectors(uid: str, ids: List[int]):
+def delete_screen_activity_vectors(uid: str, ids: List[str]):
     """Delete screen activity vectors by screenshot IDs."""
     if index is None:
         return

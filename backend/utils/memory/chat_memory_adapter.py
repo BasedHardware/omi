@@ -43,7 +43,7 @@ def search_memory_default_chat_memories_text(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     now: Optional[datetime] = None,
 ) -> Optional[str]:
     """Return LLM-ready default-visible memory product memories for Omi chat.
@@ -101,7 +101,7 @@ def list_default_chat_memories_decision_text(
     uid: str,
     limit: int,
     offset: int = 0,
-    db_client,
+    db_client: Any,
     now: Optional[datetime] = None,
     allow_legacy_safe_fallback: bool = False,
 ) -> ChatMemorySearchResult:
@@ -176,7 +176,7 @@ def search_memory_default_chat_memories_vector_text(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
 ) -> Optional[str]:
@@ -206,7 +206,7 @@ def search_memory_default_chat_memories_vector_decision_text(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
     allow_legacy_safe_fallback: bool = False,
@@ -246,7 +246,8 @@ def search_memory_default_chat_memories_vector_decision_text(
     def _attach_vector_line(memory: dict[str, Any], item: dict[str, Any], scores: dict[str, float]) -> str:
         updated_at = parse_optional_default_read_datetime(item.get('updated_at') or item.get('date'))
         date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
-        score = float(scores.get(item.get('memory_id'), 0))
+        memory_id = item.get('memory_id')
+        score = scores.get(memory_id, 0.0) if isinstance(memory_id, str) else 0.0
         return _format_chat_memory_evidence_line(
             item,
             source_marker='vector_memory',
@@ -304,10 +305,3 @@ def _quote_chat_memory_content(content: str) -> str:
     if len(normalized) > CHAT_MEMORY_CONTENT_MAX_CHARS:
         normalized = normalized[: CHAT_MEMORY_CONTENT_MAX_CHARS - 1].rstrip() + '…'
     return json.dumps(normalized, ensure_ascii=False)
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-ChatMemorySearchResult = ChatMemorySearchResult
-CHAT_MEMORY_BOUNDARY_NOTICE = CHAT_MEMORY_BOUNDARY_NOTICE
-CHAT_MEMORY_CONTENT_MAX_CHARS = CHAT_MEMORY_CONTENT_MAX_CHARS
-CHAT_MEMORY_POLICY_MARKER = CHAT_MEMORY_POLICY_MARKER

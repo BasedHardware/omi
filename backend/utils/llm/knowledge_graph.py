@@ -80,7 +80,7 @@ def extract_knowledge_from_memory(
     memory_id: str,
     user_name: str = "User",
     *,
-    db_client=None,
+    db_client: Any = None,
     strict_parse: bool = False,
 ) -> Optional[Dict[str, Any]]:
     existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)

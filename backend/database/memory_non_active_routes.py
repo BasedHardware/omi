@@ -6,30 +6,41 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+
+T = TypeVar("T")
 
 try:
-    from google.cloud.firestore_v1 import transactional
+    from google.cloud import firestore_v1 as _firestore_v1
 except ImportError:  # pragma: no cover - local unit tests mock Firestore.
+    _firestore_v1 = None
 
-    def transactional(func):
-        def wrapper(transaction, *args, **kwargs):
-            if hasattr(transaction, "_begin"):
-                transaction._begin()
-            try:
-                result = func(transaction, *args, **kwargs)
-                if hasattr(transaction, "_commit"):
-                    transaction._commit()
-                return result
-            except Exception:
-                if hasattr(transaction, "_rollback"):
-                    transaction._rollback()
-                raise
-            finally:
-                if hasattr(transaction, "_clean_up"):
-                    transaction._clean_up()
 
-        return wrapper
+def _fallback_transactional(func: Callable[..., T]) -> Callable[..., T]:
+    def wrapper(transaction: Any, *args: Any, **kwargs: Any) -> T:
+        if hasattr(transaction, "_begin"):
+            transaction._begin()
+        try:
+            result = func(transaction, *args, **kwargs)
+            if hasattr(transaction, "_commit"):
+                transaction._commit()
+            return result
+        except Exception:
+            if hasattr(transaction, "_rollback"):
+                transaction._rollback()
+            raise
+        finally:
+            if hasattr(transaction, "_clean_up"):
+                transaction._clean_up()
+
+    return wrapper
+
+
+def transactional(func: Callable[..., T]) -> Callable[..., T]:
+    if _firestore_v1 is None:
+        return _fallback_transactional(func)
+    firestore_transactional = cast(Any, _firestore_v1).transactional
+    return cast(Callable[..., T], firestore_transactional(func))
 
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -101,7 +112,7 @@ class PersistedNonActiveRouteOutcome(_NonActiveRouteOutcomeBase):
 def persist_non_active_route_outcome(
     outcome: NonActiveRouteOutcome,
     *,
-    db_client=db,
+    db_client: Any = db,
 ) -> PersistedNonActiveRouteOutcome:
     transaction = db_client.transaction()
     return _persist_non_active_route_outcome_transaction(transaction, db_client, outcome)
@@ -109,8 +120,8 @@ def persist_non_active_route_outcome(
 
 @transactional
 def _persist_non_active_route_outcome_transaction(
-    transaction,
-    db_client,
+    transaction: Any,
+    db_client: Any,
     outcome: NonActiveRouteOutcome,
 ) -> PersistedNonActiveRouteOutcome:
     persisted = _with_persistence_fields(outcome)
@@ -118,7 +129,8 @@ def _persist_non_active_route_outcome_transaction(
     outcome_ref = db_client.document(f"{collections.non_active_memory_routes}/{persisted.outcome_id}")
     snapshot = outcome_ref.get(transaction=transaction)
     if snapshot.exists:
-        existing = PersistedNonActiveRouteOutcome(**(snapshot.to_dict() or {}))
+        existing_payload = cast(Dict[str, Any], snapshot.to_dict() or {})
+        existing = PersistedNonActiveRouteOutcome(**existing_payload)
         if existing.payload_fingerprint != persisted.payload_fingerprint:
             raise NonActiveRouteStoreConflict("idempotency key payload mismatch")
         return existing

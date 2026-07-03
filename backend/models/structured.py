@@ -1,7 +1,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional, TYPE_CHECKING
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -9,9 +9,14 @@ _SDK_SRC = Path(__file__).resolve().parents[2] / 'plugins' / 'omi-plugin-sdk' / 
 if _SDK_SRC.exists() and str(_SDK_SRC) not in sys.path:
     sys.path.insert(0, str(_SDK_SRC))
 
-try:
-    from omi_plugin_sdk.models import ActionItem, Event, Structured
-except ModuleNotFoundError:
+_USE_LOCAL_MODELS = TYPE_CHECKING
+if not TYPE_CHECKING:
+    try:
+        from omi_plugin_sdk.models import ActionItem, Event, Structured
+    except ModuleNotFoundError:
+        _USE_LOCAL_MODELS = True
+
+if _USE_LOCAL_MODELS:
     from models.conversation_enums import CategoryEnum
 
     class ActionItem(BaseModel):
@@ -30,12 +35,12 @@ except ModuleNotFoundError:
             if not action_items:
                 return 'None'
 
-            result = []
+            result: list[str] = []
             for item in action_items:
                 status = 'completed' if item.completed else 'pending'
                 line = f'- {item.description} ({status})'
 
-                timestamps = []
+                timestamps: list[str] = []
                 if item.created_at:
                     timestamps.append(f"Created: {item.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
                 if item.due_at:
@@ -57,8 +62,8 @@ except ModuleNotFoundError:
         duration: int = Field(description='The duration of the event in minutes', default=30)
         created: bool = False
 
-        def as_dict_cleaned_dates(self):
-            event_dict = self.dict()
+        def as_dict_cleaned_dates(self) -> dict[str, Any]:
+            event_dict = self.model_dump()
             event_dict['start'] = event_dict['start'].isoformat()
             return event_dict
 
@@ -82,16 +87,16 @@ except ModuleNotFoundError:
         emoji: str = Field(description='An emoji to represent the conversation', default='🧠')
         category: CategoryEnum = Field(description='A category for this conversation', default=CategoryEnum.other)
         action_items: List[ActionItem] = Field(
-            description='A list of action items from the conversation', default_factory=list
+            description='A list of action items from the conversation', default_factory=list[ActionItem]
         )
         events: List[Event] = Field(
             description='A list of events extracted from the conversation, that the user must have on his calendar.',
-            default_factory=list,
+            default_factory=list[Event],
         )
 
         @field_validator('category', mode='before')
         @classmethod
-        def set_category_default_on_error(cls, value):
+        def set_category_default_on_error(cls, value: Any) -> CategoryEnum:
             if isinstance(value, CategoryEnum):
                 return value
             try:

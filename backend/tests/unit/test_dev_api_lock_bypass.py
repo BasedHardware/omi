@@ -142,8 +142,6 @@ _DEV_API_REAL_IMPORT_MODULES = (
     'utils.llm.knowledge_graph',
 )
 
-_install_dev_api_lock_bypass_stubs()
-
 
 @pytest.fixture(scope="module", autouse=True)
 def _dev_api_lock_bypass_import_isolation():

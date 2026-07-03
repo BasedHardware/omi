@@ -10,7 +10,6 @@ from models.product_memory import MemoryTier
 
 # Neutral fact-source string for new durable-memory patch ledger writes (schema literal unchanged).
 DURABLE_MEMORY_PATCH_FACT_SOURCE = "durable_memory_patch"
-DURABLE_MEMORY_PATCH_FACT_SOURCE = DURABLE_MEMORY_PATCH_FACT_SOURCE
 
 
 class LifecycleState(str, Enum):
@@ -89,7 +88,7 @@ class L1MemoryArchiveItem(BaseModel):
         validation_alias=AliasChoices("archive_class", "class"),
         serialization_alias="class",
     )
-    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
     evidence_quotes: List[str] = Field(default_factory=list)
     speaker_label: Optional[str] = None
     speaker_scope: str = "session-local"
@@ -169,7 +168,7 @@ class WorkingMemoryObservation(BaseModel):
     packet_id: Optional[str] = None
     content: str
     evidence_ids: List[str] = Field(default_factory=list)
-    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
     subject_entity_id: Optional[str] = None
     subject_scope: str = "primary_user"
     literal_observation: Optional[str] = None
@@ -310,7 +309,7 @@ class SourceBackedMemoryCandidate(BaseModel):
     source_version: str
     text: str
     evidence_ids: List[str] = Field(default_factory=list)
-    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
     captured_at: AwareDatetime
     expires_at: AwareDatetime
     initial_tier: MemoryTier = MemoryTier.short_term
@@ -359,7 +358,7 @@ class L2SearchPlan(BaseModel):
     schema_version: str = "l2_custom_search_plan.v1"
     packet_id: str
     search_budget: int = 3
-    searches: List[L2SearchRequest] = Field(default_factory=list)
+    searches: List[L2SearchRequest] = Field(default_factory=list[L2SearchRequest])
     same_user_only: bool = True
     read_only: bool = True
 
@@ -444,7 +443,7 @@ class DurableMemoryPatch(BaseModel):
     decision: DurablePatchDecision
     result_status: LifecycleState
     evidence_ids: List[str] = Field(default_factory=list)
-    evidence_refs: List[EvidenceRef] = Field(default_factory=list)
+    evidence_refs: List[EvidenceRef] = Field(default_factory=list[EvidenceRef])
     target_memory_id: Optional[str] = None
     new_memory_id: Optional[str] = None
     memory_text: Optional[str] = None

@@ -291,7 +291,7 @@ class TestMemoryServiceParity:
             "write",
             MagicMock(side_effect=AssertionError("external canonical writes must not re-enter public write")),
         )
-        monkeypatch.setattr(service_mod, "_read_canonical_memory_item", MagicMock(return_value=None))
+        monkeypatch.setattr(service_mod, "read_canonical_memory_item", MagicMock(return_value=None))
 
         service = service_mod.MemoryService(db_client=_FirestoreFake())
         service._canonical.write = canonical_write
@@ -506,7 +506,9 @@ class TestMemoryServiceUsesRequestPin:
 
             return MemorySystem.LEGACY if calls["count"] == 1 else MemorySystem.CANONICAL
 
-        monkeypatch.setattr("utils.memory.memory_system_pin.resolve_memory_system", flipping_resolve)
+        import utils.memory.memory_system_pin as memory_system_pin
+
+        monkeypatch.setattr(memory_system_pin, "resolve_memory_system", flipping_resolve)
         canonical_mock = MagicMock(return_value=[{"id": "canonical-only"}])
         monkeypatch.setattr(service_mod, "_canonical_search_memories_mcp", canonical_mock)
 

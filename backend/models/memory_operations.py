@@ -233,7 +233,7 @@ class MemoryOperation(BaseModel):
             raise ValueError("failure operations require error_code")
         return self
 
-    def _transition(self, *, status: MemoryOperationStatus, **updates) -> "MemoryOperation":
+    def _transition(self, *, status: MemoryOperationStatus, **updates: Any) -> "MemoryOperation":
         if self.status in _TERMINAL_STATUSES:
             raise ValueError(f"cannot transition terminal operation from {self.status.value}")
         data = self.model_dump()

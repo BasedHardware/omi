@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
@@ -160,7 +160,7 @@ def is_exists_user(uid: str):
     return True
 
 
-def get_user_profile(uid: str) -> dict:
+def get_user_profile(uid: str) -> dict[str, Any]:
     """Gets the full user profile document."""
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
@@ -367,7 +367,7 @@ def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
     running_stale_after: timedelta = timedelta(minutes=30),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return account_deletions documents whose wipe needs retry.
 
     Queries ``failed`` records (always actionable), stale ``pending`` records

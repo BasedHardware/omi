@@ -10,7 +10,7 @@ extra dependency or index — BM25 runs in-memory over the small candidate set.
 
 import math
 import re
-from typing import List, Dict
+from typing import Any, Dict, List
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -55,7 +55,7 @@ def bm25_scores(query: str, docs: List[str], k1: float = 1.5, b: float = 0.75) -
     return scores
 
 
-def rrf_rerank(query: str, candidates: List[dict], limit: int, k: int = 60) -> List[dict]:
+def rrf_rerank(query: str, candidates: List[Dict[str, Any]], limit: int, k: int = 60) -> List[Dict[str, Any]]:
     """Rerank vector candidates by fusing their vector rank with a BM25 keyword rank.
 
     `candidates` must be ordered best-first by vector relevance and each must carry a
@@ -74,7 +74,7 @@ def rrf_rerank(query: str, candidates: List[dict], limit: int, k: int = 60) -> L
     bm_order = sorted(range(len(candidates)), key=lambda i: (bm[i], -i), reverse=True)
     bm_rank = {i: r for r, i in enumerate(bm_order)}
 
-    fused: List[dict] = []
+    fused: List[Dict[str, Any]] = []
     for i, c in enumerate(candidates):
         item = dict(c)
         item["_bm25"] = bm[i]

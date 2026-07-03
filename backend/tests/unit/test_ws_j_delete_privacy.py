@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib
 import os
 import re
 import sys
@@ -79,10 +80,28 @@ from utils.memory.canonical_memory_adapter import (
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 
+def _refresh_canonical_memory_adapter_runtime() -> None:
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    globals().update(
+        {
+            "delete_all_canonical_memories": canonical_adapter.delete_all_canonical_memories,
+            "delete_canonical_memory": canonical_adapter.delete_canonical_memory,
+            "extraction_memory_id": canonical_adapter.extraction_memory_id,
+            "neutral_vector_id_for_memory": canonical_adapter.neutral_vector_id_for_memory,
+            "purge_canonical_derived_user_data": canonical_adapter.purge_canonical_derived_user_data,
+            "retract_conversation_sourced_memories": canonical_adapter.retract_conversation_sourced_memories,
+            "update_canonical_memory_content": canonical_adapter.update_canonical_memory_content,
+            "update_canonical_memory_visibility": canonical_adapter.update_canonical_memory_visibility,
+            "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+        }
+    )
+
+
 @pytest.fixture(autouse=True)
 def _clear_canonical_env(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
+    _refresh_canonical_memory_adapter_runtime()
     clear_canonical_cohort(monkeypatch)
 
 

@@ -5,19 +5,19 @@ import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Tuple, cast
 
 from database import memory_ledger
 from models.product_memory import MemoryAccessPolicy
 from utils.memory.projections import rebuild_memory_memory_projections
 
 try:
-    from utils.memory.vector_search_service import fetch_default_vector_memory_search
+    from utils.memory import vector_search_service as _vector_search_service
 
-    _VECTOR_SEARCH_IMPORT_ERROR = None
+    _vector_search_import_error: Exception | None = None
 except Exception as exc:
-    fetch_default_vector_memory_search = None
-    _VECTOR_SEARCH_IMPORT_ERROR = exc
+    _vector_search_service = None
+    _vector_search_import_error = exc
 
 _TOKEN_RE = re.compile(r"[\w']+", re.UNICODE)
 _STOPWORDS = {
@@ -48,6 +48,38 @@ _STOPWORDS = {
     'automatic',
 }
 
+Payload = Dict[str, Any]
+PayloadList = List[Payload]
+ScoredMemory = Tuple[float, List[str], Payload]
+
+
+class DefaultVectorSearchService(Protocol):
+    def __call__(
+        self,
+        uid: str,
+        query: str,
+        *,
+        db_client: Any,
+        policy: MemoryAccessPolicy,
+        limit: int,
+        required_projection_commit_id: str,
+        required_account_generation: int,
+    ) -> Payload: ...
+
+
+def _default_vector_search_service() -> DefaultVectorSearchService | None:
+    if _vector_search_service is None:
+        return None
+    return cast(DefaultVectorSearchService, getattr(_vector_search_service, 'fetch_default_vector_memory_search'))
+
+
+def _empty_payload() -> Payload:
+    return {}
+
+
+def _payload_or_empty(value: object) -> Payload:
+    return cast(Payload, value) if isinstance(value, dict) else {}
+
 
 @dataclass(frozen=True)
 class PromotionBundleConfig:
@@ -76,15 +108,15 @@ class PromotionBundle:
     bundle_id: str
     uid: str
     session_ids: List[str]
-    l1_items: List[Dict[str, Any]]
-    evidence_packets: List[Dict[str, Any]]
-    vector_seed: List[Dict[str, Any]]
-    graph_snapshot: Dict[str, Any]
+    l1_items: PayloadList
+    evidence_packets: PayloadList
+    vector_seed: PayloadList
+    graph_snapshot: Payload
     observed_head_commit_id: Optional[str]
     observed_head: Optional[str] = None
-    config: Dict[str, Any] = field(default_factory=dict)
+    config: Payload = field(default_factory=_empty_payload)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> Payload:
         return {
             'schema_version': self.schema_version,
             'bundle_id': self.bundle_id,
@@ -104,18 +136,18 @@ class UngroundedPromotionError(RuntimeError):
     pass
 
 
-VectorSeedFetcher = Callable[[str, str, int], List[Dict[str, Any]]]
-GraphSnapshotFetcher = Callable[[str, List[Dict[str, Any]], PromotionBundleConfig], Dict[str, Any]]
+VectorSeedFetcher = Callable[[str, str, int], PayloadList]
+GraphSnapshotFetcher = Callable[[str, PayloadList, PromotionBundleConfig], Payload]
 HeadReader = Callable[[str], Optional[str]]
-DurableFactsFetcher = Callable[[str], List[Dict[str, Any]]]
+DurableFactsFetcher = Callable[[str], PayloadList]
 
 
-def stable_id(namespace: str, payload: Dict[str, Any]) -> str:
+def stable_id(namespace: str, payload: Payload) -> str:
     serialized = json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)
     return hashlib.sha256(f'{namespace}|{serialized}'.encode('utf-8')).hexdigest()[:20]
 
 
-def _canonical_json(payload: Dict[str, Any]) -> str:
+def _canonical_json(payload: Payload) -> str:
     return json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)
 
 
@@ -125,13 +157,11 @@ def tokens(text: str) -> set[str]:
     }
 
 
-def retrieve_existing_memories(
-    query_text: str, existing_memories: Iterable[Dict[str, Any]], limit: int = 8
-) -> List[Dict[str, Any]]:
+def retrieve_existing_memories(query_text: str, existing_memories: Iterable[Payload], limit: int = 8) -> PayloadList:
     query_tokens = tokens(query_text)
     if not query_tokens or limit <= 0:
         return []
-    scored = []
+    scored: List[ScoredMemory] = []
     for memory in existing_memories:
         memory_tokens = tokens(str(memory.get('content') or memory.get('memory_text') or ''))
         overlap = query_tokens.intersection(memory_tokens)
@@ -153,7 +183,7 @@ def retrieve_existing_memories(
     ]
 
 
-def _group_key(observation: Dict[str, Any], group_mode: str) -> Tuple[str, str, str]:
+def _group_key(observation: Payload, group_mode: str) -> Tuple[str, str, str]:
     if group_mode == 'observation':
         return (
             str(observation.get('session_id') or observation.get('source_id') or 'unknown_source'),
@@ -168,27 +198,33 @@ def _group_key(observation: Dict[str, Any], group_mode: str) -> Tuple[str, str, 
 
 
 def build_l2_packets(
-    observations: List[Dict[str, Any]],
-    existing_memories: Iterable[Dict[str, Any]],
+    observations: PayloadList,
+    existing_memories: Iterable[Payload],
     *,
     run_id: str = 'l2_promotion_bundle_builder',
     group_mode: str = 'theme',
-) -> List[Dict[str, Any]]:
-    groups: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+) -> PayloadList:
+    groups: Dict[Tuple[str, str, str], PayloadList] = defaultdict(list)
     for observation in observations:
         groups[_group_key(observation, group_mode)].append(observation)
 
-    packets = []
+    packets: PayloadList = []
     existing = list(existing_memories)
     for key, rows in sorted(groups.items(), key=lambda item: item[0]):
         source_id, theme, status = key
         ordered_rows = sorted(rows, key=lambda row: str(row.get('observation_id') or row.get('id') or ''))
         packet_text = '\n'.join(str(row.get('content') or row.get('text') or '') for row in ordered_rows)
-        evidence_ids = []
-        source_refs = []
+        evidence_ids: List[str] = []
+        source_refs: PayloadList = []
         for row in ordered_rows:
-            evidence_ids.extend(row.get('evidence_ids') or [])
-            source_refs.extend(row.get('source_refs') or [])
+            row_evidence_ids = row.get('evidence_ids')
+            if isinstance(row_evidence_ids, list):
+                evidence_ids.extend(str(value) for value in cast(List[object], row_evidence_ids) if value)
+            row_source_refs = row.get('source_refs')
+            if isinstance(row_source_refs, list):
+                source_refs.extend(
+                    cast(Payload, value) for value in cast(List[object], row_source_refs) if isinstance(value, dict)
+                )
         packet_id = 'pkt_' + stable_id(
             'memory-l2-packet',
             {
@@ -209,13 +245,14 @@ def build_l2_packets(
                 'status': status,
                 'observation_ids': [row.get('observation_id') or row.get('id') for row in ordered_rows],
                 'source_example_ids': sorted(
-                    {
+                    str(value)
+                    for value in {
                         row.get('session_id') or row.get('source_id')
                         for row in ordered_rows
                         if row.get('session_id') or row.get('source_id')
                     }
                 ),
-                'source_types': sorted({row.get('source_type') for row in ordered_rows if row.get('source_type')}),
+                'source_types': sorted(str(row.get('source_type')) for row in ordered_rows if row.get('source_type')),
                 'evidence_ids': sorted(set(evidence_ids)),
                 'source_refs': source_refs,
                 'observations': ordered_rows,
@@ -226,36 +263,30 @@ def build_l2_packets(
     return packets
 
 
-def _query_text(l1_items: List[Dict[str, Any]]) -> str:
+def _query_text(l1_items: PayloadList) -> str:
     return '\n'.join(str(item.get('content') or item.get('text') or '') for item in l1_items)
 
 
-def fetch_durable_facts_from_ledger(uid: str) -> List[Dict[str, Any]]:
+def fetch_durable_facts_from_ledger(uid: str) -> PayloadList:
     return list(memory_ledger.replay_to(uid).values())
 
 
-def vector_seed_from_durable_facts(
-    query: str, durable_facts: Iterable[Dict[str, Any]], limit: int
-) -> List[Dict[str, Any]]:
+def vector_seed_from_durable_facts(query: str, durable_facts: Iterable[Payload], limit: int) -> PayloadList:
     return retrieve_existing_memories(query, durable_facts, limit=limit)
 
 
 def make_vector_seed_fetcher(
     *,
-    db_client=None,
+    db_client: Any = None,
     policy: Optional[MemoryAccessPolicy] = None,
     required_projection_commit_id: Optional[str] = None,
     required_account_generation: int = 0,
 ) -> VectorSeedFetcher:
-    def fetch(uid: str, query: str, limit: int) -> List[Dict[str, Any]]:
-        if (
-            fetch_default_vector_memory_search is None
-            or db_client is None
-            or policy is None
-            or not required_projection_commit_id
-        ):
+    def fetch(uid: str, query: str, limit: int) -> PayloadList:
+        vector_search = _default_vector_search_service()
+        if vector_search is None or db_client is None or policy is None or not required_projection_commit_id:
             return vector_seed_from_durable_facts(query, fetch_durable_facts_from_ledger(uid), limit)
-        response = fetch_default_vector_memory_search(
+        response = vector_search(
             uid,
             query,
             db_client=db_client,
@@ -264,13 +295,14 @@ def make_vector_seed_fetcher(
             required_projection_commit_id=required_projection_commit_id,
             required_account_generation=required_account_generation,
         )
-        return list(response.get('items') or [])
+        items = response.get('items')
+        return [item for item in cast(List[object], items) if isinstance(item, dict)] if isinstance(items, list) else []
 
     return fetch
 
 
-def _subject_keys(items: List[Dict[str, Any]]) -> set[str]:
-    keys = set()
+def _subject_keys(items: PayloadList) -> set[str]:
+    keys: set[str] = set()
     for item in items:
         for key in ('subject_entity_id', 'subject', 'about'):
             value = item.get(key)
@@ -281,21 +313,29 @@ def _subject_keys(items: List[Dict[str, Any]]) -> set[str]:
 
 def build_bounded_graph_snapshot(
     uid: str,
-    l1_items: List[Dict[str, Any]],
+    l1_items: PayloadList,
     config: PromotionBundleConfig,
-    durable_facts: Optional[Iterable[Dict[str, Any]]] = None,
-) -> Dict[str, Any]:
+    durable_facts: Optional[Iterable[Payload]] = None,
+) -> Payload:
     subjects = _subject_keys(l1_items)
     projections = rebuild_memory_memory_projections(list(durable_facts or []))
-    projected_graph = projections.get('graph') or {}
-    nodes: Dict[str, Dict[str, Any]] = {}
-    edges: List[Dict[str, Any]] = []
-    projected_nodes = projected_graph.get('nodes') or {}
-    for edge in projected_graph.get('edges') or []:
-        subject = edge.get('subject_entity_id')
-        arguments = edge.get('arguments') or {}
+    raw_projected_graph: object = projections.get('graph')
+    projected_graph = _payload_or_empty(raw_projected_graph)
+    nodes: Dict[str, Payload] = {}
+    edges: PayloadList = []
+    projected_nodes = (
+        cast(Dict[str, Payload], projected_graph.get('nodes')) if isinstance(projected_graph.get('nodes'), dict) else {}
+    )
+    projected_edges = projected_graph.get('edges')
+    for edge in cast(List[object], projected_edges) if isinstance(projected_edges, list) else []:
+        if not isinstance(edge, dict):
+            continue
+        edge_payload = cast(Payload, edge)
+        subject = edge_payload.get('subject_entity_id')
+        raw_arguments = edge_payload.get('arguments')
+        arguments = cast(Payload, raw_arguments) if isinstance(raw_arguments, dict) else {}
         obj = arguments.get('object') or arguments.get('object_entity_id')
-        fact_id = edge.get('memory_id') or edge.get('fact_id')
+        fact_id = edge_payload.get('memory_id') or edge_payload.get('fact_id')
         include = not subjects or subject in subjects or obj in subjects
         if not include:
             continue
@@ -307,12 +347,12 @@ def build_bounded_graph_snapshot(
             edges.append(
                 {
                     'fact_id': fact_id,
-                    'edge_id': edge.get('edge_id'),
+                    'edge_id': edge_payload.get('edge_id'),
                     'subject_entity_id': subject,
-                    'predicate': edge.get('predicate'),
+                    'predicate': edge_payload.get('predicate'),
                     'object': obj,
                     'arguments': arguments,
-                    'content': edge.get('content'),
+                    'content': edge_payload.get('content'),
                 }
             )
     return {
@@ -331,9 +371,9 @@ def build_promotion_bundle(
     *,
     uid: str,
     session_ids: List[str],
-    l1_items: List[Dict[str, Any]],
-    existing_memories: Optional[Iterable[Dict[str, Any]]] = None,
-    durable_facts: Optional[Iterable[Dict[str, Any]]] = None,
+    l1_items: PayloadList,
+    existing_memories: Optional[Iterable[Payload]] = None,
+    durable_facts: Optional[Iterable[Payload]] = None,
     durable_facts_fetcher: Optional[DurableFactsFetcher] = None,
     vector_seed_fetcher: Optional[VectorSeedFetcher] = None,
     graph_snapshot_fetcher: Optional[GraphSnapshotFetcher] = None,
@@ -358,12 +398,10 @@ def build_promotion_bundle(
         vector_seed = vector_seed_fetcher(uid, query, cfg.vector_seed_limit)
     existing = list(existing_memories) if existing_memories is not None else vector_seed
     packets = build_l2_packets(ordered_l1, existing, group_mode=cfg.packet_group_mode)
-    graph_fetch = graph_snapshot_fetcher or build_bounded_graph_snapshot
-    graph_snapshot = (
-        graph_fetch(uid, ordered_l1, cfg)
-        if graph_snapshot_fetcher
-        else graph_fetch(uid, ordered_l1, cfg, resolved_durable_facts)
-    )
+    if graph_snapshot_fetcher is not None:
+        graph_snapshot = graph_snapshot_fetcher(uid, ordered_l1, cfg)
+    else:
+        graph_snapshot = build_bounded_graph_snapshot(uid, ordered_l1, cfg, resolved_durable_facts)
     read_head = head_reader or memory_ledger.read_head
     observed_head_commit_id = read_head(uid)
     bundle_id = 'pbn_' + stable_id(
@@ -398,11 +436,15 @@ def build_promotion_bundle(
     )
 
 
-def enforce_grounded_promotion_bundle(bundle: Dict[str, Any], *, environment: str = 'dev') -> Dict[str, Any]:
+def enforce_grounded_promotion_bundle(bundle: Payload, *, environment: str = 'dev') -> Payload:
     if not bundle.get('observed_head_commit_id'):
         return {'ok': True, 'reason': 'no_existing_head'}
-    vector_seed = bundle.get('vector_seed') or []
-    graph_edges = (bundle.get('graph_snapshot') or {}).get('edges') or []
+    raw_vector_seed = bundle.get('vector_seed')
+    vector_seed: List[object] = cast(List[object], raw_vector_seed) if isinstance(raw_vector_seed, list) else []
+    raw_graph_snapshot = bundle.get('graph_snapshot')
+    graph_snapshot = cast(Payload, raw_graph_snapshot) if isinstance(raw_graph_snapshot, dict) else {}
+    raw_graph_edges = graph_snapshot.get('edges')
+    graph_edges: List[object] = cast(List[object], raw_graph_edges) if isinstance(raw_graph_edges, list) else []
     if vector_seed or graph_edges:
         return {
             'ok': True,

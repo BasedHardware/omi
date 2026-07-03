@@ -47,6 +47,10 @@ jobs:
         working-directory: backend
         run: bash test-preflight.sh
 
+      - name: Type-check backend typed boundary
+        working-directory: backend
+        run: bash scripts/typecheck.sh
+
       - name: Select backend unit tests
         id: select-tests
         working-directory: backend

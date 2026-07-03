@@ -73,6 +73,12 @@ def _fact_from_patch(patch: DurableMemoryPatch) -> Dict[str, Any]:
     return fact
 
 
+def _required_target_memory_id(patch: DurableMemoryPatch) -> str:
+    if patch.target_memory_id is None:
+        raise ValueError("target_memory_id is required for this patch decision")
+    return patch.target_memory_id
+
+
 def patch_to_ledger_mutations(patch: DurableMemoryPatch) -> List[Dict[str, Any]]:
     decision = patch.decision
     if decision in {
@@ -87,17 +93,17 @@ def patch_to_ledger_mutations(patch: DurableMemoryPatch) -> List[Dict[str, Any]]
         return [memory_ledger.add_fact(_fact_from_patch(patch))]
 
     if decision == DurablePatchDecision.add_evidence:
-        return [
-            memory_ledger.add_evidence(patch.target_memory_id, evidence) for evidence in _dedupe_evidence_refs(patch)
-        ]
+        target_memory_id = _required_target_memory_id(patch)
+        return [memory_ledger.add_evidence(target_memory_id, evidence) for evidence in _dedupe_evidence_refs(patch)]
 
     if decision in {DurablePatchDecision.update, DurablePatchDecision.merge}:
+        target_memory_id = _required_target_memory_id(patch)
         fact = _fact_from_patch(patch)
         kind = "merge" if decision == DurablePatchDecision.merge else "update"
         mutations = [memory_ledger.add_fact(fact)]
-        mutations.append(memory_ledger.supersede_fact(patch.target_memory_id, by=fact["id"], kind=kind))
+        mutations.append(memory_ledger.supersede_fact(target_memory_id, by=fact["id"], kind=kind))
         for superseded_id in patch.supersedes:
-            if superseded_id != patch.target_memory_id:
+            if superseded_id != target_memory_id:
                 mutations.append(memory_ledger.supersede_fact(superseded_id, by=fact["id"], kind=kind))
         return mutations
 
@@ -118,7 +124,7 @@ def persist_non_active_route_for_patch(
     *,
     reason: Optional[str] = None,
     audit_metadata: Optional[Dict[str, Any]] = None,
-    db_client=None,
+    db_client: Any = None,
 ) -> Optional[PersistedNonActiveRouteOutcome]:
     route = _NON_ACTIVE_ROUTE_BY_DECISION.get(patch.decision)
     if route is None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from utils.memory.v3_cursor import validate_v3_cursor_request
 from utils.memory.v3_memory_read_service import V3_READ_MODE, V3_READ_SOURCE
@@ -43,8 +43,8 @@ class V3AdaptedRequest:
     legacy_primary: bool
     v3_cursor_mode: bool
     filter_hash: str
-    filters: dict[str, Any] = field(default_factory=dict)
-    cursor_binding: dict[str, str] = field(default_factory=dict)
+    filters: dict[str, Any] = field(default_factory=dict[str, Any])
+    cursor_binding: dict[str, str] = field(default_factory=dict[str, str])
     category: str | None = None
     include_archive: bool = False
     archive_authorized: bool = False
@@ -65,17 +65,23 @@ class _Invalid:
     include_archive: bool = False
 
 
-def _first_value(value: Any) -> Any:
-    if isinstance(value, (list, tuple)):
-        return value[0] if value else None
+def _first_value(value: object) -> object | None:
+    if isinstance(value, list):
+        values = cast(list[object], value)
+        return values[0] if values else None
+    if isinstance(value, tuple):
+        values = cast(tuple[object, ...], value)
+        return values[0] if values else None
     return value
 
 
-def _parse_int(value: Any, *, default: int, reason: str) -> int:
+def _parse_int(value: object, *, default: int, reason: str) -> int:
     value = _first_value(value)
     if value is None or value == '':
         return default
     if isinstance(value, bool):
+        raise V3RequestAdapterError(reason)
+    if not isinstance(value, (str, int, float, bytes, bytearray)):
         raise V3RequestAdapterError(reason)
     try:
         return int(value)
@@ -83,7 +89,7 @@ def _parse_int(value: Any, *, default: int, reason: str) -> int:
         raise V3RequestAdapterError(reason)
 
 
-def _parse_bool(value: Any, *, default: bool, reason: str) -> bool:
+def _parse_bool(value: object, *, default: bool, reason: str) -> bool:
     value = _first_value(value)
     if value is None or value == '':
         return default
@@ -95,7 +101,7 @@ def _parse_bool(value: Any, *, default: bool, reason: str) -> bool:
     raise V3RequestAdapterError(reason)
 
 
-def _normalize_cursor(value: Any) -> str | None:
+def _normalize_cursor(value: object) -> str | None:
     value = _first_value(value)
     if value is None:
         return None
@@ -169,6 +175,10 @@ def adapt_v3_request_parameters(
     """
 
     params = dict(query_params or {})
+    limit = V3_DEFAULT_LIMIT
+    offset: int | None = None
+    cursor: str | None = None
+    include_archive = False
     try:
         limit = _parse_int(params.get('limit'), default=V3_DEFAULT_LIMIT, reason='invalid_limit')
         offset_present = 'offset' in params
@@ -238,10 +248,10 @@ def adapt_v3_request_parameters(
         return _invalid_result(
             _Invalid(
                 reason=exc.reason,
-                limit=locals().get('limit', V3_DEFAULT_LIMIT),
-                offset=locals().get('offset'),
-                cursor=locals().get('cursor'),
-                include_archive=locals().get('include_archive', False),
+                limit=limit,
+                offset=offset,
+                cursor=cursor,
+                include_archive=include_archive,
             ),
             enrolled=enrolled,
             raise_on_invalid=raise_on_invalid,
@@ -251,18 +261,11 @@ def adapt_v3_request_parameters(
         return _invalid_result(
             _Invalid(
                 reason=reason,
-                limit=locals().get('limit', V3_DEFAULT_LIMIT),
-                offset=locals().get('offset'),
-                cursor=locals().get('cursor'),
-                include_archive=locals().get('include_archive', False),
+                limit=limit,
+                offset=offset,
+                cursor=cursor,
+                include_archive=include_archive,
             ),
             enrolled=enrolled,
             raise_on_invalid=raise_on_invalid,
         )
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3_DEFAULT_LIMIT = V3_DEFAULT_LIMIT
-V3_MAX_LIMIT = V3_MAX_LIMIT
-V3RequestAdapterError = V3RequestAdapterError
-V3AdaptedRequest = V3AdaptedRequest

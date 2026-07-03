@@ -4,12 +4,17 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
+ConfigDict = dict[str, Any]
+
+
+def _as_config_dict(value: object) -> ConfigDict | None:
+    return cast(ConfigDict, value) if isinstance(value, dict) else None
 
 
 def main() -> int:
@@ -19,58 +24,67 @@ def main() -> int:
     args = parser.parse_args()
 
     manifest = _load_yaml(args.manifest)
-    env_config = manifest['environments'][args.env]
-    cloud_run = env_config['cloud_run']
+    environments = _as_config_dict(manifest['environments']) or {}
+    env_config = _as_config_dict(environments[args.env]) or {}
+    cloud_run = _as_config_dict(env_config['cloud_run']) or {}
 
-    _emit_output('cloud_run_flags', _render_flags(cloud_run.get('network', {}).get('flags', {})))
-    for service, service_config in cloud_run['services'].items():
+    network = _as_config_dict(cloud_run.get('network')) or {}
+    _emit_output('cloud_run_flags', _render_flags(_as_config_dict(network.get('flags')) or {}))
+    services = _as_config_dict(cloud_run['services']) or {}
+    for service, raw_service_config in services.items():
+        service_config = _as_config_dict(raw_service_config)
+        if service_config is None:
+            raise ValueError(f'Cloud Run service {service} must be a mapping')
         output_prefix = _output_prefix(service)
         _emit_output(f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {})))
         _emit_output(f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {})))
     return 0
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
+def _load_yaml(path: Path) -> ConfigDict:
     with path.open('r', encoding='utf-8') as handle:
         loaded = yaml.safe_load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
-    return loaded
+    return cast(ConfigDict, loaded)
 
 
-def _render_env_vars(env_entries: dict[str, Any]) -> str:
-    lines = []
-    for name, entry in env_entries.items():
-        if not isinstance(entry, dict):
+def _render_env_vars(env_entries: ConfigDict) -> str:
+    lines: list[str] = []
+    for name, raw_entry in env_entries.items():
+        entry = _as_config_dict(raw_entry)
+        if entry is None:
             raise ValueError(f'Cloud Run env {name} must be a mapping')
         lines.append(f'{name}={_runtime_value(name, entry)}')
     return '\n'.join(lines)
 
 
-def _render_secrets(secret_entries: dict[str, Any]) -> str:
-    lines = []
-    for name, entry in secret_entries.items():
-        if not isinstance(entry, dict) or 'secret' not in entry:
+def _render_secrets(secret_entries: ConfigDict) -> str:
+    lines: list[str] = []
+    for name, raw_entry in secret_entries.items():
+        entry = _as_config_dict(raw_entry)
+        if entry is None or 'secret' not in entry:
             raise ValueError(f'Cloud Run secret binding {name} must have a secret entry')
         version = entry.get('version', 'latest')
         lines.append(f'{name}={entry["secret"]}:{version}')
     return '\n'.join(lines)
 
 
-def _render_flags(flag_entries: dict[str, Any]) -> str:
-    flags = []
-    for name, entry in flag_entries.items():
-        if isinstance(entry, dict):
+def _render_flags(flag_entries: ConfigDict) -> str:
+    flags: list[str] = []
+    for name, raw_entry in flag_entries.items():
+        entry = _as_config_dict(raw_entry)
+        if entry is not None:
             value = _runtime_value(name, entry)
         else:
-            value = entry
+            value = raw_entry
         if value in (None, ''):
             raise ValueError(f'Cloud Run flag {name} must have a value')
         flags.append(f'{name}={value}')
     return ' '.join(flags)
 
 
-def _runtime_value(name: str, entry: dict[str, Any]) -> str:
+def _runtime_value(name: str, entry: ConfigDict) -> str:
     if 'value' in entry:
         return str(entry['value'])
     env_var = entry.get('env_var')

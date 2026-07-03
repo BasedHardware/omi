@@ -48,7 +48,7 @@ class V3MemoryReadServiceInput:
     default_memory_grant: bool | None
     request: V3MemoryReadRequest
     projection_readiness_context: V3ProjectionReadinessContext | dict[str, Any] | None = None
-    page_body: list[Any] = field(default_factory=list)
+    page_body: list[Any] = field(default_factory=list[Any])
     cursor_context: V3CursorContext | None = None
     cursor_secret: bytes | None = None
     next_keyset: V3Keyset | None = None
@@ -226,11 +226,3 @@ def plan_v3_memory_read(service_input: V3MemoryReadServiceInput) -> V3MemoryRead
         body=service_input.page_body,
         legacy_fallback_allowed=decision.legacy_fallback_allowed,
     )
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3_READ_SOURCE = V3_READ_SOURCE
-V3_READ_MODE = V3_READ_MODE
-V3MemoryReadRequest = V3MemoryReadRequest
-V3MemoryReadServiceInput = V3MemoryReadServiceInput
-V3MemoryReadServiceResult = V3MemoryReadServiceResult

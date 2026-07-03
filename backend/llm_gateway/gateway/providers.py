@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import json
 import os
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 
@@ -239,12 +239,12 @@ async def _read_bounded_preview(response: httpx.Response, *, max_bytes: int) -> 
 
 def _parse_limited_json_response(body: bytes) -> Mapping[str, Any]:
     try:
-        parsed = json.loads(body)
+        parsed = cast(object, json.loads(body))
     except ValueError as exc:
         raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
     if not isinstance(parsed, Mapping):
         raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
-    return parsed
+    return cast(Mapping[str, Any], parsed)
 
 
 def _validate_chat_completion_response_shape(response: Mapping[str, Any]) -> None:
@@ -257,11 +257,16 @@ def _validate_chat_completion_response_shape(response: Mapping[str, Any]) -> Non
     choices = response.get('choices')
     if not isinstance(choices, list) or not choices:
         raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
-    for choice in choices:
+    typed_choices = cast(list[object], choices)
+    for choice in typed_choices:
         if not isinstance(choice, Mapping):
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
-        message = choice.get('message')
-        if not isinstance(message, Mapping) or message.get('role') != 'assistant':
+        typed_choice = cast(Mapping[str, object], choice)
+        message = typed_choice.get('message')
+        if not isinstance(message, Mapping):
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+        typed_message = cast(Mapping[str, object], message)
+        if typed_message.get('role') != 'assistant':
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
 
 

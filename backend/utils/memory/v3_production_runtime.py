@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal, Mapping, Protocol, TypeAlias, cast
 
 from config.memory_rollout import (
     MemoryRolloutMode,
@@ -18,8 +18,9 @@ from config.memory_rollout import (
     rollout_mode_env_value,
     rollout_v3_get_enabled_env_value,
 )
-from database.memory_compatibility_projection import read_v3_compatibility_projection_page
+from database import memory_compatibility_projection as projection_db
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3_account_generation_source import V3TrustedAccountGenerationResult
 from utils.memory.v3_composed_get_service import (
     V3ComposedAdapters,
     V3ComposedCursor,
@@ -39,6 +40,7 @@ from utils.memory.v3_control_reader_contract import (
     decide_v3_control_route,
 )
 from utils.memory.v3_control_state_adapter import read_v3_control
+from utils.memory.v3_control_reader_contract import V3ControlReadResult
 from utils.memory.v3_cursor import (
     V3CursorContext,
     V3CursorError,
@@ -46,15 +48,24 @@ from utils.memory.v3_cursor import (
     create_v3_cursor,
     parse_v3_cursor,
 )
-from utils.memory.v3_projection_reader_contract import V3ProjectionCursor, V3ProjectionReadRequest
+from utils.memory.v3_projection_reader_contract import V3ProjectionCursor, V3ProjectionPage, V3ProjectionReadRequest
 
-V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'memory_read']
+V3GetSourceDecision: TypeAlias = Literal['disabled', 'legacy_primary', 'memory_read']
+MemoryDbItem: TypeAlias = dict[str, Any]
+EnvMapping: TypeAlias = Mapping[str, str]
 _DEFAULT_LIMIT = 100
 _DEFAULT_CURSOR_TTL_SECONDS = 600
 _DEFAULT_CURSOR_POLICY_VERSION = 'v3-cursor-policy-1'
 _DEFAULT_CURSOR_SECRET_VERSION = 'unconfigured'
 _DEFAULT_READ_MODE = 'default_memory'
 _MEMORY_SOURCE = 'memory_compatibility_projection'
+
+
+class ProjectionReader(Protocol):
+    def __call__(self, *, db_client: object, request: V3ProjectionReadRequest) -> V3ProjectionPage: ...
+
+
+_projection_reader = cast(ProjectionReader, getattr(projection_db, 'read_v3_compatibility_projection_page'))
 
 
 @dataclass(frozen=True)
@@ -88,9 +99,11 @@ class _RuntimeConfig:
 class _ProductionV3Adapters:
     def __init__(self, config: _RuntimeConfig):
         self.config = config
-        self._last_control = None
-        self._last_route_decision = None
-        self._last_trusted_generation = None
+        self._last_control: V3ControlReadResult | None = None
+        self._last_route_decision: object | None = None
+        self._last_trusted_generation: V3TrustedAccountGenerationResult | None = None
+        self._projection_source_commit: str | None = None
+        self._projection_source_version: str | None = None
 
     def normalize_request(self, params: V3ComposedRequestParams) -> V3ComposedRequest:
         return V3ComposedRequest(
@@ -148,8 +161,8 @@ class _ProductionV3Adapters:
         if not isinstance(projection_state_data, dict):
             return V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
         try:
-            account_generation = int(projection_state_data.get('account_generation'))
-            projection_generation = int(projection_state_data.get('projection_generation'))
+            account_generation = _required_int(projection_state_data.get('account_generation'))
+            projection_generation = _required_int(projection_state_data.get('projection_generation'))
             projection_commit = _required_str(projection_state_data.get('projection_commit_id'))
             source_commit = _required_str(projection_state_data.get('source_commit_id'))
             source_version = _required_str(projection_state_data.get('source_version'))
@@ -196,7 +209,7 @@ class _ProductionV3Adapters:
         limit: int,
         budget_ms: int,
     ) -> V3ComposedProjectionPage:
-        projection_page = read_v3_compatibility_projection_page(
+        projection_page = _projection_reader(
             db_client=self.config.db_client,
             request=V3ProjectionReadRequest(
                 uid=context.subject_uid,
@@ -254,18 +267,24 @@ class _ProductionV3Adapters:
         )
 
 
-def _read_doc_dict(db_client, path: str) -> dict | None:
-    snapshot = db_client.document(path).get()
+def _read_doc_dict(db_client: Any, path: str) -> MemoryDbItem | None:
+    snapshot: Any = db_client.document(path).get()
     if getattr(snapshot, 'exists', False) is False:
         return None
-    data = snapshot.to_dict()
-    return data if isinstance(data, dict) else None
+    data: object = snapshot.to_dict()
+    return cast(MemoryDbItem, data) if isinstance(data, dict) else None
 
 
 def _required_str(value: object) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError('missing_string')
     return value
+
+
+def _required_int(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError('missing_int')
+    return int(value)
 
 
 def _filter_hash(request: V3ComposedRequest) -> str:
@@ -306,7 +325,9 @@ def _composed_cursor(cursor: V3ProjectionCursor | None) -> V3ComposedCursor | No
     return V3ComposedCursor(created_at_ms=int(cursor.created_at.timestamp() * 1000), memory_id=cursor.memory_id)
 
 
-def _projection_item_to_row(item: dict, context: V3ComposedExecutionContext, projection_page) -> V3ComposedRow:
+def _projection_item_to_row(
+    item: MemoryDbItem, context: V3ComposedExecutionContext, projection_page: V3ProjectionPage
+) -> V3ComposedRow:
     created_at = item.get('created_at')
     if not isinstance(created_at, datetime):
         created_at = item.get('updated_at')
@@ -336,12 +357,12 @@ def _projection_item_to_row(item: dict, context: V3ComposedExecutionContext, pro
     )
 
 
-def _cursor_secret_from_env(env) -> bytes | None:
+def _cursor_secret_from_env(env: EnvMapping) -> bytes | None:
     raw = env.get('MEMORY_V3_CURSOR_SECRET') or ''
     return raw.encode('utf-8') if raw else None
 
 
-def _cursor_ttl_from_env(env) -> int:
+def _cursor_ttl_from_env(env: EnvMapping) -> int:
     raw = env.get('MEMORY_V3_CURSOR_TTL_SECONDS') or ''
     if not raw:
         return _DEFAULT_CURSOR_TTL_SECONDS
@@ -351,7 +372,7 @@ def _cursor_ttl_from_env(env) -> int:
         return _DEFAULT_CURSOR_TTL_SECONDS
 
 
-def _v3_get_route_enabled(env) -> bool:
+def _v3_get_route_enabled(env: EnvMapping) -> bool:
     return rollout_v3_get_enabled_env_value(env)
 
 
@@ -359,7 +380,7 @@ def _runtime_enabled(rollout_config: MemoryRolloutConfig) -> bool:
     return rollout_config.mode == MemoryRolloutMode.read and bool(rollout_config.enabled_users)
 
 
-def _rollout_config_from_env(env) -> MemoryRolloutConfig:
+def _rollout_config_from_env(env: EnvMapping) -> MemoryRolloutConfig:
     try:
         mode = MemoryRolloutMode(rollout_mode_env_value(env))
     except (TypeError, ValueError):
@@ -370,7 +391,9 @@ def _rollout_config_from_env(env) -> MemoryRolloutConfig:
     )
 
 
-def _source_decision_for_uid(*, uid: str, db_client, rollout_config: MemoryRolloutConfig) -> V3GetSourceDecision:
+def _source_decision_for_uid(
+    *, uid: str, db_client: object, rollout_config: MemoryRolloutConfig
+) -> V3GetSourceDecision:
     if not _runtime_enabled(rollout_config):
         return 'disabled'
     control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
@@ -381,7 +404,7 @@ def _source_decision_for_uid(*, uid: str, db_client, rollout_config: MemoryRollo
     return 'memory_read'
 
 
-def build_v3_production_runtime(*, uid: str, db_client, env: dict[str, str] | None = None) -> V3GetRuntime:
+def build_v3_production_runtime(*, uid: str, db_client: object, env: EnvMapping | None = None) -> V3GetRuntime:
     effective_env = env if env is not None else os.environ
     if not _v3_get_route_enabled(effective_env):
         return V3GetRuntime(enabled=False, source_decision='disabled')
@@ -410,12 +433,7 @@ def build_v3_production_runtime(*, uid: str, db_client, env: dict[str, str] | No
         adapters=adapters.as_composed_adapters(),
         source_selector='server_side_rollout_config_and_control_state',
         control_reader=read_v3_control,
-        projection_reader=read_v3_compatibility_projection_page,
+        projection_reader=_projection_reader,
         cursor_codec='v3_hmac_cursor',
         clock=adapters.now_ms,
     )
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3GetSourceDecision = V3GetSourceDecision
-V3GetRuntime = V3GetRuntime

@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Mapping, Optional, cast
 
 from pydantic import BaseModel
 
@@ -29,7 +29,7 @@ class Targeting(BaseModel):
     trigger: TriggerType = TriggerType.VERSION_UPGRADE
     test_uids: Optional[List[str]] = None  # If set, only these users see the announcement (for testing)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "app_version_min": self.app_version_min,
             "app_version_max": self.app_version_max,
@@ -51,7 +51,7 @@ class Display(BaseModel):
     dismissible: bool = True  # Can user skip?
     show_once: bool = True  # Only show once per user
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "priority": self.priority,
             "start_at": self.start_at,
@@ -59,6 +59,12 @@ class Display(BaseModel):
             "dismissible": self.dismissible,
             "show_once": self.show_once,
         }
+
+
+def _nested_dict(value: Any) -> Optional[dict[str, Any]]:
+    if not isinstance(value, Mapping):
+        return None
+    return dict(cast(Mapping[str, Any], value))
 
 
 # Changelog content models
@@ -120,7 +126,7 @@ class Announcement(BaseModel):
     display: Optional[Display] = None
 
     # Content - will be one of ChangelogContent, FeatureContent, or AnnouncementContent
-    content: dict
+    content: dict[str, Any]
 
     def get_changelog_content(self) -> ChangelogContent:
         return ChangelogContent(**self.content)
@@ -155,9 +161,9 @@ class Announcement(BaseModel):
         )
 
     @staticmethod
-    def from_dict(data: dict) -> "Announcement":
-        targeting_data = data.get("targeting")
-        display_data = data.get("display")
+    def from_dict(data: Mapping[str, Any]) -> "Announcement":
+        targeting_data = _nested_dict(data.get("targeting"))
+        display_data = _nested_dict(data.get("display"))
 
         # Tolerate a missing or out-of-enum type so one malformed/legacy announcement document cannot
         # 500 the whole (public) announcements list. Fall back to the generic ANNOUNCEMENT type.
@@ -168,9 +174,9 @@ class Announcement(BaseModel):
             announcement_type = AnnouncementType.ANNOUNCEMENT
 
         return Announcement(
-            id=data.get("id"),
+            id=cast(str, data.get("id")),
             type=announcement_type,
-            created_at=data.get("created_at"),
+            created_at=cast(datetime, data.get("created_at")),
             active=data.get("active", True),
             app_version=data.get("app_version"),
             firmware_version=data.get("firmware_version"),
@@ -181,7 +187,7 @@ class Announcement(BaseModel):
             content=data.get("content", {}),
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         result = {
             "id": self.id,
             "type": self.type.value,

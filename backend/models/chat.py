@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, List, Literal, Optional, Union, cast
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class MessageSender(str, Enum):
@@ -35,12 +35,12 @@ class FileChat(BaseModel):
     created_at: datetime
     thumb_name: Optional[str] = ""
 
-    def is_image(self):
+    def is_image(self) -> bool:
         return self.mime_type.startswith("image")
 
-    def dict(self, **kwargs):
+    def dict(self, **kwargs: Any) -> dict[str, Any]:
         exclude_fields = {'thumb_name'}
-        return super().dict(exclude=exclude_fields, **kwargs)
+        return self.model_dump(exclude=exclude_fields, **kwargs)
 
 
 class ChartDataPoint(BaseModel):
@@ -72,31 +72,33 @@ class Message(BaseModel):
     plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
-    memories_id: List[str] = []  # used in db
-    memories: List[MessageConversation] = []  # used front facing
+    memories_id: List[str] = Field(default_factory=list[str])  # used in db
+    memories: List[MessageConversation] = Field(default_factory=list[MessageConversation])  # used front facing
     reported: bool = False
     report_reason: Optional[str] = None
-    files_id: List[str] = []
-    files: List[FileChat] = []
+    files_id: List[str] = Field(default_factory=list[str])
+    files: List[FileChat] = Field(default_factory=list[FileChat])
     chat_session_id: Optional[str] = None
     data_protection_level: Optional[str] = None
     langsmith_run_id: Optional[str] = None  # LangSmith run ID for feedback tracking
     prompt_name: Optional[str] = None  # LangSmith prompt name for versioning
     prompt_commit: Optional[str] = None  # LangSmith prompt commit/version for traceability
     rating: Optional[int] = None  # User feedback: 1 = thumbs up, -1 = thumbs down, None = no rating
-    chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
+    chart_data: Optional[Union[ChartData, dict[str, Any]]] = None  # Inline chart visualization data
 
     @model_validator(mode='before')
     @classmethod
     def _sync_app_and_plugin_ids(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            app_id_val = data.get('app_id')
-            plugin_id_val = data.get('plugin_id')
+            data_dict = cast(dict[str, Any], data)
+            app_id_val = data_dict.get('app_id')
+            plugin_id_val = data_dict.get('plugin_id')
 
             if app_id_val is not None:
-                data['plugin_id'] = app_id_val
+                data_dict['plugin_id'] = app_id_val
             elif plugin_id_val is not None:
-                data['app_id'] = plugin_id_val
+                data_dict['app_id'] = plugin_id_val
+            return data_dict
         return data
 
     @staticmethod
@@ -117,7 +119,7 @@ class Message(BaseModel):
             #         return plugin.name RESTORE ME
             return message.sender.upper()  # TODO: use app id
 
-        formatted_messages = []
+        formatted_messages: list[str] = []
         for message in sorted_messages:
             msg_text = (
                 f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
@@ -150,7 +152,7 @@ class Message(BaseModel):
             #         return plugin.name RESTORE ME
             return message.sender.upper()  # TODO: use app id
 
-        formatted_messages = []
+        formatted_messages: list[str] = []
         for message in sorted_messages:
             # Build file section if requested
             file_section = ""
@@ -197,14 +199,14 @@ class PageContext(BaseModel):
 
 class SendMessageRequest(BaseModel):
     text: str
-    file_ids: Optional[List[str]] = []
+    file_ids: Optional[List[str]] = Field(default_factory=list[str])
     context: Optional[PageContext] = None
 
 
 class ChatSession(BaseModel):
     id: str
-    message_ids: Optional[List[str]] = []
-    file_ids: Optional[List[str]] = []
+    message_ids: Optional[List[str]] = Field(default_factory=list[str])
+    file_ids: Optional[List[str]] = Field(default_factory=list[str])
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
@@ -215,22 +217,24 @@ class ChatSession(BaseModel):
     @classmethod
     def _sync_chat_session_app_and_plugin_ids(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            app_id_val = data.get('app_id')
-            plugin_id_val = data.get('plugin_id')
+            data_dict = cast(dict[str, Any], data)
+            app_id_val = data_dict.get('app_id')
+            plugin_id_val = data_dict.get('plugin_id')
 
             if app_id_val is not None:
-                data['plugin_id'] = app_id_val
+                data_dict['plugin_id'] = app_id_val
             elif plugin_id_val is not None:
-                data['app_id'] = plugin_id_val
+                data_dict['app_id'] = plugin_id_val
+            return data_dict
         return data
 
-    def add_file_ids(self, new_file_ids: List[str]):
+    def add_file_ids(self, new_file_ids: List[str]) -> None:
         if self.file_ids is None:
             self.file_ids = []
         for file_id in new_file_ids:
             if file_id not in self.file_ids:
                 self.file_ids.append(file_id)
 
-    def retrieve_new_file(self, file_ids) -> List:
+    def retrieve_new_file(self, file_ids: List[str]) -> List[str]:
         existing_files = set(self.file_ids or [])
         return list(set(file_ids) - existing_files)

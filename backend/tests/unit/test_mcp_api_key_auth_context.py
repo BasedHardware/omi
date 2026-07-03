@@ -1,7 +1,40 @@
 from types import SimpleNamespace
 import asyncio
+import sys
+from pathlib import Path
+from types import ModuleType
 
 import pytest
+
+
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        if "." in name:
+            parent_name, attr_name = name.rsplit(".", 1)
+            parent = sys.modules.get(parent_name)
+            parent_attr = getattr(parent, attr_name, None) if isinstance(parent, ModuleType) else None
+            if parent_attr is not None and getattr(parent_attr, "__file__", None) != str(expected_file):
+                delattr(parent, attr_name)
+        return
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+    if module_path == expected_file.resolve():
+        return
+    sys.modules.pop(name, None)
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType) and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
+
+
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_drop_stale_module("database.mcp_api_key", _BACKEND_DIR / "database" / "mcp_api_key.py")
+sys.modules.pop("dependencies", None)
 
 import dependencies
 from fastapi import HTTPException

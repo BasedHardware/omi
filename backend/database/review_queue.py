@@ -90,7 +90,7 @@ def purge_stale_review_conflicts_for_memories(
     memory_ids: List[str],
     *,
     reason: str = "source_memory_deleted",
-    db_client=None,
+    db_client: Any = None,
 ) -> List[str]:
     """Drop pending review items that reference tombstoned/superseded/deleted memories."""
     target_ids = {memory_id for memory_id in memory_ids if memory_id}

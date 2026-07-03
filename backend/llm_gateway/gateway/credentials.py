@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Mapping
+from typing import Any, Mapping
 
 from pydantic import Field, field_validator
 
@@ -48,7 +48,7 @@ class CredentialContext(StrictBaseModel):
         key_presence = self.provider_keys.get(provider.strip().lower())
         return key_presence.present if key_presence is not None else False
 
-    def safe_model_dump(self) -> dict:
+    def safe_model_dump(self) -> dict[str, Any]:
         return self.model_dump(mode='json')
 
 

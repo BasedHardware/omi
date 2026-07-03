@@ -231,7 +231,7 @@ def get_knowledge_graph(uid: str, *, db_client=None) -> Dict[str, Any]:
     }
 
 
-def delete_knowledge_graph(uid: str, *, db_client=None) -> None:
+def delete_knowledge_graph(uid: str, *, db_client: Any = None) -> None:
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
 
@@ -252,7 +252,7 @@ def delete_knowledge_graph(uid: str, *, db_client=None) -> None:
     _batch_delete(edges_ref)
 
 
-def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client=None) -> int:
+def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client: Any = None) -> int:
     """Remove memory_ids from KG nodes/edges; delete entities with no remaining citations."""
     if not memory_ids:
         return 0

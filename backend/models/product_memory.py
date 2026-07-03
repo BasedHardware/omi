@@ -101,7 +101,7 @@ class MemoryItem(BaseModel):
     status: MemoryItemStatus
     processing_state: ProcessingState
     content: Optional[str]
-    evidence: List[MemoryEvidence] = Field(default_factory=list)
+    evidence: List[MemoryEvidence] = Field(default_factory=list[MemoryEvidence])
     source_state: SourceState
     sensitivity_labels: List[str]
     visibility: str

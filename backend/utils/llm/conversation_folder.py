@@ -9,7 +9,7 @@ validation in each experiment or callsite.
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Any, Mapping, Optional, Sequence, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 from .clients import get_llm
 
 logger = logging.getLogger(__name__)
+
+FolderRecord = Mapping[str, object]
 
 
 class FolderAssignment(BaseModel):
@@ -38,7 +40,21 @@ class FolderAssignmentResult:
     validation_status: str
 
 
-def build_folders_context(folders: List[dict]) -> str:
+def _optional_str(value: object) -> Optional[str]:
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _str_or_empty(value: object) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _bool_or_false(value: object) -> bool:
+    return value if isinstance(value, bool) else False
+
+
+def build_folders_context(folders: Sequence[FolderRecord]) -> str:
     """
     Build context string for LLM folder assignment using natural language descriptions.
 
@@ -48,12 +64,12 @@ def build_folders_context(folders: List[dict]) -> str:
     if not folders:
         return "No folders available. Use default assignment."
 
-    lines = []
+    lines: list[str] = []
     for folder in folders:
-        folder_id = folder.get('id', '')
-        name = folder.get('name', '')
-        description = folder.get('description', '')
-        is_default = folder.get('is_default', False)
+        folder_id = _str_or_empty(folder.get('id'))
+        name = _str_or_empty(folder.get('name'))
+        description = _str_or_empty(folder.get('description'))
+        is_default = _bool_or_false(folder.get('is_default'))
 
         # Format: folder_id | "Folder Name" → Description
         if description:
@@ -77,20 +93,20 @@ Overview: {overview}
 """.strip()
 
 
-def get_default_folder_id(user_folders: List[dict]) -> Optional[str]:
-    default_folder = next((f for f in user_folders if f.get('is_default')), None)
-    return default_folder.get('id') if default_folder else None
+def get_default_folder_id(user_folders: Sequence[FolderRecord]) -> Optional[str]:
+    default_folder = next((f for f in user_folders if _bool_or_false(f.get('is_default'))), None)
+    return _optional_str(default_folder.get('id')) if default_folder else None
 
 
 def validate_folder_assignment(
     response: FolderAssignment,
-    user_folders: List[dict],
+    user_folders: Sequence[FolderRecord],
     default_folder_id: Optional[str],
     confidence_threshold: float = 0.7,
 ) -> FolderAssignmentResult:
     """Apply route-specific safety checks to a parsed folder assignment."""
 
-    valid_folder_ids = {f.get('id') for f in user_folders}
+    valid_folder_ids = {_optional_str(f.get('id')) for f in user_folders}
     if response.folder_id not in valid_folder_ids:
         return FolderAssignmentResult(
             folder_id=default_folder_id,
@@ -119,7 +135,7 @@ def assign_conversation_to_folder(
     title: str,
     overview: str,
     category: str,
-    user_folders: List[dict],
+    user_folders: Sequence[FolderRecord],
 ) -> Tuple[Optional[str], float, str]:
     """
     Use AI to assign a conversation to the most appropriate folder.
@@ -163,16 +179,19 @@ Provide:
 {format_instructions}'''
 
     folder_parser = PydanticOutputParser(pydantic_object=FolderAssignment)
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
     chain = prompt | get_llm('conv_folder') | folder_parser
 
     try:
-        response: FolderAssignment = chain.invoke(
-            {
-                'folders_context': folders_context,
-                'conversation_context': conversation_context,
-                'format_instructions': folder_parser.get_format_instructions(),
-            }
+        response = cast(
+            FolderAssignment,
+            chain.invoke(
+                {
+                    'folders_context': folders_context,
+                    'conversation_context': conversation_context,
+                    'format_instructions': folder_parser.get_format_instructions(),
+                }
+            ),
         )
         result = validate_folder_assignment(response, user_folders, default_folder_id)
         return result.folder_id, result.confidence, result.reasoning

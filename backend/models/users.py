@@ -19,7 +19,7 @@ class PlanType(str, Enum):
     operator = 'operator'  # display "Operator"
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: object):
         # Backward compat: 'pro' was renamed to 'architect'
         if value == 'pro':
             return cls.architect

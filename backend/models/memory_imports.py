@@ -52,7 +52,7 @@ class MemoryImportBatchRequest(BaseModel):
     source_account_hash: Optional[str] = None
     importer_version: str = "v1"
     extractor_version: Optional[str] = None
-    items: List[MemoryImportBatchItem] = Field(default_factory=list, max_length=100)
+    items: List[MemoryImportBatchItem] = Field(default_factory=list[MemoryImportBatchItem], max_length=100)
 
     @field_validator("source_type", "import_run_id", "source_account_hash", "importer_version", "extractor_version")
     @classmethod

@@ -7,7 +7,7 @@ Neutral ``product_memory_read_service`` is the source of truth. Legacy ``product
 
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem
@@ -21,7 +21,7 @@ def fetch_default_product_memory_search(
     uid: str,
     query: str,
     *,
-    db_client,
+    db_client: Any,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
@@ -58,7 +58,7 @@ def fetch_archive_product_memory_search(
     uid: str,
     query: str,
     *,
-    db_client,
+    db_client: Any,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
@@ -91,13 +91,14 @@ def fetch_archive_product_memory_search(
     }
 
 
-def fetch_authoritative_product_memory_items(uid: str, *, db_client) -> List[MemoryItem]:
+def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
     """Load and coerce all authoritative memory product memory item docs for one user."""
 
     collection_path = MemoryCollections(uid=uid).memory_items
-    items = []
+    items: List[MemoryItem] = []
     for snapshot in db_client.collection(collection_path).stream():
-        payload = snapshot.to_dict() or {}
+        raw_payload: object = snapshot.to_dict()
+        payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)
         if item.uid != uid:
             raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
@@ -105,7 +106,7 @@ def fetch_authoritative_product_memory_items(uid: str, *, db_client) -> List[Mem
     return sorted(items, key=_memory_item_sort_key)
 
 
-def _memory_item_sort_key(item: MemoryItem):
+def _memory_item_sort_key(item: MemoryItem) -> tuple[float, str]:
     return (-item.updated_at.timestamp(), item.memory_id)
 
 

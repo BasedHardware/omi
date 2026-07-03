@@ -66,7 +66,7 @@ def apply_long_term_patch_firestore(
     uid: str,
     operation_id: str,
     patch_payload: Dict[str, Any],
-    db_client=db,
+    db_client: Any = db,
 ) -> ApplyResult:
     """Apply a memory Long-term patch through the Firestore transaction boundary.
 
@@ -84,7 +84,7 @@ def apply_long_term_patch_firestore(
     )
 
 
-def atomic_bump_source_generation(uid: str, *, db_client) -> MemoryControlState:
+def atomic_bump_source_generation(uid: str, *, db_client: Any) -> MemoryControlState:
     """Atomically advance canonical apply ``source_generation`` (Q7 reprocess)."""
     transaction = db_client.transaction()
     return _atomic_bump_source_generation_transaction(transaction, db_client, uid)

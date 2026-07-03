@@ -161,6 +161,7 @@ pydeck==0.9.1
 pydub==0.25.1
 Pygments==2.20.0
 PyJWT==2.12.0
+pyright==1.1.403
 pynndescent==0.5.13
 PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a ; sys_platform == "linux"
 pyparsing==3.1.2

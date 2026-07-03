@@ -3,8 +3,20 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
+
+ConfigDict = dict[str, Any]
+EnvMap = dict[str, ConfigDict]
+
+
+def _as_config_dict(value: object) -> ConfigDict | None:
+    return cast(ConfigDict, value) if isinstance(value, dict) else None
+
+
+def _as_config_list(value: object) -> list[Any] | None:
+    return cast(list[Any], value) if isinstance(value, list) else None
 
 
 def main() -> int:
@@ -37,7 +49,7 @@ def main() -> int:
     return 1 if errors else 0
 
 
-def _load_yaml(path: Path) -> dict | None:
+def _load_yaml(path: Path) -> ConfigDict | None:
     try:
         with path.open('r', encoding='utf-8') as handle:
             loaded = yaml.safe_load(handle)
@@ -47,36 +59,37 @@ def _load_yaml(path: Path) -> dict | None:
     except yaml.YAMLError as exc:
         print(f'ERROR: invalid YAML in {path}: {exc}')
         return None
-    return loaded if isinstance(loaded, dict) else {}
+    return cast(ConfigDict, loaded) if isinstance(loaded, dict) else {}
 
 
-def _env_map(values: dict) -> dict[str, dict]:
-    env = values.get('env', [])
-    if not isinstance(env, list):
+def _env_map(values: ConfigDict) -> EnvMap:
+    env = _as_config_list(values.get('env'))
+    if env is None:
         return {}
-    result: dict[str, dict] = {}
+    result: EnvMap = {}
     for item in env:
-        if isinstance(item, dict) and isinstance(item.get('name'), str):
-            result[item['name']] = item
+        item_dict = _as_config_dict(item)
+        if item_dict is not None and isinstance(item_dict.get('name'), str):
+            result[item_dict['name']] = item_dict
     return result
 
 
-def _has_value(entry: dict) -> bool:
+def _has_value(entry: ConfigDict) -> bool:
     """Check whether an env var has an actual value or a valid secret reference."""
     if entry.get('value') not in (None, ''):
         return True
-    value_from = entry.get('valueFrom')
-    if isinstance(value_from, dict):
-        secret_ref = value_from.get('secretKeyRef')
-        if isinstance(secret_ref, dict) and secret_ref.get('name') and secret_ref.get('key'):
+    value_from = _as_config_dict(entry.get('valueFrom'))
+    if value_from is not None:
+        secret_ref = _as_config_dict(value_from.get('secretKeyRef'))
+        if secret_ref is not None and secret_ref.get('name') and secret_ref.get('key'):
             return True
-        config_ref = value_from.get('configMapKeyRef')
-        if isinstance(config_ref, dict) and config_ref.get('name') and config_ref.get('key'):
+        config_ref = _as_config_dict(value_from.get('configMapKeyRef'))
+        if config_ref is not None and config_ref.get('name') and config_ref.get('key'):
             return True
     return False
 
 
-def _require(needle: str, env_map: dict[str, dict], errors: list[str], label: str) -> None:
+def _require(needle: str, env_map: EnvMap, errors: list[str], label: str) -> None:
     entry = env_map.get(needle)
     if entry is None:
         errors.append(f'{label} has no {needle} env')

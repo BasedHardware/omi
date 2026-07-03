@@ -17,6 +17,7 @@ from utils.memory.product_memory_read_service import fetch_default_product_memor
 from utils.memory.vector_search_service import fetch_default_vector_memory_search
 
 T = TypeVar('T')
+MemoryPayload = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -93,12 +94,12 @@ def fetch_default_read_list(
     query: str,
     limit: int,
     offset: int,
-    db_client,
+    db_client: Any,
     decision: DefaultReadRolloutDecision,
     consumer: MemoryConsumer,
     now: Optional[datetime] = None,
-    item_filter: Optional[Callable[[dict], bool]] = None,
-    item_formatter: Callable[[dict, MemoryAccessPolicy], Any],
+    item_filter: Optional[Callable[[Any], bool]] = None,
+    item_formatter: Callable[[MemoryPayload, MemoryAccessPolicy], Any],
     max_limit: int = 500,
 ) -> DefaultReadSearchResult:
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
@@ -121,7 +122,7 @@ def fetch_default_read_list(
         limit=bounded_limit,
         offset=bounded_offset,
     )
-    formatted = []
+    formatted: list[Any] = []
     for item in response['items']:
         memory = item_formatter(item, policy)
         if item_filter is not None and not item_filter(memory):
@@ -135,13 +136,13 @@ def fetch_default_read_vector(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     decision: DefaultReadRolloutDecision,
     consumer: MemoryConsumer,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
-    item_formatter: Callable[[dict, MemoryAccessPolicy], Any],
-    score_attacher: Optional[Callable[[Any, dict, dict[str, float]], Any]] = None,
+    item_formatter: Callable[[MemoryPayload, MemoryAccessPolicy], Any],
+    score_attacher: Optional[Callable[[Any, MemoryPayload, dict[str, float]], Any]] = None,
 ) -> DefaultReadSearchResult:
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
         return deny_default_read_search(decision)
@@ -172,7 +173,7 @@ def fetch_default_read_vector(
         required_account_generation=decision.rollout_capabilities.account_generation,
     )
     scores_by_memory_id = response.get('scores_by_memory_id', {})
-    formatted = []
+    formatted: list[Any] = []
     for item in response['items']:
         memory = item_formatter(item, policy)
         if score_attacher is not None:
