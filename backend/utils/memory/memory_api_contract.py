@@ -17,10 +17,11 @@ class MemoryApiExposure(str, Enum):
     CANONICAL = "canonical"
 
 
-CANONICAL_LIFECYCLE_FIELDS = frozenset({"memory_tier", "layer", "tier"})
+CANONICAL_LIFECYCLE_FIELDS = frozenset({"memory_tier", "layer", "tier", "expires_at"})
 MEMORY_INTERNAL_FIELDS = frozenset(
     {
         "memory_only",
+        "memory_default_memory",
         "memory_source",
         "memory_policy",
         "source",
@@ -30,6 +31,7 @@ MEMORY_INTERNAL_FIELDS = frozenset(
         "read_decision",
         "source_policy",
         "archive_default_available",
+        "archive_default_visible",
         "stale_short_term_default_visible",
     }
 )

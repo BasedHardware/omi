@@ -21,7 +21,6 @@ struct DesktopHomeView: View {
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
-  @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
@@ -45,8 +44,6 @@ struct DesktopHomeView: View {
   @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
   @State private var didScheduleConversationWarmup = false
   @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
-  // Dismiss state for the Neo "no desktop access" banner (resets each launch).
-  @State private var neoDesktopBannerDismissed = false
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -908,24 +905,6 @@ struct DesktopHomeView: View {
       }
       .padding(14)
     }
-    .safeAreaInset(edge: .top, spacing: 0) {
-      if usageLimiter.neoNeedsDesktopUpgrade && !neoDesktopBannerDismissed {
-        NeoDesktopBanner(
-          onUpgrade: {
-            selectedSettingsSection = .planUsage
-            withAnimation(Self.pageNavigationAnimation) {
-              selectedIndex = SidebarNavItem.settings.rawValue
-            }
-          },
-          onDismiss: {
-            withAnimation(Self.pageNavigationAnimation) {
-              neoDesktopBannerDismissed = true
-            }
-          }
-        )
-        .transition(.move(edge: .top).combined(with: .opacity))
-      }
-    }
     .overlay {
       // Goal completion celebration overlay
       GoalCelebrationView()
@@ -1072,54 +1051,6 @@ private struct PageChromeButton: View {
     .onHover { isHovering = $0 }
     .help(title)
     .accessibilityLabel(title)
-  }
-}
-
-/// Dismissible top banner shown when a Neo (unlimited) user opens the desktop app.
-/// Neo is a mobile/web plan with no desktop access; the CTA routes to Settings →
-/// Plan & Usage where the existing Operator upgrade flow lives.
-private struct NeoDesktopBanner: View {
-  var onUpgrade: () -> Void
-  var onDismiss: () -> Void
-
-  var body: some View {
-    HStack(spacing: 12) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .scaledFont(size: 14, weight: .semibold)
-        .foregroundColor(OmiColors.warning)
-
-      Text("Neo doesn't include desktop access. Upgrade to Operator to use Omi on Mac.")
-        .scaledFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
-        .fixedSize(horizontal: false, vertical: true)
-
-      Spacer(minLength: 12)
-
-      Button(action: onUpgrade) {
-        Text("Upgrade to Operator")
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(.white)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 7)
-          .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.purplePrimary))
-      }
-      .buttonStyle(.plain)
-
-      Button(action: onDismiss) {
-        Image(systemName: "xmark")
-          .scaledFont(size: 12, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 10)
-    .frame(maxWidth: .infinity)
-    .background(OmiColors.backgroundSecondary)
-    .overlay(
-      Rectangle().fill(OmiColors.border.opacity(0.4)).frame(height: 1),
-      alignment: .bottom
-    )
   }
 }
 

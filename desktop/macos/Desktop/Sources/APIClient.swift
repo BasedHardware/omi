@@ -684,6 +684,22 @@ extension APIClient {
     return response.count
   }
 
+  /// True when this account has any conversations captured by an Omi wearable
+  /// (paired on any platform — usually the mobile app).
+  func hasOmiDeviceConversations() async throws -> Bool {
+    struct CountResponse: Decodable {
+      let count: Int
+      // Backends without the sources filter ignore the param and return the
+      // unfiltered total without this echo — decoding then fails, so we never
+      // read a false positive from an old backend.
+      let sources: [String]
+    }
+
+    let response: CountResponse = try await get(
+      "v1/conversations/count?include_discarded=true&sources=friend,omi")
+    return response.count > 0
+  }
+
   /// Gets the count of AI chat messages from PostHog
   func getChatMessageCount() async throws -> Int {
     struct CountResponse: Decodable {
@@ -3753,33 +3769,34 @@ extension APIClient {
       let data: [OmiApp]
     }
 
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
+    var queryItems: [URLQueryItem] = [
+      URLQueryItem(name: "limit", value: "\(limit)"),
+      URLQueryItem(name: "offset", value: "\(offset)"),
     ]
 
     if let query = query, !query.isEmpty {
-      queryItems.append(
-        "query=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)")
+      queryItems.append(URLQueryItem(name: "q", value: query))
     }
 
     if let category = category {
-      queryItems.append("category=\(category)")
+      queryItems.append(URLQueryItem(name: "category", value: category))
     }
 
     if let capability = capability {
-      queryItems.append("capability=\(capability)")
+      queryItems.append(URLQueryItem(name: "capability", value: capability))
     }
 
     if let minRating = minRating {
-      queryItems.append("rating=\(minRating)")
+      queryItems.append(URLQueryItem(name: "rating", value: "\(minRating)"))
     }
 
     if installedOnly {
-      queryItems.append("installed_apps=true")
+      queryItems.append(URLQueryItem(name: "installed_apps", value: "true"))
     }
 
-    let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
+    var components = URLComponents()
+    components.queryItems = queryItems
+    let endpoint = "v2/apps/search?\(components.percentEncodedQuery ?? "")"
     let response: SearchResponse = try await get(endpoint)
     return response.data
   }

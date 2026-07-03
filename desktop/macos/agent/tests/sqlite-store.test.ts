@@ -13,17 +13,24 @@ afterEach(() => {
 });
 
 describe("SqliteAgentStore", () => {
-  it("runs Phase 1 migrations idempotently", () => {
+  it("runs runtime and desktop coordinator migrations idempotently", () => {
     const store = newStore({ reconcileOnOpen: false });
 
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(2);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(9);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
       "delegations",
+      "desktop_artifact_deliveries",
+      "desktop_attention_overrides",
+      "desktop_context_access_log",
+      "desktop_context_packets",
+      "desktop_dispatches",
+      "desktop_memory_candidates",
+      "desktop_task_candidates",
       "events",
       "grants",
       "run_attempts",
@@ -31,7 +38,109 @@ describe("SqliteAgentStore", () => {
       "schema_migrations",
       "sessions",
     ]);
+    expect(tableNames(store)).not.toContain("desktop_action_queue");
 
+    store.close();
+  });
+
+  it("enforces one active execution-authority attempt per run in SQLite", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "running",
+      mode: "act",
+    });
+
+    store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "acp",
+      adapterInstanceId: "worker-1",
+    });
+    expect(() => store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 2,
+      status: "queued",
+      adapterId: "acp",
+      adapterInstanceId: "worker-2",
+    })).toThrow();
+
+    expect(() => store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 3,
+      status: "failed",
+      adapterId: "acp",
+      adapterInstanceId: "worker-3",
+    })).not.toThrow();
+    expect(store.allRows("SELECT attempt_no, status FROM run_attempts ORDER BY attempt_no")).toEqual([
+      expect.objectContaining({ attempt_no: 1, status: "running" }),
+      expect.objectContaining({ attempt_no: 3, status: "failed" }),
+    ]);
+    store.close();
+  });
+
+  it("repairs legacy duplicate active attempts before installing the authority index", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "running",
+      mode: "act",
+    });
+
+    store.execute("DROP INDEX run_attempts_one_active_per_run_uq");
+    store.execute("DELETE FROM schema_migrations WHERE version = 9");
+    store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "acp",
+      adapterInstanceId: "worker-1",
+    });
+    store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 2,
+      status: "queued",
+      adapterId: "acp",
+      adapterInstanceId: "worker-2",
+    });
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 900 });
+
+    expect(store.allRows("SELECT attempt_no, status, completed_at_ms FROM run_attempts ORDER BY attempt_no")).toEqual([
+      expect.objectContaining({ attempt_no: 1, status: "orphaned", completed_at_ms: 900 }),
+      expect.objectContaining({ attempt_no: 2, status: "queued" }),
+    ]);
+    expect(store.getRow("SELECT type, payload_json FROM events WHERE attempt_id = (SELECT attempt_id FROM run_attempts WHERE attempt_no = 1)")).toMatchObject({
+      type: "attempt.orphaned",
+      payload_json: expect.stringContaining("\"attemptId\":\"att_"),
+    });
+    expect(JSON.parse(String(store.getRow("SELECT payload_json FROM events").payload_json))).toMatchObject({
+      reason: "active_attempt_authority_migration",
+    });
+    expect(() => store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 3,
+      status: "starting",
+      adapterId: "acp",
+      adapterInstanceId: "worker-3",
+    })).toThrow();
     store.close();
   });
 
@@ -51,6 +160,304 @@ describe("SqliteAgentStore", () => {
       mode: "ask",
     })).toThrow();
 
+    store.close();
+  });
+
+  it("persists desktop coordinator records and rejects invalid JSON", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "succeeded",
+      mode: "ask",
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "acp",
+      adapterInstanceId: "worker",
+    });
+    const artifact = store.insertArtifact({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      kind: "markdown",
+      role: "result",
+      uri: "omi-artifact://result",
+    });
+
+    expect(() => store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      surfaceKind: "main_chat",
+      objective: "bad packet",
+      packetJson: "{",
+      redactedPreviewJson: "{}",
+      contextHash: "sha256:bad",
+      retentionClass: "debug",
+      expiresAtMs: Date.now() + 60_000,
+    })).toThrow();
+    expect(() => store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      surfaceKind: "main_chat",
+      objective: "missing ttl",
+      packetJson: "{}",
+      redactedPreviewJson: "{}",
+      contextHash: "sha256:no-ttl",
+      retentionClass: "debug",
+    } as any)).toThrow("expiresAtMs must be in the future");
+    expect(() => store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      surfaceKind: "main_chat",
+      objective: "expired ttl",
+      packetJson: "{}",
+      redactedPreviewJson: "{}",
+      contextHash: "sha256:expired",
+      retentionClass: "debug",
+      createdAtMs: 100,
+      expiresAtMs: 100,
+    })).toThrow("expiresAtMs must be in the future");
+
+    const packet = store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      surfaceKind: "main_chat",
+      objective: "summarize current work",
+      packetJson: JSON.stringify({ snippets: [] }),
+      redactedPreviewJson: JSON.stringify({ preview: [] }),
+      contextHash: "sha256:packet",
+      retentionClass: "debug",
+      tokenEstimate: 12,
+      expiresAtMs: Date.now() + 60_000,
+    });
+    const dispatch = store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 90,
+      title: "Approve screenshot",
+      decisionPrompt: "Allow screenshot image bytes?",
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      payloadJson: "{}",
+    });
+    const delivery = store.insertDesktopArtifactDelivery({
+      artifactId: artifact.artifactId,
+      ownerId: "owner",
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      sourceAttemptId: attempt.attemptId,
+      intendedSurface: "main_chat",
+      targetKind: "ask_omi",
+      contentHash: "sha256:artifact",
+    });
+    const memory = store.insertDesktopMemoryCandidate({
+      ownerId: "owner",
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      proposedFact: "User prefers local verification",
+      evidenceRefsJson: "[]",
+      confidence: 0.8,
+      sensitivityTier: "low",
+    });
+    const task = store.insertDesktopTaskCandidate({
+      ownerId: "owner",
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      action: "create",
+      proposedChangeJson: "{}",
+      evidenceRefsJson: "[]",
+      confidence: 0.7,
+      requiresApproval: 1,
+    });
+    const access = store.insertDesktopContextAccessLog({
+      ownerId: "owner",
+      packetId: packet.packetId,
+      runId: run.runId,
+      sourceKind: "chat_surface",
+      operation: "include_snippet",
+      scopeJson: "{}",
+      sensitivityTier: "low",
+      policyDecision: "allowed",
+      dispatchId: dispatch.dispatchId,
+    });
+    const override = store.upsertDesktopAttentionOverride({
+      ownerId: "owner",
+      subjectKind: "dispatch",
+      subjectId: dispatch.dispatchId,
+      hiddenUntilMs: 600,
+      reason: "snoozed",
+      createdAtMs: 200,
+    });
+    const updatedOverride = store.upsertDesktopAttentionOverride({
+      ownerId: "owner",
+      subjectKind: "dispatch",
+      subjectId: dispatch.dispatchId,
+      hiddenUntilMs: 700,
+      reason: "still snoozed",
+      createdAtMs: 900,
+    });
+
+    expect(store.getRow("SELECT objective FROM desktop_context_packets WHERE packet_id = ?", [packet.packetId]).objective).toBe("summarize current work");
+    expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [dispatch.dispatchId]).status).toBe("pending");
+    expect(() => store.resolveDesktopDispatch(dispatch.dispatchId, {
+      ownerId: "other",
+      status: "resolved",
+      resolvedBy: "user",
+      resolutionJson: "{}",
+      resolvedAtMs: 299,
+    })).toThrow("not pending for owner");
+    const resolvedDispatch = store.resolveDesktopDispatch(dispatch.dispatchId, {
+      ownerId: "owner",
+      status: "resolved",
+      resolvedBy: "user",
+      resolutionJson: "{}",
+      resolvedAtMs: 300,
+    });
+    expect(resolvedDispatch.status).toBe("resolved");
+    expect(() => store.resolveDesktopDispatch(dispatch.dispatchId, {
+      ownerId: "owner",
+      status: "cancelled",
+      resolvedBy: "user",
+      resolvedAtMs: 301,
+    })).toThrow("not pending for owner");
+    expect(() => store.updateDesktopArtifactDelivery(delivery.deliveryId, {
+      ownerId: "other",
+      deliveryStatus: "delivered",
+    })).toThrow();
+    expect(store.updateDesktopArtifactDelivery(delivery.deliveryId, {
+      ownerId: "owner",
+      deliveryStatus: "delivered",
+      deliveredAtMs: 400,
+    })).toMatchObject({
+      deliveryStatus: "delivered",
+      deliveredAtMs: 400,
+    });
+    expect(store.getRow("SELECT delivery_status FROM desktop_artifact_deliveries WHERE delivery_id = ?", [delivery.deliveryId]).delivery_status).toBe("delivered");
+    expect(store.getRow("SELECT status FROM desktop_memory_candidates WHERE candidate_id = ?", [memory.candidateId]).status).toBe("pending");
+    expect(store.getRow("SELECT requires_approval FROM desktop_task_candidates WHERE candidate_id = ?", [task.candidateId]).requires_approval).toBe(1);
+    expect(store.getRow("SELECT policy_decision FROM desktop_context_access_log WHERE access_id = ?", [access.accessId]).policy_decision).toBe("allowed");
+    expect(store.getRow("SELECT hidden_until_ms FROM desktop_attention_overrides WHERE owner_id = ? AND subject_kind = ? AND subject_id = ?", [
+      override.ownerId,
+      override.subjectKind,
+      override.subjectId,
+    ]).hidden_until_ms).toBe(700);
+    expect(updatedOverride.createdAtMs).toBe(override.createdAtMs);
+    expect(store.getRow("SELECT hidden_until_ms, reason, created_at_ms FROM desktop_attention_overrides WHERE owner_id = ? AND subject_kind = ? AND subject_id = ?", [
+      override.ownerId,
+      override.subjectKind,
+      override.subjectId,
+    ])).toMatchObject({
+      hidden_until_ms: 700,
+      reason: "still snoozed",
+      created_at_ms: override.createdAtMs,
+    });
+
+    store.close();
+  });
+
+  it("rejects coordinator records with mismatched owner or source scope", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const ownerSession = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+    });
+    const otherSession = store.insertSession({
+      ownerId: "other",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+    });
+    const ownerRun = store.insertRun({
+      sessionId: ownerSession.sessionId,
+      clientId: "client",
+      requestId: "owner",
+      status: "succeeded",
+      mode: "ask",
+    });
+    const otherRun = store.insertRun({
+      sessionId: otherSession.sessionId,
+      clientId: "client",
+      requestId: "other",
+      status: "succeeded",
+      mode: "ask",
+    });
+    const otherArtifact = store.insertArtifact({
+      sessionId: otherSession.sessionId,
+      runId: otherRun.runId,
+      kind: "markdown",
+      role: "result",
+      uri: "omi-artifact://other",
+    });
+
+    expect(() => store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: ownerSession.sessionId,
+      runId: otherRun.runId,
+      surfaceKind: "main_chat",
+      objective: "bad scope",
+      packetJson: "{}",
+      redactedPreviewJson: "{}",
+      contextHash: "sha256:bad-scope",
+      retentionClass: "debug",
+      expiresAtMs: Date.now() + 60_000,
+    })).toThrow("outside owner scope");
+    expect(() => store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "artifact_review",
+      priority: 10,
+      title: "Bad artifact",
+      decisionPrompt: "Review",
+      sourceSessionId: ownerSession.sessionId,
+      sourceRunId: ownerRun.runId,
+      sourceArtifactId: otherArtifact.artifactId,
+    })).toThrow("outside owner scope");
+
+    const packet = store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: ownerSession.sessionId,
+      runId: ownerRun.runId,
+      surfaceKind: "main_chat",
+      objective: "good packet",
+      packetJson: "{}",
+      redactedPreviewJson: "{}",
+      contextHash: "sha256:good",
+      retentionClass: "debug",
+      expiresAtMs: Date.now() + 60_000,
+    });
+    const otherDispatch = store.insertDesktopDispatch({
+      ownerId: "other",
+      kind: "approval",
+      priority: 10,
+      title: "Other dispatch",
+      decisionPrompt: "Other",
+      sourceSessionId: otherSession.sessionId,
+      sourceRunId: otherRun.runId,
+    });
+
+    expect(() => store.insertDesktopContextAccessLog({
+      ownerId: "owner",
+      packetId: packet.packetId,
+      runId: ownerRun.runId,
+      dispatchId: otherDispatch.dispatchId,
+      sourceKind: "chat_surface",
+      operation: "include_snippet",
+      scopeJson: "{}",
+      sensitivityTier: "low",
+      policyDecision: "dispatch_created",
+    })).toThrow("dispatch reference is outside owner scope");
     store.close();
   });
 
@@ -425,6 +832,291 @@ describe("SqliteAgentStore", () => {
     store.close();
   });
 
+  it("reconciles desktop coordinator state on startup", () => {
+    const databasePath = newDatabasePath();
+    let now = 100;
+    const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => now });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "delegated_agent",
+      defaultAdapterId: "acp",
+    });
+    const parentRun = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "parent",
+      status: "succeeded",
+      mode: "act",
+    });
+    const childRun = store.insertRun({
+      sessionId: session.sessionId,
+      parentRunId: parentRun.runId,
+      clientId: "client",
+      requestId: "child",
+      status: "orphaned",
+      mode: "act",
+    });
+    const artifact = store.insertArtifact({
+      sessionId: session.sessionId,
+      runId: childRun.runId,
+      kind: "markdown",
+      role: "result",
+      uri: "omi-artifact://retrying",
+    });
+    const packet = store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: session.sessionId,
+      runId: childRun.runId,
+      surfaceKind: "delegated_agent",
+      objective: "expired work",
+      packetJson: "{}",
+      redactedPreviewJson: "{}",
+      contextHash: "sha256:expired",
+      retentionClass: "ephemeral",
+      expiresAtMs: 150,
+    });
+    const delivery = store.insertDesktopArtifactDelivery({
+      artifactId: artifact.artifactId,
+      ownerId: "owner",
+      sourceSessionId: session.sessionId,
+      sourceRunId: childRun.runId,
+      intendedSurface: "main_chat",
+      targetKind: "ask_omi",
+      deliveryStatus: "retrying",
+      errorJson: "{}",
+    });
+    const staleRecoveryDispatch = store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      title: "Stale recovery",
+      decisionPrompt: "This recovery dispatch expired before startup reconciliation.",
+      sourceSessionId: session.sessionId,
+      sourceRunId: childRun.runId,
+      expiresAtMs: 150,
+    });
+    store.execute(
+      `INSERT INTO delegations (
+        delegation_id, parent_session_id, parent_run_id, child_session_id, child_run_id,
+        mode, status, objective, request_json, created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "del_reconcile",
+        session.sessionId,
+        parentRun.runId,
+        session.sessionId,
+        childRun.runId,
+        "spawn",
+        "running",
+        "child work",
+        "{}",
+        100,
+      ],
+    );
+
+    now = 250;
+    const reconciliation = store.reconcileStartup();
+
+    expect(reconciliation.expiredContextPacketIds).toEqual([packet.packetId]);
+    expect(store.getOptionalRow("SELECT packet_id FROM desktop_context_packets WHERE packet_id = ?", [packet.packetId])).toBeUndefined();
+    expect(reconciliation.failedArtifactDeliveryIds).toEqual([delivery.deliveryId]);
+    expect(reconciliation.recoveryDispatchIds).toHaveLength(1);
+    expect(reconciliation.recoveryDispatchIds[0]).not.toBe(staleRecoveryDispatch.dispatchId);
+    expect(store.getRow("SELECT status, resolved_at_ms, resolved_by FROM desktop_dispatches WHERE dispatch_id = ?", [staleRecoveryDispatch.dispatchId])).toMatchObject({
+      status: "expired",
+      resolved_at_ms: 250,
+      resolved_by: "daemon_startup_reconciliation",
+    });
+    expect(store.getRow("SELECT delivery_status, error_json FROM desktop_artifact_deliveries WHERE delivery_id = ?", [delivery.deliveryId])).toMatchObject({
+      delivery_status: "failed",
+      error_json: "{\"reason\":\"daemon_startup_reconciliation\"}",
+    });
+    expect(store.getRow("SELECT kind, status, source_run_id FROM desktop_dispatches WHERE dispatch_id = ?", [reconciliation.recoveryDispatchIds[0]])).toMatchObject({
+      kind: "failure_recovery",
+      status: "pending",
+      source_run_id: childRun.runId,
+    });
+    expect(store.getRow("SELECT status, completed_at_ms FROM delegations WHERE delegation_id = ?", ["del_reconcile"])).toMatchObject({
+      status: "failed",
+      completed_at_ms: 250,
+    });
+    expect(store.getRow("SELECT type FROM events WHERE type = ?", ["delegation.recovery_required"]).type).toBe("delegation.recovery_required");
+    store.resolveDesktopDispatch(reconciliation.recoveryDispatchIds[0], {
+      ownerId: "owner",
+      status: "resolved",
+      resolvedAtMs: 260,
+    });
+    expect(store.reconcileStartup().recoveryDispatchIds).toHaveLength(0);
+    store.close();
+  });
+
+  it("expires stale pending recovery dispatches and creates one fresh recovery action", () => {
+    const databasePath = newDatabasePath();
+    let now = 100;
+    const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => now });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "delegated_agent",
+      defaultAdapterId: "acp",
+    });
+    const parentRun = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "parent",
+      status: "succeeded",
+      mode: "act",
+    });
+    const childRun = store.insertRun({
+      sessionId: session.sessionId,
+      parentRunId: parentRun.runId,
+      clientId: "client",
+      requestId: "child",
+      status: "orphaned",
+      mode: "act",
+    });
+    const staleDispatch = store.insertDesktopDispatch({
+      dispatchId: "dispatch_stale_recovery",
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      title: "Old recovery",
+      decisionPrompt: "Old recovery",
+      sourceSessionId: session.sessionId,
+      sourceRunId: childRun.runId,
+      expiresAtMs: 150,
+    });
+
+    now = 250;
+    const reconciliation = store.reconcileStartup();
+
+    expect(store.getRow("SELECT status, resolved_at_ms FROM desktop_dispatches WHERE dispatch_id = ?", [staleDispatch.dispatchId])).toMatchObject({
+      status: "expired",
+      resolved_at_ms: 250,
+    });
+    expect(reconciliation.recoveryDispatchIds).toHaveLength(1);
+    expect(reconciliation.recoveryDispatchIds[0]).not.toBe(staleDispatch.dispatchId);
+    expect(store.allRows("SELECT status FROM desktop_dispatches WHERE kind = ? AND source_run_id = ? ORDER BY created_at_ms", [
+      "failure_recovery",
+      childRun.runId,
+    ]).map((row) => row.status)).toEqual(["expired", "pending"]);
+    store.close();
+  });
+
+  it("does not recreate recovery dispatches after resolved or cancelled recovery decisions", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false, nowMs: () => 250 });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "delegated_agent",
+      defaultAdapterId: "acp",
+    });
+    const parentRun = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "parent",
+      status: "succeeded",
+      mode: "act",
+    });
+    const resolvedRun = store.insertRun({
+      sessionId: session.sessionId,
+      parentRunId: parentRun.runId,
+      clientId: "client",
+      requestId: "resolved-child",
+      status: "orphaned",
+      mode: "act",
+    });
+    const cancelledRun = store.insertRun({
+      sessionId: session.sessionId,
+      parentRunId: parentRun.runId,
+      clientId: "client",
+      requestId: "cancelled-child",
+      status: "orphaned",
+      mode: "act",
+    });
+    store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      status: "resolved",
+      title: "Resolved recovery",
+      decisionPrompt: "Resolved recovery",
+      sourceSessionId: session.sessionId,
+      sourceRunId: resolvedRun.runId,
+      resolvedAtMs: 200,
+      resolvedBy: "user",
+      resolutionJson: "{}",
+    });
+    store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      status: "cancelled",
+      title: "Cancelled recovery",
+      decisionPrompt: "Cancelled recovery",
+      sourceSessionId: session.sessionId,
+      sourceRunId: cancelledRun.runId,
+      resolvedAtMs: 200,
+      resolvedBy: "user",
+      resolutionJson: "{}",
+    });
+
+    const reconciliation = store.reconcileStartup();
+
+    expect(reconciliation.recoveryDispatchIds).toEqual([]);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM desktop_dispatches WHERE kind = ?", ["failure_recovery"]).count).toBe(2);
+    store.close();
+  });
+
+  it("rejects context packets that are expired against the store clock even with old createdAtMs", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false, nowMs: () => 1_000 });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+    });
+
+    expect(() => store.insertDesktopContextPacket({
+      ownerId: "owner",
+      sessionId: session.sessionId,
+      surfaceKind: "main_chat",
+      objective: "old packet",
+      packetJson: "{}",
+      redactedPreviewJson: "{}",
+      contextHash: "sha256:old",
+      retentionClass: "debug",
+      createdAtMs: 100,
+      expiresAtMs: 500,
+    })).toThrow("expiresAtMs must be in the future");
+    store.close();
+  });
+
+  it("rejects expired pending dispatch resolution", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false, nowMs: () => 100 });
+    const dispatch = store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 10,
+      title: "Expired",
+      decisionPrompt: "Expired dispatch",
+      expiresAtMs: 150,
+    });
+
+    expect(() => store.resolveDesktopDispatch(dispatch.dispatchId, {
+      ownerId: "owner",
+      status: "resolved",
+      resolvedAtMs: 200,
+    })).toThrow("has expired");
+    store.close();
+  });
+
+  it("does not fail artifact lifecycle migration when columns already exist but the migration row is missing", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    store.execute("DELETE FROM schema_migrations WHERE version = ?", [2]);
+
+    expect(() => store.migrate()).not.toThrow();
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations WHERE version = ?", [2]).count).toBe(1);
+    store.close();
+  });
+
   it("fails loudly when the runtime probe cannot use node:sqlite", () => {
     class BrokenDatabase {
       readonly isTransaction = false;
@@ -443,7 +1135,7 @@ describe("SqliteAgentStore", () => {
     );
   });
 
-  it("includes artifact lifecycle migration in the runtime probe", () => {
+  it("includes coordinator migrations in the runtime probe", () => {
     const execStatements: string[] = [];
     class ProbeDatabase {
       readonly isTransaction = false;
@@ -451,8 +1143,8 @@ describe("SqliteAgentStore", () => {
       exec(sql: string): void {
         execStatements.push(sql);
       }
-      prepare(_sql: string): { run: (..._args: unknown[]) => void } {
-        return { run: () => {} };
+      prepare(_sql: string): { run: (..._args: unknown[]) => void; all: () => unknown[] } {
+        return { run: () => {}, all: () => [] };
       }
       close(): void {}
     }
@@ -461,6 +1153,12 @@ describe("SqliteAgentStore", () => {
 
     expect(execStatements.some((statement) => statement.includes("ADD COLUMN lifecycle_state"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("ADD COLUMN lifecycle_updated_at_ms"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_context_packets"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_dispatches"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_artifact_deliveries"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_memory_candidates"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_context_access_log"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_attention_overrides"))).toBe(true);
   });
 });
 

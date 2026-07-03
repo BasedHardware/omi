@@ -292,8 +292,33 @@ class MemoriesViewModel: ObservableObject {
     displayMemories(values, lifecycleExposed: canonicalLifecycleExposed)
   }
 
+  private func displayCacheMemories(_ values: [ServerMemory], for token: MemoryScopeToken) -> [ServerMemory] {
+    displayMemories(values, for: token)
+  }
+
   private func displayMemories(_ values: [ServerMemory], lifecycleExposed: Bool) -> [ServerMemory] {
     lifecycleExposed ? values : values.map { $0.hidingLifecycleExposure() }
+  }
+
+  private struct MemoryPageFetchResult {
+    let page: APIClient.MemoryListPage
+    let deviceScopeSupportedOverride: Bool?
+  }
+
+  @discardableResult
+  private func commitMemoryPageCapabilities(
+    _ page: APIClient.MemoryListPage,
+    for token: MemoryScopeToken,
+    expectedOffset: Int? = nil,
+    deviceScopeSupportedOverride: Bool? = nil
+  ) -> Bool {
+    guard isCurrentScope(token) else { return false }
+    if let expectedOffset, currentOffset != expectedOffset { return false }
+    canonicalLifecycleExposed = page.canonicalLifecycleExposed
+    if let deviceScopeCapability = deviceScopeSupportedOverride ?? page.deviceScopeSupported {
+      deviceScopeSupported = deviceScopeCapability
+    }
+    return isCurrentScope(token)
   }
 
   private func layerAllowed(_ memory: ServerMemory, for token: MemoryScopeToken) -> Bool {
@@ -315,7 +340,7 @@ class MemoriesViewModel: ObservableObject {
         let loaded = try await MemoryStorage.shared.getLocalMemories(
           limit: pageSize, offset: 0, tiers: layers(for: token))
         guard isCurrentScope(token) else { return }
-        memories = displayMemories(loaded, for: token)
+        memories = displayCacheMemories(loaded, for: token)
         currentOffset = loaded.count
         hasMoreMemories = loaded.count >= pageSize
         recomputeFilteredMemories()
@@ -421,8 +446,9 @@ class MemoriesViewModel: ObservableObject {
       guard isCurrentScope(token) else { return }
       if let fetchedLifecycleExposure {
         canonicalLifecycleExposed = fetchedLifecycleExposure
+        guard isCurrentScope(token) else { return }
       }
-      memories = displayMemories(mergedMemories, for: token)
+      memories = displayCacheMemories(mergedMemories, for: token)
       currentOffset = mergedMemories.count
       hasMoreMemories = mergedMemories.count >= reloadLimit
       recomputeFilteredMemories()
@@ -494,8 +520,7 @@ class MemoriesViewModel: ObservableObject {
       let reloadLimit = max(pageSize, memories.count)
       let page = try await APIClient.shared.getMemoriesPage(limit: reloadLimit, offset: 0)
       let apiMemories = page.memories
-      guard isCurrentScope(token) else { return }
-      canonicalLifecycleExposed = page.canonicalLifecycleExposed
+      guard commitMemoryPageCapabilities(page, for: token) else { return }
 
       // Sync API results to local cache
       try await MemoryStorage.shared.syncServerMemories(apiMemories)
@@ -510,7 +535,7 @@ class MemoriesViewModel: ObservableObject {
       log(
         "MemoriesViewModel: Auto-refresh showing \(mergedMemories.count) memories (API had \(apiMemories.count))"
       )
-      memories = displayMemories(mergedMemories, for: token)
+      memories = displayCacheMemories(mergedMemories, for: token)
       currentOffset = mergedMemories.count
       rawBackendOffset = apiMemories.count
       hasMoreMemories = mergedMemories.count >= reloadLimit
@@ -590,7 +615,7 @@ class MemoriesViewModel: ObservableObject {
         token.selectedTags.contains { tag in tag.matches(memory) }
       }
 
-      filteredFromDatabase = displayMemories(filteredResults, for: token)
+      filteredFromDatabase = displayCacheMemories(filteredResults, for: token)
       log(
         "MemoriesViewModel: Loaded \(filteredResults.count) filtered memories from SQLite (raw: \(results.count))"
       )
@@ -689,7 +714,7 @@ class MemoriesViewModel: ObservableObject {
         tiers: layers(for: token)
       )
       guard isCurrentScope(token) else { return }
-      searchResults = displayMemories(results, for: token)
+      searchResults = displayCacheMemories(results, for: token)
       log("MemoriesViewModel: Search for '\(query)' found \(results.count) results")
     } catch {
       guard isCurrentScope(token) else { return }
@@ -709,18 +734,19 @@ class MemoriesViewModel: ObservableObject {
 
   /// Fetch memories from the API, honoring the device-scope filter only when
   /// the backend supports it for this user. Legacy (non-canonical) memory users
-  /// get a 400 from device_scope=current; on that we clear deviceScopeSupported
-  /// and retry without the scope so the page still loads. Client-side device
+  /// get a 400 from device_scope=current; on that we retry without the scope
+  /// and return the capability update to the guarded page commit. Client-side device
   /// filtering (recomputeFilteredMemories) preserves the "This Mac" UX.
-  private func fetchMemoriesPageDeviceScopeAware(limit: Int, offset: Int) async throws -> APIClient.MemoryListPage {
+  private func fetchMemoriesPageDeviceScopeAware(limit: Int, offset: Int) async throws -> MemoryPageFetchResult {
     let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
     do {
-      return try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: scope)
+      let page = try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: scope)
+      return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: nil)
     } catch APIError.httpError(let statusCode, _) where statusCode == 400 && scope != nil {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
-      deviceScopeSupported = false
       log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
-      return try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: nil)
+      let page = try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: nil)
+      return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: false)
     }
   }
 
@@ -760,7 +786,7 @@ class MemoriesViewModel: ObservableObject {
       }
 
       if !cachedMemories.isEmpty, isCurrentScope(token) {
-        memories = displayMemories(cachedMemories, for: token)
+        memories = displayCacheMemories(cachedMemories, for: token)
         currentOffset = cachedMemories.count
         hasMoreMemories = cachedMemories.count >= pageSize
         isLoading = false  // Show cached data immediately
@@ -773,10 +799,11 @@ class MemoriesViewModel: ObservableObject {
 
     // Step 2: Fetch from API in background and sync to local cache
     do {
-      let page = try await fetchMemoriesPageDeviceScopeAware(
+      let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
         offset: 0
       )
+      let page = fetchResult.page
       let fetchedMemories = page.memories
       guard isCurrentScope(token) else {
         // Scope changed mid-load; reset loading state so the replacement load
@@ -784,9 +811,13 @@ class MemoriesViewModel: ObservableObject {
         isLoading = false
         return
       }
-      canonicalLifecycleExposed = page.canonicalLifecycleExposed
-      if let deviceScopeCapability = page.deviceScopeSupported {
-        deviceScopeSupported = deviceScopeCapability
+      guard commitMemoryPageCapabilities(
+        page,
+        for: token,
+        deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+      ) else {
+        isLoading = false
+        return
       }
       hasLoadedInitially = true
       log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API")
@@ -802,8 +833,9 @@ class MemoriesViewModel: ObservableObject {
         // Reloading from the unscoped SQLite cache can surface other devices'
         // newer memories that recomputeFilteredMemories() then strips, leaving
         // an empty/short initial page that cannot paginate. Display the fetched
-        // page directly instead. (If device_scope 400'd, deviceScopeSupported is
-        // now false so we take the merged-cache path with client-side filtering.)
+        // page directly instead. (If device_scope 400'd, the committed
+        // capability override is false so we take the merged-cache path with
+        // client-side filtering.)
         let wasDeviceScoped = filterThisDeviceOnly && deviceScopeSupported
         let displayMemories: [ServerMemory]
         if wasDeviceScoped {
@@ -822,7 +854,7 @@ class MemoriesViewModel: ObservableObject {
           isLoading = false
           return
         }
-        let visibleMemories = self.displayMemories(displayMemories, for: token)
+        let visibleMemories = self.displayCacheMemories(displayMemories, for: token)
         memories = visibleMemories
         currentOffset = visibleMemories.count
         // Track the raw backend cursor for subsequent loadMore() fetches.
@@ -887,7 +919,6 @@ class MemoriesViewModel: ObservableObject {
     do {
       while true {
         let page = try await APIClient.shared.getMemoriesPage(limit: batchSize, offset: offset)
-        canonicalLifecycleExposed = page.canonicalLifecycleExposed
         let batch = page.memories
         if batch.isEmpty { break }
 
@@ -940,7 +971,6 @@ class MemoriesViewModel: ObservableObject {
     do {
       while true {
         let page = try await APIClient.shared.getMemoriesPage(limit: batchSize, offset: offset)
-        canonicalLifecycleExposed = page.canonicalLifecycleExposed
         let batch = page.memories
         if batch.isEmpty { break }
 
@@ -1021,7 +1051,7 @@ class MemoriesViewModel: ObservableObject {
 
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }
       if !moreFromCache.isEmpty {
-        let visibleMemories = displayMemories(moreFromCache, for: token)
+        let visibleMemories = displayCacheMemories(moreFromCache, for: token)
         memories.append(contentsOf: visibleMemories)
         currentOffset += visibleMemories.count
         hasMoreMemories = visibleMemories.count >= pageSize
@@ -1040,16 +1070,18 @@ class MemoriesViewModel: ObservableObject {
     // Use the raw backend offset (not the visible/SQLite offset) so that layer
     // filtering does not cause overlapping pages or duplicate appends.
     do {
-      let page = try await fetchMemoriesPageDeviceScopeAware(
+      let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
         offset: requestedRawOffset
       )
+      let page = fetchResult.page
       let newMemories = page.memories
-      guard isCurrentScope(token), currentOffset == requestedOffset else { return }
-      canonicalLifecycleExposed = page.canonicalLifecycleExposed
-      if let deviceScopeCapability = page.deviceScopeSupported {
-        deviceScopeSupported = deviceScopeCapability
-      }
+      guard commitMemoryPageCapabilities(
+        page,
+        for: token,
+        expectedOffset: requestedOffset,
+        deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+      ) else { return }
 
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)

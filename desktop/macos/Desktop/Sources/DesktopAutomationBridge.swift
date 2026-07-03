@@ -569,6 +569,43 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "capture_floating_bar_png",
+      summary: "Write PNG of the floating control bar window (in-process capture)",
+      params: ["path"]
+    ) { params in
+      guard let path = params["path"], !path.isEmpty else {
+        return ["error": "missing 'path'"]
+      }
+      return await MainActor.run { () -> [String: String] in
+        guard
+          let window = NSApp.windows.compactMap({ $0 as? FloatingControlBarWindow }).first,
+          window.isVisible,
+          let contentView = window.contentView
+        else {
+          return ["error": "no_floating_bar_window"]
+        }
+        let bounds = contentView.bounds
+        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+          return ["error": "bitmap_rep_failed"]
+        }
+        contentView.cacheDisplay(in: bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+          return ["error": "png_encode_failed"]
+        }
+        do {
+          try data.write(to: URL(fileURLWithPath: path))
+          return [
+            "path": path,
+            "bytes": "\(data.count)",
+            "frame": NSStringFromRect(window.frame),
+          ]
+        } catch {
+          return ["error": error.localizedDescription]
+        }
+      }
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]
@@ -630,6 +667,76 @@ final class DesktopAutomationActionRegistry {
       summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
     ) { _ in
       await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
+    }
+
+    register(
+      name: "coordinator_awareness_snapshot",
+      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
+    ) { _ in
+      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
+      return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "coordinator_action_queue",
+      summary: "Read the derived Swift coordinator attention queue",
+      params: ["limit"]
+    ) { params in
+      let limit = intParam(params["limit"], default: 20)
+      let queue = try await DesktopCoordinatorService.shared.actionQueueJSON(limit: max(1, limit))
+      return ["items": queue]
+    }
+
+    register(
+      name: "coordinator_open_loops",
+      summary: "Read unresolved agent/coordinator loops from the Swift projection"
+    ) { _ in
+      let loops = try await DesktopCoordinatorService.shared.openLoopsJSON()
+      return ["openLoops": loops]
+    }
+
+    register(
+      name: "coordinator_route_intent",
+      summary: "Route an intent through deterministic coordinator projection rules",
+      params: ["intent", "surfaceKind", "taskId"]
+    ) { params in
+      let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
+        intent: params["intent"] ?? "",
+        surfaceKind: params["surfaceKind"],
+        taskId: params["taskId"]
+      )
+      return ["decision": decision]
+    }
+
+    register(
+      name: "coordinator_create_dispatch",
+      summary: "Create a coordinator dispatch through the runtime control path for Agents & Attention testing",
+      params: ["kind", "title", "decisionPrompt", "recommendedDefault", "sourceSessionId", "sourceRunId"]
+    ) { params in
+      let dispatch = try await DesktopCoordinatorService.shared.createDispatchJSON(
+        kind: params["kind"] ?? "routing_choice",
+        title: params["title"] ?? "Coordinator attention",
+        decisionPrompt: params["decisionPrompt"] ?? "Review this coordinator attention item.",
+        recommendedDefault: params["recommendedDefault"],
+        sourceSessionId: params["sourceSessionId"],
+        sourceRunId: params["sourceRunId"]
+      )
+      return ["dispatch": dispatch]
+    }
+
+    register(
+      name: "coordinator_resolve_dispatch",
+      summary: "Resolve a coordinator dispatch through the runtime control path",
+      params: ["dispatchId", "resolution"]
+    ) { params in
+      guard let dispatchId = params["dispatchId"], !dispatchId.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("missing dispatchId")
+      }
+      let dispatch = try await DesktopCoordinatorService.shared.resolveDispatchJSON(
+        dispatchId: dispatchId,
+        resolution: params["resolution"] ?? "resolved"
+      )
+      return ["dispatch": dispatch]
     }
 
     register(

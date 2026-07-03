@@ -40,6 +40,7 @@ struct OnboardingDataSourcesStepView: View {
             onContinue()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .keyboardShortcut(.defaultAction)
           .transition(.opacity.combined(with: .scale(scale: 0.95)))
         } else {
           HStack(spacing: 8) {

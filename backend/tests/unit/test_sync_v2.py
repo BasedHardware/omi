@@ -2375,6 +2375,12 @@ class TestTimeoutConfiguration:
         with open(path, encoding='utf-8') as f:
             return f.read()
 
+    @staticmethod
+    def _read_llm_providers_source():
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'llm', 'providers.py')
+        with open(path, encoding='utf-8') as f:
+            return f.read()
+
     def test_llm_mini_has_timeout(self):
         source = self._read_clients_source()
         llm_mini_line = [l for l in source.split('\n') if 'llm_mini' in l and 'ChatOpenAI' in l][0]
@@ -2404,12 +2410,12 @@ class TestTimeoutConfiguration:
         assert "'max_retries': 1" in func_body
 
     def test_classifier_llm_has_timeout(self):
-        source = self._read_classifier_source()
-        start = source.index('_classifier_llm')
-        end = source.index('\n', source.index(')', start))
-        constructor_call = source[start:end]
-        assert 'request_timeout=120' in constructor_call
-        assert 'max_retries=1' in constructor_call
+        classifier_source = self._read_classifier_source()
+        providers_source = self._read_llm_providers_source()
+
+        assert "get_llm('fair_use')" in classifier_source
+        assert "'request_timeout': options.get('request_timeout', 120)" in providers_source
+        assert "'max_retries': options.get('max_retries', 1)" in providers_source
 
     def test_dg_timeout_read_within_budget(self):
         """DG read timeout must be <= 150s so 2 attempts fit within 300s segment budget."""

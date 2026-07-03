@@ -194,7 +194,7 @@ def _get_structured(
 
             if conversation.text_source == ExternalIntegrationConversationSource.other:
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                    structured = summarize_experience_text(conversation.text, conversation.text_source_spec)
+                    structured = summarize_experience_text(conversation.text, conversation.text_source_spec, tz=tz)
                 return structured, False
 
             # not supported conversation source

@@ -2,9 +2,9 @@ import Combine
 import Foundation
 import SwiftUI
 
-/// A running or finished background "agent" launched from the Ask Omi floating
-/// bar. Each pill owns its own `ChatProvider` so multiple agents can execute in
-/// parallel without sharing message state.
+/// A visible background-agent projection launched from the Ask Omi floating
+/// bar. Execution is owned by the canonical Omi agent runtime; this model only
+/// drives the floating/notch-less pill UI.
 @MainActor
 final class AgentPill: ObservableObject, Identifiable {
     enum Status: Equatable {
@@ -63,6 +63,9 @@ final class AgentPill: ObservableObject, Identifiable {
     /// fallback can move the pill onto the next directed provider — or the
     /// Omi default agent (`nil`) — before the task produced any output.
     @Published private(set) var bridgeHarnessOverride: AgentHarnessMode?
+    var canonicalSessionId: String?
+    var canonicalRunId: String?
+    var canonicalAttemptId: String?
 
     @Published var title: String
     @Published var status: Status = .queued
@@ -102,6 +105,12 @@ final class AgentPill: ObservableObject, Identifiable {
         failedStartupProviders.append(failed)
         bridgeHarnessOverride = next?.harnessMode
         hasProducedTaskOutput = false
+        // The retry spawns a fresh canonical session/run; drop the failed
+        // attempt's ids so follow-ups queue for the new run instead of
+        // targeting the dead session.
+        canonicalSessionId = nil
+        canonicalRunId = nil
+        canonicalAttemptId = nil
         let notice = "\(failed.displayName) failed to start — continuing with \(next?.displayName ?? "Omi's default agent")."
         providerFallbackNotices.append(ChatMessage(text: notice, sender: .ai))
         conversationMessages = providerFallbackNotices + conversationMessages.filter { $0.sender == .user }
@@ -144,41 +153,20 @@ final class AgentPill: ObservableObject, Identifiable {
     }
 }
 
-/// Singleton that owns the running `AgentPill`s. Spawning a pill creates a new
-/// `ChatProvider` and observes its message stream until the agent finishes.
+/// Singleton that owns visible `AgentPill` projections. It never owns agent
+/// execution; spawn/continue/stop delegate to the canonical runtime.
 @MainActor
 final class AgentPillsManager: ObservableObject {
     static let shared = AgentPillsManager()
 
     @Published private(set) var pills: [AgentPill] = []
-    @Published var hoveredPillID: UUID?
-    @Published var pinnedPillID: UUID?
 
     /// Configurable soft cap so the row never grows past a reasonable width.
     private let maxPills: Int = 8
 
-    /// One ChatProvider (and therefore one ACP node subprocess) per pill so
-    /// pills can truly run in parallel — each provider has its own bridge,
-    /// `isSending` flag, and interrupt scope. Bridges are heavy to boot, so we
-    /// stagger their startup via `bootChain` to avoid the race we saw the first
-    /// time around. After boot completes, every pill's `sendMessage` runs in
-    /// parallel with the others.
-    private var providersByPill: [UUID: ChatProvider] = [:]
-    private var streamsByPill: [UUID: AnyCancellable] = [:]
-    private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
-    private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
-    /// Resolved system-prompt suffix per pill so a startup-fallback retry
-    /// re-sends the brief with the same prompt as the original attempt.
-    private var systemPromptSuffixByPill: [UUID: String] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
-    private var bootChain: Task<Void, Never> = Task {}
-
-    private static let backgroundAgentSystemPromptSuffix = """
-    You are running inside a visible floating background agent pill. Do the requested work now; do not merely acknowledge, promise, or say that you are working on it. Use the available tools when the task requires local data, browser/app/file actions, or multi-step investigation. Finish only after you have either completed the task or hit a concrete blocker, then give a concise final summary of the outcome.
-
-    This is already the spawned background agent. Do not call spawn_agent or delegate_agent just to hand off this same task.
-    """
+    private var pendingFollowUpsByPill: [UUID: [String]] = [:]
 
     /// Shared agent-noun pattern used by negation guard, intent detection, and
     /// task extraction. Kept word-boundary-free so callers can embed it inside
@@ -804,10 +792,8 @@ final class AgentPillsManager: ObservableObject {
         )
     }
 
-    /// Spawn a new agent pill. Each pill gets its own ChatProvider so the
-    /// pills truly run in parallel. Bridge boots are staggered through
-    /// `bootChain` so we never race ACP startup; once a pill's bridge is
-    /// warmed it sends concurrently with everything else.
+    /// Spawn a visible pill projection backed by a canonical background-agent
+    /// session/run in the Omi runtime.
     @discardableResult
     func spawn(
         query: String,
@@ -834,33 +820,22 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
-        pills.append(pill)
-        systemPromptSuffixByPill[pill.id] = systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix
-
         let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-        projectionStreamsByPill[pill.id] = AgentRuntimeStatusStore.shared.$projectionsBySurface
-            .receive(on: DispatchQueue.main)
-            .sink { [weak pill] projections in
-                guard let pill, let projection = projections[surfaceRef.key] else { return }
-                guard !pill.status.isFinished || projection.status.isTerminal else { return }
-                AgentPillsManager.apply(projection: projection, to: pill)
-            }
-
-        startProviderAttempt(for: pill)
+        pills.append(pill)
 
         pill.status = .starting
         if let preFetchedAck, !preFetchedAck.isEmpty {
             pill.latestActivity = preFetchedAck
         } else {
-            pill.latestActivity = "Warming up…"
+            pill.latestActivity = "Starting…"
         }
+        AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef, statusText: pill.latestActivity)
 
-        // For voice queries, speak the pre-fetched ack from the router (or a
-        // random instant ack) BEFORE waiting for the bridge so the user
-        // always hears confirmation that we heard them.
+        // For voice queries, play a cached deterministic kickoff sample before
+        // the runtime accepts the run so the user always hears confirmation
+        // without falling back to a different system voice.
         if fromVoice {
-            let phrase = (preFetchedAck?.isEmpty == false) ? preFetchedAck! : AgentPillsManager.randomAck()
-            FloatingBarVoicePlaybackService.shared.speakOneShot(phrase)
+            FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
         }
 
         // If the router already returned a title we don't need a second
@@ -879,95 +854,83 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
+        startProviderAttempt(for: pill)
+
         return pill
     }
 
-    /// Wire one provider attempt for a pill: fresh ChatProvider, message
-    /// stream, staggered bridge boot, and the run task that sends the pill's
-    /// brief. Used by the initial spawn and by startup-fallback retries — a
-    /// retry replaces the failed provider's wiring but keeps the same pill
-    /// (id, projection stream, chat surface).
-    private func startProviderAttempt(for pill: AgentPill, isFallbackRetry: Bool = false) {
-        // Tear down the attempt being displaced before installing the new
-        // one: cancel its run task and shut its provider's bridge down so the
-        // old AgentBridge clientId is unregistered from the shared Node
-        // runtime (ChatProvider has no deinit teardown — without this, every
-        // displaced attempt would stay registered forever).
+    /// Wire one canonical-run attempt for a pill: coordinator spawn, accepted
+    /// run bookkeeping, and status polling. Used by the initial spawn and by
+    /// startup-fallback retries — a retry replaces the failed attempt's run
+    /// task but keeps the same pill (id, chat surface, transcript). Reads the
+    /// pill's CURRENT bridgeHarnessOverride so a retry lands on the provider
+    /// the fallback moved the pill to.
+    private func startProviderAttempt(for pill: AgentPill) {
+        // A retry displaces the failed attempt's still-registered run task;
+        // the initial spawn has nothing to displace.
         runTasksByPill[pill.id]?.cancel()
-        runTasksByPill[pill.id] = nil
-        if let displaced = providersByPill[pill.id] {
-            Task { await displaced.shutdownBridge() }
-        }
-
-        let bridgeHarnessOverride = pill.bridgeHarnessOverride
-        let provider = ChatProvider(bridgeHarnessOverride: bridgeHarnessOverride)
-        let hasBridgeHarnessOverride = bridgeHarnessOverride != nil
-        if let floating = FloatingControlBarManager.shared.sharedFloatingProvider {
-            provider.workingDirectory = floating.workingDirectory
-            // Directed Hermes/OpenClaw pills must not inherit the floating bar's
-            // Claude model override. Those harnesses can reject Omi's Claude
-            // aliases during session/set_model, so leave model selection to the
-            // provider-native default when a harness override is present.
-            if !hasBridgeHarnessOverride {
-                provider.modelOverride = floating.modelOverride
-            }
-        }
-        providersByPill[pill.id] = provider
-
-        let messageCountBefore = provider.messages.count
-        messageCountByPill[pill.id] = messageCountBefore
-        streamsByPill[pill.id]?.cancel()
-        streamsByPill[pill.id] = provider.$messages
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self, weak pill, weak provider] messages in
-                guard let self, let pill, let provider else { return }
-                // Identity guard: Combine can still deliver a publish that was
-                // already scheduled on the main queue when this sink replaced a
-                // displaced attempt's sink. Drop deliveries from any provider
-                // that is no longer the pill's current attempt so stale content
-                // can't repaint the transcript or mark task output on the retry.
-                guard self.providersByPill[pill.id] === provider else { return }
-                self.handle(messages: messages, since: messageCountBefore, for: pill)
-            }
-
-        // Stagger bridge boots: chain this pill's warmup after the previous
-        // pill's. Once warmed, the actual sendMessage runs in parallel with
-        // every other warmed pill. A startup-fallback retry skips the stagger
-        // entirely: it must not wait behind every queued pill warmup, and it
-        // must not extend the chain other pills wait on.
-        let previousBoot = isFallbackRetry ? nil : bootChain
-        let myBoot = Task { [weak provider] in
-            if let previousBoot {
-                await previousBoot.value
-            }
-            await provider?.warmupBridge()
-        }
-        if !isFallbackRetry {
-            bootChain = myBoot
-        }
 
         let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-        let systemPromptSuffix = systemPromptSuffixByPill[pill.id] ?? Self.backgroundAgentSystemPromptSuffix
-        let runTask = Task { [weak self, weak pill, weak provider] in
-            await myBoot.value
+        let bridgeHarnessOverride = pill.bridgeHarnessOverride
+        let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
+        // Directed provider pills must not inherit the floating bar's Claude
+        // model override: those harnesses can reject Omi's Claude aliases, so
+        // leave model selection to the provider-native default.
+        let modelForSpawn = bridgeHarnessOverride == nil
+            ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
+            : nil
+        let runTask = Task { @MainActor [weak self, weak pill] in
             guard !Task.isCancelled else { return }
-            guard let self, let pill, let provider else { return }
-            // Bridge is up; flip to running and fire the prompt. Concurrent
-            // with any other pill that's already past this point.
-            pill.status = .running
-            pill.completedAt = nil
-            pill.suggestedFollowUps = []
-            let finalText = await provider.sendMessage(
-                pill.query,
-                model: Self.modelForSend(pill: pill, provider: provider),
-                systemPromptSuffix: systemPromptSuffix,
-                systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)",
-                surfaceRef: surfaceRef,
-                legacyClientScope: AgentLegacyClientScope.floatingPill
-            )
-            guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider, finalText: finalText, allowStartupFallback: true)
+            guard let self, let pill else { return }
+            do {
+                let accepted = try await DesktopCoordinatorService.shared.spawnBackgroundAgent(
+                    prompt: pill.query,
+                    title: pill.title,
+                    pillId: pill.id,
+                    model: modelForSpawn,
+                    harnessMode: bridgeHarnessOverride,
+                    cwd: workingDirectory
+                )
+                pill.canonicalSessionId = accepted.sessionId
+                pill.canonicalRunId = accepted.runId
+                pill.canonicalAttemptId = accepted.attemptId
+                if Task.isCancelled || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
+                    Task {
+                        _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
+                    }
+                    return
+                }
+                pill.title = accepted.title
+                pill.status = .running
+                pill.completedAt = nil
+                pill.suggestedFollowUps = []
+                pill.latestActivity = "Working…"
+                // Keep any provider-fallback notices pinned above the brief so
+                // the handoff stays visible after the retry's accept rebuilds
+                // the transcript (empty on a first attempt).
+                pill.conversationMessages = pill.providerFallbackNotices + [ChatMessage(text: pill.query, sender: .user)]
+                pill.markContentChanged()
+                AgentRuntimeStatusStore.shared.recordAcceptedRun(
+                    surface: surfaceRef,
+                    sessionId: accepted.sessionId,
+                    runId: accepted.runId,
+                    attemptId: accepted.attemptId,
+                    statusText: "Working…"
+                )
+                let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+                if !queuedFollowUps.isEmpty {
+                    self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                    return
+                }
+                await self.pollCanonicalRun(for: pill)
+            } catch {
+                guard !Task.isCancelled else { return }
+                AgentRuntimeStatusStore.shared.recordLocalFailure(
+                    surface: surfaceRef,
+                    error: error.localizedDescription
+                )
+                self.fail(pill: pill, errorText: error.localizedDescription)
+            }
         }
         runTasksByPill[pill.id] = runTask
     }
@@ -1008,7 +971,7 @@ final class AgentPillsManager: ObservableObject {
             surface: .floatingPill(pillId: pill.id),
             statusText: nil
         )
-        startProviderAttempt(for: pill, isFallbackRetry: true)
+        startProviderAttempt(for: pill)
         return true
     }
 
@@ -1051,50 +1014,97 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    /// Send a follow-up to the SAME agent session — reuses the pill's ChatProvider +
-    /// sessionKey so it keeps full context. Falls back to a fresh agent only if the
-    /// session was already torn down (pill dismissed/trimmed).
+    /// Send a follow-up to the same canonical background-agent session.
     func continueAgent(from pill: AgentPill, text: String) {
-        guard let provider = providersByPill[pill.id] else {
-            spawnFromUserQuery(text, model: pill.model)
+        guard let sessionId = pill.canonicalSessionId else {
+            pendingFollowUpsByPill[pill.id, default: []].append(text)
+            pill.latestActivity = "Queued follow-up until the agent starts…"
+            pill.markContentChanged()
             return
         }
         pill.status = .running
         pill.completedAt = nil
         pill.suggestedFollowUps = []
-        pill.latestActivity = "Working on your follow-up…"
+        pill.latestActivity = "Interrupting current run…"
+        pill.conversationMessages.append(ChatMessage(text: text, sender: .user))
+        pill.markContentChanged()
+        let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
+        let activeRunId = pill.canonicalRunId
         runTasksByPill[pill.id]?.cancel()
-        let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
-            guard let self, let pill, let provider else { return }
-            // If the provider is still streaming the previous turn, interrupt
-            // it first and wait for the guard to clear before starting the next
-            // agent turn. Otherwise the isSending guard returns nil and
-            // complete() marks the pill as failed. (Codex P2.)
-            if provider.isSending {
-                provider.stopAgent()
-                // stopAgent() has a 3s watchdog that force-releases isSending;
-                // poll until the guard clears (bounded to ~4s total). Check
-                // Task.isCancelled on every iteration so a cancelled follow-up
-                // does not proceed to sendMessage. (Cubic P1.)
-                for _ in 0..<80 {
-                    if Task.isCancelled { return }
-                    if !provider.isSending { break }
-                    try? await Task.sleep(nanoseconds: 50_000_000)
+        let runTask = Task { @MainActor [weak self, weak pill] in
+            guard let self, let pill else { return }
+            guard !Task.isCancelled else { return }
+            do {
+                if let activeRunId, !activeRunId.isEmpty, !pill.status.isFinished {
+                    switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) {
+                    case .stopped:
+                        break
+                    case .cancelled:
+                        return
+                    case .failed:
+                        pendingFollowUpsByPill[pill.id, default: []].append(text)
+                        pill.latestActivity = "Queued follow-up until the current run stops…"
+                        pill.markContentChanged()
+                        await self.pollCanonicalRun(for: pill)
+                        guard self.pills.contains(where: { $0.id == pill.id }) else { return }
+                        let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+                        if !queuedFollowUps.isEmpty {
+                            self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                        }
+                        return
+                    }
+                    guard !Task.isCancelled else { return }
+                    guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                 }
+                pill.latestActivity = "Working on your follow-up…"
+                pill.markContentChanged()
+                let result = try await DesktopCoordinatorService.shared.continueAgent(
+                    sessionId: sessionId,
+                    prompt: text,
+                    model: pill.bridgeHarnessOverride == nil ? pill.model : nil,
+                    cwd: workingDirectory
+                )
+                guard !Task.isCancelled else { return }
+                pill.canonicalRunId = result.runId ?? pill.canonicalRunId
+                self.apply(inspection: result, to: pill)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.fail(pill: pill, errorText: error.localizedDescription)
             }
-            guard !Task.isCancelled else { return }
-            let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-            let finalText = await provider.sendMessage(
-                text, model: Self.modelForSend(pill: pill, provider: provider),
-                systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
-                systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)",
-                surfaceRef: surfaceRef,
-                legacyClientScope: AgentLegacyClientScope.floatingPill)
-            guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider, finalText: finalText)
         }
         runTasksByPill[pill.id] = runTask
+    }
+
+    private enum ActiveRunCancellationResult {
+        case stopped
+        case cancelled
+        case failed
+    }
+
+    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> ActiveRunCancellationResult {
+        do {
+            _ = try await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
+        } catch {
+            logError("AgentPills: failed to cancel active run before follow-up", error: error)
+            return .failed
+        }
+        for _ in 0..<20 {
+            if Task.isCancelled { return .cancelled }
+            do {
+                let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
+                let status = inspection.status
+                if ["succeeded", "completed", "failed", "timed_out", "orphaned", "cancelled"].contains(status) {
+                    return .stopped
+                }
+                pill.latestActivity = status == "cancelling" ? "Stopping current run…" : "Waiting for current run to stop…"
+                pill.markContentChanged()
+            } catch {
+                logError("AgentPills: failed to inspect active run before follow-up", error: error)
+                return .failed
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return .failed
     }
 
     /// Force-dismiss a pill.
@@ -1107,8 +1117,6 @@ final class AgentPillsManager: ObservableObject {
             FloatingControlBarManager.shared.leaveActiveAgentSurfaceFromPillDismiss()
         }
         cleanup(pillID: pillID)
-        if hoveredPillID == pillID { hoveredPillID = nil }
-        if pinnedPillID == pillID { pinnedPillID = nil }
     }
 
     func stop(pillID: UUID) {
@@ -1118,7 +1126,7 @@ final class AgentPillsManager: ObservableObject {
             recordingPillID = nil
             PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
         }
-        providersByPill[pillID]?.stopAgent()
+        let runId = pill.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
         pill.status = .stopped
@@ -1133,6 +1141,11 @@ final class AgentPillsManager: ObservableObject {
             surface: .floatingPill(pillId: pillID),
             message: "Stopped by user"
         )
+        if let runId, !runId.isEmpty {
+            Task {
+                _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
+            }
+        }
     }
 
     func markViewed(pillID: UUID) {
@@ -1252,23 +1265,20 @@ final class AgentPillsManager: ObservableObject {
             recordingPillID = nil
             PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
         }
+        let pill = pills.first(where: { $0.id == pillID })
+        let shouldCancelRun = pill?.status.isFinished == false
+        let runId = pill?.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
-        providersByPill[pillID]?.stopAgent()
-        streamsByPill[pillID]?.cancel()
-        streamsByPill[pillID] = nil
-        projectionStreamsByPill[pillID]?.cancel()
-        projectionStreamsByPill[pillID] = nil
-        providersByPill[pillID] = nil
-        messageCountByPill[pillID] = nil
-        systemPromptSuffixByPill[pillID] = nil
+        pendingFollowUpsByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
-    }
-
-    private static func modelForSend(pill: AgentPill, provider: ChatProvider) -> String? {
-        provider.hasBridgeHarnessOverride ? nil : pill.model
+        if shouldCancelRun, let runId, !runId.isEmpty {
+            Task {
+                _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
+            }
+        }
     }
 
     /// Remove all completed (done or failed) pills.
@@ -1353,6 +1363,104 @@ final class AgentPillsManager: ObservableObject {
             let id = pill.id.uuidString.lowercased()
             return id == needle || id.hasPrefix(needle)
         }?.id
+    }
+
+    private func pollCanonicalRun(for pill: AgentPill) async {
+        while !Task.isCancelled {
+            guard pills.contains(where: { $0.id == pill.id }) else { return }
+            guard let runId = pill.canonicalRunId else { return }
+            do {
+                let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(
+                    runId: runId
+                )
+                apply(inspection: inspection, to: pill)
+                if pill.status.isFinished { return }
+            } catch {
+                logError("AgentPills: failed to inspect canonical run \(runId)", error: error)
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+    }
+
+    private func apply(inspection: DesktopCoordinatorAgentRunInspection, to pill: AgentPill) {
+        pill.canonicalSessionId = inspection.sessionId ?? pill.canonicalSessionId
+        pill.canonicalRunId = inspection.runId ?? pill.canonicalRunId
+        switch inspection.status {
+        case "queued", "starting":
+            pill.status = .starting
+            pill.latestActivity = "Starting…"
+        case "running", "waiting_input", "waiting_approval", "cancelling":
+            pill.status = .running
+            pill.latestActivity = inspection.status == "cancelling" ? "Stopping…" : "Working…"
+        case "succeeded", "completed":
+            finish(pill: pill, finalText: inspection.finalText)
+        case "cancelled":
+            pill.status = .stopped
+            pill.latestActivity = "Stopped by user"
+            pill.completedAt = Date()
+            pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        case "failed", "timed_out", "orphaned":
+            // Startup fallback runs before any terminal state is committed so
+            // a directed provider that failed to start can hand the same brief
+            // to the next provider in the chain. Only `failed` runs whose
+            // structured runtime failure proves the adapter never began
+            // executing are eligible (see startupFallbackFailure); timeouts
+            // and orphaned runs may still be executing remotely and must
+            // surface as failures instead.
+            if inspection.status == "failed",
+                let startupFailure = Self.startupFallbackFailure(
+                    projection: AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id)),
+                attemptProviderStartupFallback(for: pill, errorText: startupFailure.displayMessage)
+            {
+                return
+            }
+            fail(pill: pill, errorText: inspection.errorMessage ?? "Agent failed")
+        default:
+            if let finalText = inspection.finalText, !finalText.isEmpty {
+                finish(pill: pill, finalText: finalText)
+            }
+        }
+        pill.markContentChanged()
+        if pill.status.isFinished, pill.viewedAt != nil {
+            scheduleViewedExpiration(for: pill)
+        }
+    }
+
+    private func finish(pill: AgentPill, finalText: String?) {
+        let trimmed = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty {
+            // Real task output arrived — from here on, provider startup
+            // fallback is permanently off for this pill (a later follow-up
+            // turn that fails at startup must fail visibly, not silently
+            // re-run the brief on another provider).
+            pill.markTaskOutputProduced()
+            let finalMessage = ChatMessage(text: trimmed, sender: .ai)
+            pill.aiMessage = finalMessage
+            if pill.conversationMessages.isEmpty {
+                pill.conversationMessages = [
+                    ChatMessage(text: pill.query, sender: .user),
+                    finalMessage,
+                ]
+            } else if !pill.conversationMessages.contains(where: { $0.id == finalMessage.id }) {
+                pill.conversationMessages.append(finalMessage)
+            }
+            pill.latestActivity = String(trimmed.prefix(140))
+        } else {
+            pill.latestActivity = "Done"
+        }
+        pill.status = .done
+        pill.completedAt = Date()
+        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        pill.markContentChanged()
+    }
+
+    private func fail(pill: AgentPill, errorText: String) {
+        pill.status = .failed(errorText)
+        pill.latestActivity = errorText
+        pill.completedAt = Date()
+        Self.ensureFailureMessage(errorText, for: pill)
+        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        pill.markContentChanged()
     }
 
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
@@ -1483,10 +1591,6 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .done
             pill.completedAt = Date()
             pill.markContentChanged()
-            AgentRuntimeStatusStore.shared.recordLocalSuccess(
-                surface: .floatingPill(pillId: pill.id),
-                statusText: trimmedFinalText
-            )
         } else {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()

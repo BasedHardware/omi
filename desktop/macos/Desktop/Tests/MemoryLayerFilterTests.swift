@@ -102,6 +102,50 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertEqual(hidden.tier, .longTerm)
         XCTAssertFalse(hidden.tierIsExplicit)
     }
+
+    func testMemoriesPageCommitsPageCapabilitiesThroughSingleFreshnessHelper() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(source.contains("private func commitMemoryPageCapabilities("))
+        XCTAssertTrue(source.contains("private struct MemoryPageFetchResult"))
+        XCTAssertEqual(
+            source.components(separatedBy: "canonicalLifecycleExposed = page.canonicalLifecycleExposed").count - 1,
+            1,
+            "Page capability metadata should only be assigned inside commitMemoryPageCapabilities()."
+        )
+        XCTAssertEqual(
+            source.components(separatedBy: "deviceScopeSupported = false").count - 1,
+            0,
+            "Device-scope fallback metadata should be returned to commitMemoryPageCapabilities(), not assigned in fetch retry code."
+        )
+        XCTAssertTrue(source.contains("guard commitMemoryPageCapabilities(page, for: token) else"))
+        XCTAssertTrue(source.contains("let fetchResult = try await fetchMemoriesPageDeviceScopeAware("))
+        XCTAssertTrue(source.contains("let page = fetchResult.page"))
+        XCTAssertTrue(source.contains("deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride"))
+    }
+
+    func testMemoriesPageProjectsCacheReadsBeforeDisplay() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(source.contains("private func displayCacheMemories("))
+        XCTAssertFalse(source.contains("memories.append(contentsOf: moreFromCache)"))
+        XCTAssertFalse(source.contains("memories = displayMemories(cachedMemories, for: token)"))
+        XCTAssertFalse(source.contains("memories = displayMemories(mergedMemories, for: token)"))
+        XCTAssertTrue(source.contains("memories.append(contentsOf: visibleMemories)"))
+        XCTAssertTrue(source.contains("memories = displayCacheMemories(cachedMemories, for: token)"))
+        XCTAssertTrue(source.contains("memories = displayCacheMemories(mergedMemories, for: token)"))
+    }
+
+    private func memoriesPageSource() throws -> String {
+        let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let packageDirectory = testsDirectory.deletingLastPathComponent()
+        let sourceURL = packageDirectory
+            .appendingPathComponent("Sources")
+            .appendingPathComponent("MainWindow")
+            .appendingPathComponent("Pages")
+            .appendingPathComponent("MemoriesPage.swift")
+        return try String(contentsOf: sourceURL, encoding: .utf8)
+    }
 }
 
 /// Reversible alias during WS-G client rename (Wave 36).

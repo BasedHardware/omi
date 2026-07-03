@@ -303,6 +303,13 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     }
 
 
+def test_build_report_static_probe_is_read_only_and_blocked():
+    report = build_report()
+    assert report["summary"]["status"] == "BLOCKED"
+    assert report["summary"]["read_only"] is True
+    assert report["summary"]["router_imported"] is False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="Emit the same safe static report with execute=true")

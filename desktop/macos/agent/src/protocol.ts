@@ -133,6 +133,7 @@ export interface QueryScopedOutbound extends OutboundEnvelope, CanonicalCorrelat
 export interface InitMessage extends OutboundEnvelope {
   type: "init";
   sessionId: string;
+  agentControlTools: string[];
 }
 
 export interface TextDeltaMessage extends QueryScopedOutbound {

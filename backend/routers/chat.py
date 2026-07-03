@@ -286,7 +286,20 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    # Skip a malformed/legacy stored message rather than 500 the whole chat send.
+    messages = list(
+        reversed(
+            Message.deserialize_many_safe(
+                chat_db.get_messages(uid, limit=10, app_id=compat_app_id),
+                on_error=lambda record, exc: logger.warning(
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
+                    uid,
+                    type(exc).__name__,
+                ),
+            )
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])

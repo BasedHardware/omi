@@ -2,6 +2,120 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.6",
+      "date": "2026-07-03",
+      "changes": [
+        "Split desktop recording and reconciliation failures into dedicated PostHog events so phone mic reports no longer include desktop finalization errors",
+        "Fixed macOS notification permission registration after app updates",
+        "Voice assistant now knows which languages you speak — pick them in onboarding or Settings → Transcription, and push-to-talk identifies the language each turn instead of guessing (no more Russian questions transcribed as Italian)",
+        "Fixed Apple Sign-In for desktop beta builds.",
+        "Improved macOS updater failure diagnostics so nested Sparkle network errors are classified correctly.",
+        "Fixed Gemini realtime token minting and separated expected realtime idle closes from failure analytics."
+      ]
+    },
+    {
+      "version": "0.12.5",
+      "date": "2026-07-03",
+      "changes": [
+        "Fixed a desktop chat build failure."
+      ]
+    },
+    {
+      "version": "0.12.4",
+      "date": "2026-07-03",
+      "changes": [
+        "Improved desktop agent task reliability, status handling, and top-level awareness of completed subagent work.",
+        "Improved desktop chat continuity so follow-up answers stay tied to the same runtime conversation after restarts or runtime rebinding.",
+        "Fixed background-agent startup during push-to-talk so spawned pills wait for the agent bridge to finish initializing before dispatching.",
+        "Background-agent voice acknowledgements now use an approved phrase pack cached per selected OpenAI voice instead of falling back to arbitrary system speech.",
+        "Fixed subagent status checks so stale orphaned background-agent runs stop prompting recovery after newer successful work covers the same visible goal.",
+        "Fixed visible background-agent pill startup so top-level spawned agents keep canonical runtime context while their runs execute.",
+        "Migrated visible background-agent pills onto canonical Omi agent runtime sessions so push-to-talk and chat-spawned agents share the new control-plane context.",
+        "PTT and floating-bar chat now resolve background-agent requests through a shared delegation resolver before spawning a child agent, preventing vague follow-up briefs from being handed to subagents.",
+        "Hardened direct-control background-agent spawning with a runtime capability handshake, stricter payload contracts, and deterministic floating-pill lifecycle tests.",
+        "Fixed rapid push-to-talk follow-ups losing context by carrying recent voice turns into fresh realtime sessions after barge-in.",
+        "Stabilized push-to-talk barge-in handling so rapid follow-up turns keep conversation context and fall back cleanly if no realtime session owns the commit.",
+        "Improved push-to-talk continuity so follow-up voice turns retain recent Omi chat, voice context, and background-agent handoffs after realtime provider reconnects.",
+        "Realtime voice agents no longer dismiss completed floating agent pills unless the user explicitly asks, and silent background-agent handoffs can receive a same-provider spoken acknowledgement instead of switching to cached local voice.",
+        "Realtime push-to-talk now uses the selected app voice playback service for no-audio fallbacks and background-agent kickoff acknowledgements instead of owning a separate Apple TTS path."
+      ]
+    },
+    {
+      "version": "0.12.3",
+      "date": "2026-07-03",
+      "changes": [
+        "Voice answers powered by Gemini now always use the same voice (Charon) instead of a provider default that could vary"
+      ]
+    },
+    {
+      "version": "0.12.2",
+      "date": "2026-07-03",
+      "changes": [
+        "Removed the outdated \"Neo doesn't include desktop access\" banner and upgrade notices — Neo works on desktop with the freemium tier"
+      ]
+    },
+    {
+      "version": "0.12.1",
+      "date": "2026-07-03",
+      "changes": [
+        "Improved Gemini request timeout handling so stalled desktop AI requests fail faster with a retryable error",
+        "Fixed proactive notifications (and the floating bar popup) still appearing after turning the master Notifications toggle off in Settings"
+      ]
+    },
+    {
+      "version": "0.12.0",
+      "date": "2026-07-03",
+      "changes": [
+        "Major desktop reliability release: rolls up the beta improvements since 0.11.507, including safer updates, cleaner recording recovery, stronger sign-in diagnostics, and fewer stale UI states.",
+        "Unified the floating chat and subagent experience across notched and non-notched Macs, including improved agent rows, chat surfaces, scroll behavior, and settings controls.",
+        "Improved ChatGPT, Claude, OpenClaw, and Hermes connector setup with accepted public OAuth clients, clearer guided setup cards, one-click copy values, and more reliable MCP wiring.",
+        "Hardened Gmail, Google Calendar, Apple Notes, and browser-session connector probes so existing connections are detected more accurately and failures explain the required recovery step.",
+        "Improved push-to-talk and recording reliability with silent-audio recovery, delayed-reply fixes, durable cloud recording reconciliation, and clearer diagnostics for realtime voice issues.",
+        "Improved desktop chat and agent reliability, including clearer failed-agent transcripts, safer tool-call rendering, better follow-up handling, and fixed quota accounting for internal tool loops.",
+        "Improved onboarding and memory import reliability with batched imports, Enter-to-continue support, better second-brain setup flows, and fixes for stale or incorrect memory labels.",
+        "Fixed legacy memory loading issues for long-time accounts, including memory_id alias conflicts and stale Short-term / Long-term labels after backend sync.",
+        "Improved desktop update behavior with stuck-update recovery, foreground-safe relaunch behavior, older-version update prompts, and clearer manual-download guidance.",
+        "Improved Rewind and screen capture reliability with more efficient screenshot history, immediate Capture button state updates, and safer transcript/conversation rendering.",
+        "Fixed home and Apps surfaces, including wearable-connected status, Ask Omi placement, Installed/category filters, cached filter switching, compact menu bar visuals, and one-line memory export text.",
+        "Fixed a crash that could occur when loading conversations or copying a transcript if the account had duplicate speaker profiles."
+      ]
+    },
+    {
+      "version": "0.11.598",
+      "date": "2026-07-03",
+      "changes": [
+        "Fixed the chat jump-to-latest button so it disappears when scrolling reaches the latest message.",
+        "Fixed the notch floating bar settings button so it opens settings reliably",
+        "Fixed OpenClaw memory setup so Omi reloads OpenClaw MCP after wiring Omi memory, uses the current streamable HTTP MCP transport, and tells OpenClaw to call the Omi MCP tools instead of local memory tools"
+      ]
+    },
+    {
+      "version": "0.11.597",
+      "date": "2026-07-02",
+      "changes": [
+        "Apps: fixed Installed and category filters and cached filter results for faster switching",
+        "Displays without a notch now get the full subagent experience: a status gem on the idle pill, an agents row on hover, and the same agent list and chat surface as notched displays",
+        "Onboarding: pressing Enter now activates available Continue actions",
+        "Unified the floating chat experience across notched and non-notched displays while keeping the compact pill on displays without a notch",
+        "Fixed memory labels appearing incorrectly after stale fetches or local cache updates"
+      ]
+    },
+    {
+      "version": "0.11.596",
+      "date": "2026-07-02",
+      "changes": [
+        "Home: moved Ask Omi to the top of the memory export list"
+      ]
+    },
+    {
+      "version": "0.11.595",
+      "date": "2026-07-02",
+      "changes": [
+        "Clear stale Short-term and Long-term memory labels from legacy memory accounts after backend sync",
+        "Home: the Omi Device row now shows Connected when a wearable was used on this account (e.g. paired on mobile), not only when paired to this Mac"
+      ]
+    },
+    {
       "version": "0.11.594",
       "date": "2026-07-02",
       "changes": [

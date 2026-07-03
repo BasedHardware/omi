@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CancelAckMessage, InboundMessage, OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { requestIdFor } from "../src/protocol.js";
+import { AGENT_CONTROL_TOOL_NAMES } from "../src/runtime/control-tools.js";
 
 describe("protocol v2 compatibility", () => {
   it("continues to accept v1 query fields", () => {
@@ -58,6 +59,17 @@ describe("protocol v2 compatibility", () => {
     expect(outbound.type).toBe("cancel_ack");
   });
 
+  it("announces canonical agent-control tools in the init handshake", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const initSendStart = source.indexOf('send({ type: "init"');
+    const initSendBlock = source.slice(initSendStart, source.indexOf("// --- Process stdin messages ---"));
+
+    expect(initSendStart).toBeGreaterThanOrEqual(0);
+    expect(AGENT_CONTROL_TOOL_NAMES).toContain("spawn_background_agent");
+    expect(initSendBlock).toContain("agentControlTools: AGENT_CONTROL_TOOL_NAMES");
+  });
+
   it("defines direct app control as an owner-guarded inbound message", () => {
     const message: InboundMessage = {
       type: "direct_control_tool",
@@ -89,5 +101,32 @@ describe("protocol v2 compatibility", () => {
     expect(legacyBlock).not.toContain("registerSignedDirectControlOwner");
     expect(directBlock).toContain("registerSignedDirectControlOwner");
     expect(directBlock).toContain("releaseDirectControlOwner");
+  });
+
+  it("routes direct app control through the canonical agent-control registry", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const directStart = source.indexOf('case "direct_control_tool"');
+    const directBlock = source.slice(directStart, source.indexOf('case "interrupt"'));
+
+    expect(directStart).toBeGreaterThanOrEqual(0);
+    expect(directBlock).toContain("if (!isAgentControlToolName(control.name))");
+    expect(directBlock).not.toContain("DIRECT_CONTROL_TOOL_NAMES");
+    expect(directBlock).toContain("handleAgentControlToolCall");
+  });
+
+  it("treats top-level background-agent spawn as a long-lived correlated control run", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const correlationStart = source.indexOf("function withControlRunCorrelation");
+    const adapterStart = source.indexOf("function controlRunAdapterId");
+    const longLivedStart = source.indexOf("function isLongLivedControlRun");
+    const correlationBlock = source.slice(correlationStart, adapterStart);
+    const adapterBlock = source.slice(adapterStart, longLivedStart);
+    const longLivedBlock = source.slice(longLivedStart, source.indexOf("function controlToolResultOk"));
+
+    expect(correlationBlock).toContain('"spawn_background_agent"');
+    expect(adapterBlock).toContain('"spawn_background_agent"');
+    expect(longLivedBlock).toContain('name === "spawn_background_agent"');
   });
 });

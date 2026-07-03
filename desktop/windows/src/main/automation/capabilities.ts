@@ -43,6 +43,9 @@ const FORBIDDEN_MODIFIER_CHARS = ['^', '%', '+', '#']
 
 function validateSendKeys(keys: string): ValidationResult {
   keys = keys.normalize('NFKC')
+  if (keys.trim().length === 0) {
+    return { ok: false, reason: 'keys is empty' }
+  }
   for (const c of FORBIDDEN_MODIFIER_CHARS) {
     if (keys.includes(c)) return { ok: false, reason: `modifier chord "${c}" not allowed` }
   }
@@ -85,8 +88,11 @@ export function validateStep(step: AutomationStep): ValidationResult {
       return step.timeoutMs > 0 && step.timeoutMs <= MAX_WAIT_FOR_MS
         ? { ok: true }
         : { ok: false, reason: 'timeoutMs out of range' }
-    case 'send_keys':
+    case 'send_keys': {
+      const r = nonEmpty(step.keys, 'keys')
+      if (!r.ok) return r
       return validateSendKeys(step.keys)
+    }
     case 'click':
       if (step.elementRef && step.elementRef.trim()) return { ok: true }
       if (step.point && ALLOW_RAW_COORDINATE_CLICK) return { ok: true }
@@ -101,7 +107,8 @@ export function validatePlan(plan: AutomationPlan): ValidationResult {
   if (!t.ok) return t
   const target = plan.targetWindow.toLowerCase()
   for (const sub of BLOCKLISTED_WINDOW_SUBSTRINGS) {
-    if (target.includes(sub)) return { ok: false, reason: `target window "${plan.targetWindow}" is blocklisted` }
+    if (target.includes(sub))
+      return { ok: false, reason: `target window "${plan.targetWindow}" is blocklisted` }
   }
   for (let i = 0; i < plan.steps.length; i++) {
     const r = validateStep(plan.steps[i])

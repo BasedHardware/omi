@@ -39,10 +39,11 @@ final class MemoryBankConnectorTests: XCTestCase {
       message,
       "Connected OpenClaw — added the Omi MCP to openclaw.json and a 'search Omi first' note to SOUL.md.")
     XCTAssertTrue(soulContent.contains(MemoryBankConnector.marker))
-    XCTAssertTrue(soulContent.contains("The `omi-memory` MCP server is configured for you"))
+    XCTAssertTrue(soulContent.contains("omi-memory__search_memories"))
+    XCTAssertTrue(soulContent.contains("Do not substitute OpenClaw's local `memory_search`"))
     XCTAssertFalse(soulContent.contains("test-key"))
     XCTAssertTrue(configContent.contains(#""omi-memory""#))
-    XCTAssertTrue(configContent.contains(#""transport":"sse""#))
+    XCTAssertTrue(configContent.contains(#""transport":"streamable-http""#))
     XCTAssertTrue(configContent.contains(#""Authorization":"Bearer test-key""#))
   }
 
@@ -61,7 +62,7 @@ final class MemoryBankConnectorTests: XCTestCase {
 
     let configContent = try String(contentsOf: config, encoding: .utf8)
     XCTAssertTrue(configContent.contains(#""omi-memory""#))
-    XCTAssertTrue(configContent.contains(#""transport":"sse""#))
+    XCTAssertTrue(configContent.contains(#""transport":"streamable-http""#))
     XCTAssertTrue(configContent.contains(#""Authorization":"Bearer test-key""#))
     XCTAssertTrue(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("SOUL.md").path))
   }
@@ -83,6 +84,9 @@ final class MemoryBankConnectorTests: XCTestCase {
       fi
       if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
         printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+        exit 0
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
         exit 0
       fi
       echo "unexpected arguments: $*" >&2
@@ -268,6 +272,66 @@ final class MemoryBankConnectorTests: XCTestCase {
     }
   }
 
+  func testOpenClawConnectReloadsMCPRuntimeAfterConfigUpdate() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    let reloadMarker = tempHome.appendingPathComponent("openclaw-reloaded")
+    let cli = tempHome.appendingPathComponent("reload-openclaw")
+    try """
+      #!/bin/sh
+      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+        exit 1
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+        exit 0
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+        touch "\(reloadMarker.path)"
+        exit 0
+      fi
+      echo "unexpected arguments: $*" >&2
+      exit 2
+      """.write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+
+    _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: reloadMarker.path))
+  }
+
+  func testOpenClawConnectSurfacesReloadFailure() throws {
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    let cli = tempHome.appendingPathComponent("reload-failing-openclaw")
+    try """
+      #!/bin/sh
+      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+        exit 1
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+        exit 0
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+        echo "reload unavailable" >&2
+        exit 7
+      fi
+      echo "unexpected arguments: $*" >&2
+      exit 2
+      """.write(to: cli, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+    MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
+
+    XCTAssertThrowsError(try MemoryBankConnector.connect(.openclaw, key: "test-key")) { error in
+      XCTAssertTrue(error.localizedDescription.contains("OpenClaw MCP config was updated"))
+      XCTAssertTrue(error.localizedDescription.contains("reload unavailable"))
+    }
+  }
+
   func testHermesConnectRequiresRealInstallEvidence() throws {
     let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
     try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
@@ -386,6 +450,9 @@ final class MemoryBankConnectorTests: XCTestCase {
         printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
         exit 0
       fi
+      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+        exit 0
+      fi
       echo "unexpected arguments: $*" >&2
       exit 2
       """
@@ -400,6 +467,9 @@ final class MemoryBankConnectorTests: XCTestCase {
       fi
       if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
         printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+        exit 0
+      fi
+      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
         exit 0
       fi
       echo "unexpected arguments: $*" >&2

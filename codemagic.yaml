@@ -32,13 +32,8 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
+    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
+    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
@@ -184,7 +179,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
-          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -257,13 +251,8 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
+    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
+    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
@@ -429,8 +418,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
-          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -582,7 +569,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
-          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -985,8 +971,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
-          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
 
     artifacts:
@@ -1135,7 +1119,6 @@ workflows:
           shorebird patch ios \
             --flavor prod -- \
             --export-options-plist=$HOME/export_options.plist
-          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1904,8 +1887,6 @@ workflows:
           # Should use bump version automatically by CI
           shorebird patch android \
             --flavor prod
-          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
-          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
