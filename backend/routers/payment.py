@@ -517,12 +517,27 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     )
 
 
+def _validate_price_id(price_id: str) -> None:
+    """Reject a blank/whitespace-only or unknown price_id before any Stripe call.
+
+    A valid price_id must resolve to one of Omi's configured subscription plans (or a known
+    legacy price). This is the boundary check for these payment-sensitive endpoints.
+    """
+    if not price_id or not price_id.strip():
+        raise HTTPException(status_code=400, detail="price_id is required")
+    try:
+        get_plan_type_from_price_id(price_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Unknown price_id")
+
+
 @router.post(
     '/v1/payments/checkout-session',
     response_model=PaymentCheckoutSessionResponse,
     response_model_exclude_none=True,
 )
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+    _validate_price_id(request.price_id)
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
     if not can_pay:
@@ -598,6 +613,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
+    _validate_price_id(request.price_id)
     current_subscription = users_db.get_user_subscription(uid)
 
     if not current_subscription or not current_subscription.stripe_subscription_id:
