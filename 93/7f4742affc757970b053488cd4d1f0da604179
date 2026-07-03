@@ -1,0 +1,30 @@
+desktop/macos/changelog/unreleased/20260703-imessage-auto-reply-app-wide.json
+  s_d9b279e6f46a50::t_35571bb18ecbdd 1-3
+desktop/macos/Desktop/Sources/IMessageInboxStore.swift
+  s_d9b279e6f46a50::t_dec71a3553ce6f 248-258,262-265,270,274-277,279-282,289,303-305
+  s_d9b279e6f46a50::t_43d7c313a4dfd9 7-13
+  s_d9b279e6f46a50::t_b893ae473e1a9b 62-65
+  s_d9b279e6f46a50::t_fedca29d1ffadc 81
+  s_d9b279e6f46a50::t_e4ccc6e4b56e28 72-78,86-88
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageInboxPage.swift
+  s_d9b279e6f46a50::t_9df742535659ac 11
+  s_d9b279e6f46a50::t_d9d7ae0fd60871 36-38
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_d9b279e6f46a50::t_d4d98d21bb2339 606-613,616
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "937f4742affc757970b053488cd4d1f0da604179",
+  "prompts": {},
+  "sessions": {
+    "s_d9b279e6f46a50": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c954d140-dd18-484c-84c7-7e2bf1d146f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
