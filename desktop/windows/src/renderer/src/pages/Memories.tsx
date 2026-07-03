@@ -210,7 +210,13 @@ export function Memories(): React.JSX.Element {
                 the graph on every unrelated UI repaint, pinning GPU at 50-60%.
                 Keeps the card look via a solid tint + hairline border. */}
             <div className="relative h-80 overflow-hidden rounded-2xl border border-white/[0.08] bg-black/40 p-0">
-              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} interactive={false} pauseWhenHidden />
+              <BrainGraph
+                graph={brainGraph}
+                centerNodeId={centerNodeId}
+                interactive={false}
+                pauseWhenHidden
+                frameLoop="demand"
+              />
             </div>
           </div>
         )}
