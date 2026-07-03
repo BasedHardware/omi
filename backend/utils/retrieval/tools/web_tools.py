@@ -306,3 +306,37 @@ async def fetch_url_tool(url: str) -> str:
 
     logger.info(f"fetch_url_tool - fetched {len(text)} chars from {sanitize(url)}")
     return f'Content from {url}:\n\n{text}'
+
+
+async def fetch_url_summary(url: str, max_chars: int = 700) -> str:
+    """Concise summary of a URL for use as chat context.
+
+    Leads with the page's og:title / og:description / <title> — which carry the
+    title and caption even for JS-rendered pages that render almost no body text
+    (Instagram reels, YouTube, TikTok, etc.) — then appends a little readable body
+    text when present. Returns '' on any failure or block; callers treat a URL with
+    no summary as simply un-resolvable rather than surfacing an error.
+    """
+    if not url.startswith(('http://', 'https://')):
+        return ''
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (compatible; Omi-AI-Bot/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
+        'Accept-Language': 'en-US,en;q=0.5',
+    }
+    try:
+        status, content_type, body = await _fetch_page(url, headers)
+    except Exception as e:
+        logger.warning(f"fetch_url_summary - {sanitize(str(e))}")
+        return ''
+    if status != 200 or not body:
+        return ''
+    parts = []
+    meta = _extract_meta_tags(body)
+    if meta:
+        parts.append(meta)
+    if not content_type or any(t in content_type for t in _PARSEABLE_TYPES):
+        text = _html_to_text(body)
+        if text:
+            parts.append(text)
+    return '\n'.join(parts).strip()[:max_chars]

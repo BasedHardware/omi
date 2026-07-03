@@ -31,7 +31,7 @@ from models.whatsapp import (
 )
 from utils import whatsapp_connector
 from utils.executors import db_executor, llm_executor, run_blocking
-from utils.llm import reply_draft
+from utils.llm import reply_draft, reply_media
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -67,8 +67,9 @@ def whatsapp_disconnect(uid: str = Depends(auth.get_current_user_uid)):
 @router.post('/v1/whatsapp/draft-reply', response_model=WhatsAppDraftResponse, tags=['whatsapp'])
 async def whatsapp_draft_reply(req: WhatsAppDraftRequest, uid: str = Depends(auth.get_current_user_uid)):
     thread = [m.dict() for m in req.thread]
+    media_context = await reply_media.build_media_context(uid, thread)
     result = await run_blocking(
-        llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent, req.is_group
+        llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent, req.is_group, media_context
     )
     return WhatsAppDraftResponse(
         draft=result['draft'], ambiguous=result.get('ambiguous', False), abstain=result.get('abstain', False)

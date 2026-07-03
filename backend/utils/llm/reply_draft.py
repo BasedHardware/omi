@@ -279,6 +279,7 @@ def build_reply_prompt(
     style_block: str,
     fingerprint: StyleFingerprint,
     omi_context: str,
+    media_context: str,
     thread_text: str,
     intent: Optional[str],
     is_group: bool,
@@ -293,6 +294,13 @@ def build_reply_prompt(
         f"WHAT OMI KNOWS (use ONLY to answer something {name} actually asked; otherwise ignore it):\n"
         f"<omi_context>\n{_fence(omi_context)}\n</omi_context>\n\n"
         if omi_context
+        else ""
+    )
+    media_block = (
+        f"SHARED LINKS & IMAGES (resolved — this is what the links/photos in the conversation actually are "
+        f"and show; use them to understand what's being discussed, but do NOT invent actions or opinions "
+        f"about them the user never stated):\n<shared_media>\n{_fence(media_context)}\n</shared_media>\n\n"
+        if media_context
         else ""
     )
     intent_line = f"WHAT THE USER WANTS THIS REPLY TO DO: {intent}\n\n" if intent else ""
@@ -335,6 +343,7 @@ def build_reply_prompt(
         f"<user_style>\n{style_block}\n</user_style>\n\n"
         f"WHO {name} IS TO THE USER:\n<person_context>\n{context_text}\n</person_context>\n\n"
         f"{omi_block}"
+        f"{media_block}"
         f"GROUNDING — never CONFIRM or DENY anything you don't have evidence for. This covers: facts about "
         f"the user's life; the user's opinions, feelings, preferences and stances toward people or things; "
         f"actions the user took; and REASONS or explanations for the user's own behavior (e.g. why they "
@@ -352,9 +361,10 @@ def build_reply_prompt(
         f"and you're not sure what the user wants, keep the reply non-committal — in the user's own voice — "
         f"rather than committing them.\n\n"
         f"{intent_line}"
-        f"SHARED MEDIA: the conversation may include links (URLs) and photos/videos (📷/🎥 markers). You may "
-        f"react to them, but do NOT invent what the user did with them or why (that they liked it, made it, "
-        f"know the person, sent it for a reason) unless the context above actually says so — reacting is not "
+        f"SHARED MEDIA: links and photos/videos in the chat are resolved for you in the SHARED LINKS & "
+        f"IMAGES block above (when available) — use that to understand what's being discussed. You may react "
+        f"to them, but do NOT invent what the user did with them or why (that they liked it, made it, know "
+        f"the person, sent it for a reason) unless the context actually says so — seeing a link/photo is not "
         f"a license to fabricate an action or motive.\n\n"
         f"CONVERSATION (oldest first, newest last):\n<conversation>\n{thread_text}\n</conversation>\n\n"
         f"Write {NUM_CANDIDATES} DISTINCT candidate messages the user might send next — vary the wording and "
@@ -489,6 +499,7 @@ def draft_reply(
     thread: List[dict],
     intent: Optional[str] = None,
     is_group: bool = False,
+    media_context: str = '',
 ) -> dict:
     thread = _order_thread(thread)
     person = resolve_person(uid, person_ref)
@@ -544,6 +555,7 @@ def draft_reply(
         style_block=style_block,
         fingerprint=fingerprint,
         omi_context=omi_context,
+        media_context=media_context,
         thread_text=thread_text,
         intent=intent,
         is_group=is_group,
