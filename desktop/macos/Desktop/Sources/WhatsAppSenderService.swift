@@ -1,49 +1,88 @@
 import AppKit
-import CoreGraphics
+import ApplicationServices
 import Foundation
 
 enum WhatsAppSenderError: LocalizedError {
-  /// Group (`@g.us`) or opaque (`@lid`) chat — no phone number to open a 1:1 send
-  /// deep link, so automated send is disabled.
+  /// Group (`@g.us`) or opaque (`@lid`) chat with no dialable number — there's no 1:1
+  /// deep link to open, so automated send is disabled and the user replies manually.
   case invalidTarget
-  /// The reply text was prefilled into WhatsApp's compose box, but Omi couldn't
-  /// press Return for you (Accessibility not granted). The user finishes the send.
-  case manualSendRequired
+  /// Accessibility / Automation permission is missing, so Omi can't read the compose
+  /// box (recipient guard) or press Return. The reply is prefilled; the user grants the
+  /// one-time permission and Omi sends automatically thereafter.
+  case permissionRequired
+  /// Omi could not prove — before the keystroke (compose box holds exactly our reply in
+  /// the target chat) or after it (an outbound row for this chat in WhatsApp's database)
+  /// — that the reply went to the intended person. The send was NOT performed / not
+  /// confirmed; the draft is kept and retried. This is the fail-closed guard that makes
+  /// "never send to the wrong person" hold even when WhatsApp's UI misbehaves.
+  case notConfirmed
   case sendFailed(String)
 
   var errorDescription: String? {
     switch self {
     case .invalidTarget:
       return "Automated send isn't available for this chat. Open WhatsApp and reply manually."
-    case .manualSendRequired:
-      return "Draft ready in WhatsApp — review it and press Enter to send."
+    case .permissionRequired:
+      return
+        "Omi needs Accessibility & Automation access to send in WhatsApp. Grant it in System Settings — then Omi sends for you automatically."
+    case .notConfirmed:
+      return "Couldn't confirm the reply was sent to the right chat — Omi kept the draft and will retry."
     case .sendFailed(let message):
       return message
     }
   }
 }
 
-/// Sends an approved reply through WhatsApp.
+/// Sends an approved reply through WhatsApp, fully automatically, with two guarantees:
+/// it goes to the **intended** person, and it is only reported sent once it **actually**
+/// left. WhatsApp on macOS is a Catalyst app with no send-scripting API, so we drive its
+/// UI — but never blindly.
 ///
-/// Primary path (1:1 only): open `whatsapp://send?phone=<digits>&text=<encoded>` to
-/// prefill the chat's compose box, then — after a short focus settle — press Return
-/// in WhatsApp via a synthetic key event (requires Accessibility). Nothing is auto
-/// sent unless the UI explicitly calls `send`.
+/// Flow (1:1 only; the user never has to press Enter on the happy path):
+///  1. **Prefill** — open `whatsapp://send?phone=<digits>&text=<Y>`. WhatsApp itself
+///     switches to that 1:1 chat and puts `Y` into *its* compose box.
+///  2. **Recipient guard (prevention)** — poll the Accessibility tree until WhatsApp's
+///     compose box (`AXTextArea` "Compose message") holds exactly `Y`. Because WhatsApp
+///     placed our unique reply into the target chat's box, `compose == Y` proves the open
+///     chat *is* the intended recipient. Then activate WhatsApp and re-verify `compose ==
+///     Y` immediately before pressing Return, so nothing can slip in between (minimal
+///     check→act gap). If we can't verify, we **never press** — fail closed.
+///  3. **Send** — press Return via a System Events keystroke (WhatsApp's Catalyst app
+///     ignores raw `CGEvent`; System Events works). WhatsApp is already frontmost and
+///     verified, so the keystroke lands in the target chat's compose box.
+///  4. **Proof (detection + "actually sent")** — poll WhatsApp's own `ChatStorage.sqlite`
+///     for an outbound row in the target chat's JID matching `Y`. Only then is the send
+///     reported successful; otherwise `.notConfirmed` (kept as a draft, retried).
+///  5. **Restore focus** — reactivate whatever app was frontmost before, so sending
+///     doesn't hijack the user's window.
 ///
-/// Fallback (no Accessibility, or a group/opaque chat): prefill only and surface a
-/// "review & press Enter in WhatsApp" prompt so the user completes the send.
+/// Residual (documented, not hidden): between the final compose re-verify and the
+/// keystroke there is a sub-100ms fully-automated window in which no user interaction is
+/// possible. In the astronomically unlikely event a wrong chat were nonetheless targeted,
+/// the `ChatStorage.sqlite` proof (keyed by the target JID) fails and we report the send
+/// unconfirmed rather than falsely "sent".
 enum WhatsAppSenderService {
 
-  /// Delay before pressing Return, giving WhatsApp time to open the chat and focus
-  /// the prefilled compose box.
-  private static let returnPressDelay: TimeInterval = 1.5
+  // Recipient-guard / settle timing.
+  private static let settlePollNanos: UInt64 = 150_000_000  // 0.15s between compose reads
+  private static let settleMaxPolls = 27  // ~4.0s to see the prefill land
+  private static let settleReprefillPoll = 12  // ~1.8s in: nudge the deep link once
+  private static let activatePollNanos: UInt64 = 100_000_000  // 0.10s
+  private static let activateMaxPolls = 10  // ~1.0s for WhatsApp to come frontmost
+  // Post-send DB proof.
+  private static let confirmPollNanos: UInt64 = 400_000_000  // 0.4s
+  private static let confirmMaxPolls = 15  // ~6.0s for WhatsApp to persist the outbound row
+  /// Clock skew subtracted from the pre-send timestamp so the DB proof can't match a
+  /// pre-existing identical outbound message, while still catching the one we just sent.
+  private static let confirmSkewSeconds: Double = 3.0
+  /// The `AXTextArea` for WhatsApp's compose box carries this in its `AXDescription`
+  /// (verified live 2026-07-03; the real value has a leading LTR mark, so match a
+  /// substring rather than the whole string).
+  private static let composeDescriptionMarker = "Compose"
 
-  /// Outcome of the Return keystroke that actually sends the prefilled reply.
   private enum ReturnPress {
     case ok
-    /// Automation/Accessibility permission missing — the reply is prefilled but we
-    /// can't press Enter for the user.
-    case notAuthorized
+    case notAuthorized  // Automation/Accessibility permission missing
     case failed(String)
   }
 
@@ -57,48 +96,80 @@ enum WhatsAppSenderService {
   }
 
   /// Whether Omi can fully automate the send (a dialable phone AND Accessibility
-  /// granted). `phone` is the chat's resolved dialable number (from the reader),
-  /// which for `@lid` privacy chats isn't derivable from the JID. When false, the
-  /// send path degrades to prefill-only.
+  /// granted). `phone` is the chat's resolved dialable number (from the reader), which
+  /// for `@lid` privacy chats isn't derivable from the JID.
   static func canAutoSend(chatID: String, phone: String? = nil) -> Bool {
     (phone ?? phoneDigits(forChatID: chatID)) != nil && WhatsAppPermissionPolicy.accessibilityGranted()
   }
 
-  /// Prefill + (best-effort) send. Only ever called after the user taps Send, or
-  /// for chats the user explicitly enabled auto-reply on. `phone` overrides the
-  /// JID-derived number so `@lid` (new-contact) chats — whose dialable number lives
-  /// in the session's identifier, not the JID — can still be sent to. Runs on the
-  /// main actor because NSWorkspace/CGEvent prefer the main run loop.
+  /// Prefill → verified auto-send → DB-confirmed. Returns normally only when the reply
+  /// is proven sent to the intended chat; otherwise throws (see `WhatsAppSenderError`).
+  /// `phone` overrides the JID-derived number so `@lid` (new-contact) chats can be sent
+  /// to. Runs on the main actor because NSWorkspace/AX prefer the main run loop; the
+  /// osascript keystroke and the DB read are dispatched off-main so the UI stays live.
   @MainActor
   static func send(text: String, toChatID chatID: String, phone explicitPhone: String? = nil) async throws {
+    let reply = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !reply.isEmpty else { throw WhatsAppSenderError.notConfirmed }
+
     let digits = explicitPhone?.filter { $0.isNumber }
     guard let phone = (digits?.count ?? 0) >= 7 ? digits : phoneDigits(forChatID: chatID) else {
-      // Group / no number — can't deep-link a 1:1 send. Bring WhatsApp forward
-      // so the user can reply manually, then report the limitation.
+      // Group / no number — can't deep-link a 1:1 send. Bring WhatsApp forward for a
+      // manual reply and report the limitation.
       activateWhatsApp()
       throw WhatsAppSenderError.invalidTarget
     }
 
-    try prefill(text: text, phone: phone)
+    // Accessibility is required both to read the compose box (recipient guard) and to
+    // press Return. Without it we cannot safely auto-send, so prefill for a manual send
+    // and ask for the one-time grant.
+    guard WhatsAppPermissionPolicy.accessibilityGranted() else {
+      try prefill(text: reply, phone: phone)
+      throw WhatsAppSenderError.permissionRequired
+    }
 
-    // Let WhatsApp open the chat and focus the prefilled compose box, then press
-    // Return via System Events (osascript) to actually send. We AWAIT the result so
-    // the UI only marks the reply sent when it truly was — a prefill-without-send
-    // (missing Automation permission, etc.) surfaces as manualSendRequired instead
-    // of a silent "sent" that never left the compose box.
-    try? await Task.sleep(nanoseconds: UInt64(returnPressDelay * 1_000_000_000))
+    guard let app = runningWhatsApp() else {
+      throw WhatsAppSenderError.sendFailed("WhatsApp isn't running.")
+    }
+
+    // Restore the user's frontmost app whatever the outcome, so sending never leaves
+    // WhatsApp stealing focus.
+    let priorFront = NSWorkspace.shared.frontmostApplication
+    defer { restoreFrontmost(priorFront) }
+
+    // Floor for the post-send DB proof, in WhatsApp's reference-date seconds.
+    let sinceRef = Date().timeIntervalSinceReferenceDate - confirmSkewSeconds
+
+    try prefill(text: reply, phone: phone)
+
+    // Recipient guard: wait for WhatsApp to navigate + prefill, proven by compose == reply.
+    guard await waitForComposeMatch(reply: reply, phone: phone, pid: app.processIdentifier) else {
+      throw WhatsAppSenderError.notConfirmed
+    }
+
+    // Bring WhatsApp frontmost and re-verify compose == reply the instant before the
+    // keystroke, closing the check→act gap.
+    guard await activateAndReverify(reply: reply, pid: app.processIdentifier) else {
+      throw WhatsAppSenderError.notConfirmed
+    }
+
     switch await pressReturnInWhatsApp() {
     case .ok:
-      return
+      break
     case .notAuthorized:
-      throw WhatsAppSenderError.manualSendRequired
+      throw WhatsAppSenderError.permissionRequired
     case .failed(let message):
       throw WhatsAppSenderError.sendFailed(message)
     }
+
+    // Ground-truth proof the reply landed in the target chat's JID.
+    guard await confirmSent(reply: reply, chatID: chatID, sinceRef: sinceRef) else {
+      throw WhatsAppSenderError.notConfirmed
+    }
   }
 
-  /// Opens the WhatsApp deep link that switches to the 1:1 chat and prefills the
-  /// compose box with `text` (percent-encoded). Does not send.
+  /// Opens the WhatsApp deep link that switches to the 1:1 chat and prefills the compose
+  /// box with `text` (percent-encoded). Does not send.
   @MainActor
   static func prefill(text: String, phone: String) throws {
     var components = URLComponents()
@@ -114,6 +185,97 @@ enum WhatsAppSenderService {
     NSWorkspace.shared.open(url)
   }
 
+  // MARK: - Recipient guard (Accessibility)
+
+  /// Polls WhatsApp's compose box until it holds exactly `reply` (proof the target 1:1
+  /// is open and prefilled) or times out. Re-issues the deep link once mid-way if
+  /// navigation stalled. AX reads work even while WhatsApp is in the background.
+  @MainActor
+  private static func waitForComposeMatch(reply: String, phone: String, pid: pid_t) async -> Bool {
+    for poll in 0..<settleMaxPolls {
+      if poll == settleReprefillPoll {
+        try? prefill(text: reply, phone: phone)  // nudge once if it hasn't landed yet
+      }
+      if let value = composeBoxValue(pid: pid), composeMatches(value, reply) {
+        return true
+      }
+      try? await Task.sleep(nanoseconds: settlePollNanos)
+    }
+    return false
+  }
+
+  /// Brings WhatsApp frontmost (required for the keystroke to land there) and confirms
+  /// compose still equals `reply`, as the final check before pressing Return.
+  @MainActor
+  private static func activateAndReverify(reply: String, pid: pid_t) async -> Bool {
+    activateWhatsApp()
+    for _ in 0..<activateMaxPolls {
+      if let app = runningWhatsApp(), app.isActive,
+        let value = composeBoxValue(pid: pid), composeMatches(value, reply)
+      {
+        return true
+      }
+      try? await Task.sleep(nanoseconds: activatePollNanos)
+    }
+    return false
+  }
+
+  private static func composeMatches(_ composeValue: String, _ reply: String) -> Bool {
+    composeValue.trimmingCharacters(in: .whitespacesAndNewlines)
+      == reply.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// Reads WhatsApp's compose box value: the `AXTextArea` whose `AXDescription` contains
+  /// "Compose message". Returns nil when it can't be found (no chat open) or is empty.
+  private static func composeBoxValue(pid: pid_t) -> String? {
+    findComposeValue(AXUIElementCreateApplication(pid), depth: 0)
+  }
+
+  private static func findComposeValue(_ element: AXUIElement, depth: Int) -> String? {
+    if depth > 40 { return nil }
+    if axString(element, kAXRoleAttribute) == "AXTextArea",
+      let desc = axString(element, kAXDescriptionAttribute), desc.contains(composeDescriptionMarker)
+    {
+      return axString(element, kAXValueAttribute)
+    }
+    for child in axChildren(element) {
+      if let value = findComposeValue(child, depth: depth + 1) { return value }
+    }
+    return nil
+  }
+
+  private static func axString(_ element: AXUIElement, _ attribute: String) -> String? {
+    var value: AnyObject?
+    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+      return nil
+    }
+    return value as? String
+  }
+
+  private static func axChildren(_ element: AXUIElement) -> [AXUIElement] {
+    var value: AnyObject?
+    guard
+      AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &value) == .success
+    else { return [] }
+    return (value as? [AXUIElement]) ?? []
+  }
+
+  // MARK: - Post-send proof
+
+  /// Polls `ChatStorage.sqlite` (via the reader) until the outbound row for this send
+  /// appears in the target chat's JID, or times out.
+  private static func confirmSent(reply: String, chatID: String, sinceRef: Double) async -> Bool {
+    for _ in 0..<confirmMaxPolls {
+      if let confirmed = try? await WhatsAppReaderService.shared.confirmSent(
+        text: reply, chatID: chatID, sinceReferenceSeconds: sinceRef), confirmed
+      {
+        return true
+      }
+      try? await Task.sleep(nanoseconds: confirmPollNanos)
+    }
+    return false
+  }
+
   // MARK: - Helpers
 
   private static func runningWhatsApp() -> NSRunningApplication? {
@@ -127,20 +289,24 @@ enum WhatsAppSenderService {
     runningWhatsApp()?.activate(options: [.activateIgnoringOtherApps])
   }
 
-  /// Presses Return in WhatsApp to send the prefilled reply. WhatsApp on macOS is a
-  /// Catalyst app that ignores raw `CGEvent` key posts, but does honor a System
-  /// Events keystroke — so we drive it through `osascript`, which atomically
-  /// activates WhatsApp, lets the prefilled compose field focus, then keys Return.
-  /// Requires Accessibility (already required) and Automation permission for the
-  /// bundle to control System Events/WhatsApp. Fire-and-forget.
+  /// Reactivate the app that was frontmost before the send (unless it was WhatsApp), so
+  /// automated sending doesn't leave the user's window buried.
+  @MainActor
+  private static func restoreFrontmost(_ app: NSRunningApplication?) {
+    guard let app, app.bundleIdentifier != WhatsAppPermissionPolicy.whatsappBundleID,
+      !app.isTerminated
+    else { return }
+    app.activate(options: [.activateIgnoringOtherApps])
+  }
+
+  /// Presses Return in WhatsApp to send the prefilled, recipient-verified reply. WhatsApp
+  /// is already frontmost; System Events keys Return into it (Catalyst ignores raw
+  /// `CGEvent`). Requires Automation permission to control System Events. Runs off the
+  /// main run loop so the UI stays responsive.
   private static func pressReturnInWhatsApp() async -> ReturnPress {
     await withCheckedContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
-        let script = """
-          tell application "WhatsApp" to activate
-          delay 0.8
-          tell application "System Events" to key code 36
-          """
+        let script = "tell application \"System Events\" to key code 36"
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         proc.arguments = ["-e", script]
@@ -163,7 +329,7 @@ enum WhatsAppSenderService {
         NSLog("WhatsApp send: osascript failed status=\(proc.terminationStatus) err=\(errText)")
         let lower = errText.lowercased()
         // -1743 / "not allowed"/"not authorized"/"assistive" all mean the app lacks
-        // Automation (AppleEvents) permission to drive System Events / WhatsApp.
+        // Automation (AppleEvents) permission to drive System Events.
         if errText.contains("-1743") || lower.contains("not allow") || lower.contains("not authoriz")
           || lower.contains("assistive")
         {

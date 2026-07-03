@@ -1,3 +1,3 @@
 {
-  "change": "Fixed WhatsApp replies that prefilled in WhatsApp but never actually sent — Omi now confirms the send fired and, if it needs Automation permission, tells you to press Enter instead of silently marking it sent"
+  "change": "WhatsApp replies now send fully automatically and safely — Omi verifies the right chat is open before sending and confirms against WhatsApp's own record that the message actually landed in that chat, so it never sends to the wrong person or marks an unsent reply as sent"
 }

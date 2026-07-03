@@ -142,6 +142,37 @@ actor WhatsAppReaderService {
     }
   }
 
+  /// Ground-truth proof that a reply was actually sent to the intended chat.
+  ///
+  /// Returns true when WhatsApp's own database contains an outbound (`ZISFROMME = 1`)
+  /// text row whose body equals `text`, in the chat identified by `chatID` (its
+  /// `ZCONTACTJID`), dated at/after `sinceReferenceSeconds` (seconds since the 2001
+  /// reference date, matching `ZMESSAGEDATE`). Because the row is keyed by the chat's
+  /// JID, a match proves both that the message physically left AND that it landed in
+  /// the correct conversation — independent of the UI keystroke path that fired it.
+  /// `WhatsAppSenderService` uses this as the post-send confirmation before reporting
+  /// a reply as sent. The `sinceReferenceSeconds` floor (set just before the send)
+  /// prevents matching a pre-existing identical outbound message.
+  func confirmSent(text: String, chatID: String, sinceReferenceSeconds: Double) throws -> Bool {
+    let dbQueue = try openDatabase()
+    let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !needle.isEmpty, !chatID.isEmpty else { return false }
+    return try dbQueue.read { db -> Bool in
+      let sql = """
+          SELECT COUNT(*)
+          \(SQL.from)
+          WHERE m.ZISFROMME = 1
+            AND s.ZCONTACTJID = ?
+            AND m.ZMESSAGEDATE >= ?
+            AND TRIM(m.ZTEXT) = ?
+        """
+      let count =
+        try Int.fetchOne(
+          db, sql: sql, arguments: [chatID, sinceReferenceSeconds, needle]) ?? 0
+      return count > 0
+    }
+  }
+
   /// Recent inbound threads awaiting a reply, for the inbox. Does NOT advance the
   /// ingest cursor — this is a read-only view over recent history.
   ///

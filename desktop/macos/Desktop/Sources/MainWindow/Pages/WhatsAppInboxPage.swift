@@ -269,18 +269,20 @@ private struct ChatDetailView: View {
     defer { isSending = false }
     do {
       try await WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: chat.dialablePhone)
-      // Only reflect a sent message once the Return keystroke actually fired. Pin the
-      // append to THIS chat: send is awaited, so the user may have switched chats
-      // during it, and the no-arg appendSent writes to whatever is selected now.
+      // Only reflect a sent message once WhatsApp's own database confirms it landed in
+      // THIS chat. Pin the append to `chat.id`: send is awaited, so the user may have
+      // switched chats during it, and the no-arg appendSent writes to whatever is
+      // selected now.
       store.appendSent(text, to: chat.id)
       draft = ""
     } catch let error as WhatsAppSenderError {
       switch error {
-      case .manualSendRequired, .invalidTarget:
-        // Not a failure — the reply is prefilled in WhatsApp (or the user must open
-        // the chat). Keep the draft and guide them to finish the send.
+      case .invalidTarget, .permissionRequired:
+        // Not a failure — the reply is prefilled in WhatsApp; guide the user to finish
+        // (open the chat / grant the one-time permission). Keep the draft.
         infoText = error.errorDescription
-      case .sendFailed:
+      case .notConfirmed, .sendFailed:
+        // The send wasn't confirmed — keep the draft so nothing is lost.
         errorText = error.errorDescription
       }
     } catch {
