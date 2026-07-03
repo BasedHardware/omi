@@ -29,6 +29,8 @@ The first required surface covers migration-sensitive gateway, config, memory re
 - `pusher/main.py`
 - adjacent memory boundaries:
   - `database/__init__.py`
+  - `database/_client.py`
+  - `database/app_review_config.py`
   - `database/document_ids.py`
   - `database/firestore_cache_metrics.py`
   - `database/firestore_cache.py`
