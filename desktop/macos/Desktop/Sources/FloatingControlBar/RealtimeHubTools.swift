@@ -116,7 +116,25 @@ enum RealtimeHubTools {
     )
   }
 
-  static func systemInstruction(aboutUser: String, topLevelConversationContext: String = "") -> String {
+  /// One line telling the model which languages the user actually speaks, so a short or
+  /// ambiguous utterance is never interpreted (or transcribed, where the provider allows
+  /// it) as some third language. Empty when the user has only the default set.
+  private static func userLanguagesLine(_ codes: [String]) -> String {
+    guard !codes.isEmpty else { return "" }
+    let names = codes.map { code in
+      Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
+    }
+    let primary = names[0]
+    let list = names.joined(separator: ", ")
+    return
+      "The user speaks ONLY these languages: \(list) (primary: \(primary)). Their speech "
+      + "is always in one of them — if an utterance seems to be in any other language, it "
+      + "was misheard; interpret it as \(primary). "
+  }
+
+  static func systemInstruction(
+    aboutUser: String, topLevelConversationContext: String = "", userLanguages: [String] = []
+  ) -> String {
     let rawContext = topLevelConversationContext.trimmingCharacters(in: .whitespacesAndNewlines)
     // Escape angle brackets so user-controlled transcript text cannot break
     // out of the XML-like wrapper and inject instructions.
@@ -141,7 +159,7 @@ enum RealtimeHubTools {
     conversationally. Default to one or two sentences, but when the user asks for \
     something longer or creative (a story, a detailed explanation, brainstorming), \
     give the full answer yourself — don't shorten it and don't offload it. \
-    Reply in the same language the user is speaking.
+    \(userLanguagesLine(userLanguages))Reply in the same language the user is speaking.
 
     \(aboutUser)
     \(continuityBlock)
