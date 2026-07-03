@@ -174,6 +174,15 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     self == .agents
   }
 
+  var hasLocallyVerifiableLiveSetup: Bool {
+    switch self {
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return true
+    case .notion, .obsidian, .chatgpt, .claude, .gemini:
+      return false
+    }
+  }
+
   /// Whether this destination offers the classic copy/paste memory-pack export.
   var supportsMemoryPack: Bool {
     switch self {

@@ -124,10 +124,10 @@ private struct MemoryExportRow: View {
 
   private var actionTitle: String {
     if destination.supportsAgentSetup {
-      return status.hasConnection ? "Connected" : "Connect"
+      return isLiveSetupConnected ? "Connected" : "Connect"
     }
     if destination.supportsMCP {
-      return status.hasConnection ? "Connected" : "Connect"
+      return isLiveSetupConnected ? "Connected" : "Connect"
     }
     switch destination {
     case .obsidian:
@@ -135,6 +135,10 @@ private struct MemoryExportRow: View {
     case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return "Open"
     }
+  }
+
+  private var isLiveSetupConnected: Bool {
+    destination.hasLocallyVerifiableLiveSetup && status.hasConnection
   }
 
   var body: some View {
@@ -158,7 +162,7 @@ private struct MemoryExportRow: View {
         Spacer(minLength: 12)
 
         ImportConnectorActionButton(
-          title: actionTitle, isConnected: status.hasConnection)
+          title: actionTitle, isConnected: isLiveSetupConnected)
       }
       .padding(.horizontal, 14)
       .padding(.vertical, 11)
@@ -621,10 +625,10 @@ struct MemoryExportDestinationSheet: View {
           .foregroundColor(OmiColors.textPrimary)
         Text("MCP + CLI")
           .scaledFont(size: 9, weight: .bold)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.success)
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
-          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
+          .background(Capsule().fill(OmiColors.success.opacity(0.15)))
       }
       Text(
         "Copy one setup prompt for your agent. It connects Omi memories through MCP, turns on local Desktop access through the Omi CLI, and includes a short Omi guide the agent can keep."
@@ -639,7 +643,7 @@ struct MemoryExportDestinationSheet: View {
     HStack(alignment: .top, spacing: 8) {
       Image(systemName: "checkmark.circle.fill")
         .scaledFont(size: 12)
-        .foregroundColor(OmiColors.purplePrimary)
+        .foregroundColor(OmiColors.success)
         .padding(.top, 1)
       Text(text)
         .scaledFont(size: 12)
@@ -694,16 +698,16 @@ struct MemoryExportDestinationSheet: View {
       HStack(spacing: 8) {
         Image(systemName: "sparkles")
           .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.textSecondary)
         Text("Let Omi do it")
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text("FASTEST")
           .scaledFont(size: 9, weight: .bold)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.success)
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
-          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
+          .background(Capsule().fill(OmiColors.success.opacity(0.15)))
       }
       Text(executeBlockSubtitle)
         .scaledFont(size: 12)
@@ -732,7 +736,7 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var isConnected: Bool {
-    statuses[destination]?.hasConnection == true
+    destination.hasLocallyVerifiableLiveSetup && statuses[destination]?.hasConnection == true
   }
 
   /// Labeled header that makes the automatic (MCP) vs manual (pack) choice obvious.

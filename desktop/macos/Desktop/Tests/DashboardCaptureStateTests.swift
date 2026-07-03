@@ -122,7 +122,8 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(source.contains("var onSelectApp: ((OmiApp) -> Void)? = nil"))
         XCTAssertTrue(source.contains("var onSelectConnector: ((ImportConnector) -> Void)? = nil"))
         XCTAssertTrue(source.contains("var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil"))
-        XCTAssertTrue(source.contains("if let onDismiss {\n                DismissButton(action: onDismiss)"))
+        XCTAssertTrue(source.contains("private var dismissControl: some View"))
+        XCTAssertTrue(source.contains("DismissButton(action: onDismiss)"))
         XCTAssertTrue(source.contains("case .imports:\n                                ImportsSection(statusStore: connectorStatusStore)"))
         XCTAssertTrue(source.contains("case .exports:\n                                ExportsSection(statuses: exportStatuses)"))
         XCTAssertTrue(source.contains("private func selectApp(_ app: OmiApp)"))
@@ -135,7 +136,18 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(source.contains("onSelectDestination(destination)"))
         XCTAssertTrue(source.contains("selectedExportDestination = destination"))
         XCTAssertTrue(source.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
+        XCTAssertTrue(source.contains("ViewThatFits(in: .horizontal)"))
+        XCTAssertTrue(source.contains("private var searchField: some View"))
+        XCTAssertTrue(source.contains("private var filterControls: some View"))
         XCTAssertFalse(source.contains("struct AppsCatalogContent: View"))
+    }
+
+    func testConnectorSetupSurfacesDoNotUsePurpleAccents() throws {
+        let memoryExportSheet = try source(named: "MemoryExportDestinationSheet.swift")
+        let apps = try appsSource()
+
+        XCTAssertFalse(memoryExportSheet.contains("purplePrimary"))
+        XCTAssertFalse(apps.contains("purplePrimary"))
     }
 
     private func dashboardSource() throws -> String {
@@ -147,11 +159,15 @@ final class DashboardCaptureStateTests: XCTestCase {
     }
 
     private func appsSource() throws -> String {
+        try source(named: "AppsPage.swift")
+    }
+
+    private func source(named fileName: String) throws -> String {
         let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        let appsURL = testsURL
+        let sourceURL = testsURL
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/MainWindow/Pages/AppsPage.swift")
-        return try String(contentsOf: appsURL, encoding: .utf8)
+            .appendingPathComponent("Sources/MainWindow/Pages/\(fileName)")
+        return try String(contentsOf: sourceURL, encoding: .utf8)
     }
 
     private func methodBody(named name: String, in source: String) throws -> String {

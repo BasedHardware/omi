@@ -62,6 +62,16 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertTrue(status.hasConnection)
   }
 
+  func testOnlyLocalAgentSetupDestinationsDisableAfterVerifiedConnection() {
+    XCTAssertFalse(MemoryExportDestination.chatgpt.hasLocallyVerifiableLiveSetup)
+    XCTAssertFalse(MemoryExportDestination.claude.hasLocallyVerifiableLiveSetup)
+    XCTAssertTrue(MemoryExportDestination.codex.hasLocallyVerifiableLiveSetup)
+    XCTAssertTrue(MemoryExportDestination.claudeCode.hasLocallyVerifiableLiveSetup)
+    XCTAssertTrue(MemoryExportDestination.openclaw.hasLocallyVerifiableLiveSetup)
+    XCTAssertTrue(MemoryExportDestination.hermes.hasLocallyVerifiableLiveSetup)
+    XCTAssertTrue(MemoryExportDestination.agents.hasLocallyVerifiableLiveSetup)
+  }
+
   func testExistingCodexMCPConfigMarksCodexConnected() async throws {
     storeOwnedMCPKey()
     let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)

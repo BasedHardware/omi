@@ -379,28 +379,55 @@ struct AppsPage: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 10) {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(OmiColors.textTertiary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                searchField
+                    .layoutPriority(1)
+                filterControls
+                Spacer(minLength: 8)
+                createAppButton
+                dismissControl
+            }
 
-                TextField("Search apps...", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    searchField
+                    dismissControl
+                }
 
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
+                HStack(spacing: 10) {
+                    filterControls
+                    Spacer(minLength: 8)
+                    createAppButton
                 }
             }
-            .padding(10)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(10)
+        }
+    }
 
-            // Filter toggles
+    private var searchField: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(OmiColors.textTertiary)
+
+            TextField("Search apps...", text: $searchText)
+                .textFieldStyle(.plain)
+                .foregroundColor(OmiColors.textPrimary)
+
+            if !searchText.isEmpty {
+                Button(action: { searchText = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .background(OmiColors.backgroundSecondary)
+        .cornerRadius(10)
+    }
+
+    private var filterControls: some View {
+        HStack(spacing: 10) {
             FilterToggle(
                 icon: "arrow.down.circle",
                 label: "Installed",
@@ -411,77 +438,81 @@ struct AppsPage: View {
                 Task { await appProvider.searchApps() }
             }
 
-            // Category dropdown
-            Menu {
+            categoryMenu
+        }
+    }
+
+    private var categoryMenu: some View {
+        Menu {
+            Button(action: {
+                viewAllSection = nil
+                appProvider.clearCategoryFilter()
+                Task { await appProvider.searchApps() }
+            }) {
+                HStack {
+                    Text("All Categories")
+                    if appProvider.selectedCategory == nil {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+
+            Divider()
+
+            ForEach(appProvider.categories) { category in
                 Button(action: {
                     viewAllSection = nil
-                    appProvider.clearCategoryFilter()
+                    appProvider.selectedCategory = category.id
                     Task { await appProvider.searchApps() }
                 }) {
                     HStack {
-                        Text("All Categories")
-                        if appProvider.selectedCategory == nil {
+                        Text(category.title)
+                        if appProvider.selectedCategory == category.id {
                             Image(systemName: "checkmark")
                         }
                     }
                 }
-
-                Divider()
-
-                ForEach(appProvider.categories) { category in
-                    Button(action: {
-                        viewAllSection = nil
-                        appProvider.selectedCategory = category.id
-                        Task { await appProvider.searchApps() }
-                    }) {
-                        HStack {
-                            Text(category.title)
-                            if appProvider.selectedCategory == category.id {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                        .scaledFont(size: 12)
-                    Text(selectedCategoryLabel)
-                        .scaledFont(size: 13)
-                    Image(systemName: "chevron.down")
-                        .scaledFont(size: 9, weight: .medium)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
-                .foregroundColor(OmiColors.textPrimary)
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
-                )
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-
-            Spacer()
-
-            // Create buttons (compact)
-            HStack(spacing: 8) {
-                SmallHeaderButton(
-                    icon: "app.badge.fill",
-                    label: "Create App",
-                    color: OmiColors.textSecondary
-                ) {
-                    if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .scaledFont(size: 12)
+                Text(selectedCategoryLabel)
+                    .scaledFont(size: 13)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .scaledFont(size: 9, weight: .medium)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(OmiColors.backgroundSecondary)
+            .foregroundColor(OmiColors.textPrimary)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
 
-            if let onDismiss {
-                DismissButton(action: onDismiss)
+    private var createAppButton: some View {
+        SmallHeaderButton(
+            icon: "app.badge.fill",
+            label: "Create App",
+            color: OmiColors.textSecondary
+        ) {
+            if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
+                NSWorkspace.shared.open(url)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var dismissControl: some View {
+        if let onDismiss {
+            DismissButton(action: onDismiss)
         }
     }
 
@@ -2311,7 +2342,7 @@ struct AppFilterSheet: View {
                             .foregroundColor(OmiColors.textPrimary)
 
                         Toggle("Show installed only", isOn: $appProvider.showInstalledOnly)
-                            .toggleStyle(SwitchToggleStyle(tint: OmiColors.purplePrimary))
+                            .toggleStyle(SwitchToggleStyle(tint: OmiColors.success))
                             .foregroundColor(OmiColors.textSecondary)
                             .onChange(of: appProvider.showInstalledOnly) { _, _ in
                                 Task { await appProvider.searchApps() }

@@ -190,7 +190,7 @@ enum MemoryBankConnector {
         arguments: ["mcp", "reload"]
       )
     } catch {
-      let message = sanitizeOpenClawError(error.localizedDescription)
+      let message = sanitizeCommandError(error.localizedDescription)
       throw ConnectError.invalidConfig(
         "OpenClaw MCP config was updated, but OpenClaw rejected MCP reload for \(displayPath(for: configURL)): \(message)")
     }

@@ -200,7 +200,7 @@ private struct ConnectOptionCard: View {
   }
 
   private var isConnected: Bool {
-    statuses[destination]?.hasConnection == true
+    destination.hasLocallyVerifiableLiveSetup && statuses[destination]?.hasConnection == true
   }
 
   private func prepareMCPKeyIfNeeded() async {
