@@ -71,6 +71,22 @@ describe('memorySource', () => {
   it('prefers a tag over a conflicting evidence record', () => {
     expect(memorySource(mem('1', { tags: [SCREEN_TAG], evidence: [ev()] }))).toBe('screen')
   })
+  it('prefers manually_added / category=manual over a conflicting transcription signal', () => {
+    // Defense in depth for the create flow: even if the evidence record says
+    // 'transcription', an explicit manual marker on the record wins — a
+    // user-typed memory must never be labeled "Heard in a conversation".
+    expect(memorySource(mem('1', { manually_added: true, evidence: [ev()] }))).toBe('manual')
+    expect(memorySource(mem('2', { category: 'manual', evidence: [ev()] }))).toBe('manual')
+    expect(
+      memorySource(
+        mem('3', {
+          manually_added: true,
+          conversation_id: 'c1',
+          evidence: [ev({ source_type: 'conversation', source_signal: 'transcription' })]
+        })
+      )
+    ).toBe('manual')
+  })
 })
 
 describe('withinDateRange', () => {

@@ -70,7 +70,10 @@ export function Memories(): React.JSX.Element {
     if (!text || saving) return
     setSaving(true)
     try {
-      await createMemory(text)
+      // category 'manual' is the provenance stamp: the backend derives
+      // manually_added from it (createMemoryBody defaults it too — explicit
+      // here because this compose box is exactly the user-typed path).
+      await createMemory(text, { category: 'manual' })
       toast('Memory created', { tone: 'info' })
       closeCompose()
     } catch (e) {

@@ -63,9 +63,24 @@ function extractList(data: unknown): Memory[] {
 }
 
 // Optional extra fields for a created memory. `tags` carries provenance (e.g.
-// 'omi-app-index'); `category` is sent best-effort — the server may ignore or
-// reassign it, so UI coloring must not depend on it.
+// 'omi-app-index'); `category` carries provenance too — see createMemoryBody.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
+
+// The POST /v3/memories body for a memory created through this hook. The
+// category defaults to 'manual', and that default is load-bearing provenance:
+// the backend honors a client-supplied category and DERIVES manually_added
+// from category === 'manual'; without it the record stores category
+// 'interesting', manually_added false, and an evidence source_signal of
+// 'transcription' (backend/routers/memories.py create_memory +
+// models/memories.py MemoryDB.from_memory) — which would make the provenance
+// UI label a user-typed memory "Heard in a conversation". Importers creating
+// non-manual memories pass their own category in `extra`.
+export function createMemoryBody(
+  content: string,
+  extra?: CreateMemoryExtra
+): { content: string } & CreateMemoryExtra {
+  return { content, ...extra, category: extra?.category ?? 'manual' }
+}
 
 // Match the server KG's build budget (it's built from up to 500 memories), so
 // the brain map can scope itself to roughly the same memory set the graph was
@@ -136,7 +151,7 @@ export function useMemories(): {
   const createMemory = async (content: string, extra?: CreateMemoryExtra): Promise<void> => {
     const text = content.trim()
     if (!text) return
-    await omiApi.post('/v3/memories', { content: text, ...extra })
+    await omiApi.post('/v3/memories', createMemoryBody(text, extra))
     publish(await fetchMemories())
   }
 
