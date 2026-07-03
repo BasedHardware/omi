@@ -133,10 +133,6 @@ enum WhatsAppSenderService {
       throw WhatsAppSenderError.permissionRequired
     }
 
-    guard let app = runningWhatsApp() else {
-      throw WhatsAppSenderError.sendFailed("WhatsApp isn't running.")
-    }
-
     // Restore the user's frontmost app whatever the outcome, so sending never leaves
     // WhatsApp stealing focus.
     let priorFront = NSWorkspace.shared.frontmostApplication
@@ -144,15 +140,21 @@ enum WhatsAppSenderService {
 
     // Row-id baseline for the post-send proof: only a message created after this counts
     // as the one we're about to send (so the proof can't match a pre-existing message).
-    let baselineRowID = (try? await WhatsAppReaderService.shared.maxMessageRowID()) ?? 0
+    // Fail closed if we can't read it — without a valid baseline the row-id invariant
+    // doesn't hold, so don't send (nothing sent, safe to retry).
+    guard let baselineRowID = try? await WhatsAppReaderService.shared.maxMessageRowID() else {
+      throw WhatsAppSenderError.notConfirmed
+    }
 
+    // Prefill launches WhatsApp if it's closed, opens the target 1:1, and fills the
+    // compose box; the guard below then waits for it to come up and navigate.
     try prefill(text: reply, phone: phone)
 
     // Recipient guard: wait for WhatsApp to navigate + prefill, proven by compose == reply,
     // then re-verify once more right before sending. If either can't be verified we never
     // press Return — nothing is sent, and it's safe to retry (.notConfirmed).
-    guard await waitForComposeMatch(reply: reply, phone: phone, pid: app.processIdentifier),
-      await activateAndReverify(reply: reply, pid: app.processIdentifier)
+    guard await waitForComposeMatch(reply: reply, phone: phone),
+      await activateAndReverify(reply: reply)
     else {
       throw WhatsAppSenderError.notConfirmed
     }
@@ -201,15 +203,19 @@ enum WhatsAppSenderService {
   // MARK: - Recipient guard (Accessibility)
 
   /// Polls WhatsApp's compose box until it holds exactly `reply` (proof the target 1:1
-  /// is open and prefilled) or times out. Re-issues the deep link once mid-way if
-  /// navigation stalled. AX reads work even while WhatsApp is in the background.
+  /// is open and prefilled) or times out. Looks the app up each poll so it also covers a
+  /// cold launch (WhatsApp was closed and the prefill deep link is starting it), and
+  /// re-issues the deep link once mid-way if navigation stalled. AX reads work even while
+  /// WhatsApp is in the background.
   @MainActor
-  private static func waitForComposeMatch(reply: String, phone: String, pid: pid_t) async -> Bool {
+  private static func waitForComposeMatch(reply: String, phone: String) async -> Bool {
     for poll in 0..<settleMaxPolls {
       if poll == settleReprefillPoll {
         try? prefill(text: reply, phone: phone)  // nudge once if it hasn't landed yet
       }
-      if let value = composeBoxValue(pid: pid), composeMatches(value, reply) {
+      if let app = runningWhatsApp(), let value = composeBoxValue(pid: app.processIdentifier),
+        composeMatches(value, reply)
+      {
         return true
       }
       try? await Task.sleep(nanoseconds: settlePollNanos)
@@ -220,11 +226,11 @@ enum WhatsAppSenderService {
   /// Brings WhatsApp frontmost (required for the keystroke to land there) and confirms
   /// compose still equals `reply`, as the final check before pressing Return.
   @MainActor
-  private static func activateAndReverify(reply: String, pid: pid_t) async -> Bool {
+  private static func activateAndReverify(reply: String) async -> Bool {
     activateWhatsApp()
     for _ in 0..<activateMaxPolls {
       if let app = runningWhatsApp(), app.isActive,
-        let value = composeBoxValue(pid: pid), composeMatches(value, reply)
+        let value = composeBoxValue(pid: app.processIdentifier), composeMatches(value, reply)
       {
         return true
       }

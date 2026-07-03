@@ -261,12 +261,17 @@ final class WhatsAppInboxStore: ObservableObject {
       // Only reflect the send once WhatsApp's database confirms it (send() throws
       // otherwise), so auto-reply never optimistically shows an unsent message.
       appendSent(text, to: chat.id)
+    } catch WhatsAppSenderError.sendUnconfirmed {
+      // Return was pressed against the verified chat, so the reply was very likely
+      // delivered — just not DB-confirmed in time. Do NOT re-surface it as a draft: that
+      // would risk the user manually sending a duplicate. If it genuinely didn't send,
+      // the chat still shows as awaiting a reply on the next refresh.
+      NSLog("WhatsApp auto-reply unconfirmed (likely delivered) for \(chat.chatID)")
     } catch {
-      // Auto-send wasn't confirmed (permission missing, recipient unverifiable, or the
-      // outbound row never appeared). Keep the composed reply as a draft so it's not
-      // lost and can be completed on the next tick or by the user — never silently
-      // mark it sent.
-      NSLog("WhatsApp auto-reply send unconfirmed for \(chat.chatID): \(error.localizedDescription)")
+      // Nothing was sent (permission missing, recipient unverifiable, etc.). Keep the
+      // composed reply as a draft so it's not lost and can be completed by the user —
+      // never silently mark it sent.
+      NSLog("WhatsApp auto-reply not sent for \(chat.chatID): \(error.localizedDescription)")
       preDrafts[chat.id] = text
     }
   }
