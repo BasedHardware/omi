@@ -350,6 +350,7 @@ async def stream_transcribe_v4(
     websocket: WebSocket,
     sample_rate: int = Query(16000),
 ):
+    await websocket.accept()
     if sample_rate != 16000:
         await websocket.close(code=1003, reason="Only 16kHz sample rate is supported")
         return
@@ -359,8 +360,6 @@ async def stream_transcribe_v4(
     if not gpu_worker.is_ready:
         await websocket.close(code=1013, reason="Model loading, try again shortly")
         return
-
-    await websocket.accept()
     ACTIVE_STREAMS.inc()
     t0 = time.monotonic()
     stream_result = None
