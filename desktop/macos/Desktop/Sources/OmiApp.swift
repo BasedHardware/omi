@@ -874,12 +874,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           button.image = icon
         }
       } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_text_logo", withExtension: "png"),
+        forResource: "omi_menu_bar_icon", withExtension: "png"),
         let icon = NSImage(contentsOf: iconURL)
       {
         icon.isTemplate = true
-        let aspect = icon.size.width / icon.size.height
-        icon.size = NSSize(width: 16 * aspect, height: 16)
+        icon.size = NSSize(width: 18, height: 18)
         button.image = icon
       }
     }
@@ -931,7 +930,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let displayName =
       Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
 
-    // Set up the button with icon — use "omi" text logo (not a circle)
+    // Set up the button with compact circle mark.
     if let button = statusBarItem.button {
       if OMIApp.launchMode == .rewind {
         // Rewind mode uses SF Symbol
@@ -943,23 +942,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           log("AppDelegate: [MENUBAR] Rewind icon set successfully")
         }
       } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_text_logo", withExtension: "png"),
+        forResource: "omi_menu_bar_icon", withExtension: "png"),
         let icon = NSImage(contentsOf: iconURL)
       {
         icon.isTemplate = true
-        // Scale to menu bar height (16pt) with proportional width
-        let aspect = icon.size.width / icon.size.height
-        icon.size = NSSize(width: 16 * aspect, height: 16)
+        icon.size = NSSize(width: 18, height: 18)
         button.image = icon
         button.imagePosition = .imageOnly
-        log("AppDelegate: [MENUBAR] Omi text logo set successfully (size: \(icon.size))")
+        log("AppDelegate: [MENUBAR] Omi circle logo set successfully (size: \(icon.size))")
       } else {
         // Fallback to SF Symbol
         if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
           icon.isTemplate = true
           button.image = icon
         }
-        log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_text_logo, using fallback")
+        log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_menu_bar_icon, using fallback")
       }
       button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
     } else {

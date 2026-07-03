@@ -116,15 +116,17 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var activeAgentChatPillID: UUID? = nil
     @Published var conversationSurface: FloatingConversationSurface = .closed
 
-    /// Notch subagent switcher visibility state. Mirrored from the SwiftUI view
-    /// so the window can account for an expanded switcher when resizing.
+    /// Subagent switcher visibility state, shared by both display modes.
+    /// On notched displays the menu opens on hover over the notch; on
+    /// non-notched displays it opens pinned via an explicit click on the
+    /// pill's agents affordance. Mirrored from the SwiftUI view so the
+    /// window can account for an expanded switcher when resizing.
     @Published var agentSwitcherPinned: Bool = false
     @Published var agentSwitcherHovering: Bool = false
     var isAgentSwitcherExpanded: Bool { agentSwitcherPinned || agentSwitcherHovering }
     @Published private(set) var notchHoverMenuOpen: Bool = false
     var canShowNotchHoverMenu: Bool {
-        usesNotchIsland
-            && !showingAIConversation
+        !showingAIConversation
             && !isVoiceListening
             && !isShowingNotification
             && currentNotification == nil

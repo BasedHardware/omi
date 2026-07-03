@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AsanaSettingsPage extends StatefulWidget {

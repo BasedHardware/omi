@@ -3,33 +3,43 @@ Unit tests for LLM usage database operations.
 """
 
 import os
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+import pytest
 
-# Create mock db before importing the module
-mock_db = MagicMock()
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
-# Mock the database client module
-mock_client_module = MagicMock()
-mock_client_module.db = mock_db
-sys.modules["database._client"] = mock_client_module
-sys.modules["stripe"] = MagicMock()
+_BACKEND = Path(__file__).resolve().parents[2]
 
-_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
-_google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-_google_firestore_module = types.ModuleType("google.cloud.firestore")
-_google_firestore_module.Increment = lambda x: {"__increment": x}
-sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
-setattr(_google_module, "cloud", _google_cloud_module)
-setattr(_google_cloud_module, "firestore", _google_firestore_module)
 
-from database import llm_usage
+@pytest.fixture(scope="module", autouse=True)
+def _llm_usage_module():
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.Increment = lambda value: value
+    firestore_stub.transactional = lambda fn: fn
+    client_stub = AutoMockModule("database._client")
+    client_stub.db = MagicMock()
+
+    with stub_modules(
+        {
+            "google": google_pkg,
+            "google.cloud": google_cloud_pkg,
+            "google.cloud.firestore": firestore_stub,
+            "database._client": client_stub,
+        }
+    ):
+        module = load_module_fresh(
+            "database.llm_usage",
+            os.path.join(str(_BACKEND), "database", "llm_usage.py"),
+        )
+        globals()["llm_usage"] = module
+        yield module
 
 
 class _FakeDocSnapshot:

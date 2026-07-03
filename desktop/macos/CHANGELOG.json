@@ -9,6 +9,192 @@
   ],
   "releases": [
     {
+      "version": "0.12.0",
+      "date": "2026-07-03",
+      "changes": [
+        "Major desktop reliability release: rolls up the beta improvements since 0.11.507, including safer updates, cleaner recording recovery, stronger sign-in diagnostics, and fewer stale UI states.",
+        "Unified the floating chat and subagent experience across notched and non-notched Macs, including improved agent rows, chat surfaces, scroll behavior, and settings controls.",
+        "Improved ChatGPT, Claude, OpenClaw, and Hermes connector setup with accepted public OAuth clients, clearer guided setup cards, one-click copy values, and more reliable MCP wiring.",
+        "Hardened Gmail, Google Calendar, Apple Notes, and browser-session connector probes so existing connections are detected more accurately and failures explain the required recovery step.",
+        "Improved push-to-talk and recording reliability with silent-audio recovery, delayed-reply fixes, durable cloud recording reconciliation, and clearer diagnostics for realtime voice issues.",
+        "Improved desktop chat and agent reliability, including clearer failed-agent transcripts, safer tool-call rendering, better follow-up handling, and fixed quota accounting for internal tool loops.",
+        "Improved onboarding and memory import reliability with batched imports, Enter-to-continue support, better second-brain setup flows, and fixes for stale or incorrect memory labels.",
+        "Fixed legacy memory loading issues for long-time accounts, including memory_id alias conflicts and stale Short-term / Long-term labels after backend sync.",
+        "Improved desktop update behavior with stuck-update recovery, foreground-safe relaunch behavior, older-version update prompts, and clearer manual-download guidance.",
+        "Improved Rewind and screen capture reliability with more efficient screenshot history, immediate Capture button state updates, and safer transcript/conversation rendering.",
+        "Fixed home and Apps surfaces, including wearable-connected status, Ask Omi placement, Installed/category filters, cached filter switching, compact menu bar visuals, and one-line memory export text.",
+        "Fixed a crash that could occur when loading conversations or copying a transcript if the account had duplicate speaker profiles."
+      ]
+    },
+    {
+      "version": "0.11.598",
+      "date": "2026-07-03",
+      "changes": [
+        "Fixed the chat jump-to-latest button so it disappears when scrolling reaches the latest message.",
+        "Fixed the notch floating bar settings button so it opens settings reliably",
+        "Fixed OpenClaw memory setup so Omi reloads OpenClaw MCP after wiring Omi memory, uses the current streamable HTTP MCP transport, and tells OpenClaw to call the Omi MCP tools instead of local memory tools"
+      ]
+    },
+    {
+      "version": "0.11.597",
+      "date": "2026-07-02",
+      "changes": [
+        "Apps: fixed Installed and category filters and cached filter results for faster switching",
+        "Displays without a notch now get the full subagent experience: a status gem on the idle pill, an agents row on hover, and the same agent list and chat surface as notched displays",
+        "Onboarding: pressing Enter now activates available Continue actions",
+        "Unified the floating chat experience across notched and non-notched displays while keeping the compact pill on displays without a notch",
+        "Fixed memory labels appearing incorrectly after stale fetches or local cache updates"
+      ]
+    },
+    {
+      "version": "0.11.596",
+      "date": "2026-07-02",
+      "changes": [
+        "Home: moved Ask Omi to the top of the memory export list"
+      ]
+    },
+    {
+      "version": "0.11.595",
+      "date": "2026-07-02",
+      "changes": [
+        "Clear stale Short-term and Long-term memory labels from legacy memory accounts after backend sync",
+        "Home: the Omi Device row now shows Connected when a wearable was used on this account (e.g. paired on mobile), not only when paired to this Mac"
+      ]
+    },
+    {
+      "version": "0.11.594",
+      "date": "2026-07-02",
+      "changes": [
+        "Fixed connector rows showing disconnected when Notes or local MCP clients are already set up",
+        "Home: shortened the memory export subtitle so it fits on one line"
+      ]
+    },
+    {
+      "version": "0.11.593",
+      "date": "2026-07-02",
+      "changes": [
+        "Improved desktop app packaging so the bundled agent runtime no longer depends on developer-machine Node libraries",
+        "Fixed OpenClaw memory setup so Omi can use OpenClaw's bundled Node runtime when updating MCP config"
+      ]
+    },
+    {
+      "version": "0.11.592",
+      "date": "2026-07-02",
+      "changes": [
+        "Prompt to update to the latest Omi when running an older desktop version"
+      ]
+    },
+    {
+      "version": "0.11.591",
+      "date": "2026-07-02",
+      "changes": [
+        "Fixes ChatGPT MCP connector setup to use the accepted public OAuth client",
+        "Hardened macOS connector probes, browser cookie discovery, Gmail imports, and OpenClaw memory setup against stale status, privacy leaks, and hung helper processes"
+      ]
+    },
+    {
+      "version": "0.11.590",
+      "date": "2026-07-02",
+      "changes": [
+        "Made ChatGPT and Claude connector setup more reliable: Omi opens the right page and shows a movable on-screen card with one-click copy buttons for each setup value, and ChatGPT setup now uses the correct OAuth client (no secret needed)",
+        "Routes onboarding imports through the memory import evidence pipeline",
+        "Fixed ChatGPT and Claude cloud connector setup to use public OAuth clients without requiring an MCP key as a client secret"
+      ]
+    },
+    {
+      "version": "0.11.589",
+      "date": "2026-07-02",
+      "changes": [
+        "Fixed OpenClaw and Hermes memory-bank setup so local installs are detected safely and Omi MCP wiring is updated deterministically",
+        "Fixed floating subagent chats so stale completed tool calls do not duplicate around text, and added a Stop control for running subagents",
+        "Added a semantic Gmail connector probe and updated the Google connector checklist to reflect the shared browser-session path."
+      ]
+    },
+    {
+      "version": "0.11.588",
+      "date": "2026-07-02",
+      "changes": [
+        "Google Calendar imports now wait for desktop API keys to load before checking your browser session",
+        "Hardened Gmail and Google Calendar desktop integrations with shared browser session handling and clearer sign-in diagnostics."
+      ]
+    },
+    {
+      "version": "0.11.587",
+      "date": "2026-07-02",
+      "changes": [
+        "Apple Notes import now reports actionable permission and folder errors instead of a generic unavailable state",
+        "Google Calendar connection checks now preserve specific network failure details and can be verified through the same real connector path the app uses",
+        "Fixed Gmail import getting stuck while reading large email histories",
+        "Improved Apple Notes connection checks so existing folder access keeps working and database read errors show the right recovery message"
+      ]
+    },
+    {
+      "version": "0.11.586",
+      "date": "2026-07-01",
+      "changes": [
+        "Google Calendar now tells you exactly why a connection failed — sign-in needed vs. expired session vs. network — instead of a confusing \"Network error\", and checks all your browser profiles before giving up",
+        "Fixed Gmail/Email import hanging forever on 'Importing…' when reading a large mailbox"
+      ]
+    },
+    {
+      "version": "0.11.585",
+      "date": "2026-07-01",
+      "changes": [
+        "Fixed repeated macOS keychain permission prompts and device identity churn when a keychain prompt is denied",
+        "Fixed Memories failing to load (\"data couldn't be read\") for long-time users with legacy memory records",
+        "Updated notch chat agent controls so spawned subagents open from tool calls and settings moved to a hover-only right-side control.",
+        "Improved notch chat scrolling so streaming responses follow the bottom only until the user scrolls away",
+        "Improved desktop release checks so agent runtime packaging issues are caught before release"
+      ]
+    },
+    {
+      "version": "0.11.584",
+      "date": "2026-07-01",
+      "changes": [
+        "Home: renamed the Connect your AI section to \"Use omi memory anywhere\" with a clearer subtitle",
+        "Fixed Free chat quota counting so internal desktop AI tool loops no longer consume multiple questions"
+      ]
+    },
+    {
+      "version": "0.11.583",
+      "date": "2026-07-01",
+      "changes": [
+        "Fixed duplicate tool-call rows in chat so completed tools no longer leave a second spinner behind",
+        "Added a safe helper for reviewing and resetting stale macOS privacy permissions from temporary Omi test builds",
+        "Fixed AI connection setup showing a misleading memory-pressure error after non-memory agent runtime crashes"
+      ]
+    },
+    {
+      "version": "0.11.582",
+      "date": "2026-07-01",
+      "changes": [
+        "Improved onboarding memory imports to save memories in batches and reduce rate-limit failures",
+        "Fixed named desktop dev bundles so they no longer ask for login keychain access to the shared device ID",
+        "Fixed Connect your AI rows showing Connected before Omi has evidence that the agent connection was completed"
+      ]
+    },
+    {
+      "version": "0.11.581",
+      "date": "2026-07-01",
+      "changes": [
+        "Made the macOS menu bar logo more compact"
+      ]
+    },
+    {
+      "version": "0.11.580",
+      "date": "2026-07-01",
+      "changes": [
+        "Added an onboarding prompt to turn up muted or zero Mac volume before trying push-to-talk"
+      ]
+    },
+    {
+      "version": "0.11.579",
+      "date": "2026-07-01",
+      "changes": [
+        "Fixed desktop recordings that could stay stuck after the recording window closed"
+      ]
+    },
+    {
       "version": "0.11.578",
       "date": "2026-07-01",
       "changes": [

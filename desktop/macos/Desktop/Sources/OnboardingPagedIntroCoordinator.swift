@@ -1315,40 +1315,43 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       let drafts = await buildLocalFileMemoryDrafts(from: snapshot)
       guard !drafts.isEmpty else { return 0 }
 
-      // Batch the drafts through POST /v3/memories/batch. The previous
+      // Batch the drafts through the import evidence ingress. The previous
       // implementation fanned out 12 concurrent POST /v3/memories calls
       // per draft; with up to ~2800 drafts, that blew through Cloud
       // Armor's 120 req/min per-Authorization limit in seconds and
       // collaterally 429'd unrelated onboarding calls (goals, sync, chat).
       //
-      // One batch request = one Firestore write + one embeddings call +
-      // one Pinecone upsert on the server, regardless of batch size.
-      let chunkSize = APIClient.memoriesBatchMaxSize
-      var savedCount = 0
-      var index = 0
-      while index < drafts.count {
-        let end = min(index + chunkSize, drafts.count)
-        let chunk = drafts[index..<end].map { draft in
-          MemoryBatchItem(
-            content: draft.content,
-            visibility: "private",
-            tags: draft.tags,
-            headline: draft.headline
-          )
-        }
-        index = end
-
-        do {
-          let response = try await APIClient.shared.createMemoriesBatch(Array(chunk))
-          savedCount += response.createdCount
-        } catch {
-          log(
-            "OnboardingPagedIntroCoordinator: Failed to save local file memory batch "
-              + "(\(chunk.count) items): \(error)")
-        }
+      // One batch request stores import artifacts only; memory extraction,
+      // promotion, vectors, and KG are backend-owned later stages.
+      let artifacts = drafts.map { draft in
+        ImportEvidenceBatchItem(
+          title: draft.headline,
+          snippet: draft.content,
+          content: draft.content,
+          metadata: [
+            "import_kind": "local_file_profile",
+            "tags": draft.tags.joined(separator: ","),
+            "source": draft.source,
+          ]
+        )
+      }
+      let legacyMemories = drafts.map { draft in
+        MemoryBatchItem(
+          content: draft.content,
+          tags: draft.tags,
+          headline: draft.headline,
+          source: draft.source
+        )
       }
 
-      log("OnboardingPagedIntroCoordinator: Saved \(savedCount) local file memories")
+      let result = await OnboardingImportEvidenceService.save(
+        artifacts,
+        sourceType: "local_files",
+        logPrefix: "OnboardingPagedIntroCoordinator",
+        legacyMemories: legacyMemories
+      )
+      let savedCount = result.saved
+      log("OnboardingPagedIntroCoordinator: Saved \(savedCount) local file import evidence artifacts")
       return savedCount
     }
 

@@ -452,7 +452,7 @@ while true; do
 done
 
 step "Preparing agent runtime..."
-"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --local-node
+"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
 
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
@@ -670,6 +670,9 @@ fi
 
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
+step "Preparing bundled native dependencies..."
+"$(dirname "$0")/scripts/prepare-desktop-bundle-native-deps.sh" "$APP_BUNDLE"
+
 step "Removing extended attributes (xattr -cr)..."
 # SwiftPM copies some dylibs (libsharpyuv, libwebp) with read-only perms,
 # which makes `xattr -cr` fail with EACCES. Make the bundle writable first.
@@ -769,6 +772,9 @@ fi
 step "Removing quarantine attributes..."
 chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
+
+step "Auditing app bundle dependencies..."
+"$(dirname "$0")/scripts/audit-desktop-bundle-deps.sh" "$APP_BUNDLE"
 
 step "Installing to /Applications/..."
 # Install to /Applications/ so "Quit & Reopen" (after granting screen recording

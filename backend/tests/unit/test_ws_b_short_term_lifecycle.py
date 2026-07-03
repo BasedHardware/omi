@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
+import importlib
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,34 +23,89 @@ from tests.unit.memory_import_isolation import (
     snapshot_sys_modules,
 )
 
+read_canonical_memories = None
+write_canonical_extraction_memory = None
+required_promotion_payload = None
+MemorySystem = None
+resolve_memory_system = None
+CanonicalKgPromotionResult = None
+DEFAULT_PROMOTION_BATCH_THRESHOLD = None
+promotion_batch_threshold = None
+promotion_trigger_reason = None
+run_canonical_short_term_promotion = None
+run_canonical_short_term_ttl_lifecycle = None
+
+
+def _load_ws_b_runtime_modules() -> None:
+    if write_canonical_extraction_memory is not None:
+        return
+    ensure_utils_memory_packages_importable()
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    short_term_promotion = importlib.import_module("utils.memory.short_term_promotion")
+    required_promotion = importlib.import_module("utils.memory.required_promotion")
+    memory_system = importlib.import_module("utils.memory.memory_system")
+    canonical_kg_promotion = importlib.import_module("utils.memory.canonical_kg_promotion")
+
+    g = globals()
+    g["read_canonical_memories"] = canonical_adapter.read_canonical_memories
+    g["write_canonical_extraction_memory"] = canonical_adapter.write_canonical_extraction_memory
+    g["required_promotion_payload"] = required_promotion.required_promotion_payload
+    g["MemorySystem"] = memory_system.MemorySystem
+    g["resolve_memory_system"] = memory_system.resolve_memory_system
+    g["CanonicalKgPromotionResult"] = canonical_kg_promotion.CanonicalKgPromotionResult
+    g["DEFAULT_PROMOTION_BATCH_THRESHOLD"] = short_term_promotion.DEFAULT_PROMOTION_BATCH_THRESHOLD
+    g["promotion_batch_threshold"] = short_term_promotion.promotion_batch_threshold
+    g["promotion_trigger_reason"] = short_term_promotion.promotion_trigger_reason
+    g["run_canonical_short_term_promotion"] = short_term_promotion.run_canonical_short_term_promotion
+    g["run_canonical_short_term_ttl_lifecycle"] = short_term_promotion.run_canonical_short_term_ttl_lifecycle
+
+
+def _clear_ws_b_runtime_modules() -> None:
+    g = globals()
+    for name in (
+        "read_canonical_memories",
+        "write_canonical_extraction_memory",
+        "required_promotion_payload",
+        "MemorySystem",
+        "resolve_memory_system",
+        "CanonicalKgPromotionResult",
+        "DEFAULT_PROMOTION_BATCH_THRESHOLD",
+        "promotion_batch_threshold",
+        "promotion_trigger_reason",
+        "run_canonical_short_term_promotion",
+        "run_canonical_short_term_ttl_lifecycle",
+    ):
+        g[name] = None
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _ws_b_import_isolation():
     saved = snapshot_sys_modules(WS_B_STUB_MODULE_NAMES)
     touched = install_ws_b_import_stubs()
     saved.update(snapshot_sys_modules(touched))
+    ensure_utils_memory_packages_importable()
+
+    for stale_module in (
+        "database.memory_apply_store",
+        "utils.memory.canonical_memory_adapter",
+        "utils.memory.short_term_promotion",
+        "utils.memory.required_promotion",
+        "utils.memory.memory_system",
+        "utils.memory.canonical_kg_promotion",
+    ):
+        sys.modules.pop(stale_module, None)
+
+    _load_ws_b_runtime_modules()
+
     yield
     restore_sys_modules(saved)
+    _clear_ws_b_runtime_modules()
 
 
-ensure_utils_memory_packages_importable()
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.canonical_memory_adapter import (
-    read_canonical_memories,
-    write_canonical_extraction_memory,
-)
-from utils.memory.required_promotion import required_promotion_payload
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.short_term_promotion import (
-    DEFAULT_PROMOTION_BATCH_THRESHOLD,
-    promotion_batch_threshold,
-    promotion_trigger_reason,
-    run_canonical_short_term_promotion,
-    run_canonical_short_term_ttl_lifecycle,
-)
 from tests.unit.test_ws_i_write_convergence import (
     _FakeDb,
     _sample_memory_payload,
@@ -179,6 +235,7 @@ def _seed_canonical_short_term(
     content: str,
     monkeypatch,
 ) -> str:
+    _load_ws_b_runtime_modules()
     evidence_id = f"ev_{conversation_id}"
     db.docs[f"users/{uid}/memory_evidence/{evidence_id}"] = MemoryEvidence(
         evidence_id=evidence_id,
@@ -207,7 +264,10 @@ def _clear_canonical_cohort_fixture(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
     clear_canonical_cohort(monkeypatch)
-    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),
+    )
 
 
 def test_promotion_fires_on_batch_threshold_via_apply(monkeypatch):
@@ -454,7 +514,10 @@ def test_required_promotion_fires_on_first_run_below_batch_threshold(monkeypatch
         lambda **_: _trusted_account_generation(),
     )
     monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
-    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),
+    )
     payload = required_promotion_payload(
         {
             "id": "manual-required-2",
@@ -486,7 +549,10 @@ def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
         lambda **_: _trusted_account_generation(),
     )
     monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
-    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),
+    )
 
     existing_payload = {
         "id": "existing-long-term",
@@ -504,6 +570,8 @@ def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
         source_surface="mcp",
     )
     short_id = write_canonical_extraction_memory(uid, required_payload, db_client=db)
+    initial_existing_commit = db.docs[f"users/{uid}/memory_items/{existing_id}"]["ledger_commit_id"]
+    initial_short_commit = db.docs[f"users/{uid}/memory_items/{short_id}"]["ledger_commit_id"]
 
     report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-merge")
     existing_stored = db.docs[f"users/{uid}/memory_items/{existing_id}"]
@@ -513,11 +581,128 @@ def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
     assert report.promoted_memory_ids == [existing_id]
     assert existing_stored["tier"] == MemoryTier.long_term.value
     assert existing_stored["corroboration_count"] == 1
+    assert existing_stored["ledger_commit_id"] != initial_existing_commit
     assert short_stored["tier"] == MemoryTier.short_term.value
     assert short_stored["status"] == MemoryItemStatus.superseded.value
     assert short_stored["superseded_by"] == existing_id
+    assert short_stored["ledger_commit_id"] != initial_short_commit
     assert short_stored["promotion"]["status"] == "merged"
     assert short_stored["promotion"]["target_memory_id"] == existing_id
+
+
+def test_required_promotion_merges_multiple_sources_in_same_run(monkeypatch):
+    uid = "uid-canonical-required-merge-multiple"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
+
+    existing_id = write_canonical_extraction_memory(
+        uid,
+        {
+            "id": "existing-long-term-multi",
+            "content": "User prefers launch checklists",
+            "memory_tier": MemoryTier.long_term.value,
+        },
+        db_client=db,
+    )
+    short_ids = []
+    for source_id in ["manual-required-multi-a", "manual-required-multi-b"]:
+        payload = required_promotion_payload(
+            {
+                "id": source_id,
+                "content": "User prefers launch checklists",
+                "manually_added": True,
+            },
+            source_surface="mcp",
+        )
+        short_ids.append(write_canonical_extraction_memory(uid, payload, db_client=db))
+
+    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-multi")
+    existing_stored = db.docs[f"users/{uid}/memory_items/{existing_id}"]
+
+    assert report.trigger_reason == "required_promotion"
+    assert report.promoted_memory_ids == [existing_id, existing_id]
+    assert existing_stored["corroboration_count"] == 2
+    for short_id in short_ids:
+        short_stored = db.docs[f"users/{uid}/memory_items/{short_id}"]
+        assert short_stored["status"] == MemoryItemStatus.superseded.value
+        assert short_stored["promotion"]["status"] == "merged"
+        assert short_stored["promotion"]["target_memory_id"] == existing_id
+
+
+def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_run_ids(monkeypatch):
+    uid = "uid-canonical-required-merge-retry"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
+
+    existing_id = write_canonical_extraction_memory(
+        uid,
+        {
+            "id": "existing-long-term-retry",
+            "content": "User prefers launch checklists",
+            "memory_tier": MemoryTier.long_term.value,
+        },
+        db_client=db,
+    )
+    required_payload = required_promotion_payload(
+        {
+            "id": "manual-required-retry",
+            "content": "User prefers launch checklists",
+            "manually_added": True,
+        },
+        source_surface="mcp",
+    )
+    short_id = write_canonical_extraction_memory(uid, required_payload, db_client=db)
+
+    import utils.memory.short_term_promotion as short_term_promotion_mod
+
+    real_apply = short_term_promotion_mod.apply_long_term_patch_firestore
+    failed_once = False
+
+    def flaky_apply(**kwargs):
+        nonlocal failed_once
+        patch_payload = kwargs.get("patch_payload") or {}
+        if (
+            not failed_once
+            and patch_payload.get("target_memory_id") == short_id
+            and patch_payload.get("result_status") == "superseded"
+        ):
+            failed_once = True
+            raise RuntimeError("injected supersede failure")
+        return real_apply(**kwargs)
+
+    with patch("utils.memory.short_term_promotion.apply_long_term_patch_firestore", side_effect=flaky_apply):
+        with pytest.raises(RuntimeError, match="injected supersede failure"):
+            run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-retry-1")
+
+    existing_after_failure = db.docs[f"users/{uid}/memory_items/{existing_id}"]
+    short_after_failure = db.docs[f"users/{uid}/memory_items/{short_id}"]
+    assert existing_after_failure["corroboration_count"] == 1
+    assert short_after_failure["status"] == MemoryItemStatus.active.value
+
+    retry = run_canonical_short_term_promotion(
+        uid,
+        db_client=db,
+        now=NOW + timedelta(hours=1),
+        run_id="promo-required-retry-2",
+    )
+    existing_after_retry = db.docs[f"users/{uid}/memory_items/{existing_id}"]
+    short_after_retry = db.docs[f"users/{uid}/memory_items/{short_id}"]
+
+    assert retry.promoted_memory_ids == [existing_id]
+    assert existing_after_retry["corroboration_count"] == 1
+    assert existing_after_retry["ledger_commit_id"] == existing_after_failure["ledger_commit_id"]
+    assert short_after_retry["status"] == MemoryItemStatus.superseded.value
+    assert short_after_retry["promotion"]["status"] == "merged"
 
 
 def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch):

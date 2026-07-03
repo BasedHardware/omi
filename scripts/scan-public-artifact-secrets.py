@@ -33,9 +33,17 @@ PRIVATE_KEY_MARKERS = (
     b'"private_key"',
     b"'private_key'",
 )
-ZIP_SUFFIXES = {".zip", ".ipa", ".apk", ".aab", ".jar", ".aar", ".asar"}
-TAR_SUFFIXES = {".tar", ".tgz", ".gz", ".bz2", ".xz"}
+SECRET_VALUE_PATTERNS = (
+    (re.compile(rb"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{16,}\b"), "OpenAI-shaped secret"),
+    (re.compile(rb"\bsk-ant-[A-Za-z0-9_-]{16,}\b"), "Anthropic-shaped secret"),
+    (re.compile(rb"\bdg_[0-9A-Za-z]{20,}\b"), "Deepgram-shaped secret"),
+    (re.compile(rb"\bxox[baprs]-[0-9A-Za-z-]{20,}\b"), "Slack token-shaped secret"),
+)
+ALLOWED_PLACEHOLDER_TOKENS = {"YOUR_API_KEY"}
+ZIP_SUFFIXES = {".zip", ".ipa", ".apk", ".aab", ".jar", ".aar"}
+TAR_SUFFIXES = {".tar", ".tgz"}
 FAIL_CLOSED_SUFFIXES = {".7z", ".rar", ".pkg", ".dmg"}
+FRAMEWORK_DIR_SUFFIXES = (".framework", ".xcframework")
 
 
 def load_policy() -> dict:
@@ -48,11 +56,21 @@ def denied_patterns(policy: dict) -> list[re.Pattern[str]]:
 
 
 def allowed_names(policy: dict) -> set[str]:
-    return set(policy["public_client_env"]["allowed"]) | set(policy.get("legacy_public_client_env", {}).get("allowed", []))
+    return set(policy["public_client_env"]["allowed"]) | set(
+        policy.get("legacy_public_client_env", {}).get("allowed", [])
+    )
+
+
+def allowed_public_token_names(policy: dict) -> set[str]:
+    return allowed_names(policy) | set(policy.get("allowed_public_client_tokens", []))
 
 
 def name_is_denied(name: str, exact: set[str], patterns: list[re.Pattern[str]]) -> bool:
     return name in exact or any(pattern.search(name) for pattern in patterns)
+
+
+def is_public_firebase_config(rel: Path) -> bool:
+    return rel.name in {"GoogleService-Info.plist", "google-services.json"}
 
 
 def extract_zip(path: Path, dest: Path) -> None:
@@ -67,9 +85,8 @@ def extract_zip(path: Path, dest: Path) -> None:
 
 
 def looks_like_tar(path: Path) -> bool:
-    return path.suffix.lower() in TAR_SUFFIXES or any(
-        str(path).lower().endswith(suffix) for suffix in (".tar.gz", ".tar.bz2", ".tar.xz")
-    )
+    lower_path = str(path).lower()
+    return path.suffix.lower() in TAR_SUFFIXES or lower_path.endswith((".tar.gz", ".tar.bz2", ".tar.xz"))
 
 
 def extract_tar(path: Path, dest: Path) -> None:
@@ -179,12 +196,14 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
     denied = set(policy["server_secret_env"]["denied_exact"])
     patterns = denied_patterns(policy)
     allowed = allowed_names(policy)
+    allowed_public_tokens = allowed_public_token_names(policy)
     secret_values = {
         name: value.encode()
         for name, value in os.environ.items()
         if value
         and len(value) >= 8
         and not name.startswith(("PUBLIC_", "NEXT_PUBLIC_"))
+        and name not in allowed_public_tokens
         and name_is_denied(name, denied, patterns)
     }
 
@@ -235,23 +254,30 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
             for marker in PRIVATE_KEY_MARKERS:
                 if marker in data:
                     errors.append(f"{path}: private key material appears in {rel}")
+            for pattern, label in SECRET_VALUE_PATTERNS:
+                if pattern.search(data):
+                    errors.append(f"{path}: {label} appears in {rel}")
             if file_path.name.endswith(".env") or file_path.name == ".env":
                 for lineno, raw_line in enumerate(data.decode("utf-8", errors="ignore").splitlines(), start=1):
                     line = raw_line.strip()
                     if not line or line.startswith("#") or "=" not in line:
                         continue
                     name = line.split("=", 1)[0].strip()
-                    if name not in allowed:
+                    if name not in allowed_public_tokens:
                         errors.append(f"{path}: non-allowlisted variable name {name} appears in {rel}:{lineno}")
-                    if name not in allowed and name_is_denied(name, denied, patterns):
+                    if name not in allowed_public_tokens and name_is_denied(name, denied, patterns):
                         errors.append(f"{path}: server-only variable name {name} appears in {rel}:{lineno}")
             for name in denied:
-                if name not in allowed and name.encode() in data:
+                if name not in allowed_public_tokens and name.encode() in data:
                     errors.append(f"{path}: server-only variable name {name} appears in {rel}")
-            text = data.decode("utf-8", errors="ignore")
-            for token in set(re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", text)):
-                if token not in allowed and name_is_denied(token, denied, patterns):
-                    errors.append(f"{path}: server-only variable-like token {token} appears in {rel}")
+            in_framework = any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts)
+            if not in_framework and not is_public_firebase_config(rel):
+                text = data.decode("utf-8", errors="ignore")
+                for token in set(re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", text)):
+                    if token in ALLOWED_PLACEHOLDER_TOKENS:
+                        continue
+                    if token not in allowed_public_tokens and name_is_denied(token, denied, patterns):
+                        errors.append(f"{path}: server-only variable-like token {token} appears in {rel}")
             for name, value in secret_values.items():
                 if value and value in data:
                     errors.append(f"{path}: current CI value for {name} appears in {rel}")
@@ -261,8 +287,12 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("artifacts", nargs="+", type=Path, help="IPA/AAB/APK/app/zip/directory artifacts to scan")
+    parser.add_argument("artifacts", nargs="*", type=Path, help="IPA/AAB/APK/app/zip/directory artifacts to scan")
     args = parser.parse_args()
+
+    if not args.artifacts:
+        print("No artifacts to scan (glob matched nothing).", file=sys.stderr)
+        return 1
 
     policy = load_policy()
     errors: list[str] = []

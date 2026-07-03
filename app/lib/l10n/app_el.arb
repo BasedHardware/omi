@@ -3103,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Μια γρήγορη, πρακτική περιήγηση σε όλα όσα μπορεί να κάνει το Omi σας.",
     "deviceOnboardingIntroDuration": "Περίπου 1 λεπτό",
     "jumpToLatestMessage": "Μετάβαση στο πιο πρόσφατο μήνυμα",
-    "latest": "Πρόσφατο"
+    "latest": "Πρόσφατο",
+    "flashFirmware": "Εγκατάσταση firmware"
 }

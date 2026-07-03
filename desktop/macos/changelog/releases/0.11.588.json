@@ -1,0 +1,8 @@
+{
+  "version": "0.11.588",
+  "date": "2026-07-02",
+  "changes": [
+    "Google Calendar imports now wait for desktop API keys to load before checking your browser session",
+    "Hardened Gmail and Google Calendar desktop integrations with shared browser session handling and clearer sign-in diagnostics."
+  ]
+}

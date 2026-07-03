@@ -35,6 +35,7 @@ enum FinishConversationResult {
 enum DesktopConversationMatchPolicy {
   /// Backend and local clocks can differ slightly around WebSocket close/reconnect.
   static let startedAtTolerance: TimeInterval = 10
+  static let cloudReconciliationStatuses: [ConversationStatus] = [.inProgress, .processing, .completed]
 
   static func matchesDesktopConversation(
     startedAt conversationStartedAt: Date?,
@@ -87,6 +88,17 @@ enum DesktopConversationMatchPolicy {
     source: ConversationSource?
   ) -> Bool {
     conversationId == boundBackendId && source == .desktop && status != .inProgress
+  }
+
+  static func shouldFinalizeTimestampMatchedConversation(status: ConversationStatus) -> Bool {
+    status == .inProgress
+  }
+
+  static func canCompleteTimestampMatchedConversation(
+    status: ConversationStatus,
+    source: ConversationSource?
+  ) -> Bool {
+    source == .desktop && status != .inProgress
   }
 
   static func canForceProcessBoundCloudSession(
@@ -182,7 +194,9 @@ class AppState: ObservableObject {
   // People (speaker voice profiles)
   @Published var people: [Person] = []
   var peopleById: [String: Person] {
-    Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+    // Last-write-wins: the API can return duplicate person ids; uniqueKeysWithValues
+    // would trap on a collision and crash the render path (same class as the fixed #6506).
+    Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
   }
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)

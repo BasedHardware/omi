@@ -248,6 +248,7 @@ struct RunningAppChip: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   SettingsPage(
     appState: AppState(),
@@ -255,3 +256,4 @@ struct RunningAppChip: View {
     highlightedSettingId: .constant(nil)
   )
 }
+#endif

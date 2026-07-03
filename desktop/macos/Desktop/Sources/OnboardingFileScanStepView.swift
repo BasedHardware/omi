@@ -59,6 +59,7 @@ struct OnboardingFileScanStepView: View {
             onContinue()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .keyboardShortcut(.defaultAction)
         } else {
           Text("Scanning your workspace…")
             .font(.system(size: 13))

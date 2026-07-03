@@ -12,6 +12,7 @@ final class AgentPill: ObservableObject, Identifiable {
         case starting
         case running
         case done
+        case stopped
         case failed(String)
 
         var displayLabel: String {
@@ -19,6 +20,7 @@ final class AgentPill: ObservableObject, Identifiable {
             case .queued: return "Queued"
             case .starting, .running: return "Running"
             case .done: return "Done"
+            case .stopped: return "Stopped"
             case .failed: return "Failed"
             }
         }
@@ -28,6 +30,7 @@ final class AgentPill: ObservableObject, Identifiable {
             case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
             case .starting, .running: return Color(red: 1.0, green: 0.80, blue: 0.40)
             case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
+            case .stopped: return Color(red: 0.64, green: 0.66, blue: 0.70)
             case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
             }
         }
@@ -38,13 +41,14 @@ final class AgentPill: ObservableObject, Identifiable {
             case .starting: return "starting"
             case .running: return "running"
             case .done: return "done"
+            case .stopped: return "stopped"
             case .failed: return "failed"
             }
         }
 
         var isFinished: Bool {
             switch self {
-            case .done, .failed: return true
+            case .done, .stopped, .failed: return true
             default: return false
             }
         }
@@ -108,8 +112,6 @@ final class AgentPillsManager: ObservableObject {
     static let shared = AgentPillsManager()
 
     @Published private(set) var pills: [AgentPill] = []
-    @Published var hoveredPillID: UUID?
-    @Published var pinnedPillID: UUID?
 
     /// Configurable soft cap so the row never grows past a reasonable width.
     private let maxPills: Int = 8
@@ -837,8 +839,30 @@ final class AgentPillsManager: ObservableObject {
             FloatingControlBarManager.shared.leaveActiveAgentSurfaceFromPillDismiss()
         }
         cleanup(pillID: pillID)
-        if hoveredPillID == pillID { hoveredPillID = nil }
-        if pinnedPillID == pillID { pinnedPillID = nil }
+    }
+
+    func stop(pillID: UUID) {
+        guard let pill = pills.first(where: { $0.id == pillID }), !pill.status.isFinished else { return }
+        log("AgentPills: stopping pill \(pill.title)")
+        if recordingPillID == pillID {
+            recordingPillID = nil
+            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
+        }
+        providersByPill[pillID]?.stopAgent()
+        runTasksByPill[pillID]?.cancel()
+        runTasksByPill[pillID] = nil
+        pill.status = .stopped
+        pill.latestActivity = "Stopped by user"
+        pill.completedAt = Date()
+        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        pill.markContentChanged()
+        if pill.viewedAt != nil {
+            scheduleViewedExpiration(for: pill)
+        }
+        AgentRuntimeStatusStore.shared.recordLocalCancellation(
+            surface: .floatingPill(pillId: pillID),
+            message: "Stopped by user"
+        )
     }
 
     func markViewed(pillID: UUID) {
@@ -1200,6 +1224,10 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
+        if pill.status == .stopped && projection.status != .cancelled {
+            return
+        }
+
         switch projection.status {
         case .queued:
             pill.status = .queued
@@ -1228,7 +1256,7 @@ final class AgentPillsManager: ObservableObject {
             ensureFailureMessage(message, for: pill)
             pill.markContentChanged()
         case .cancelled:
-            pill.status = .failed("Stopped by user")
+            pill.status = .stopped
             pill.latestActivity = "Stopped by user"
             pill.completedAt = projection.completedAt ?? Date()
             pill.markContentChanged()

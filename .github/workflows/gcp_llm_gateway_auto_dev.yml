@@ -1,0 +1,93 @@
+name: Auto Deploy LLM Gateway to GKE (Development)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/llm_gateway/**'
+      - 'backend/charts/llm-gateway/**'
+      - 'backend/charts/backend-secrets/**'
+      - 'backend/scripts/deploy-backend-secrets.sh'
+      - 'backend/scripts/deploy-llm-gateway.sh'
+      - 'backend/scripts/smoke-llm-gateway.py'
+      - 'backend/scripts/validate-llm-gateway-env.py'
+      - 'backend/Dockerfile'
+      - '.github/workflows/gcp_llm_gateway*.yml'
+
+env:
+  SERVICE: llm-gateway
+  REGION: us-central1
+
+jobs:
+  deploy:
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Validate gateway env wiring
+        run: |
+          python backend/scripts/validate-llm-gateway-env.py \
+            backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
+
+      - name: Build and Push Docker image
+        run: |
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy LLM Gateway to GKE cluster using Helm
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
+        run: |
+          IMAGE_TAG="${GITHUB_SHA::7}" backend/scripts/deploy-llm-gateway.sh
+
+      - name: Smoke LLM Gateway
+        run: |
+          TOKEN="$(kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.OMI_LLM_GATEWAY_SERVICE_TOKEN}' | base64 -d)"
+          kubectl -n ${{ vars.ENV }}-omi-backend run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
+            --rm -i --restart=Never \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --env "SMOKE_URL=http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080" \
+            --env "SMOKE_TOKEN=$TOKEN" \
+            --command -- sh -c 'python scripts/smoke-llm-gateway.py --url "$SMOKE_URL" --token "$SMOKE_TOKEN"'
+
+      - name: Show Output
+        run: echo "LLM Gateway deployed to development"

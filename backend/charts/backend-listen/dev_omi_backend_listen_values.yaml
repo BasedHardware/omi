@@ -115,6 +115,10 @@ env:
     value: "true"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
     value: "1.0"
+  - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED
+    value: "true"
+  - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE
+    value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -266,6 +270,8 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: TYPESENSE_API_KEY
+  - name: MEMORY_TYPESENSE_COLLECTION
+    value: "canonical_memory_atoms"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: DEEPGRAM_SELF_HOSTED_URL
@@ -430,6 +436,16 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+  - name: MCP_OAUTH_PUBLIC_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_PUBLIC_CLIENT_ID
+  - name: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

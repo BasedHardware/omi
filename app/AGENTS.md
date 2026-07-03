@@ -5,20 +5,13 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 ## Build Bootstrap
 
 ### Flavors
-- **dev**: `com.friend.ios.dev` — uses `.client.dev.env`, Firebase project `based-hardware-dev`
-- **prod**: `com.friend.ios` — uses `.client.env`, Firebase project `based-hardware-prod`
-
-### Public Client Env
-- Every Envied value is compiled into public client binaries. Treat `.client.env`, `.client.dev.env`, generated Envied output, IPA/AAB contents, and bundled app resources as public.
-- Add new app config only through `app/config/client_env_policy.yaml`, then update `app/.client.env.example` and `scripts/create-public-client-env.sh`.
-- Do not add provider API keys, OAuth client secrets, service accounts, private keys, admin tokens, signing credentials, or backend-only secrets to app env files or `lib/env/**`.
-- `obfuscate: true` is not a security boundary. It only raises extraction effort.
-- Run `python3 ../scripts/check-public-client-secrets.py` from `app/` after env or release workflow changes.
+- **dev**: `com.friend.ios.dev` — uses `.dev.env`, Firebase project `based-hardware-dev`
+- **prod**: `com.friend.ios` — uses `.prod.env`, Firebase project `based-hardware-prod`
 
 ### Generated Files (never edit manually)
 | Generator | Source | Output | Command |
 |-----------|--------|--------|---------|
-| envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (public client config) | `flutter pub run build_runner build` |
+| envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (obfuscated secrets) | `flutter pub run build_runner build` |
 | json_serializable | `@JsonSerializable` models | `*.g.dart` (fromJson/toJson) | `flutter pub run build_runner build` |
 | pigeon | `lib/watch_interface.dart` | `lib/gen/flutter_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
 | flutter_gen | `pubspec.yaml` assets/fonts | `lib/gen/assets.gen.dart`, `lib/gen/fonts.gen.dart` | `flutter pub run build_runner build` |
@@ -80,6 +73,10 @@ flutter test           # same thing
 flutter test test/unit/  # specific directory
 ```
 
+`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL`.
+Set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/` for local backend tests, or
+`OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default.
+
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
@@ -111,8 +108,8 @@ flutter test test/unit/  # specific directory
 All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash, X-App-Version, plus Bearer token.
 
 ### API Base URLs
-- Dev: configured in `.client.dev.env` → `Env.apiBaseUrl`
-- Prod: configured in `.client.env` → `Env.apiBaseUrl`
+- Dev: configured in `.dev.env` → `Env.apiBaseUrl`
+- Prod: configured in `.prod.env` → `Env.apiBaseUrl`
 - Agent proxy WS: derived from apiBaseUrl (api.omi.me → agent.omi.me)
 
 ## Codegen Rules

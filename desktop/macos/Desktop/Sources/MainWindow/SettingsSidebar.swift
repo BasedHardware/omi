@@ -677,6 +677,7 @@ struct SettingHighlightModifier: ViewModifier {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   SettingsSidebar(
     selectedSection: .constant(.advanced),
@@ -685,3 +686,4 @@ struct SettingHighlightModifier: ViewModifier {
   )
   .preferredColorScheme(.dark)
 }
+#endif

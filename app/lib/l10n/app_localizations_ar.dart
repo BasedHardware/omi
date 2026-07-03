@@ -1700,7 +1700,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'أجهزة',
+      one: 'جهاز',
+    );
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -9308,16 +9313,23 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'هذا الجهاز';
+
   @override
   String get memoryThisIphone => 'هذا الـ iPhone';
+
   @override
   String get memoryThisPhone => 'هذا الهاتف';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'كيفية استخدام Omi';
 
   @override
@@ -9418,4 +9430,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get latest => 'الأحدث';
+
+  @override
+  String get flashFirmware => 'تحديث البرنامج الثابت';
 }

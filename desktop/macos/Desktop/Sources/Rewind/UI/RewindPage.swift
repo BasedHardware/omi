@@ -1890,7 +1890,9 @@ extension View {
 }
 
 
+#if canImport(PreviewsMacros)
 #Preview {
     RewindPage()
         .frame(width: 1000, height: 700)
 }
+#endif
