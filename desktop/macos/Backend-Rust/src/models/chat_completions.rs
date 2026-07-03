@@ -432,8 +432,40 @@ pub fn map_stop_reason(anthropic_reason: Option<&str>) -> Option<String> {
         "max_tokens" => "length".to_string(),
         "tool_use" => "tool_calls".to_string(),
         "stop_sequence" => "stop".to_string(),
+        // Long-running server tools (web search) can pause the turn. The proxy
+        // cannot resume it — the OpenAI client never saw the server tool blocks
+        // — so terminate cleanly instead of leaking an unknown finish_reason.
+        "pause_turn" => "stop".to_string(),
         other => other.to_string(),
     })
+}
+
+/// Merge stream usage: message_start carries the input/cache token counts,
+/// but on server-tool turns (web search) the final message_delta usage is
+/// cumulative across search iterations — prefer its nonzero fields so cost
+/// doesn't undercount searched turns. output and server_tool_use are only
+/// authoritative in the final usage.
+pub fn merge_stream_usage(
+    initial: Option<&AnthropicUsage>,
+    final_usage: &AnthropicUsage,
+) -> AnthropicUsage {
+    let pick = |final_v: i64, initial_v: i64| if final_v > 0 { final_v } else { initial_v };
+    AnthropicUsage {
+        input_tokens: pick(
+            final_usage.input_tokens,
+            initial.map_or(0, |u| u.input_tokens),
+        ),
+        output_tokens: final_usage.output_tokens,
+        cache_creation_input_tokens: pick(
+            final_usage.cache_creation_input_tokens,
+            initial.map_or(0, |u| u.cache_creation_input_tokens),
+        ),
+        cache_read_input_tokens: pick(
+            final_usage.cache_read_input_tokens,
+            initial.map_or(0, |u| u.cache_read_input_tokens),
+        ),
+        server_tool_use: final_usage.server_tool_use.clone(),
+    }
 }
 
 pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {

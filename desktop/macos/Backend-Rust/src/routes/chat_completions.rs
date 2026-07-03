@@ -226,7 +226,9 @@ fn translate_request_inner(
     // moved off Claude Code (whose built-in WebSearch it inherited). Bare
     // completions like the pill router classifier stay tool-free. Prepending
     // keeps the tools array byte-stable for the prompt-cache prefix.
-    let inject_web_search = enable_web_search;
+    // Haiku is excluded: web_search_20260209 is not supported there, and a
+    // tools-bearing haiku request would 400 with it attached.
+    let inject_web_search = enable_web_search && !upstream_model.starts_with("claude-haiku");
     let anthropic_tools = req.tools.as_ref().map(|tools| {
         let mut defs: Vec<AnthropicToolDef> = Vec::with_capacity(tools.len() + 1);
         if inject_web_search && !tools.is_empty() {
@@ -1033,6 +1035,13 @@ async fn handle_streaming(
                             final_usage = Some(u);
                         }
 
+                        if delta.stop_reason.as_deref() == Some("pause_turn") {
+                            // Mapped to "stop" — the proxy cannot resume a paused
+                            // server-tool turn, so the reply ends where it is.
+                            tracing::warn!(
+                                "chat_completions: pause_turn stop_reason — terminating turn"
+                            );
+                        }
                         let finish = map_stop_reason(delta.stop_reason.as_deref());
                         let chunk_val = make_chunk(
                             &stream_id,
@@ -1050,14 +1059,7 @@ async fn handle_streaming(
 
                         // Send usage chunk
                         if let Some(ref fu) = final_usage {
-                            // Merge initial + final usage
-                            let merged = AnthropicUsage {
-                                input_tokens: initial_usage.as_ref().map_or(0, |u| u.input_tokens),
-                                output_tokens: fu.output_tokens,
-                                cache_creation_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_creation_input_tokens),
-                                cache_read_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_read_input_tokens),
-                                server_tool_use: fu.server_tool_use.clone(),
-                            };
+                            let merged = merge_stream_usage(initial_usage.as_ref(), fu);
                             let openai_usage = anthropic_usage_to_openai(&merged);
                             let usage_chunk = ChatCompletionChunk {
                                 id: stream_id.clone(),
@@ -1078,13 +1080,7 @@ async fn handle_streaming(
                         // Log usage asynchronously — skip for BYOK (user pays own bill)
                         if !is_byok {
                         if let Some(ref fu) = final_usage {
-                            let merged = AnthropicUsage {
-                                input_tokens: initial_usage.as_ref().map_or(0, |u| u.input_tokens),
-                                output_tokens: fu.output_tokens,
-                                cache_creation_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_creation_input_tokens),
-                                cache_read_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_read_input_tokens),
-                                server_tool_use: fu.server_tool_use.clone(),
-                            };
+                            let merged = merge_stream_usage(initial_usage.as_ref(), fu);
                             let cost = compute_cost(&merged, &upstream_model);
                             let uid_clone = uid.clone();
                             let fs = firestore.clone();
@@ -1968,6 +1964,89 @@ mod tests {
         assert_eq!(tools.len(), 1);
         let only = serde_json::to_value(&tools[0]).unwrap();
         assert_eq!(only["name"], "get_weather");
+    }
+
+    #[test]
+    fn test_translate_request_no_web_search_on_haiku() {
+        // web_search_20260209 is unsupported on haiku — never inject there.
+        let req = ChatCompletionRequest {
+            model: "claude-haiku-4-5".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hi")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: Some(vec![ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "some_tool".to_string(),
+                    description: None,
+                    parameters: None,
+                },
+            }]),
+            tool_choice: None,
+        };
+        let result = translate_request_inner(&req, "claude-haiku-4-5", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "some_tool"
+        );
+    }
+
+    #[test]
+    fn test_map_stop_reason_pause_turn_terminates() {
+        assert_eq!(
+            map_stop_reason(Some("pause_turn")),
+            Some("stop".to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_stream_usage_prefers_final_nonzero() {
+        let initial = AnthropicUsage {
+            input_tokens: 100,
+            output_tokens: 0,
+            cache_creation_input_tokens: 50,
+            cache_read_input_tokens: 20,
+            server_tool_use: None,
+        };
+        // Web-search turn: final usage carries cumulative input + search count.
+        let fin = AnthropicUsage {
+            input_tokens: 5000,
+            output_tokens: 300,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            server_tool_use: Some(AnthropicServerToolUsage {
+                web_search_requests: 2,
+            }),
+        };
+        let merged = merge_stream_usage(Some(&initial), &fin);
+        assert_eq!(merged.input_tokens, 5000); // final wins when nonzero
+        assert_eq!(merged.output_tokens, 300);
+        assert_eq!(merged.cache_creation_input_tokens, 50); // fallback to initial
+        assert_eq!(merged.cache_read_input_tokens, 20); // fallback to initial
+        assert_eq!(merged.server_tool_use.unwrap().web_search_requests, 2);
+
+        // Plain turn: final has only output — initial fields survive.
+        let fin_plain = AnthropicUsage {
+            input_tokens: 0,
+            output_tokens: 40,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            server_tool_use: None,
+        };
+        let merged_plain = merge_stream_usage(Some(&initial), &fin_plain);
+        assert_eq!(merged_plain.input_tokens, 100);
+        assert_eq!(merged_plain.cache_read_input_tokens, 20);
+        assert!(merged_plain.server_tool_use.is_none());
     }
 
     #[test]
