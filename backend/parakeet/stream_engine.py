@@ -37,6 +37,7 @@ class StreamEngine:
         self._idle_timeout = idle_timeout
         self._max_chunk_bytes = max_chunk_bytes
         self._sessions: dict[str, StreamSession] = {}
+        self._open_semaphore = asyncio.Semaphore(max_concurrent_streams)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._reaper_task: Optional[asyncio.Task] = None
         self._metrics = {
@@ -83,11 +84,15 @@ class StreamEngine:
                     logger.error(f"Failed to reap stream {sid}: {exc}")
 
     async def open_stream(self) -> dict:
+        if self._open_semaphore.locked():
+            raise TooManyStreamsError(f"Active streams at limit {self._max_concurrent}")
+        await self._open_semaphore.acquire()
         stream_id = str(uuid.uuid4())
-        if len(self._sessions) >= self._max_concurrent:
-            raise TooManyStreamsError(f"Active streams {len(self._sessions)} at limit {self._max_concurrent}")
-
-        result = await self._gpu_worker.stream_open({"stream_id": stream_id}, self._loop)
+        try:
+            result = await self._gpu_worker.stream_open({"stream_id": stream_id}, self._loop)
+        except BaseException:
+            self._open_semaphore.release()
+            raise
         self._sessions[stream_id] = StreamSession(stream_id=stream_id)
         self._metrics["total_streams_opened"] += 1
         logger.info(f"Opened stream {stream_id} (active: {len(self._sessions)})")
@@ -116,6 +121,7 @@ class StreamEngine:
         if session is None:
             return {"stream_id": stream_id, "status": "not_found"}
 
+        self._open_semaphore.release()
         try:
             result = await self._gpu_worker.stream_close({"stream_id": stream_id}, self._loop)
         except Exception as exc:
