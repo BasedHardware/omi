@@ -38,10 +38,10 @@ final class DashboardCaptureStateTests: XCTestCase {
 
         XCTAssertTrue(source.contains("@State private var selectedImportConnector: ImportConnector?"))
         XCTAssertTrue(source.contains("@State private var selectedExportDestination: MemoryExportDestination?"))
-        XCTAssertTrue(source.contains(".dismissableSheet(item: $selectedImportConnector)"))
-        XCTAssertTrue(source.contains(".dismissableSheet(item: $selectedExportDestination)"))
-        XCTAssertTrue(importMethod.contains("selectedImportConnector = ImportConnector.all.first { $0.id == connectorID }"))
-        XCTAssertTrue(exportMethod.contains("selectedExportDestination = destination"))
+        XCTAssertFalse(source.contains(".dismissableSheet(item: $selectedImportConnector)"))
+        XCTAssertFalse(source.contains(".dismissableSheet(item: $selectedExportDestination)"))
+        XCTAssertTrue(importMethod.contains("presentImportConnector(connector)"))
+        XCTAssertTrue(exportMethod.contains("presentExportDestination(destination)"))
         XCTAssertFalse(importMethod.contains("navigate(to: .apps)"))
         XCTAssertFalse(exportMethod.contains("navigate(to: .apps)"))
         XCTAssertFalse(importMethod.contains("desktopAutomationOpenImportRequested"))
@@ -60,7 +60,6 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(source.contains("@State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports"))
         XCTAssertTrue(source.contains("@State private var appsPopupPresentationID = UUID()"))
         XCTAssertTrue(source.contains("private func appsPopupOverlay("))
-        XCTAssertTrue(source.contains(".dismissableSheet(item: $selectedCatalogApp)"))
         XCTAssertTrue(source.contains("AppsPage(\n                appProvider: appProvider,\n                appState: appState,"))
         XCTAssertTrue(source.contains("initialSection: appsPopupInitialSection"))
         XCTAssertTrue(source.contains("onSelectApp: { app in\n                    openAppFromAppsPopup(app)\n                }"))
@@ -83,11 +82,26 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(popupMethod.contains("isShowingAppsPopup = true"))
         XCTAssertFalse(popupMethod.contains("navigate(to: .apps)"))
         XCTAssertTrue(appSelectionMethod.contains("isShowingAppsPopup = false"))
-        XCTAssertTrue(appSelectionMethod.contains("selectedCatalogApp = app"))
+        XCTAssertTrue(appSelectionMethod.contains("presentCatalogApp(app)"))
         XCTAssertTrue(importSelectionMethod.contains("isShowingAppsPopup = false"))
-        XCTAssertTrue(importSelectionMethod.contains("selectedImportConnector = connector"))
+        XCTAssertTrue(importSelectionMethod.contains("presentImportConnector(connector)"))
         XCTAssertTrue(exportSelectionMethod.contains("isShowingAppsPopup = false"))
-        XCTAssertTrue(exportSelectionMethod.contains("selectedExportDestination = destination"))
+        XCTAssertTrue(exportSelectionMethod.contains("presentExportDestination(destination)"))
+    }
+
+    func testHomeConnectSheetsUseHomeScopedPresentation() throws {
+        let source = try dashboardSource()
+
+        XCTAssertTrue(source.contains("private var homeConnectSheetIsPresented: Bool"))
+        XCTAssertTrue(source.contains("private var legacySelectedCatalogApp: Binding<OmiApp?>"))
+        XCTAssertTrue(source.contains("private var legacySelectedImportConnector: Binding<ImportConnector?>"))
+        XCTAssertTrue(source.contains("private var legacySelectedExportDestination: Binding<MemoryExportDestination?>"))
+        XCTAssertTrue(source.contains("homeConnectSheetOverlay(\n                    contentWidth: proxy.size.width"))
+        XCTAssertTrue(source.contains("let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)"))
+        XCTAssertTrue(source.contains(".position(x: contentWidth / 2, y: panelTop + panelHeight / 2)"))
+        XCTAssertTrue(source.contains(".onTapGesture {\n                    dismissHomeConnectSheet()"))
+        XCTAssertFalse(source.contains("homeConnectSheetHasKeyboardFocus"))
+        XCTAssertTrue(source.contains("private func dismissHomeConnectSheet()"))
     }
 
     func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {

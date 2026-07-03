@@ -279,6 +279,39 @@ struct DashboardPage: View {
     private static let appsPopupHorizontalMargin: CGFloat = 48
     private static let appsPopupVerticalMargin: CGFloat = 32
     private static let appsPopupCornerRadius: CGFloat = 22
+    private static let homeConnectSheetHorizontalMargin: CGFloat = 56
+    private static let homeConnectSheetVerticalMargin: CGFloat = 44
+    private static let homeConnectSheetMinWidth: CGFloat = 360
+    private static let homeConnectSheetMinHeight: CGFloat = 360
+    private static let homeConnectSheetCornerRadius: CGFloat = 24
+    private static let appDetailSheetPreferredSize = CGSize(width: 500, height: 600)
+    private static let importConnectorSheetPreferredSize = CGSize(width: 520, height: 500)
+    private static let exportDestinationSheetPreferredSize = CGSize(width: 520, height: 560)
+
+    private var homeConnectSheetIsPresented: Bool {
+        selectedCatalogApp != nil || selectedImportConnector != nil || selectedExportDestination != nil
+    }
+
+    private var legacySelectedCatalogApp: Binding<OmiApp?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedCatalogApp : nil },
+            set: { selectedCatalogApp = $0 }
+        )
+    }
+
+    private var legacySelectedImportConnector: Binding<ImportConnector?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedImportConnector : nil },
+            set: { selectedImportConnector = $0 }
+        )
+    }
+
+    private var legacySelectedExportDestination: Binding<MemoryExportDestination?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedExportDestination : nil },
+            set: { selectedExportDestination = $0 }
+        )
+    }
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
@@ -321,14 +354,14 @@ struct DashboardPage: View {
             )
             .frame(minWidth: 500, minHeight: 500)
         }
-        .dismissableSheet(item: $selectedCatalogApp) { app in
+        .dismissableSheet(item: legacySelectedCatalogApp) { app in
             AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedCatalogApp = nil })
                 .frame(width: 500, height: 650)
                 .onAppear {
                     AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
                 }
         }
-        .dismissableSheet(item: $selectedImportConnector) { connector in
+        .dismissableSheet(item: legacySelectedImportConnector) { connector in
             ImportConnectorSheet(
                 connector: connector,
                 appState: appState,
@@ -339,7 +372,7 @@ struct DashboardPage: View {
             )
             .frame(width: 520, height: 620)
         }
-        .dismissableSheet(item: $selectedExportDestination) { destination in
+        .dismissableSheet(item: legacySelectedExportDestination) { destination in
             ConnectDestinationSheet(
                 destination: destination,
                 statuses: $memoryExportStatuses,
@@ -501,8 +534,16 @@ struct DashboardPage: View {
                     panelHeight: panelHeight,
                     panelTop: panelTop
                 )
+
+                homeConnectSheetOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
             }
             .animation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
+            .animation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
         }
     }
 
@@ -557,6 +598,91 @@ struct DashboardPage: View {
                 isShowingAppsPopup = false
             }
             .zIndex(3)
+        }
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        if homeConnectSheetIsPresented {
+            Color.black.opacity(0.22)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    dismissHomeConnectSheet()
+                }
+                .transition(.opacity)
+                .zIndex(4)
+
+            let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+            homeConnectSheetContent()
+                .frame(width: sheetSize.width, height: sheetSize.height)
+                .background(OmiColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
+                        .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
+                .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+                .zIndex(5)
+        }
+    }
+
+    private func homeConnectSheetSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        let preferred = homeConnectSheetPreferredSize
+        return CGSize(
+            width: min(
+                preferred.width,
+                max(Self.homeConnectSheetMinWidth, panelWidth - (Self.homeConnectSheetHorizontalMargin * 2))
+            ),
+            height: min(
+                preferred.height,
+                max(Self.homeConnectSheetMinHeight, panelHeight - (Self.homeConnectSheetVerticalMargin * 2))
+            )
+        )
+    }
+
+    private var homeConnectSheetPreferredSize: CGSize {
+        if selectedCatalogApp != nil {
+            return Self.appDetailSheetPreferredSize
+        }
+        if selectedImportConnector != nil {
+            return Self.importConnectorSheetPreferredSize
+        }
+        return Self.exportDestinationSheetPreferredSize
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetContent() -> some View {
+        if let app = selectedCatalogApp {
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { dismissHomeConnectSheet() })
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
+        } else if let connector = selectedImportConnector {
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: importConnectorStatusStore,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
+        } else if let destination = selectedExportDestination {
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $memoryExportStatuses,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
         }
     }
 
@@ -808,25 +934,51 @@ struct DashboardPage: View {
 
     private func openAppFromAppsPopup(_ app: OmiApp) {
         isShowingAppsPopup = false
-        selectedCatalogApp = app
+        presentCatalogApp(app)
     }
 
     private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
         isShowingAppsPopup = false
-        selectedImportConnector = connector
+        presentImportConnector(connector)
     }
 
     private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
         isShowingAppsPopup = false
-        selectedExportDestination = destination
+        presentExportDestination(destination)
     }
 
     private func openImportConnector(_ connectorID: String) {
-        selectedImportConnector = ImportConnector.all.first { $0.id == connectorID }
+        if let connector = ImportConnector.all.first(where: { $0.id == connectorID }) {
+            presentImportConnector(connector)
+        }
     }
 
     private func openExportDestination(_ destination: MemoryExportDestination) {
+        presentExportDestination(destination)
+    }
+
+    private func presentCatalogApp(_ app: OmiApp) {
+        selectedImportConnector = nil
+        selectedExportDestination = nil
+        selectedCatalogApp = app
+    }
+
+    private func presentImportConnector(_ connector: ImportConnector) {
+        selectedCatalogApp = nil
+        selectedExportDestination = nil
+        selectedImportConnector = connector
+    }
+
+    private func presentExportDestination(_ destination: MemoryExportDestination) {
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
         selectedExportDestination = destination
+    }
+
+    private func dismissHomeConnectSheet() {
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
+        selectedExportDestination = nil
     }
 
     private func openReferFriend() {
