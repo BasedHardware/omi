@@ -90,6 +90,19 @@ def import_write_violation(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
+def import_write_violation_for_guard(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """`import_write_violation`, except per-file local-file items are exempt.
+
+    The memory endpoints acknowledge-and-drop per-file items without
+    persisting them; letting the guard see them would 409 an old desktop
+    build's whole onboarding batch in enforce mode before the drop can
+    happen, defeating the backstop.
+    """
+    if is_per_file_local_import_tags(payload.get("tags")):
+        return None
+    return import_write_violation(payload)
+
+
 def import_write_block_mode() -> str:
     mode = (os.getenv(IMPORT_WRITE_BLOCK_MODE_ENV) or "log").strip().lower()
     return mode if mode in {"off", "log", "enforce"} else "log"

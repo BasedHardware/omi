@@ -32,7 +32,7 @@ from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.import_write_guard import (
     import_write_block_mode,
-    import_write_violation,
+    import_write_violation_for_guard,
     is_per_file_local_import_tags,
 )
 from utils.memory.memory_api_contract import (
@@ -138,7 +138,11 @@ async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: st
     for payload in payloads:
         if not isinstance(payload, dict):
             continue
-        violation = import_write_violation(payload)
+        # Per-file local-file items are exempt: the endpoints below
+        # acknowledge-and-drop them without persisting, and a 409 here
+        # (enforce mode) would fail an old desktop build's whole batch
+        # before that drop can happen.
+        violation = import_write_violation_for_guard(payload)
         if not violation:
             continue
         logger.warning(
