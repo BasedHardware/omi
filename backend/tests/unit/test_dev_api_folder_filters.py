@@ -99,6 +99,7 @@ _mock_populate_speaker_names = MagicMock()
 
 import database.conversations as conversations_db
 import database.folders as folders_db
+from dependencies import ApiKeyAuth, get_api_key_auth, get_auth_with_conversations_read, get_uid_with_conversations_read
 
 _mock_get_conversations = MagicMock(return_value=[])
 conversations_db.get_conversations = _mock_get_conversations
@@ -113,8 +114,6 @@ folders_db.initialize_system_folders = _mock_initialize_system_folders
 
 
 def _read_auth():
-    from dependencies import ApiKeyAuth
-
     return ApiKeyAuth(
         uid='uid1',
         scopes=['conversations:read'],
@@ -366,7 +365,6 @@ def _build_test_app():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers.developer import router as developer_router
-    from dependencies import get_auth_with_conversations_read, get_uid_with_conversations_read
 
     app = FastAPI()
     app.include_router(developer_router)
@@ -463,7 +461,6 @@ class TestDevApiHttpLayer:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from routers.developer import router as developer_router
-        from dependencies import get_api_key_auth, ApiKeyAuth
 
         app = FastAPI()
         app.include_router(developer_router)
@@ -484,7 +481,6 @@ class TestDevApiHttpLayer:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from routers.developer import router as developer_router
-        from dependencies import get_api_key_auth, ApiKeyAuth
 
         app = FastAPI()
         app.include_router(developer_router)

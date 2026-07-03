@@ -192,18 +192,19 @@ def _log_dev_api_rate_limit_failure(
     policy_name: str,
     status_code: int,
 ):
-    if request is None:
-        return
+    path = request.url.path if request else 'unknown_path'
+    remote_ip = request.client.host if request and request.client else None
+    user_agent = sanitize(request.headers.get('user-agent')) if request else None
     logger.warning(
         "developer_api_rate_limit_failure policy=%s status=%s path=%s uid=%s app_id=%s key_id=%s remote_ip=%s user_agent=%s",
         policy_name,
         status_code,
-        request.url.path,
+        path,
         auth.uid,
         auth.app_id or 'unknown_app',
         auth.key_id or 'unknown_key',
-        request.client.host if request.client else None,
-        sanitize(request.headers.get('user-agent')),
+        remote_ip,
+        user_agent,
     )
 
 

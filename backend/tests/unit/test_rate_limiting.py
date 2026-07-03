@@ -532,11 +532,36 @@ class TestRouterWiring(unittest.TestCase):
         self.assertIn("auth.app_id or 'unknown_app'", developer_source)
         self.assertIn("auth.key_id or 'unknown_key'", developer_source)
         self.assertIn("sanitize(request.headers.get('user-agent'))", developer_source)
-        self.assertIn("sanitize(request.headers.get('user-agent'))", dependencies_source)
         self.assertNotIn("request.headers.get('Authorization'", developer_source)
         self.assertNotIn('request.headers.get("Authorization"', developer_source)
         self.assertNotIn("request.headers.get('Authorization'", dependencies_source)
         self.assertNotIn('request.headers.get("Authorization"', dependencies_source)
+
+    def test_developer_rate_limit_failures_log_without_request(self):
+        dependencies = importlib.import_module("dependencies")
+        auth = dependencies.ApiKeyAuth(
+            uid="uid1",
+            scopes=["conversations:read"],
+            app_id="test-app",
+            key_id="test-key",
+        )
+
+        with patch.object(
+            dependencies,
+            "check_api_key_rate_limit",
+            side_effect=HTTPException(status_code=429, detail="Rate limit exceeded"),
+        ):
+            with self.assertLogs("dependencies", level="WARNING") as logs:
+                with self.assertRaises(HTTPException):
+                    dependencies.check_conversation_transcript_read_limit(auth)
+
+        log_output = "\n".join(logs.output)
+        self.assertIn("developer_api_rate_limit_failure policy=dev:conversation_transcript_read", log_output)
+        self.assertIn("path=unknown_path", log_output)
+        self.assertIn("uid=uid1", log_output)
+        self.assertIn("app_id=test-app", log_output)
+        self.assertIn("key_id=test-key", log_output)
+        self.assertNotIn("Authorization", log_output)
 
     def test_developer_read_routes_do_not_add_duplicate_uid_wrappers(self):
         developer_source = open("routers/developer.py", encoding='utf-8').read()
