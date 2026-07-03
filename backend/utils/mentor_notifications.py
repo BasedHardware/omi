@@ -115,7 +115,9 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Lis
         tz_name = quiet.get('time_zone')
         try:
             now_local = datetime.now(pytz.timezone(tz_name)) if tz_name else datetime.now(pytz.utc)
-        except pytz.UnknownTimeZoneError:
+        except (pytz.UnknownTimeZoneError, AttributeError, TypeError):
+            # Unknown zone string, or corrupted non-string value (pytz raises AttributeError):
+            # fall back to UTC rather than crash the notification pipeline.
             now_local = datetime.now(pytz.utc)
         if is_within_quiet_hours(now_local.hour, quiet['start_hour'], quiet['end_hour']):
             return None

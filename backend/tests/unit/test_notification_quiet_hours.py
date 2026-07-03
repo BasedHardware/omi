@@ -176,7 +176,7 @@ class TestMentorNotificationRespectsQuietHours:
         assert result is None
 
     def test_bad_timezone_falls_back_to_utc_without_raising(self):
-        # An unknown stored time zone must not crash the notification path.
+        # An unknown stored time zone string must not crash the notification path.
         with patch.object(mentor, "get_mentor_notification_frequency", return_value=3), patch.object(
             mentor,
             "get_quiet_hours",
@@ -187,6 +187,25 @@ class TestMentorNotificationRespectsQuietHours:
             result = mentor.process_mentor_notification("u_badtz", [{"text": "hello there"}])
         assert result is None
         within.assert_called_once()
+
+    def test_non_string_timezone_does_not_crash(self):
+        # A corrupted non-string time_zone (pytz.timezone(int) raises AttributeError, not
+        # UnknownTimeZoneError) must fall back to UTC and still evaluate the window, not crash.
+        with patch.object(mentor, "get_mentor_notification_frequency", return_value=3), patch.object(
+            mentor,
+            "get_quiet_hours",
+            return_value={"enabled": True, "start_hour": 22, "end_hour": 7, "time_zone": 12345},
+        ), patch.object(mentor, "is_within_quiet_hours", return_value=False) as within, patch.object(
+            mentor.message_buffer,
+            "get_buffer",
+            return_value={"messages": [], "messages_at_last_analysis": 0, "silence_detected": False},
+        ):
+            result = mentor.process_mentor_notification("u_nonstr_tz", [])
+        within.assert_called_once()
+        # The hour handed to the window check came from the UTC fallback: a valid 0-23 int.
+        hour_arg = within.call_args.args[0]
+        assert isinstance(hour_arg, int) and 0 <= hour_arg <= 23
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
