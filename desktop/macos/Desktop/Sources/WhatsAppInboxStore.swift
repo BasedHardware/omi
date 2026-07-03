@@ -221,8 +221,11 @@ final class WhatsAppInboxStore: ObservableObject {
   }
 
   /// Draft a reply and send it immediately, without review. Only ever called for
-  /// chats the user explicitly enabled auto-reply on. Sent messages can't be
-  /// unsent, so a send failure is logged and the draft is simply dropped.
+  /// chats the user explicitly enabled auto-reply on. Sent messages can't be unsent, so
+  /// the send is confirmed against WhatsApp's database before being reflected; if it
+  /// can't be confirmed, the composed reply is kept as a draft (not silently dropped)
+  /// so a possibly-unsent reply isn't lost — except when auto-reply was toggled off
+  /// mid-send, where nothing is kept.
   private func autoReply(_ chat: WhatsAppChat) async {
     // Groups are DRAFT-ONLY: never auto-send to a group chat. (In practice WhatsApp
     // group sends already have no dialable number, but guard explicitly so this holds
@@ -261,6 +264,10 @@ final class WhatsAppInboxStore: ObservableObject {
       // Only reflect the send once WhatsApp's database confirms it (send() throws
       // otherwise), so auto-reply never optimistically shows an unsent message.
       appendSent(text, to: chat.id)
+    } catch is CancellationError {
+      // Auto-reply was toggled off (or the task cancelled) mid-send — nothing was sent
+      // and the user opted out, so don't leave a draft behind.
+      NSLog("WhatsApp auto-reply cancelled mid-send for \(chat.chatID)")
     } catch {
       // The send wasn't confirmed. This is either nothing-sent (permission missing,
       // recipient unverifiable) or .sendUnconfirmed (Return fired but no confirming row

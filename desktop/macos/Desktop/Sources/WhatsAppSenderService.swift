@@ -150,8 +150,12 @@ enum WhatsAppSenderService {
   @MainActor
   static func send(text: String, toChatID chatID: String, phone explicitPhone: String? = nil) async throws {
     // Only one send may drive the shared WhatsApp UI at a time (see WhatsAppSendGate).
+    // Acquiring can park for seconds while another send holds the gate, so re-check
+    // cancellation right after: if this task was cancelled while parked (e.g. auto-reply
+    // toggled off for this chat), don't send.
     await WhatsAppSendGate.shared.acquire()
     defer { Task { await WhatsAppSendGate.shared.release() } }
+    try Task.checkCancellation()
 
     let reply = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !reply.isEmpty else { throw WhatsAppSenderError.notConfirmed }
@@ -211,6 +215,10 @@ enum WhatsAppSenderService {
     else {
       throw WhatsAppSenderError.notConfirmed
     }
+
+    // Final cancellation check before the irreversible keystroke — the recipient guard
+    // took a few seconds, during which auto-reply may have been toggled off.
+    try Task.checkCancellation()
 
     switch await pressReturnInWhatsApp() {
     case .ok:
