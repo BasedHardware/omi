@@ -108,6 +108,7 @@ struct DismissButton: View {
 struct AppsPage: View {
     @ObservedObject var appProvider: AppProvider
     var appState: AppState? = nil
+    var onDismiss: (() -> Void)? = nil
     @StateObject private var connectorStatusStore = ImportConnectorStatusStore()
     @State private var searchText = ""
     @State private var selectedApp: OmiApp?
@@ -430,6 +431,10 @@ struct AppsPage: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
+            }
+
+            if let onDismiss {
+                DismissButton(action: onDismiss)
             }
         }
     }

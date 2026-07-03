@@ -48,12 +48,48 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertFalse(exportMethod.contains("desktopAutomationOpenExportRequested"))
     }
 
+    func testHomeMoreUsesAppsPopup() throws {
+        let source = try dashboardSource()
+        let popupMethod = try methodBody(named: "openAppsPopup", in: source)
+
+        XCTAssertTrue(source.contains("@State private var isShowingAppsPopup = false"))
+        XCTAssertTrue(source.contains("private func appsPopupOverlay("))
+        XCTAssertTrue(source.contains("AppsPage(\n                appProvider: appProvider,\n                appState: appState,"))
+        XCTAssertTrue(source.contains("onDismiss: {\n                    isShowingAppsPopup = false"))
+        XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
+        XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
+        XCTAssertTrue(source.contains(".onTapGesture {\n                    isShowingAppsPopup = false"))
+        XCTAssertTrue(source.contains(".onExitCommand {\n                isShowingAppsPopup = false"))
+        XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup()"))
+        XCTAssertFalse(source.contains("@State private var dashboardContentSize"))
+        XCTAssertFalse(source.contains(".dismissableSheet(isPresented: $isShowingAppsPopup)"))
+        XCTAssertFalse(source.contains("HomeMoreConnectorsSheet"))
+        XCTAssertFalse(source.contains("openAppsPage()"))
+        XCTAssertTrue(popupMethod.contains("isShowingAppsPopup = true"))
+        XCTAssertFalse(popupMethod.contains("navigate(to: .apps)"))
+    }
+
+    func testAppsPageSupportsPopupDismissal() throws {
+        let source = try appsSource()
+
+        XCTAssertTrue(source.contains("var onDismiss: (() -> Void)? = nil"))
+        XCTAssertTrue(source.contains("if let onDismiss {\n                DismissButton(action: onDismiss)"))
+    }
+
     private func dashboardSource() throws -> String {
         let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let dashboardURL = testsURL
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
         return try String(contentsOf: dashboardURL, encoding: .utf8)
+    }
+
+    private func appsSource() throws -> String {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let appsURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MainWindow/Pages/AppsPage.swift")
+        return try String(contentsOf: appsURL, encoding: .utf8)
     }
 
     private func methodBody(named name: String, in source: String) throws -> String {

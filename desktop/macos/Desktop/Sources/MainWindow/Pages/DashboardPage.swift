@@ -222,6 +222,7 @@ struct DashboardPage: View {
     @State private var citedConversation: ServerConversation? = nil
     @State private var selectedImportConnector: ImportConnector?
     @State private var selectedExportDestination: MemoryExportDestination?
+    @State private var isShowingAppsPopup = false
     @State private var isLoadingCitation = false
     @State private var screenshotCount: Int?
     // True totals for the "What omi knows" tiles. Without these the tiles showed
@@ -266,6 +267,15 @@ struct DashboardPage: View {
 
     private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
     private static let memoryExportStatusActiveRefreshThrottle: TimeInterval = 30
+    private static let homeStageMaxWidth: CGFloat = 1120
+    private static let homeStageHorizontalPadding: CGFloat = 34
+    private static let appsPopupMaxWidth: CGFloat = 1040
+    private static let appsPopupMaxHeight: CGFloat = 600
+    private static let appsPopupMinWidth: CGFloat = 360
+    private static let appsPopupMinHeight: CGFloat = 360
+    private static let appsPopupHorizontalMargin: CGFloat = 48
+    private static let appsPopupVerticalMargin: CGFloat = 32
+    private static let appsPopupCornerRadius: CGFloat = 22
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
@@ -456,22 +466,90 @@ struct DashboardPage: View {
         GeometryReader { proxy in
             let panelHeight = min(max(proxy.size.height - 132, CGFloat(440)), CGFloat(640))
             let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
+            let panelWidth = min(
+                Self.homeStageMaxWidth,
+                max(CGFloat(0), proxy.size.width - (Self.homeStageHorizontalPadding * 2))
+            )
 
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
                 homeRoutingStage
-                    .frame(maxWidth: 1120)
-                    .padding(.horizontal, 34)
+                    .frame(maxWidth: Self.homeStageMaxWidth)
+                    .padding(.horizontal, Self.homeStageHorizontalPadding)
                     .frame(width: proxy.size.width)
                     .frame(height: panelHeight)
                     .position(x: proxy.size.width / 2, y: panelTop + panelHeight / 2)
 
                 homeHeader
-                    .padding(.horizontal, 34)
+                    .padding(.horizontal, Self.homeStageHorizontalPadding)
                     .padding(.top, 26)
+
+                appsPopupOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
             }
+            .animation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
         }
+    }
+
+    @ViewBuilder
+    private func appsPopupOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        if isShowingAppsPopup {
+            Color.black.opacity(0.16)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isShowingAppsPopup = false
+                }
+                .transition(.opacity)
+                .zIndex(2)
+
+            let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+            AppsPage(
+                appProvider: appProvider,
+                appState: appState,
+                onDismiss: {
+                    isShowingAppsPopup = false
+                }
+            )
+            .frame(width: popupSize.width, height: popupSize.height)
+            .background(OmiColors.backgroundPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
+                    .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
+            .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+            .transition(.scale(scale: 0.95).combined(with: .opacity))
+            .onExitCommand {
+                isShowingAppsPopup = false
+            }
+            .zIndex(3)
+        }
+    }
+
+    private func appsPopupSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        CGSize(
+            width: min(
+                Self.appsPopupMaxWidth,
+                max(Self.appsPopupMinWidth, panelWidth - (Self.appsPopupHorizontalMargin * 2))
+            ),
+            height: min(
+                Self.appsPopupMaxHeight,
+                max(Self.appsPopupMinHeight, panelHeight - (Self.appsPopupVerticalMargin * 2))
+            )
+        )
     }
 
     private var homeHeader: some View {
@@ -595,7 +673,7 @@ struct DashboardPage: View {
                 openOmiDeviceWebsite()
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup()
             }
         }
     }
@@ -630,7 +708,7 @@ struct DashboardPage: View {
                 openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup()
             }
         }
     }
@@ -701,8 +779,8 @@ struct DashboardPage: View {
         AnalyticsManager.shared.tabChanged(tabName: item.title)
     }
 
-    private func openAppsPage() {
-        navigate(to: .apps)
+    private func openAppsPopup() {
+        isShowingAppsPopup = true
     }
 
     private func openImportConnector(_ connectorID: String) {
