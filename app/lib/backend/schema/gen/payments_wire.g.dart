@@ -150,7 +150,7 @@ class GeneratedPaymentSubscriptionResponse {
   final bool deprecated;
   final String? deprecationMessage;
   final List<String>? features;
-  final Map<String, dynamic>? limits;
+  final GeneratedPlanLimits? limits;
   final String plan;
   final String status;
   final String? stripeSubscriptionId;
@@ -178,7 +178,7 @@ class GeneratedPaymentSubscriptionResponse {
       deprecated: _required(_readFieldValue<bool>(_readField(json, const ["deprecated"]), "deprecated", _readBool, requiredField: false, nullable: false, defaultValue: false), "deprecated"),
       deprecationMessage: _readFieldValue<String>(_readField(json, const ["deprecation_message"]), "deprecation_message", _readString, requiredField: false, nullable: true),
       features: _readFieldValue<List<String>>(_readField(json, const ["features"]), "features", _readStringList, requiredField: false, nullable: true),
-      limits: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["limits"]), "limits", _readMap, requiredField: false, nullable: true),
+      limits: _readFieldValue<GeneratedPlanLimits>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedPlanLimits.fromJson), requiredField: false, nullable: true),
       plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: false, nullable: false, defaultValue: "basic"), "plan"),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "status"),
       stripeSubscriptionId: _readFieldValue<String>(_readField(json, const ["stripe_subscription_id"]), "stripe_subscription_id", _readString, requiredField: false, nullable: true),
@@ -194,7 +194,7 @@ class GeneratedPaymentSubscriptionResponse {
       'deprecated': deprecated,
       'deprecation_message': deprecationMessage,
       'features': features,
-      'limits': limits,
+      'limits': limits?.toJson(),
       'plan': plan,
       'status': status,
       'stripe_subscription_id': stripeSubscriptionId,
@@ -314,6 +314,42 @@ class GeneratedCustomerPortalSessionResponse {
   Map<String, dynamic> toJson() {
     return {
       'url': url,
+    };
+  }
+}
+
+class GeneratedPlanLimits {
+  final double? chatCostUsdPerMonth;
+  final int? chatQuestionsPerMonth;
+  final int? insightsGained;
+  final int? transcriptionSeconds;
+  final int? wordsTranscribed;
+
+  const GeneratedPlanLimits({
+    this.chatCostUsdPerMonth,
+    this.chatQuestionsPerMonth,
+    this.insightsGained,
+    this.transcriptionSeconds,
+    this.wordsTranscribed,
+  });
+
+  factory GeneratedPlanLimits.fromJson(Map<String, dynamic> json) {
+    return GeneratedPlanLimits(
+      chatCostUsdPerMonth: _readFieldValue<double>(_readField(json, const ["chat_cost_usd_per_month"]), "chat_cost_usd_per_month", _readDouble, requiredField: false, nullable: true),
+      chatQuestionsPerMonth: _readFieldValue<int>(_readField(json, const ["chat_questions_per_month"]), "chat_questions_per_month", _readInt, requiredField: false, nullable: true),
+      insightsGained: _readFieldValue<int>(_readField(json, const ["insights_gained"]), "insights_gained", _readInt, requiredField: false, nullable: true),
+      transcriptionSeconds: _readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: true),
+      wordsTranscribed: _readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'chat_cost_usd_per_month': chatCostUsdPerMonth,
+      'chat_questions_per_month': chatQuestionsPerMonth,
+      'insights_gained': insightsGained,
+      'transcription_seconds': transcriptionSeconds,
+      'words_transcribed': wordsTranscribed,
     };
   }
 }

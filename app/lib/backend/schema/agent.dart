@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:omi/backend/schema/gen/agent_wire.g.dart' as wire;
 
 class AgentVmInfo {
@@ -9,7 +11,17 @@ class AgentVmInfo {
   AgentVmInfo({required this.hasVm, this.ip, this.authToken, this.status});
 
   factory AgentVmInfo.fromJson(Map<String, dynamic> json) {
-    return AgentVmInfo.fromGenerated(wire.GeneratedAgentVmInfo.fromJson(json));
+    final generated = wire.GeneratedAgentVmInfo.fromJson(json);
+    return AgentVmInfo(
+      hasVm: generated.hasVm,
+      status: generated.status,
+      ip: json['ip'] as String?,
+      authToken: json['auth_token'] as String?,
+    );
+  }
+
+  factory AgentVmInfo.fromJsonBody(String body) {
+    return AgentVmInfo.fromJson(jsonDecode(body) as Map<String, dynamic>);
   }
 
   factory AgentVmInfo.fromGenerated(wire.GeneratedAgentVmInfo generated) {

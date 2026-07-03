@@ -34,18 +34,6 @@ class McpApiKey {
       scopes: generated.scopes,
     );
   }
-
-  wire.GeneratedMcpApiKey toGenerated() {
-    return wire.GeneratedMcpApiKey(
-      id: id,
-      name: name,
-      keyPrefix: keyPrefix,
-      createdAt: createdAt,
-      lastUsedAt: lastUsedAt,
-      appId: appId,
-      scopes: scopes,
-    );
-  }
 }
 
 class McpApiKeyCreated extends McpApiKey {
@@ -76,19 +64,6 @@ class McpApiKeyCreated extends McpApiKey {
       appId: generated.appId,
       scopes: generated.scopes,
       key: generated.key,
-    );
-  }
-
-  wire.GeneratedMcpApiKeyCreated toCreatedGenerated() {
-    return wire.GeneratedMcpApiKeyCreated(
-      id: id,
-      name: name,
-      keyPrefix: keyPrefix,
-      createdAt: createdAt,
-      lastUsedAt: lastUsedAt,
-      appId: appId,
-      scopes: scopes,
-      key: key,
     );
   }
 }

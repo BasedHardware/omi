@@ -65,18 +65,6 @@ class ImportJobResponse {
     );
   }
 
-  wire.GeneratedImportJobResponse toGenerated() {
-    return wire.GeneratedImportJobResponse(
-      jobId: jobId,
-      status: status.name,
-      totalFiles: totalFiles,
-      processedFiles: processedFiles,
-      conversationsCreated: conversationsCreated,
-      createdAt: createdAt?.toUtc().toIso8601String(),
-      error: error,
-    );
-  }
-
   double get progress {
     if (totalFiles == null || totalFiles == 0) return 0;
     return (processedFiles ?? 0) / totalFiles!;
@@ -122,10 +110,11 @@ Future<List<ImportJobResponse>> getImportJobs({int limit = 50}) async {
     );
 
     if (response != null && response.statusCode == 200) {
-      var data = jsonDecode(response.body) as List;
-      return data
-          .map((json) =>
-              ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json as Map<String, dynamic>)))
+      return (jsonDecode(response.body) as List)
+          .map(
+            (json) =>
+                ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json as Map<String, dynamic>)),
+          )
           .toList();
     } else {
       Logger.debug('Failed to get import jobs. Response: ${response?.body}');

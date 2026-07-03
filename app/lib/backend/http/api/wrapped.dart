@@ -8,6 +8,19 @@ import 'package:omi/utils/logger.dart';
 /// Wrapped status enum
 enum WrappedStatus { notGenerated, processing, done, error }
 
+WrappedStatus _wrappedStatusFromWire(String status) {
+  switch (status) {
+    case 'done':
+      return WrappedStatus.done;
+    case 'processing':
+      return WrappedStatus.processing;
+    case 'error':
+      return WrappedStatus.error;
+    default:
+      return WrappedStatus.notGenerated;
+  }
+}
+
 /// Wrapped 2025 response model
 class Wrapped2025Response {
   final WrappedStatus status;
@@ -23,23 +36,8 @@ class Wrapped2025Response {
   }
 
   factory Wrapped2025Response.fromGenerated(wire.GeneratedWrappedStatusResponse generated) {
-    WrappedStatus status;
-    switch (generated.status) {
-      case 'done':
-        status = WrappedStatus.done;
-        break;
-      case 'processing':
-        status = WrappedStatus.processing;
-        break;
-      case 'error':
-        status = WrappedStatus.error;
-        break;
-      default:
-        status = WrappedStatus.notGenerated;
-    }
-
     return Wrapped2025Response(
-      status: status,
+      status: _wrappedStatusFromWire(generated.status),
       year: generated.year,
       result: generated.result,
       error: generated.error,
@@ -86,15 +84,7 @@ Future<Wrapped2025Response?> generateWrapped2025() async {
   if (response.statusCode == 200) {
     final generated = wire.GeneratedGenerateWrappedResponse.fromJson(jsonDecode(response.body));
     // The generate endpoint returns {status, message}
-    return Wrapped2025Response(
-      status: generated.status == 'done'
-          ? WrappedStatus.done
-          : generated.status == 'processing'
-              ? WrappedStatus.processing
-              : generated.status == 'error'
-                  ? WrappedStatus.error
-                  : WrappedStatus.notGenerated,
-    );
+    return Wrapped2025Response(status: _wrappedStatusFromWire(generated.status));
   }
   return null;
 }

@@ -218,9 +218,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               icon: FontAwesomeIcons.graduationCap.data,
               title: context.l10n.deviceTutorial,
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)));
               },
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),

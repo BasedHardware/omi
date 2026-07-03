@@ -47,7 +47,7 @@ RAW_DECODE_RE = re.compile(
     r'\bjsonDecode\s*\(|\bjson\.decode\s*\(|\bas\s+(?:Map|List)<[^>]+>|\b[A-Za-z_][A-Za-z0-9_]*\.fromJson\s*\(|\[[\'"][A-Za-z_][A-Za-z0-9_]*[\'"]\]'
 )
 WIRE_DECODE_RE = re.compile(
-    r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|CreateConversationResponse\.fromGeneratedWireJson|Memory\.fromGeneratedWireJson|ServerConversation\.fromJson|ServerMessage\.fromGeneratedWireJson|ServerMessage\.fromResponseJson|TranscriptsResponse\.fromGeneratedWireJson'
+    r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|CreateConversationResponse\.fromGeneratedWireJson|Memory\.fromGeneratedWireJson|ServerConversation\.fromJson|ServerMessage\.fromGeneratedWireJson|ServerMessage\.fromResponseJson|TranscriptsResponse\.fromGeneratedWireJson|AgentVmInfo\.fromJsonBody|AgentVmInfo\.fromJson|TranscriptSegment\.fromJson'
 )
 
 
@@ -201,7 +201,7 @@ def scan_dart_schema_file(path: Path) -> DartSchemaFile:
         from_json_count=len(FROM_JSON_RE.findall(text)),
         to_json_count=len(TO_JSON_RE.findall(text)),
         generated=any(marker in text[:500] for marker in GENERATED_MARKERS) or path.name.endswith('.g.dart'),
-        generated_backed=bool(GENERATED_WIRE_RE.search(text)),
+        generated_backed=bool(GENERATED_WIRE_RE.search(text) or WIRE_DECODE_RE.search(text)),
     )
 
 
@@ -809,6 +809,8 @@ def load_openapi_operations(path: Path) -> list[OpenApiOperation]:
     operations = []
     for route, methods in spec.get('paths', {}).items():
         for method, operation in methods.items():
+            if not isinstance(operation, dict):
+                continue
             operations.append(
                 OpenApiOperation(
                     path=route,
@@ -896,11 +898,16 @@ def build_report(spec_path: Path) -> dict[str, Any]:
     openapi_prefixes = sorted({route_prefix(path) for path in openapi_paths})
     app_route_prefixes = sorted({route_prefix(route.normalized_route) for route in app_routes})
     uncovered_prefixes = sorted(set(app_route_prefixes) - set(openapi_prefixes))
-    app_route_paths = {route.normalized_route for route in app_routes}
+    app_route_keys = {(route.normalized_route, route.http_method) for route in app_routes if route.http_method}
+    app_route_paths_without_method = {route.normalized_route for route in app_routes if not route.http_method}
     app_used_unmodeled_operations = [
         operation
         for operation in openapi_operations
-        if operation.normalized_path in app_route_paths and operation.unmodeled_success_response
+        if operation.unmodeled_success_response
+        and (
+            (operation.normalized_path, operation.method) in app_route_keys
+            or operation.normalized_path in app_route_paths_without_method
+        )
     ]
     unmodeled_operations = [operation for operation in openapi_operations if operation.unmodeled_success_response]
     return {

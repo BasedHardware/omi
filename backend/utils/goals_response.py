@@ -6,7 +6,8 @@ def parse_response_datetime(value, fallback: datetime) -> datetime:
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     if isinstance(value, str) and value:
         try:
-            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
         except ValueError:
             return fallback
     return fallback
@@ -23,6 +24,21 @@ def response_float(value, fallback: float) -> float:
         return fallback
 
 
+def response_bool(value, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'true', '1', 'yes', 'y', 'on'}:
+            return True
+        if normalized in {'false', '0', 'no', 'n', 'off'}:
+            return False
+        return fallback
+    if isinstance(value, (int, float)):
+        return value != 0
+    return fallback
+
+
 def normalize_goal_response(goal: dict) -> dict:
     normalized = dict(goal)
     now = datetime.now(timezone.utc)
@@ -35,7 +51,7 @@ def normalize_goal_response(goal: dict) -> dict:
     normalized['current_value'] = response_float(normalized.get('current_value'), 0)
     normalized['min_value'] = response_float(normalized.get('min_value'), 0)
     normalized['max_value'] = response_float(normalized.get('max_value'), 10)
-    normalized['is_active'] = bool(normalized.get('is_active', True))
+    normalized['is_active'] = response_bool(normalized.get('is_active', True), True)
     normalized['created_at'] = created_at
     normalized['updated_at'] = updated_at
     return normalized

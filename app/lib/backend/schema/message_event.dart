@@ -1,5 +1,4 @@
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/transcript_segment.dart';
 
 abstract class MessageEvent {
@@ -63,7 +62,6 @@ class ConversationProcessingStartedEvent extends MessageEvent {
   ConversationProcessingStartedEvent({required this.memory}) : super(eventType: 'memory_processing_started');
 
   factory ConversationProcessingStartedEvent.fromJson(Map<String, dynamic> json) {
-    wire.GeneratedConversation.fromJson(json['memory'] as Map<String, dynamic>);
     return ConversationProcessingStartedEvent(memory: ServerConversation.fromJson(json['memory']));
   }
 }
@@ -75,7 +73,6 @@ class ConversationEvent extends MessageEvent {
   ConversationEvent({required this.memory, required this.messages}) : super(eventType: 'memory_created');
 
   factory ConversationEvent.fromJson(Map<String, dynamic> json) {
-    wire.GeneratedConversation.fromJson(json['memory'] as Map<String, dynamic>);
     return ConversationEvent(memory: ServerConversation.fromJson(json['memory']), messages: json['messages'] ?? []);
   }
 }
@@ -96,9 +93,6 @@ class TranslationEvent extends MessageEvent {
   TranslationEvent({required this.segments}) : super(eventType: 'translating');
 
   factory TranslationEvent.fromJson(Map<String, dynamic> json) {
-    for (final segment in json['segments'] as List<dynamic>) {
-      wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>);
-    }
     return TranslationEvent(
       segments: (json['segments'] as List<dynamic>).map((s) => TranscriptSegment.fromJson(s)).toList(),
     );

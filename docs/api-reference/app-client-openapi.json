@@ -2282,6 +2282,24 @@
         "title": "AppSelectOption",
         "type": "object"
       },
+      "AppStatusMessageResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "AppStatusMessageResponse",
+        "type": "object"
+      },
       "AppSubscriptionCancelResponse": {
         "properties": {
           "cancel_at_period_end": {
@@ -7624,9 +7642,19 @@
       "FirmwareVersionResponse": {
         "properties": {
           "changelog": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
             "default": "",
-            "title": "Changelog",
-            "type": "string"
+            "title": "Changelog"
           },
           "draft": {
             "default": false,
@@ -10827,9 +10855,7 @@
             "type": "array"
           },
           "limits": {
-            "additionalProperties": true,
-            "title": "Limits",
-            "type": "object"
+            "$ref": "#/components/schemas/PlanLimits"
           },
           "plan": {
             "default": "basic",
@@ -11441,6 +11467,7 @@
           "created_at": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
@@ -11464,6 +11491,7 @@
           "updated_at": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
@@ -21474,7 +21502,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppMutationResponse"
+                  "$ref": "#/components/schemas/AppStatusMessageResponse"
                 }
               }
             },

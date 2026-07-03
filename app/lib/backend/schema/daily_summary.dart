@@ -187,19 +187,7 @@ class DailySummary {
   });
 
   factory DailySummary.fromJson(Map<String, dynamic> json) {
-    DateTime createdAt;
-    try {
-      final createdAtValue = json['created_at'];
-      if (createdAtValue is String) {
-        createdAt = DateTime.parse(createdAtValue);
-      } else {
-        createdAt = DateTime.now();
-      }
-    } catch (e) {
-      createdAt = DateTime.now();
-    }
-
-    return DailySummary.fromGenerated(wire.GeneratedDailySummaryResponse.fromJson(json), createdAt: createdAt);
+    return DailySummary.fromGenerated(wire.GeneratedDailySummaryResponse.fromJson(json));
   }
 
   factory DailySummary.fromGenerated(wire.GeneratedDailySummaryResponse generated, {DateTime? createdAt}) {

@@ -11,9 +11,14 @@ Future<bool> userHasSpeakerProfile() async {
   if (response == null) return true;
   Logger.debug('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) {
-    return wire.GeneratedHasSpeechProfileResponse.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    ).hasProfile;
+    try {
+      return wire.GeneratedHasSpeechProfileResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      ).hasProfile;
+    } catch (e) {
+      Logger.debug('Failed to parse userHasSpeakerProfile response: $e');
+      return true;
+    }
   }
   return true; // to avoid showing the banner if the request fails or there's no internet.
 }
@@ -62,9 +67,14 @@ Future<List<String>> getExpandedProfileSamples() async {
   if (response == null) return [];
   Logger.debug('getExpandedProfileSamples: ${response.body}');
   if (response.statusCode == 200) {
-    return wire.GeneratedExpandedSpeechProfileSamplesResponse.fromJsonList(
-      jsonDecode(response.body) as List<dynamic>,
-    ).items;
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List<dynamic>) return [];
+      return wire.GeneratedExpandedSpeechProfileSamplesResponse.fromJsonList(decoded).items;
+    } catch (e) {
+      Logger.debug('Failed to parse getExpandedProfileSamples response: $e');
+      return [];
+    }
   }
   return [];
 }
@@ -80,10 +90,15 @@ Future<bool> deleteProfileSample(String conversationId, int segmentIdx, {String?
   if (response == null) return false;
   Logger.debug('deleteProfileSample: ${response.body}');
   if (response.statusCode == 200) {
-    final data = wire.GeneratedSpeechProfileMutationResponse.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
-    return data.status == 'ok';
+    try {
+      final data = wire.GeneratedSpeechProfileMutationResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+      return data.status == 'ok';
+    } catch (e) {
+      Logger.debug('Failed to parse deleteProfileSample response: $e');
+      return false;
+    }
   }
   return false;
 }

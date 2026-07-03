@@ -32,7 +32,7 @@ class FirmwareVersionResponse(BaseModel):
     draft: bool = False
     ota_update_steps: List[str] = Field(default_factory=list)
     is_legacy_secure_dfu: bool = True
-    changelog: str = ''
+    changelog: str | List[str] = ''
 
 
 # Firmware release tag pattern — matches Omi_CV1_v3.0.15, Omi_DK2_v2.0.10, OmiGlass_v2.3.2, etc.

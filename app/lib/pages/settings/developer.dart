@@ -548,8 +548,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               color: const Color(0xFF2A2A2E),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child:
-                                Center(child: Icon(FontAwesomeIcons.clock.data, color: Colors.grey.shade400, size: 16)),
+                            child: Center(
+                              child: Icon(FontAwesomeIcons.clock.data, color: Colors.grey.shade400, size: 16),
+                            ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -648,8 +649,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 color: const Color(0xFF2A2A2E),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child:
-                                  Center(child: Icon(FontAwesomeIcons.bug.data, color: Colors.grey.shade400, size: 16)),
+                              child: Center(
+                                child: Icon(FontAwesomeIcons.bug.data, color: Colors.grey.shade400, size: 16),
+                              ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(

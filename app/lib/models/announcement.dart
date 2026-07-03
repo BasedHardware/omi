@@ -69,8 +69,8 @@ class Targeting {
       appVersionMax: generated.appVersionMax,
       firmwareVersionMin: generated.firmwareVersionMin,
       firmwareVersionMax: generated.firmwareVersionMax,
-      deviceModels: generated.deviceModels,
-      platforms: generated.platforms,
+      deviceModels: generated.deviceModels ?? const [],
+      platforms: generated.platforms ?? const [],
       trigger: _triggerTypeFromWire(generated.trigger),
       testUids: generated.testUids,
     );

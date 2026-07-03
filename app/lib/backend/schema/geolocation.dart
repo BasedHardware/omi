@@ -47,9 +47,14 @@ class Geolocation {
   }
 
   wire.GeneratedGeolocation toGenerated() {
+    final lat = latitude;
+    final lon = longitude;
+    if (lat == null || lon == null) {
+      throw StateError('Cannot serialize geolocation without latitude and longitude');
+    }
     return wire.GeneratedGeolocation(
-      latitude: latitude ?? 0.0,
-      longitude: longitude ?? 0.0,
+      latitude: lat,
+      longitude: lon,
       googlePlaceId: googlePlaceId,
       address: address,
       locationType: locationType,

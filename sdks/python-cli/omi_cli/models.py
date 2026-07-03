@@ -24,6 +24,7 @@ class MemoryCategory(str, Enum):
     """Mirrors backend ``MemoryCategory`` — the universe of valid category values."""
 
     interesting = "interesting"
+    system = "system"
     manual = "manual"
     workflow = "workflow"
     core = "core"
@@ -35,7 +36,6 @@ class MemoryCategory(str, Enum):
     skills = "skills"
     learnings = "learnings"
     other = "other"
-    system = "system"
     auto = "auto"
 
 

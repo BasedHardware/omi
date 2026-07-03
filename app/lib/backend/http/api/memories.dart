@@ -40,16 +40,10 @@ class GetMemoriesResult {
   const GetMemoriesResult(this.memories, this.deviceScopeSupported);
 }
 
-List<Memory>? _decodeMemoriesResponse(String body) {
-  try {
-    return (json.decode(body) as List<dynamic>)
-        .map((memory) => Memory.fromGeneratedWireJson(Map<String, dynamic>.from(memory as Map)))
-        .toList();
-  } on FormatException {
-    return null;
-  } on TypeError {
-    return null;
-  }
+List<Memory> _decodeMemoriesResponse(String body) {
+  return (json.decode(body) as List<dynamic>)
+      .map((memory) => Memory.fromGeneratedWireJson(Map<String, dynamic>.from(memory as Map)))
+      .toList();
 }
 
 Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
@@ -62,10 +56,7 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
     return GetMemoriesResult([], !thisDeviceOnly);
   }
   if (response.statusCode == 200) {
-    final memories = _decodeMemoriesResponse(response.body);
-    if (memories != null) {
-      return GetMemoriesResult(memories, true);
-    }
+    return GetMemoriesResult(_decodeMemoriesResponse(response.body), true);
   }
   // Legacy memory users cannot use server-side device_scope; fetch all and
   // signal that local device filtering should be skipped to avoid hiding

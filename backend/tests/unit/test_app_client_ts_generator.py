@@ -7,20 +7,14 @@ from scripts import generate_ts_openapi_types
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
-WINDOWS_TS_PATH = ROOT_DIR / 'desktop' / 'windows' / 'src' / 'renderer' / 'src' / 'lib' / 'omiApi.generated.ts'
-WEB_APP_TS_PATH = ROOT_DIR / 'web' / 'app' / 'src' / 'lib' / 'omiApi.generated.ts'
-WEB_ADMIN_TS_PATH = ROOT_DIR / 'web' / 'admin' / 'lib' / 'services' / 'omi-api' / 'omiApi.generated.ts'
-PERSONAS_TS_PATH = ROOT_DIR / 'web' / 'personas-open-source' / 'src' / 'lib' / 'omiApi.generated.ts'
 
 
 def test_typescript_schema_types_are_generated_from_app_client_openapi():
     spec = json.loads(SPEC_PATH.read_text())
     generated = generate_ts_openapi_types.generate(spec, 'docs/api-reference/app-client-openapi.json')
 
-    assert WINDOWS_TS_PATH.read_text() == generated
-    assert WEB_APP_TS_PATH.read_text() == generated
-    assert WEB_ADMIN_TS_PATH.read_text() == generated
-    assert PERSONAS_TS_PATH.read_text() == generated
+    for output in generate_ts_openapi_types.DEFAULT_OUTPUTS:
+        assert output.read_text() == generated
     assert '// GENERATED CODE - DO NOT EDIT.' in generated
     assert 'export interface Conversation {' in generated
     assert 'export interface GoalResponse {' in generated

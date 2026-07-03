@@ -97,8 +97,10 @@ class WalListItem extends StatelessWidget {
             color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: Text(context.l10n.retry,
-              style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            context.l10n.retry,
+            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ),
       );
     }
@@ -197,15 +199,19 @@ class WalListItem extends StatelessWidget {
                           ),
                           if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
                             const SizedBox(width: 12),
-                            Text('${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+                            Text(
+                              '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
+                              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                            ),
                           ],
                         ],
                       ),
                       if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
                         const SizedBox(height: 4),
-                        Text(context.l10n.etaLabel(_formatEta(wal.syncEtaSeconds!)),
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                        Text(
+                          context.l10n.etaLabel(_formatEta(wal.syncEtaSeconds!)),
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                        ),
                       ],
                     ],
                   ],
@@ -235,12 +241,7 @@ class _SyncPageState extends State<SyncPage> {
     });
   }
 
-  Widget _buildSettingsItem({
-    required IconData icon,
-    required String title,
-    String? status,
-    VoidCallback? onTap,
-  }) {
+  Widget _buildSettingsItem({required IconData icon, required String title, String? status, VoidCallback? onTap}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -251,8 +252,10 @@ class _SyncPageState extends State<SyncPage> {
             Icon(icon, color: const Color(0xFF8E8E93), size: 18),
             const SizedBox(width: 14),
             Expanded(
-              child:
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400)),
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+              ),
             ),
             if (status != null) Text(status, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
             const SizedBox(width: 10),
@@ -279,7 +282,10 @@ class _SyncPageState extends State<SyncPage> {
             child: Row(
               children: [
                 SizedBox(
-                    width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleCheck.data, color: Colors.green)),
+                  width: 24,
+                  height: 24,
+                  child: _buildFaIcon(FontAwesomeIcons.circleCheck.data, color: Colors.green),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
@@ -612,7 +618,10 @@ class _SyncPageState extends State<SyncPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
-        child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500)),
+        child: Text(
+          label,
+          style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+        ),
       ),
     );
   }

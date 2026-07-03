@@ -2,12 +2,14 @@ import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as wire;
 
 class UsageStats {
   final int transcriptionSeconds;
+  final int speechSeconds;
   final int wordsTranscribed;
   final int insightsGained;
   final int memoriesCreated;
 
   UsageStats({
     required this.transcriptionSeconds,
+    required this.speechSeconds,
     required this.wordsTranscribed,
     required this.insightsGained,
     required this.memoriesCreated,
@@ -20,6 +22,7 @@ class UsageStats {
   factory UsageStats.fromGenerated(wire.GeneratedUsageStats generated) {
     return UsageStats(
       transcriptionSeconds: generated.transcriptionSeconds,
+      speechSeconds: generated.speechSeconds,
       wordsTranscribed: generated.wordsTranscribed,
       insightsGained: generated.insightsGained,
       memoriesCreated: generated.memoriesCreated,
@@ -29,6 +32,7 @@ class UsageStats {
   wire.GeneratedUsageStats toGenerated() {
     return wire.GeneratedUsageStats(
       transcriptionSeconds: transcriptionSeconds,
+      speechSeconds: speechSeconds,
       wordsTranscribed: wordsTranscribed,
       insightsGained: insightsGained,
       memoriesCreated: memoriesCreated,
@@ -41,6 +45,7 @@ class UsageStats {
 class UsageHistoryPoint {
   final String date;
   final int transcriptionSeconds;
+  final int speechSeconds;
   final int wordsTranscribed;
   final int insightsGained;
   final int memoriesCreated;
@@ -48,6 +53,7 @@ class UsageHistoryPoint {
   UsageHistoryPoint({
     required this.date,
     required this.transcriptionSeconds,
+    required this.speechSeconds,
     required this.wordsTranscribed,
     required this.insightsGained,
     required this.memoriesCreated,
@@ -61,6 +67,7 @@ class UsageHistoryPoint {
     return UsageHistoryPoint(
       date: generated.date,
       transcriptionSeconds: generated.transcriptionSeconds,
+      speechSeconds: generated.speechSeconds,
       wordsTranscribed: generated.wordsTranscribed,
       insightsGained: generated.insightsGained,
       memoriesCreated: generated.memoriesCreated,
@@ -71,6 +78,7 @@ class UsageHistoryPoint {
     return wire.GeneratedUsageHistoryPoint(
       date: date,
       transcriptionSeconds: transcriptionSeconds,
+      speechSeconds: speechSeconds,
       wordsTranscribed: wordsTranscribed,
       insightsGained: insightsGained,
       memoriesCreated: memoriesCreated,

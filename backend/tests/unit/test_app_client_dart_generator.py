@@ -74,7 +74,8 @@ def test_message_adapter_preserves_arbitrary_chart_data_union_payloads():
     adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'message.dart').read_text()
 
     assert 'Map<String, dynamic>? rawChartData;' in adapter
-    assert "return (chartType == 'line' || chartType == 'bar') && json.keys.every(expectedKeys.contains);" in adapter
+    assert "const requiredKeys = {'chart_type', 'title', 'datasets'};" in adapter
+    assert "return (chartType == 'line' || chartType == 'bar') && requiredKeys.every(json.containsKey);" in adapter
     assert 'static ServerMessage fromResponseJson(Map<String, dynamic> json)' in adapter
     assert 'wire.GeneratedResponseMessage.fromJson(json)' in adapter
     assert 'askForNps: generated.askForNps ?? false' in adapter

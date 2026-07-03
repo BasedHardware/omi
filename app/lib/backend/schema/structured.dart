@@ -28,12 +28,11 @@ class Structured {
   }
 
   static Structured fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedStructured.fromJson(json);
     var structured = Structured(
-      generated.title ?? '',
-      generated.overview ?? '',
-      emoji: generated.emoji ?? '',
-      category: generated.category ?? 'other',
+      json['title'] ?? '',
+      json['overview'] ?? '',
+      emoji: json['emoji'] ?? '🧠',
+      category: json['category'] ?? 'other',
     );
     final aItems = json['actionItems'] ?? json['action_items'];
     if (aItems is List) {
@@ -47,8 +46,6 @@ class Structured {
           structured.actionItems.add(ActionItem.fromJson(Map<String, dynamic>.from(item)));
         }
       }
-    } else {
-      structured.actionItems.addAll((generated.actionItems ?? const []).map(ActionItem.fromGenerated));
     }
 
     final events = json['events'];
@@ -61,8 +58,6 @@ class Structured {
           structured.events.add(Event.fromJson(Map<String, dynamic>.from(event)));
         }
       }
-    } else {
-      structured.events.addAll((generated.events ?? const []).map(Event.fromGenerated));
     }
     return structured;
   }

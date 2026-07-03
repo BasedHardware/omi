@@ -285,6 +285,7 @@ SCHEMA_GROUPS = {
             'PaymentCheckoutSessionResponse',
             'PaymentUpgradeSubscriptionResponse',
             'CustomerPortalSessionResponse',
+            'PlanLimits',
             'routers__payment__PricingOption',
             'AvailablePlansResponse',
             'AppSubscriptionDetails',

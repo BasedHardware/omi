@@ -214,8 +214,11 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                                         valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
                                       ),
                                     )
-                                  : Icon(FontAwesomeIcons.wandMagicSparkles.data,
-                                      color: Colors.grey.shade600, size: 28),
+                                  : Icon(
+                                      FontAwesomeIcons.wandMagicSparkles.data,
+                                      color: Colors.grey.shade600,
+                                      size: 28,
+                                    ),
                             )
                           : null,
                     ),
@@ -917,7 +920,9 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
             // Chat feature
             if (hasChat)
               _buildFeatureRow(
-                  icon: FontAwesomeIcons.comments.data, description: context.l10n.customChatbotPersonality),
+                icon: FontAwesomeIcons.comments.data,
+                description: context.l10n.customChatbotPersonality,
+              ),
           ],
         ],
       ),

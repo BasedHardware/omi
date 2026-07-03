@@ -268,7 +268,7 @@ class AudioFile {
 }
 
 TranscriptSegment _transcriptSegmentFromGenerated(wire.GeneratedTranscriptSegment generated) {
-  return TranscriptSegment.fromJson(generated.toJson());
+  return TranscriptSegment.fromGenerated(generated);
 }
 
 class ServerConversation {
@@ -330,10 +330,15 @@ class ServerConversation {
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedConversation.fromJson(json);
+    final normalized = Map<String, dynamic>.from(json);
+    final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
+    if (structured != null) {
+      normalized['structured'] = structured.toGenerated().toJson();
+    }
+    final generated = wire.GeneratedConversation.fromJson(normalized);
     return ServerConversation.fromGenerated(
       generated,
-      structured: json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null,
+      structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
     );

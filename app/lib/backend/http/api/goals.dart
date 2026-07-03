@@ -16,6 +16,14 @@ Map<String, dynamic> _goalSuggestionJsonWithDefaults(Map<String, dynamic> json) 
   return normalized;
 }
 
+Map<String, dynamic> _goalJsonWithDefaults(Map<String, dynamic> json) {
+  final normalized = Map<String, dynamic>.from(json);
+  final now = DateTime.now().toUtc().toIso8601String();
+  normalized['created_at'] ??= normalized['updated_at'] ?? now;
+  normalized['updated_at'] ??= normalized['created_at'];
+  return normalized;
+}
+
 /// Goal model
 class Goal {
   final String id;
@@ -45,7 +53,7 @@ class Goal {
   });
 
   factory Goal.fromJson(Map<String, dynamic> json) {
-    return Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(json));
+    return Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json)));
   }
 
   factory Goal.fromGenerated(wire.GeneratedGoalResponse generated) {
@@ -119,7 +127,8 @@ class GoalSuggestion {
 
   factory GoalSuggestion.fromJson(Map<String, dynamic> json) {
     return GoalSuggestion.fromGenerated(
-        wire.GeneratedGoalSuggestionResponse.fromJson(_goalSuggestionJsonWithDefaults(json)));
+      wire.GeneratedGoalSuggestionResponse.fromJson(_goalSuggestionJsonWithDefaults(json)),
+    );
   }
 
   factory GoalSuggestion.fromGenerated(wire.GeneratedGoalSuggestionResponse generated) {
@@ -139,9 +148,14 @@ Future<Goal?> getCurrentGoal() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   if (response.statusCode == 200) {
-    var decoded = json.decode(response.body);
-    if (decoded != null && decoded is Map<String, dynamic> && decoded.isNotEmpty) {
-      return Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(decoded));
+    try {
+      return Goal.fromGenerated(
+        wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response.body) as Map<String, dynamic>)),
+      );
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
     }
   }
   return null;
@@ -153,12 +167,12 @@ Future<List<Goal>> getAllGoals() async {
   if (response == null) return [];
   Logger.debug('getAllGoals response: ${response.body}');
   if (response.statusCode == 200) {
-    var decoded = json.decode(response.body);
-    if (decoded != null && decoded is List) {
-      return decoded
-          .map((e) => Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(e as Map<String, dynamic>)))
-          .toList();
-    }
+    return (json.decode(response.body) as List<dynamic>)
+        .map(
+          (e) =>
+              Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(e as Map<String, dynamic>))),
+        )
+        .toList();
   }
   return [];
 }
@@ -190,7 +204,9 @@ Future<Goal?> createGoal({
   if (response == null) return null;
   Logger.debug('createGoal response: ${response.body}');
   if (response.statusCode == 200) {
-    return Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(json.decode(response.body) as Map<String, dynamic>));
+    return Goal.fromGenerated(
+      wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response.body) as Map<String, dynamic>)),
+    );
   }
   return null;
 }
@@ -222,7 +238,9 @@ Future<Goal?> updateGoal(
   if (response == null) return null;
   Logger.debug('updateGoal response: ${response.body}');
   if (response.statusCode == 200) {
-    return Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(json.decode(response.body) as Map<String, dynamic>));
+    return Goal.fromGenerated(
+      wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response.body) as Map<String, dynamic>)),
+    );
   }
   return null;
 }
@@ -238,7 +256,9 @@ Future<Goal?> updateGoalProgress(String goalId, double currentValue) async {
   if (response == null) return null;
   Logger.debug('updateGoalProgress response: ${response.body}');
   if (response.statusCode == 200) {
-    return Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(json.decode(response.body) as Map<String, dynamic>));
+    return Goal.fromGenerated(
+      wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response.body) as Map<String, dynamic>)),
+    );
   }
   return null;
 }

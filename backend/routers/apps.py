@@ -162,6 +162,10 @@ class AppMutationResponse(PydanticBaseModel):
     status: str
 
 
+class AppStatusMessageResponse(AppMutationResponse):
+    message: str
+
+
 class AppManifestRefreshResponse(AppMutationResponse):
     tools_count: int = 0
 
@@ -2160,7 +2164,7 @@ def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return keys
 
 
-@router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'], response_model=AppMutationResponse)
+@router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     if not app:

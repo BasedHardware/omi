@@ -783,11 +783,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: Icon(
-                                            FontAwesomeIcons.download.data,
-                                            size: 16,
-                                            color: Colors.white,
-                                          ),
+                                          icon: Icon(FontAwesomeIcons.download.data, size: 16, color: Colors.white),
                                           label: Text(
                                             (state.visibleFilterCount > 0 && !state.isSearchActive)
                                                 ? context.l10n.installed
@@ -826,11 +822,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: Icon(
-                                            FontAwesomeIcons.download.data,
-                                            size: 16,
-                                            color: Colors.white,
-                                          ),
+                                          icon: Icon(FontAwesomeIcons.download.data, size: 16, color: Colors.white),
                                           padding: EdgeInsets.zero,
                                         ),
                                       ),

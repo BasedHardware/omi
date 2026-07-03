@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Optional
 import uuid
 import time
@@ -103,6 +103,8 @@ class PaymentCheckoutSessionResponse(BaseModel):
 
 
 class PaymentSubscriptionResponse(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     plan: str = 'basic'
     status: str = 'active'
     stripe_subscription_id: Optional[str] = None
@@ -111,7 +113,7 @@ class PaymentSubscriptionResponse(BaseModel):
     cancel_at_period_end: bool = False
     current_price_id: Optional[str] = None
     features: List[str] = Field(default_factory=list)
-    limits: dict = Field(default_factory=dict)
+    limits: PlanLimits = Field(default_factory=get_basic_plan_limits)
     deprecated: bool = False
     deprecation_message: Optional[str] = None
 

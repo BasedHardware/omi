@@ -1,8 +1,5 @@
-import 'dart:convert';
-
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/agent.dart';
-import 'package:omi/backend/schema/gen/agent_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -10,8 +7,7 @@ Future<AgentVmInfo?> getAgentVmStatus() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/agent/vm-status', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   if (response.statusCode == 200) {
-    final generated = wire.GeneratedAgentVmInfo.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return AgentVmInfo.fromGenerated(generated);
+    return AgentVmInfo.fromJsonBody(response.body);
   }
   return null;
 }

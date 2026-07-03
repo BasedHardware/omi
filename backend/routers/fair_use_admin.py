@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import logging
 import os
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -57,8 +58,8 @@ class PublicFairUseCaseStatusResponse(BaseModel):
     case_ref: str
     stage: str
     message: str
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     support_email: str
 
 

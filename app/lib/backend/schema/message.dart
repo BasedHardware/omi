@@ -182,9 +182,9 @@ class ChartData {
   }
 
   static bool _hasTypedChartDataShape(Map<String, dynamic> json) {
-    const expectedKeys = {'chart_type', 'title', 'x_label', 'y_label', 'datasets'};
+    const requiredKeys = {'chart_type', 'title', 'datasets'};
     final chartType = json['chart_type'];
-    return (chartType == 'line' || chartType == 'bar') && json.keys.every(expectedKeys.contains);
+    return (chartType == 'line' || chartType == 'bar') && requiredKeys.every(json.containsKey);
   }
 
   factory ChartData.fromGenerated(wire.GeneratedChartData generated) {
