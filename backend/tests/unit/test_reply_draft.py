@@ -219,6 +219,27 @@ def test_style_hard_fails_are_corpus_relative_not_word_based():
     assert sf.style_hard_fails('Sounds good', casual)
 
 
+def test_em_dash_is_flagged_only_for_users_who_dont_use_them():
+    formal = sf.compute_fingerprint(_FORMAL_SAMPLES)  # none of these use em dashes
+    assert formal.uses_em_dash is False
+    # An em dash (classic AI tell) contradicts this user's punctuation.
+    assert any('em dash' in f for f in sf.style_hard_fails('Sounds good — see you then.', formal))
+    assert any('em dash' in f for f in sf.style_hard_fails('Sounds good -- see you then.', formal))
+    # A user who DOES use em dashes is never penalized for them (corpus-relative).
+    dashy = sf.compute_fingerprint(
+        [
+            'Sounds good — see you at 7.',
+            'I will confirm — probably tomorrow.',
+            'That works — thanks.',
+            'Let me check — one sec.',
+            'Sure — no problem at all.',
+            'Great — talk soon.',
+        ]
+    )
+    assert dashy.uses_em_dash is True
+    assert sf.style_hard_fails('Okay — sounds good.', dashy) == []
+
+
 def test_fingerprint_measures_capitalization_and_emoji_per_user():
     formal = sf.compute_fingerprint(_FORMAL_SAMPLES)
     casual = sf.compute_fingerprint(_CASUAL_SAMPLES)
@@ -250,6 +271,13 @@ def test_build_reply_prompt_has_no_hardcoded_example_slang():
     # Corpus-relative instruction + measured fingerprint are present instead.
     assert 'use only words, abbreviations, and slang that appear in their samples' in low
     assert 'sentence capitalization' in low  # rendered because this user capitalizes
+    # This formal user never uses em dashes → the prompt forbids them.
+    assert 'never uses em dashes' in low
+    # Voice is learned only from the user's own messages, not the other person.
+    assert 'voice source' in low
+    assert 'never copy their' in low
+    # Brevity / anti-AI-polish directive.
+    assert 'not an ai' in low
     # Guardrails present.
     assert 'grounding' in low
     assert 'commitments' in low

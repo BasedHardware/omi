@@ -33,9 +33,18 @@ _EMOJI_RE = re.compile(
 
 _WORD_RE = re.compile(r"[A-Za-z']+")
 
+# Em dash, en dash, or a double-hyphen used as a dash. One of the loudest "AI
+# tells" — but still judged corpus-relatively: only forbidden for users whose own
+# messages never use it.
+_EM_DASH_RE = re.compile(r"[—–]|--")
+
 # Below this many samples we don't trust the measured capitalization/emoji habit
 # enough to hard-fail a candidate on it; cold-start neutral rules govern instead.
 MIN_SAMPLES_FOR_HARD_FAIL = 5
+
+
+def has_em_dash(text: str) -> bool:
+    return bool(_EM_DASH_RE.search(text or ""))
 
 
 @dataclass
@@ -49,6 +58,7 @@ class StyleFingerprint:
     word_band: Tuple[int, int]  # (p10, p90) words per message, clamped >= 1
     terminal_punct_rate: float  # fraction of samples ending in . ! or ?
     ends_with_period_rate: float  # fraction ending specifically in '.'
+    uses_em_dash: bool = False  # the user actually uses em/en dashes or --
     vocabulary: FrozenSet[str] = field(default_factory=frozenset)  # user's own words (informational only)
     cold_start: bool = False
 
@@ -127,6 +137,7 @@ def compute_fingerprint(samples: List[str]) -> StyleFingerprint:
         word_band=word_band,
         terminal_punct_rate=terminal / n,
         ends_with_period_rate=periods / n,
+        uses_em_dash=any(has_em_dash(s) for s in cleaned),
         vocabulary=vocabulary,
         cold_start=False,
     )
@@ -150,16 +161,21 @@ def render_fingerprint_lines(fp: StyleFingerprint) -> str:
     else:
         emoji = "never uses emoji — do NOT add any emoji"
     lo, hi = fp.word_band
-    length = f"messages are usually {lo}-{hi} words — stay in that range"
-    punct = (
+    length = f"messages are usually {lo}-{hi} words — keep it that short; do NOT pad or add extra sentences"
+    end_punct = (
         "usually ends sentences with punctuation" if fp.terminal_punct_rate > 0.5 else "usually skips end punctuation"
+    )
+    dash = (
+        "sometimes uses dashes"
+        if fp.uses_em_dash
+        else "NEVER uses em dashes (—), en dashes (–), or -- : do NOT use them"
     )
     return "\n".join(
         [
             f"- Capitalization: {cap}",
             f"- Emoji: {emoji}",
             f"- Length: {length}",
-            f"- Punctuation: {punct}",
+            f"- Punctuation: {end_punct}; use only the punctuation their samples show — {dash}",
             "- Vocabulary: use only words, abbreviations, and slang that appear in their samples "
             "above; do NOT introduce any word or register their own messages don't already show.",
         ]
@@ -183,6 +199,9 @@ def style_hard_fails(draft: str, fp: StyleFingerprint) -> List[str]:
 
     if not fp.uses_emoji and count_emojis(text) > 0:
         fails.append("added emoji, but this user never uses emoji")
+
+    if not fp.uses_em_dash and has_em_dash(text):
+        fails.append("uses an em dash / --, but this user never does (classic AI tell)")
 
     if fp.uses_capitalization and _starts_lowercase(text):
         fails.append("starts lowercase, but this user capitalizes normally")
