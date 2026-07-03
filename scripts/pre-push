@@ -426,6 +426,34 @@ check_workflows_if_needed() {
   "${actionlint_cmd[@]}" -shellcheck "" "${workflow_files[@]}"
 }
 
+check_desktop_swift_if_needed() {
+  if [ "${PRE_PUSH_SKIP_DESKTOP_SWIFT:-}" = "1" ]; then
+    echo "Skipping desktop Swift compile because PRE_PUSH_SKIP_DESKTOP_SWIFT=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/*.swift' \
+    'desktop/macos/Desktop/**/*.swift' \
+    'desktop/macos/Desktop/Package.swift' \
+    'desktop/macos/Desktop/Package.resolved' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  if ! command -v xcrun >/dev/null 2>&1; then
+    echo "FAIL: xcrun is required to compile the desktop Swift package for changed desktop files." >&2
+    echo "Push from macOS with Xcode command line tools installed, or deliberately skip with PRE_PUSH_SKIP_DESKTOP_SWIFT=1 git push." >&2
+    return 1
+  fi
+
+  (
+    cd desktop/macos
+    xcrun swift build -c debug --package-path Desktop
+  )
+}
+
 check_desktop_rust_if_needed() {
   local -a rust_files=()
   local file
@@ -513,6 +541,7 @@ run_step check_import_time_side_effects_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
+run_step check_desktop_swift_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
