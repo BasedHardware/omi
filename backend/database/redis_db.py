@@ -1,7 +1,7 @@
 import base64
 import json
 import os
-from typing import Any, Callable, List, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 from datetime import datetime, timedelta, timezone
 
 import redis
@@ -568,7 +568,7 @@ def cache_dev_api_key(
 
 
 @try_catch_decorator
-def get_cached_dev_api_key_data(hashed_key: str) -> Optional[dict]:
+def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
     """Retrieves the user_id and scopes for a given hashed Developer API key from cache."""
     cached = r.get(f'dev_api_key:{hashed_key}')
     if not cached:

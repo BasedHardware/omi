@@ -1,25 +1,28 @@
 import inspect
 from functools import wraps
-from typing import List, Dict, Any, Callable
+from typing import Any, Callable, Dict, List, TypeVar, cast
 
 from database import users as users_db, redis_db
 import logging
 
 logger = logging.getLogger(__name__)
 
+F = TypeVar("F", bound=Callable[..., Any])
 
-def _get_user_profile_for_data_protection(uid: str, firestore_client=None) -> dict:
+
+def _get_user_profile_for_data_protection(uid: str, firestore_client: Any = None) -> Dict[str, Any]:
     if firestore_client is not None:
         user_ref = firestore_client.collection('users').document(uid)
         user_doc = user_ref.get()
-        if user_doc.exists:
-            return user_doc.to_dict() or {}
+        if getattr(user_doc, "exists", False):
+            raw: object = user_doc.to_dict()
+            return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         return {}
 
     return users_db.get_user_profile(uid)
 
 
-def set_data_protection_level(data_arg_name: str):
+def set_data_protection_level(data_arg_name: str) -> Callable[[F], F]:
     """
     Decorator to automatically set 'data_protection_level' on a dictionary or a list of dictionaries.
 
@@ -30,9 +33,9 @@ def set_data_protection_level(data_arg_name: str):
     Assumes 'uid' is an argument to the decorated function.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Bind the provided arguments to the function's signature to easily access them by name
             try:
                 sig = inspect.signature(func)
@@ -113,9 +116,9 @@ def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any]
     This decorator should be placed AFTER @set_data_protection_level.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
@@ -163,9 +166,9 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
     Assumes 'uid' is an argument to the decorated function to be used for decryption.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
@@ -213,9 +216,9 @@ def with_photos(photos_getter: Callable):
     This should be applied to functions that return conversation dicts and have a 'uid' parameter.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
