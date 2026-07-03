@@ -499,6 +499,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 }
                 userScrollEndWorkItem = endWork
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+            } onScrollSettledAtBottom: {
+                guard scrollMode == .freeScrolling || scrollMode == .anchoringTurn else { return }
+                cancelAllPendingScrolls()
+                userIsScrolling = false
+                scrollMode = .followingBottom
+                hasActivityBelow = false
             }
         }
     }

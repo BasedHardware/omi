@@ -86,6 +86,7 @@ struct ScrollPositionDetector: NSViewRepresentable {
 /// keyboard scroll-navigation on the enclosing NSScrollView.
 struct UserScrollDetector: NSViewRepresentable {
   let onUserScroll: () -> Void
+  var onScrollSettledAtBottom: () -> Void = {}
 
   func makeNSView(context: Context) -> NSView {
     let view = NSView()
@@ -98,11 +99,12 @@ struct UserScrollDetector: NSViewRepresentable {
   func updateNSView(_ nsView: NSView, context: Context) {}
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(onUserScroll: onUserScroll)
+    Coordinator(onUserScroll: onUserScroll, onScrollSettledAtBottom: onScrollSettledAtBottom)
   }
 
   class Coordinator: NSObject {
     let onUserScroll: () -> Void
+    let onScrollSettledAtBottom: () -> Void
     private var monitor: Any?
 
     private static let scrollNavigationKeyCodes: Set<UInt16> = [
@@ -114,8 +116,9 @@ struct UserScrollDetector: NSViewRepresentable {
       119,  // End
     ]
 
-    init(onUserScroll: @escaping () -> Void) {
+    init(onUserScroll: @escaping () -> Void, onScrollSettledAtBottom: @escaping () -> Void) {
       self.onUserScroll = onUserScroll
+      self.onScrollSettledAtBottom = onScrollSettledAtBottom
     }
 
     func install(for view: NSView) {
@@ -151,6 +154,7 @@ struct UserScrollDetector: NSViewRepresentable {
             self.onUserScroll()
           }
         }
+        self.scheduleSettledBottomChecks(for: targetScrollView)
         return event
       }
     }
@@ -158,6 +162,24 @@ struct UserScrollDetector: NSViewRepresentable {
     private static func isScrollViewKeyboardTarget(in window: NSWindow?, scrollView: NSScrollView) -> Bool {
       guard let window, let firstResponderView = window.firstResponder as? NSView else { return false }
       return firstResponderView === scrollView || firstResponderView.isDescendant(of: scrollView)
+    }
+
+    private func scheduleSettledBottomChecks(for scrollView: NSScrollView) {
+      for delay in [0.12, 0.36] {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak scrollView] in
+          guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
+          self.onScrollSettledAtBottom()
+        }
+      }
+    }
+
+    private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {
+      guard let documentView = scrollView.documentView else { return false }
+      let clipBounds = scrollView.contentView.bounds
+      let documentHeight = documentView.frame.height
+      let visibleMaxY = clipBounds.origin.y + clipBounds.height
+      let threshold: CGFloat = 100
+      return visibleMaxY >= documentHeight - threshold
     }
 
     deinit {
@@ -250,6 +272,12 @@ struct ChatScrollContainer<Content: View>: View {
         }
         userScrollEndWorkItem = endWork
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+      } onScrollSettledAtBottom: {
+        guard scrollMode == .freeScrolling else { return }
+        cancelAllPendingScrolls()
+        userIsScrolling = false
+        scrollMode = .followingBottom
+        hasActivityBelow = false
       }
     }
   }
