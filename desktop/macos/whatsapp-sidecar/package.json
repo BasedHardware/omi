@@ -1,0 +1,15 @@
+{
+  "name": "omi-whatsapp-sidecar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.23",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4"
+  }
+}
