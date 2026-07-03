@@ -61,16 +61,23 @@ final class TelegramClientService: @unchecked Sendable {
     let leadingArgs: [String]  // e.g. the .py path when running via python3 in dev
   }
 
+  private static func environmentValue(_ key: String) -> String? {
+    if let raw = getenv(key), let value = String(validatingUTF8: raw), !value.isEmpty {
+      return value
+    }
+    let value = ProcessInfo.processInfo.environment[key]
+    return value?.isEmpty == false ? value : nil
+  }
+
   /// Resolve how to launch the helper: bundled frozen binary in production, or a
   /// dev override (env vars) pointing at the .py so it can be exercised without a
   /// notarized build.
   private func resolveLaunch() -> HelperLaunch? {
-    let env = ProcessInfo.processInfo.environment
-    if let bin = env["OMI_TELEGRAM_HELPER"], FileManager.default.isExecutableFile(atPath: bin) {
+    if let bin = Self.environmentValue("OMI_TELEGRAM_HELPER"), FileManager.default.isExecutableFile(atPath: bin) {
       return HelperLaunch(executable: URL(fileURLWithPath: bin), leadingArgs: [])
     }
-    if let py = env["OMI_TELEGRAM_HELPER_PY"] {
-      let python = env["OMI_TELEGRAM_PYTHON"] ?? "/usr/bin/env"
+    if let py = Self.environmentValue("OMI_TELEGRAM_HELPER_PY") {
+      let python = Self.environmentValue("OMI_TELEGRAM_PYTHON") ?? "/usr/bin/env"
       let lead = python == "/usr/bin/env" ? ["python3", py] : [py]
       return HelperLaunch(executable: URL(fileURLWithPath: python), leadingArgs: lead)
     }
@@ -93,12 +100,11 @@ final class TelegramClientService: @unchecked Sendable {
   // heuristics, so this MUST be switched to an Omi-registered pair before release.
   // See desktop/macos/telegram-helper/README.md and the feature plan.
   private func apiCredentials() -> (id: String, hash: String) {
-    let env = ProcessInfo.processInfo.environment
     let id =
-      env["OMI_TELEGRAM_API_ID"]
+      Self.environmentValue("OMI_TELEGRAM_API_ID")
       ?? (Bundle.main.object(forInfoDictionaryKey: "OMITelegramAPIID") as? String) ?? "0"
     let hash =
-      env["OMI_TELEGRAM_API_HASH"]
+      Self.environmentValue("OMI_TELEGRAM_API_HASH")
       ?? (Bundle.main.object(forInfoDictionaryKey: "OMITelegramAPIHash") as? String) ?? ""
     return (id, hash)
   }
@@ -114,7 +120,7 @@ final class TelegramClientService: @unchecked Sendable {
       return false
     }
     let creds = apiCredentials()
-    let selftest = ProcessInfo.processInfo.environment["OMI_TELEGRAM_SELFTEST"] == "1"
+    let selftest = Self.environmentValue("OMI_TELEGRAM_SELFTEST") == "1"
 
     let process = Process()
     process.executableURL = launch.executable

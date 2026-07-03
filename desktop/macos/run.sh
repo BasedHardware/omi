@@ -647,6 +647,46 @@ fi
 substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
 fi # end non-local .env.app merge
 
+set_app_env() {
+    local key="$1"
+    local value="$2"
+    local env_file="$APP_BUNDLE/Contents/Resources/.env"
+    if grep -q "^$key=" "$env_file"; then
+        sed -i '' "s|^$key=.*|$key=$value|" "$env_file"
+    else
+        echo "$key=$value" >> "$env_file"
+    fi
+}
+
+substep "Preparing Telegram helper"
+TELEGRAM_HELPER_DIR="$SCRIPT_DIR/telegram-helper"
+TELEGRAM_HELPER_DIST="$TELEGRAM_HELPER_DIR/dist/omi-telegram-helper"
+TELEGRAM_HELPER_SCRIPT="$TELEGRAM_HELPER_DIR/omi_telegram_helper.py"
+TELEGRAM_HELPER_VENV_PY="$TELEGRAM_HELPER_DIR/.venv/bin/python"
+if [ -x "$TELEGRAM_HELPER_DIST" ]; then
+    cp -f "$TELEGRAM_HELPER_DIST" "$APP_BUNDLE/Contents/Resources/omi-telegram-helper"
+    chmod +x "$APP_BUNDLE/Contents/Resources/omi-telegram-helper"
+    substep "Bundled Telegram helper binary"
+elif [ -f "$TELEGRAM_HELPER_SCRIPT" ]; then
+    if [ ! -x "$TELEGRAM_HELPER_VENV_PY" ]; then
+        substep "Installing Telegram helper dependencies"
+        python3 -m venv "$TELEGRAM_HELPER_DIR/.venv"
+        "$TELEGRAM_HELPER_VENV_PY" -m pip install --upgrade pip >/dev/null
+        "$TELEGRAM_HELPER_VENV_PY" -m pip install -r "$TELEGRAM_HELPER_DIR/requirements.txt" >/dev/null
+    fi
+    set_app_env "OMI_TELEGRAM_PYTHON" "$TELEGRAM_HELPER_VENV_PY"
+    set_app_env "OMI_TELEGRAM_HELPER_PY" "$TELEGRAM_HELPER_SCRIPT"
+    substep "Configured Telegram helper source for local dev"
+else
+    substep "Telegram helper source not found; Telegram replies will be unavailable"
+fi
+if [ -n "${OMI_TELEGRAM_API_ID:-}" ]; then
+    set_app_env "OMI_TELEGRAM_API_ID" "$OMI_TELEGRAM_API_ID"
+fi
+if [ -n "${OMI_TELEGRAM_API_HASH:-}" ]; then
+    set_app_env "OMI_TELEGRAM_API_HASH" "$OMI_TELEGRAM_API_HASH"
+fi
+
 substep "Copying app icon"
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
 
