@@ -428,27 +428,60 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  /// Whether the provider's input transcription accepts an explicit language hint.
+  /// OpenAI's whisper transcription does; Gemini Live's inputAudioTranscription has no
+  /// language field at all (native-audio models pick per utterance — the misdetect bug).
+  var supportsInputTranscriptionLanguage: Bool { provider == .openai }
+
+  /// ISO 639-1 hint applied to committed input transcription (OpenAI only).
+  private var inputTranscriptionLanguage: String?
+
+  /// Set (or clear, with nil) the input transcription language for this turn. Sends a
+  /// full idempotent session.update — partial nested updates have murkier merge
+  /// semantics, and the payload is deterministic anyway. Call BEFORE commitInputTurn();
+  /// both hop to `q`, so FIFO ordering guarantees the update lands first. All state
+  /// mutation happens on `q` (same discipline as every other send-path member).
+  func setInputTranscriptionLanguage(_ code: String?) {
+    guard provider == .openai else { return }
+    q.async { [weak self] in
+      guard let self else { return }
+      guard code != self.inputTranscriptionLanguage else { return }
+      self.inputTranscriptionLanguage = code
+      log("\(self.tag): input transcription language → \(code ?? "auto")")
+      guard self.isOpen else { return }  // pre-open: sendSessionSetup includes it
+      self.send(json: self.openAISessionPayload())
+    }
+  }
+
+  private func openAISessionPayload() -> [String: Any] {
+    var transcription: [String: Any] = ["model": "whisper-1"]
+    if let inputTranscriptionLanguage {
+      transcription["language"] = inputTranscriptionLanguage
+    }
+    return [
+      "type": "session.update",
+      "session": [
+        "type": "realtime",
+        "instructions": instructions,
+        "output_modalities": ["audio"],
+        "audio": [
+          "input": [
+            "format": ["type": "audio/pcm", "rate": 24000],
+            "turn_detection": NSNull(),  // PTT controls turns
+            "transcription": transcription,
+          ],
+          "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
+        ],
+        "tools": RealtimeHubTools.openAITools,
+        "tool_choice": "auto",
+      ],
+    ]
+  }
+
   private func sendSessionSetup() {
     switch provider {
     case .openai:
-      send(json: [
-        "type": "session.update",
-        "session": [
-          "type": "realtime",
-          "instructions": instructions,
-          "output_modalities": ["audio"],
-          "audio": [
-            "input": [
-              "format": ["type": "audio/pcm", "rate": 24000],
-              "turn_detection": NSNull(),  // PTT controls turns
-              "transcription": ["model": "whisper-1"],
-            ],
-            "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
-          ],
-          "tools": RealtimeHubTools.openAITools,
-          "tool_choice": "auto",
-        ],
-      ])
+      send(json: openAISessionPayload())
     case .gemini:
       // AUDIO modality: the only currently-available Live models are native-audio
       // (TEXT is rejected with close 1007). The spoken reply (24k PCM) is played by

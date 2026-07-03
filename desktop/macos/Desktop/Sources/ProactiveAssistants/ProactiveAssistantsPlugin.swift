@@ -256,29 +256,22 @@ public class ProactiveAssistantsPlugin: NSObject {
             return
         }
 
-        // Request notification permission in parallel — don't block monitoring on it.
-        // Screen analysis can work without notifications - users just won't get alerts.
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+        // Request notification permission in parallel, but only for first-time users.
+        // Denied users should not be put through repeated startup repair loops.
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
-                if let error = error {
-                    let nsError = error as NSError
-                    log("Notification permission request error: \(error.localizedDescription) (domain=\(nsError.domain) code=\(nsError.code))")
-
-                    // UNErrorDomain code 1 = notificationsNotAllowed
-                    // This happens when LaunchServices has the app marked as launch-disabled,
-                    // preventing notification center registration. Repair and retry once.
-                    if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
-                        AnalyticsManager.shared.notificationRepairTriggered(
-                            reason: "launch_disabled_error_startup",
-                            previousStatus: "notDetermined",
-                            currentStatus: "error_code_1"
-                        )
-                        Self.repairNotificationRegistration()
-                    }
+                guard settings.authorizationStatus == .notDetermined else {
+                    log("Skipping startup notification authorization request (auth=\(settings.authorizationStatus.rawValue))")
+                    return
                 }
 
-                if !granted {
-                    log("Notification permission not granted - screen analysis will work but notifications will be disabled")
+                NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+                    reason: "launch_disabled_error_startup",
+                    previousStatus: "notDetermined"
+                ) { granted in
+                    if !granted {
+                        log("Notification permission not granted - screen analysis will work but notifications will be disabled")
+                    }
                 }
             }
         }
@@ -291,62 +284,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     /// The launch-disabled flag in LaunchServices prevents notification center registration.
     /// Unregistering and re-registering clears the flag, then retries authorization.
     static func repairNotificationRegistration() {
-        let appPath = Bundle.main.bundlePath
-        let bundleURL = Bundle.main.bundleURL
-        log("Repairing LaunchServices registration for notifications: \(appPath)")
-
-        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-
-        // Run blocking Process calls on a background thread
-        DispatchQueue.global(qos: .utility).async {
-            // Unregister to clear stale/launch-disabled entries
-            let unregister = Process()
-            unregister.executableURL = URL(fileURLWithPath: lsregister)
-            unregister.arguments = ["-u", appPath]
-            try? unregister.run()
-            unregister.waitUntilExit()
-
-            // Force re-register
-            let register = Process()
-            register.executableURL = URL(fileURLWithPath: lsregister)
-            register.arguments = ["-f", appPath]
-            try? register.run()
-            register.waitUntilExit()
-
-            // Restart usernoted (notification center daemon) to pick up fresh registration
-            // Runs as current user (no sudo needed), auto-restarts within ~1 second
-            let killUsernoted = Process()
-            killUsernoted.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-            killUsernoted.arguments = ["usernoted"]
-            killUsernoted.standardOutput = FileHandle.nullDevice
-            killUsernoted.standardError = FileHandle.nullDevice
-            try? killUsernoted.run()
-            killUsernoted.waitUntilExit()
-            log("Restarted usernoted to force notification re-discovery")
-
-            // Wait for usernoted to restart before retrying
-            Thread.sleep(forTimeInterval: 1.5)
-
-            DispatchQueue.main.async {
-                // Also re-register via LSRegisterURL (must be on main thread)
-                if let cfURL = bundleURL as CFURL? {
-                    LSRegisterURL(cfURL, true)
-                }
-
-                log("LaunchServices re-registration complete, retrying notification authorization...")
-
-                // Retry authorization after a short delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    NSApp.activate()
-                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-                        if let error = error {
-                            log("Notification retry after repair failed: \(error.localizedDescription)")
-                        } else if granted {
-                            log("Notification permission granted after LaunchServices repair")
-                        }
-                    }
-                }
-            }
+        NotificationRegistrationRepair.repair(reason: "legacy_call_site", includeUnregister: true) { _ in
+            NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+                reason: "legacy_call_site_retry",
+                previousStatus: "post_repair"
+            ) { _ in }
         }
     }
 
