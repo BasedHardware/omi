@@ -39,136 +39,21 @@ class GeneratedActionItemResponse {
 
   factory GeneratedActionItemResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemResponse(
-      appleReminderId: _readFieldValue<String>(
-        _readField(json, const ["apple_reminder_id"]),
-        "apple_reminder_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      completed: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["completed"]),
-          "completed",
-          _readBool,
-          requiredField: true,
-          nullable: false,
-        ),
-        "completed",
-      ),
-      completedAt: _readFieldValue<DateTime>(
-        _readField(json, const ["completed_at"]),
-        "completed_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      conversationId: _readFieldValue<String>(
-        _readField(json, const ["conversation_id"]),
-        "conversation_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      createdAt: _readFieldValue<DateTime>(
-        _readField(json, const ["created_at"]),
-        "created_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
-      dueAt: _readFieldValue<DateTime>(
-        _readField(json, const ["due_at"]),
-        "due_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      exportDate: _readFieldValue<DateTime>(
-        _readField(json, const ["export_date"]),
-        "export_date",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      exportPlatform: _readFieldValue<String>(
-        _readField(json, const ["export_platform"]),
-        "export_platform",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      exported: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["exported"]),
-          "exported",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "exported",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      indentLevel: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["indent_level"]),
-          "indent_level",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "indent_level",
-      ),
-      isLocked: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["is_locked"]),
-          "is_locked",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "is_locked",
-      ),
-      sortOrder: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["sort_order"]),
-          "sort_order",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "sort_order",
-      ),
-      updatedAt: _readFieldValue<DateTime>(
-        _readField(json, const ["updated_at"]),
-        "updated_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
+      appleReminderId: _readFieldValue<String>(_readField(json, const ["apple_reminder_id"]), "apple_reminder_id", _readString, requiredField: false, nullable: true),
+      completed: _required(_readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: true, nullable: false), "completed"),
+      completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
+      exportDate: _readFieldValue<DateTime>(_readField(json, const ["export_date"]), "export_date", _readDateTime, requiredField: false, nullable: true),
+      exportPlatform: _readFieldValue<String>(_readField(json, const ["export_platform"]), "export_platform", _readString, requiredField: false, nullable: true),
+      exported: _required(_readFieldValue<bool>(_readField(json, const ["exported"]), "exported", _readBool, requiredField: false, nullable: false, defaultValue: false), "exported"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      indentLevel: _required(_readFieldValue<int>(_readField(json, const ["indent_level"]), "indent_level", _readInt, requiredField: false, nullable: false, defaultValue: 0), "indent_level"),
+      isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
+      sortOrder: _required(_readFieldValue<int>(_readField(json, const ["sort_order"]), "sort_order", _readInt, requiredField: false, nullable: false, defaultValue: 0), "sort_order"),
+      updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
@@ -197,61 +82,43 @@ class GeneratedActionItemsResponse {
   final List<GeneratedActionItemResponse> actionItems;
   final bool hasMore;
 
-  const GeneratedActionItemsResponse({required this.actionItems, this.hasMore = false});
+  const GeneratedActionItemsResponse({
+    required this.actionItems,
+    this.hasMore = false,
+  });
 
   factory GeneratedActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemsResponse(
-      actionItems: _required(
-        _readFieldValue<List<GeneratedActionItemResponse>>(
-          _readField(json, const ["action_items"]),
-          "action_items",
-          (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "action_items",
-      ),
-      hasMore: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["has_more"]),
-          "has_more",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "has_more",
-      ),
+      actionItems: _required(_readFieldValue<List<GeneratedActionItemResponse>>(_readField(json, const ["action_items"]), "action_items", (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson), requiredField: true, nullable: false), "action_items"),
+      hasMore: _required(_readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool, requiredField: false, nullable: false, defaultValue: false), "has_more"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'action_items': actionItems.map((value) => value.toJson()).toList(), 'has_more': hasMore};
+    return {
+      'action_items': actionItems.map((value) => value.toJson()).toList(),
+      'has_more': hasMore,
+    };
   }
 }
 
 class GeneratedActionItemsSearchResponse {
   final List<GeneratedActionItemResponse> actionItems;
 
-  const GeneratedActionItemsSearchResponse({required this.actionItems});
+  const GeneratedActionItemsSearchResponse({
+    required this.actionItems,
+  });
 
   factory GeneratedActionItemsSearchResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemsSearchResponse(
-      actionItems: _required(
-        _readFieldValue<List<GeneratedActionItemResponse>>(
-          _readField(json, const ["action_items"]),
-          "action_items",
-          (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "action_items",
-      ),
+      actionItems: _required(_readFieldValue<List<GeneratedActionItemResponse>>(_readField(json, const ["action_items"]), "action_items", (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson), requiredField: true, nullable: false), "action_items"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'action_items': actionItems.map((value) => value.toJson()).toList()};
+    return {
+      'action_items': actionItems.map((value) => value.toJson()).toList(),
+    };
   }
 }
 
@@ -259,30 +126,15 @@ class GeneratedPendingSyncResponse {
   final List<GeneratedActionItemResponse> pendingExport;
   final List<GeneratedActionItemResponse> syncedItems;
 
-  const GeneratedPendingSyncResponse({required this.pendingExport, required this.syncedItems});
+  const GeneratedPendingSyncResponse({
+    required this.pendingExport,
+    required this.syncedItems,
+  });
 
   factory GeneratedPendingSyncResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPendingSyncResponse(
-      pendingExport: _required(
-        _readFieldValue<List<GeneratedActionItemResponse>>(
-          _readField(json, const ["pending_export"]),
-          "pending_export",
-          (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "pending_export",
-      ),
-      syncedItems: _required(
-        _readFieldValue<List<GeneratedActionItemResponse>>(
-          _readField(json, const ["synced_items"]),
-          "synced_items",
-          (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "synced_items",
-      ),
+      pendingExport: _required(_readFieldValue<List<GeneratedActionItemResponse>>(_readField(json, const ["pending_export"]), "pending_export", (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson), requiredField: true, nullable: false), "pending_export"),
+      syncedItems: _required(_readFieldValue<List<GeneratedActionItemResponse>>(_readField(json, const ["synced_items"]), "synced_items", (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson), requiredField: true, nullable: false), "synced_items"),
     );
   }
 
@@ -313,54 +165,12 @@ class GeneratedBatchMutationResponse {
 
   factory GeneratedBatchMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedBatchMutationResponse(
-      lockedIds: _readFieldValue<List<String>>(
-        _readField(json, const ["locked_ids"]),
-        "locked_ids",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      missingIds: _readFieldValue<List<String>>(
-        _readField(json, const ["missing_ids"]),
-        "missing_ids",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      noopIds: _readFieldValue<List<String>>(
-        _readField(json, const ["noop_ids"]),
-        "noop_ids",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
-      updatedCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["updated_count"]),
-          "updated_count",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "updated_count",
-      ),
-      updatedIds: _readFieldValue<List<String>>(
-        _readField(json, const ["updated_ids"]),
-        "updated_ids",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
+      lockedIds: _readFieldValue<List<String>>(_readField(json, const ["locked_ids"]), "locked_ids", _readStringList, requiredField: false, nullable: true),
+      missingIds: _readFieldValue<List<String>>(_readField(json, const ["missing_ids"]), "missing_ids", _readStringList, requiredField: false, nullable: true),
+      noopIds: _readFieldValue<List<String>>(_readField(json, const ["noop_ids"]), "noop_ids", _readStringList, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      updatedCount: _required(_readFieldValue<int>(_readField(json, const ["updated_count"]), "updated_count", _readInt, requiredField: true, nullable: false), "updated_count"),
+      updatedIds: _readFieldValue<List<String>>(_readField(json, const ["updated_ids"]), "updated_ids", _readStringList, requiredField: false, nullable: true),
     );
   }
 
@@ -389,41 +199,18 @@ class GeneratedBatchDeleteActionItemsResponse {
 
   factory GeneratedBatchDeleteActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedBatchDeleteActionItemsResponse(
-      deletedCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["deleted_count"]),
-          "deleted_count",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "deleted_count",
-      ),
-      deletedIds: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["deleted_ids"]),
-          "deleted_ids",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "deleted_ids",
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      deletedCount: _required(_readFieldValue<int>(_readField(json, const ["deleted_count"]), "deleted_count", _readInt, requiredField: true, nullable: false), "deleted_count"),
+      deletedIds: _required(_readFieldValue<List<String>>(_readField(json, const ["deleted_ids"]), "deleted_ids", _readStringList, requiredField: true, nullable: false), "deleted_ids"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'deleted_count': deletedCount, 'deleted_ids': deletedIds, 'status': status};
+    return {
+      'deleted_count': deletedCount,
+      'deleted_ids': deletedIds,
+      'status': status,
+    };
   }
 }
 
@@ -431,35 +218,23 @@ class GeneratedBatchCreateActionItemsResponse {
   final List<GeneratedActionItemResponse> actionItems;
   final int createdCount;
 
-  const GeneratedBatchCreateActionItemsResponse({required this.actionItems, required this.createdCount});
+  const GeneratedBatchCreateActionItemsResponse({
+    required this.actionItems,
+    required this.createdCount,
+  });
 
   factory GeneratedBatchCreateActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedBatchCreateActionItemsResponse(
-      actionItems: _required(
-        _readFieldValue<List<GeneratedActionItemResponse>>(
-          _readField(json, const ["action_items"]),
-          "action_items",
-          (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "action_items",
-      ),
-      createdCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["created_count"]),
-          "created_count",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_count",
-      ),
+      actionItems: _required(_readFieldValue<List<GeneratedActionItemResponse>>(_readField(json, const ["action_items"]), "action_items", (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson), requiredField: true, nullable: false), "action_items"),
+      createdCount: _required(_readFieldValue<int>(_readField(json, const ["created_count"]), "created_count", _readInt, requiredField: true, nullable: false), "created_count"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'action_items': actionItems.map((value) => value.toJson()).toList(), 'created_count': createdCount};
+    return {
+      'action_items': actionItems.map((value) => value.toJson()).toList(),
+      'created_count': createdCount,
+    };
   }
 }
 
@@ -467,35 +242,23 @@ class GeneratedShareActionItemsResponse {
   final String token;
   final String url;
 
-  const GeneratedShareActionItemsResponse({required this.token, required this.url});
+  const GeneratedShareActionItemsResponse({
+    required this.token,
+    required this.url,
+  });
 
   factory GeneratedShareActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedShareActionItemsResponse(
-      token: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["token"]),
-          "token",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "token",
-      ),
-      url: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["url"]),
-          "url",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "url",
-      ),
+      token: _required(_readFieldValue<String>(_readField(json, const ["token"]), "token", _readString, requiredField: true, nullable: false), "token"),
+      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'token': token, 'url': url};
+    return {
+      'token': token,
+      'url': url,
+    };
   }
 }
 
@@ -503,32 +266,23 @@ class GeneratedSharedActionItemPreview {
   final String description;
   final DateTime? dueAt;
 
-  const GeneratedSharedActionItemPreview({required this.description, this.dueAt});
+  const GeneratedSharedActionItemPreview({
+    required this.description,
+    this.dueAt,
+  });
 
   factory GeneratedSharedActionItemPreview.fromJson(Map<String, dynamic> json) {
     return GeneratedSharedActionItemPreview(
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
-      dueAt: _readFieldValue<DateTime>(
-        _readField(json, const ["due_at"]),
-        "due_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'description': description, 'due_at': dueAt?.toUtc().toIso8601String()};
+    return {
+      'description': description,
+      'due_at': dueAt?.toUtc().toIso8601String(),
+    };
   }
 }
 
@@ -537,45 +291,26 @@ class GeneratedSharedActionItemsResponse {
   final String senderName;
   final List<GeneratedSharedActionItemPreview> tasks;
 
-  const GeneratedSharedActionItemsResponse({required this.count, required this.senderName, required this.tasks});
+  const GeneratedSharedActionItemsResponse({
+    required this.count,
+    required this.senderName,
+    required this.tasks,
+  });
 
   factory GeneratedSharedActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSharedActionItemsResponse(
-      count: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["count"]),
-          "count",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "count",
-      ),
-      senderName: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["sender_name"]),
-          "sender_name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "sender_name",
-      ),
-      tasks: _required(
-        _readFieldValue<List<GeneratedSharedActionItemPreview>>(
-          _readField(json, const ["tasks"]),
-          "tasks",
-          (value) => _readObjectList(value, GeneratedSharedActionItemPreview.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "tasks",
-      ),
+      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: true, nullable: false), "count"),
+      senderName: _required(_readFieldValue<String>(_readField(json, const ["sender_name"]), "sender_name", _readString, requiredField: true, nullable: false), "sender_name"),
+      tasks: _required(_readFieldValue<List<GeneratedSharedActionItemPreview>>(_readField(json, const ["tasks"]), "tasks", (value) => _readObjectList(value, GeneratedSharedActionItemPreview.fromJson), requiredField: true, nullable: false), "tasks"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'count': count, 'sender_name': senderName, 'tasks': tasks.map((value) => value.toJson()).toList()};
+    return {
+      'count': count,
+      'sender_name': senderName,
+      'tasks': tasks.map((value) => value.toJson()).toList(),
+    };
   }
 }
 
@@ -583,35 +318,23 @@ class GeneratedAcceptSharedActionItemsResponse {
   final int count;
   final List<String> created;
 
-  const GeneratedAcceptSharedActionItemsResponse({required this.count, required this.created});
+  const GeneratedAcceptSharedActionItemsResponse({
+    required this.count,
+    required this.created,
+  });
 
   factory GeneratedAcceptSharedActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAcceptSharedActionItemsResponse(
-      count: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["count"]),
-          "count",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "count",
-      ),
-      created: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["created"]),
-          "created",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created",
-      ),
+      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: true, nullable: false), "count"),
+      created: _required(_readFieldValue<List<String>>(_readField(json, const ["created"]), "created", _readStringList, requiredField: true, nullable: false), "created"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'count': count, 'created': created};
+    return {
+      'count': count,
+      'created': created,
+    };
   }
 }
 
@@ -646,126 +369,18 @@ class GeneratedFolder {
 
   factory GeneratedFolder.fromJson(Map<String, dynamic> json) {
     return GeneratedFolder(
-      categoryMapping: _readFieldValue<String>(
-        _readField(json, const ["category_mapping"]),
-        "category_mapping",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      color: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["color"]),
-          "color",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "#6B7280",
-        ),
-        "color",
-      ),
-      conversationCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["conversation_count"]),
-          "conversation_count",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "conversation_count",
-      ),
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      description: _readFieldValue<String>(
-        _readField(json, const ["description"]),
-        "description",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      icon: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["icon"]),
-          "icon",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "folder",
-        ),
-        "icon",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      isDefault: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["is_default"]),
-          "is_default",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "is_default",
-      ),
-      isSystem: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["is_system"]),
-          "is_system",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "is_system",
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      order: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["order"]),
-          "order",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "order",
-      ),
-      updatedAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["updated_at"]),
-          "updated_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "updated_at",
-      ),
+      categoryMapping: _readFieldValue<String>(_readField(json, const ["category_mapping"]), "category_mapping", _readString, requiredField: false, nullable: true),
+      color: _required(_readFieldValue<String>(_readField(json, const ["color"]), "color", _readString, requiredField: false, nullable: false, defaultValue: "#6B7280"), "color"),
+      conversationCount: _required(_readFieldValue<int>(_readField(json, const ["conversation_count"]), "conversation_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "conversation_count"),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      icon: _required(_readFieldValue<String>(_readField(json, const ["icon"]), "icon", _readString, requiredField: false, nullable: false, defaultValue: "folder"), "icon"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      isDefault: _required(_readFieldValue<bool>(_readField(json, const ["is_default"]), "is_default", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_default"),
+      isSystem: _required(_readFieldValue<bool>(_readField(json, const ["is_system"]), "is_system", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_system"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      order: _required(_readFieldValue<int>(_readField(json, const ["order"]), "order", _readInt, requiredField: false, nullable: false, defaultValue: 0), "order"),
+      updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
     );
   }
 
@@ -790,25 +405,20 @@ class GeneratedFolder {
 class GeneratedFolderMutationResponse {
   final String status;
 
-  const GeneratedFolderMutationResponse({required this.status});
+  const GeneratedFolderMutationResponse({
+    required this.status,
+  });
 
   factory GeneratedFolderMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFolderMutationResponse(
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'status': status};
+    return {
+      'status': status,
+    };
   }
 }
 
@@ -816,36 +426,23 @@ class GeneratedBulkMoveConversationsResponse {
   final int movedCount;
   final String status;
 
-  const GeneratedBulkMoveConversationsResponse({this.movedCount = 0, required this.status});
+  const GeneratedBulkMoveConversationsResponse({
+    this.movedCount = 0,
+    required this.status,
+  });
 
   factory GeneratedBulkMoveConversationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedBulkMoveConversationsResponse(
-      movedCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["moved_count"]),
-          "moved_count",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "moved_count",
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      movedCount: _required(_readFieldValue<int>(_readField(json, const ["moved_count"]), "moved_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "moved_count"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'moved_count': movedCount, 'status': status};
+    return {
+      'moved_count': movedCount,
+      'status': status,
+    };
   }
 }
 
@@ -933,27 +530,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

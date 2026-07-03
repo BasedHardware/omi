@@ -21,60 +21,12 @@ class GeneratedDevApiKey {
 
   factory GeneratedDevApiKey.fromJson(Map<String, dynamic> json) {
     return GeneratedDevApiKey(
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      keyPrefix: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["key_prefix"]),
-          "key_prefix",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "key_prefix",
-      ),
-      lastUsedAt: _readFieldValue<DateTime>(
-        _readField(json, const ["last_used_at"]),
-        "last_used_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      scopes: _readFieldValue<List<String>>(
-        _readField(json, const ["scopes"]),
-        "scopes",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      keyPrefix: _required(_readFieldValue<String>(_readField(json, const ["key_prefix"]), "key_prefix", _readString, requiredField: true, nullable: false), "key_prefix"),
+      lastUsedAt: _readFieldValue<DateTime>(_readField(json, const ["last_used_at"]), "last_used_at", _readDateTime, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      scopes: _readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: false, nullable: true),
     );
   }
 
@@ -111,70 +63,13 @@ class GeneratedDevApiKeyCreated {
 
   factory GeneratedDevApiKeyCreated.fromJson(Map<String, dynamic> json) {
     return GeneratedDevApiKeyCreated(
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      key: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["key"]),
-          "key",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "key",
-      ),
-      keyPrefix: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["key_prefix"]),
-          "key_prefix",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "key_prefix",
-      ),
-      lastUsedAt: _readFieldValue<DateTime>(
-        _readField(json, const ["last_used_at"]),
-        "last_used_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      scopes: _readFieldValue<List<String>>(
-        _readField(json, const ["scopes"]),
-        "scopes",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      key: _required(_readFieldValue<String>(_readField(json, const ["key"]), "key", _readString, requiredField: true, nullable: false), "key"),
+      keyPrefix: _required(_readFieldValue<String>(_readField(json, const ["key_prefix"]), "key_prefix", _readString, requiredField: true, nullable: false), "key_prefix"),
+      lastUsedAt: _readFieldValue<DateTime>(_readField(json, const ["last_used_at"]), "last_used_at", _readDateTime, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      scopes: _readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: false, nullable: true),
     );
   }
 
@@ -212,67 +107,13 @@ class GeneratedMcpApiKey {
 
   factory GeneratedMcpApiKey.fromJson(Map<String, dynamic> json) {
     return GeneratedMcpApiKey(
-      appId: _readFieldValue<String>(
-        _readField(json, const ["app_id"]),
-        "app_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      keyPrefix: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["key_prefix"]),
-          "key_prefix",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "key_prefix",
-      ),
-      lastUsedAt: _readFieldValue<DateTime>(
-        _readField(json, const ["last_used_at"]),
-        "last_used_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      scopes: _readFieldValue<List<String>>(
-        _readField(json, const ["scopes"]),
-        "scopes",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      keyPrefix: _required(_readFieldValue<String>(_readField(json, const ["key_prefix"]), "key_prefix", _readString, requiredField: true, nullable: false), "key_prefix"),
+      lastUsedAt: _readFieldValue<DateTime>(_readField(json, const ["last_used_at"]), "last_used_at", _readDateTime, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      scopes: _readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: false, nullable: true),
     );
   }
 
@@ -312,77 +153,14 @@ class GeneratedMcpApiKeyCreated {
 
   factory GeneratedMcpApiKeyCreated.fromJson(Map<String, dynamic> json) {
     return GeneratedMcpApiKeyCreated(
-      appId: _readFieldValue<String>(
-        _readField(json, const ["app_id"]),
-        "app_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      key: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["key"]),
-          "key",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "key",
-      ),
-      keyPrefix: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["key_prefix"]),
-          "key_prefix",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "key_prefix",
-      ),
-      lastUsedAt: _readFieldValue<DateTime>(
-        _readField(json, const ["last_used_at"]),
-        "last_used_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      scopes: _readFieldValue<List<String>>(
-        _readField(json, const ["scopes"]),
-        "scopes",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      key: _required(_readFieldValue<String>(_readField(json, const ["key"]), "key", _readString, requiredField: true, nullable: false), "key"),
+      keyPrefix: _required(_readFieldValue<String>(_readField(json, const ["key_prefix"]), "key_prefix", _readString, requiredField: true, nullable: false), "key_prefix"),
+      lastUsedAt: _readFieldValue<DateTime>(_readField(json, const ["last_used_at"]), "last_used_at", _readDateTime, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      scopes: _readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: false, nullable: true),
     );
   }
 
@@ -484,27 +262,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

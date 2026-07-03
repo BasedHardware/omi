@@ -6,35 +6,23 @@ class GeneratedMessageConversationStructured {
   final String emoji;
   final String title;
 
-  const GeneratedMessageConversationStructured({required this.emoji, required this.title});
+  const GeneratedMessageConversationStructured({
+    required this.emoji,
+    required this.title,
+  });
 
   factory GeneratedMessageConversationStructured.fromJson(Map<String, dynamic> json) {
     return GeneratedMessageConversationStructured(
-      emoji: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["emoji"]),
-          "emoji",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "emoji",
-      ),
-      title: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["title"]),
-          "title",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "title",
-      ),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: true, nullable: false), "emoji"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'emoji': emoji, 'title': title};
+    return {
+      'emoji': emoji,
+      'title': title,
+    };
   }
 }
 
@@ -43,45 +31,26 @@ class GeneratedMessageConversation {
   final String id;
   final GeneratedMessageConversationStructured structured;
 
-  const GeneratedMessageConversation({required this.createdAt, required this.id, required this.structured});
+  const GeneratedMessageConversation({
+    required this.createdAt,
+    required this.id,
+    required this.structured,
+  });
 
   factory GeneratedMessageConversation.fromJson(Map<String, dynamic> json) {
     return GeneratedMessageConversation(
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      structured: _required(
-        _readFieldValue<GeneratedMessageConversationStructured>(
-          _readField(json, const ["structured"]),
-          "structured",
-          (value) => _readObject(value, GeneratedMessageConversationStructured.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "structured",
-      ),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      structured: _required(_readFieldValue<GeneratedMessageConversationStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedMessageConversationStructured.fromJson), requiredField: true, nullable: false), "structured"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'created_at': createdAt.toUtc().toIso8601String(), 'id': id, 'structured': structured.toJson()};
+    return {
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'id': id,
+      'structured': structured.toJson(),
+    };
   }
 }
 
@@ -106,72 +75,13 @@ class GeneratedFileChat {
 
   factory GeneratedFileChat.fromJson(Map<String, dynamic> json) {
     return GeneratedFileChat(
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      mimeType: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["mime_type"]),
-          "mime_type",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "mime_type",
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      openaiFileId: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["openai_file_id"]),
-          "openai_file_id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "openai_file_id",
-      ),
-      thumbName: _readFieldValue<String>(
-        _readField(json, const ["thumb_name"]),
-        "thumb_name",
-        _readString,
-        requiredField: false,
-        nullable: true,
-        defaultValue: "",
-      ),
-      thumbnail: _readFieldValue<String>(
-        _readField(json, const ["thumbnail"]),
-        "thumbnail",
-        _readString,
-        requiredField: false,
-        nullable: true,
-        defaultValue: "",
-      ),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      mimeType: _required(_readFieldValue<String>(_readField(json, const ["mime_type"]), "mime_type", _readString, requiredField: true, nullable: false), "mime_type"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      openaiFileId: _required(_readFieldValue<String>(_readField(json, const ["openai_file_id"]), "openai_file_id", _readString, requiredField: true, nullable: false), "openai_file_id"),
+      thumbName: _readFieldValue<String>(_readField(json, const ["thumb_name"]), "thumb_name", _readString, requiredField: false, nullable: true, defaultValue: ""),
+      thumbnail: _readFieldValue<String>(_readField(json, const ["thumbnail"]), "thumbnail", _readString, requiredField: false, nullable: true, defaultValue: ""),
     );
   }
 
@@ -192,35 +102,23 @@ class GeneratedChartDataPoint {
   final String label;
   final double value;
 
-  const GeneratedChartDataPoint({required this.label, required this.value});
+  const GeneratedChartDataPoint({
+    required this.label,
+    required this.value,
+  });
 
   factory GeneratedChartDataPoint.fromJson(Map<String, dynamic> json) {
     return GeneratedChartDataPoint(
-      label: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["label"]),
-          "label",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "label",
-      ),
-      value: _required(
-        _readFieldValue<double>(
-          _readField(json, const ["value"]),
-          "value",
-          _readDouble,
-          requiredField: true,
-          nullable: false,
-        ),
-        "value",
-      ),
+      label: _required(_readFieldValue<String>(_readField(json, const ["label"]), "label", _readString, requiredField: true, nullable: false), "label"),
+      value: _required(_readFieldValue<double>(_readField(json, const ["value"]), "value", _readDouble, requiredField: true, nullable: false), "value"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'label': label, 'value': value};
+    return {
+      'label': label,
+      'value': value,
+    };
   }
 }
 
@@ -229,42 +127,26 @@ class GeneratedChartDataset {
   final List<GeneratedChartDataPoint> dataPoints;
   final String label;
 
-  const GeneratedChartDataset({this.color, required this.dataPoints, required this.label});
+  const GeneratedChartDataset({
+    this.color,
+    required this.dataPoints,
+    required this.label,
+  });
 
   factory GeneratedChartDataset.fromJson(Map<String, dynamic> json) {
     return GeneratedChartDataset(
-      color: _readFieldValue<String>(
-        _readField(json, const ["color"]),
-        "color",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      dataPoints: _required(
-        _readFieldValue<List<GeneratedChartDataPoint>>(
-          _readField(json, const ["data_points"]),
-          "data_points",
-          (value) => _readObjectList(value, GeneratedChartDataPoint.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "data_points",
-      ),
-      label: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["label"]),
-          "label",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "label",
-      ),
+      color: _readFieldValue<String>(_readField(json, const ["color"]), "color", _readString, requiredField: false, nullable: true),
+      dataPoints: _required(_readFieldValue<List<GeneratedChartDataPoint>>(_readField(json, const ["data_points"]), "data_points", (value) => _readObjectList(value, GeneratedChartDataPoint.fromJson), requiredField: true, nullable: false), "data_points"),
+      label: _required(_readFieldValue<String>(_readField(json, const ["label"]), "label", _readString, requiredField: true, nullable: false), "label"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'color': color, 'data_points': dataPoints.map((value) => value.toJson()).toList(), 'label': label};
+    return {
+      'color': color,
+      'data_points': dataPoints.map((value) => value.toJson()).toList(),
+      'label': label,
+    };
   }
 }
 
@@ -285,50 +167,11 @@ class GeneratedChartData {
 
   factory GeneratedChartData.fromJson(Map<String, dynamic> json) {
     return GeneratedChartData(
-      chartType: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["chart_type"]),
-          "chart_type",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "chart_type",
-      ),
-      datasets: _required(
-        _readFieldValue<List<GeneratedChartDataset>>(
-          _readField(json, const ["datasets"]),
-          "datasets",
-          (value) => _readObjectList(value, GeneratedChartDataset.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "datasets",
-      ),
-      title: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["title"]),
-          "title",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "title",
-      ),
-      xLabel: _readFieldValue<String>(
-        _readField(json, const ["x_label"]),
-        "x_label",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      yLabel: _readFieldValue<String>(
-        _readField(json, const ["y_label"]),
-        "y_label",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
+      chartType: _required(_readFieldValue<String>(_readField(json, const ["chart_type"]), "chart_type", _readString, requiredField: true, nullable: false), "chart_type"),
+      datasets: _required(_readFieldValue<List<GeneratedChartDataset>>(_readField(json, const ["datasets"]), "datasets", (value) => _readObjectList(value, GeneratedChartDataset.fromJson), requiredField: true, nullable: false), "datasets"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      xLabel: _readFieldValue<String>(_readField(json, const ["x_label"]), "x_label", _readString, requiredField: false, nullable: true),
+      yLabel: _readFieldValue<String>(_readField(json, const ["y_label"]), "y_label", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -392,192 +235,27 @@ class GeneratedMessage {
 
   factory GeneratedMessage.fromJson(Map<String, dynamic> json) {
     return GeneratedMessage(
-      appId: _readFieldValue<String>(
-        _readField(json, const ["app_id"]),
-        "app_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      chartData: _readFieldValue<Map<String, dynamic>>(
-        _readField(json, const ["chart_data"]),
-        "chart_data",
-        _readMap,
-        requiredField: false,
-        nullable: true,
-      ),
-      chatSessionId: _readFieldValue<String>(
-        _readField(json, const ["chat_session_id"]),
-        "chat_session_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      dataProtectionLevel: _readFieldValue<String>(
-        _readField(json, const ["data_protection_level"]),
-        "data_protection_level",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      files: _required(
-        _readFieldValue<List<GeneratedFileChat>>(
-          _readField(json, const ["files"]),
-          "files",
-          (value) => _readObjectList(value, GeneratedFileChat.fromJson),
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "files",
-      ),
-      filesId: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["files_id"]),
-          "files_id",
-          _readStringList,
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "files_id",
-      ),
-      fromExternalIntegration: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["from_external_integration"]),
-          "from_external_integration",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "from_external_integration",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      langsmithRunId: _readFieldValue<String>(
-        _readField(json, const ["langsmith_run_id"]),
-        "langsmith_run_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      memories: _required(
-        _readFieldValue<List<GeneratedMessageConversation>>(
-          _readField(json, const ["memories"]),
-          "memories",
-          (value) => _readObjectList(value, GeneratedMessageConversation.fromJson),
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "memories",
-      ),
-      memoriesId: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["memories_id"]),
-          "memories_id",
-          _readStringList,
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "memories_id",
-      ),
-      pluginId: _readFieldValue<String>(
-        _readField(json, const ["plugin_id"]),
-        "plugin_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      promptCommit: _readFieldValue<String>(
-        _readField(json, const ["prompt_commit"]),
-        "prompt_commit",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      promptName: _readFieldValue<String>(
-        _readField(json, const ["prompt_name"]),
-        "prompt_name",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      rating: _readFieldValue<int>(
-        _readField(json, const ["rating"]),
-        "rating",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
-      reportReason: _readFieldValue<String>(
-        _readField(json, const ["report_reason"]),
-        "report_reason",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      reported: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["reported"]),
-          "reported",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "reported",
-      ),
-      sender: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["sender"]),
-          "sender",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "sender",
-      ),
-      text: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["text"]),
-          "text",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "text",
-      ),
-      type: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["type"]),
-          "type",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "type",
-      ),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
+      chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
+      filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
+      fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      langsmithRunId: _readFieldValue<String>(_readField(json, const ["langsmith_run_id"]), "langsmith_run_id", _readString, requiredField: false, nullable: true),
+      memories: _required(_readFieldValue<List<GeneratedMessageConversation>>(_readField(json, const ["memories"]), "memories", (value) => _readObjectList(value, GeneratedMessageConversation.fromJson), requiredField: false, nullable: false, defaultValue: const []), "memories"),
+      memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
+      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
+      promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
+      promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
+      rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt, requiredField: false, nullable: true),
+      reportReason: _readFieldValue<String>(_readField(json, const ["report_reason"]), "report_reason", _readString, requiredField: false, nullable: true),
+      reported: _required(_readFieldValue<bool>(_readField(json, const ["reported"]), "reported", _readBool, requiredField: false, nullable: false, defaultValue: false), "reported"),
+      sender: _required(_readFieldValue<String>(_readField(json, const ["sender"]), "sender", _readString, requiredField: true, nullable: false), "sender"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
   }
 
@@ -659,200 +337,28 @@ class GeneratedResponseMessage {
 
   factory GeneratedResponseMessage.fromJson(Map<String, dynamic> json) {
     return GeneratedResponseMessage(
-      appId: _readFieldValue<String>(
-        _readField(json, const ["app_id"]),
-        "app_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      askForNps: _readFieldValue<bool>(
-        _readField(json, const ["ask_for_nps"]),
-        "ask_for_nps",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      chartData: _readFieldValue<Map<String, dynamic>>(
-        _readField(json, const ["chart_data"]),
-        "chart_data",
-        _readMap,
-        requiredField: false,
-        nullable: true,
-      ),
-      chatSessionId: _readFieldValue<String>(
-        _readField(json, const ["chat_session_id"]),
-        "chat_session_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      dataProtectionLevel: _readFieldValue<String>(
-        _readField(json, const ["data_protection_level"]),
-        "data_protection_level",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      files: _required(
-        _readFieldValue<List<GeneratedFileChat>>(
-          _readField(json, const ["files"]),
-          "files",
-          (value) => _readObjectList(value, GeneratedFileChat.fromJson),
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "files",
-      ),
-      filesId: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["files_id"]),
-          "files_id",
-          _readStringList,
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "files_id",
-      ),
-      fromExternalIntegration: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["from_external_integration"]),
-          "from_external_integration",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "from_external_integration",
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      langsmithRunId: _readFieldValue<String>(
-        _readField(json, const ["langsmith_run_id"]),
-        "langsmith_run_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      memories: _required(
-        _readFieldValue<List<GeneratedMessageConversation>>(
-          _readField(json, const ["memories"]),
-          "memories",
-          (value) => _readObjectList(value, GeneratedMessageConversation.fromJson),
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "memories",
-      ),
-      memoriesId: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["memories_id"]),
-          "memories_id",
-          _readStringList,
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "memories_id",
-      ),
-      pluginId: _readFieldValue<String>(
-        _readField(json, const ["plugin_id"]),
-        "plugin_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      promptCommit: _readFieldValue<String>(
-        _readField(json, const ["prompt_commit"]),
-        "prompt_commit",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      promptName: _readFieldValue<String>(
-        _readField(json, const ["prompt_name"]),
-        "prompt_name",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      rating: _readFieldValue<int>(
-        _readField(json, const ["rating"]),
-        "rating",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
-      reportReason: _readFieldValue<String>(
-        _readField(json, const ["report_reason"]),
-        "report_reason",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      reported: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["reported"]),
-          "reported",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "reported",
-      ),
-      sender: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["sender"]),
-          "sender",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "sender",
-      ),
-      text: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["text"]),
-          "text",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "text",
-      ),
-      type: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["type"]),
-          "type",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "type",
-      ),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      askForNps: _readFieldValue<bool>(_readField(json, const ["ask_for_nps"]), "ask_for_nps", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
+      chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
+      filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
+      fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      langsmithRunId: _readFieldValue<String>(_readField(json, const ["langsmith_run_id"]), "langsmith_run_id", _readString, requiredField: false, nullable: true),
+      memories: _required(_readFieldValue<List<GeneratedMessageConversation>>(_readField(json, const ["memories"]), "memories", (value) => _readObjectList(value, GeneratedMessageConversation.fromJson), requiredField: false, nullable: false, defaultValue: const []), "memories"),
+      memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
+      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
+      promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
+      promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
+      rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt, requiredField: false, nullable: true),
+      reportReason: _readFieldValue<String>(_readField(json, const ["report_reason"]), "report_reason", _readString, requiredField: false, nullable: true),
+      reported: _required(_readFieldValue<bool>(_readField(json, const ["reported"]), "reported", _readBool, requiredField: false, nullable: false, defaultValue: false), "reported"),
+      sender: _required(_readFieldValue<String>(_readField(json, const ["sender"]), "sender", _readString, requiredField: true, nullable: false), "sender"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
   }
 
@@ -887,25 +393,20 @@ class GeneratedResponseMessage {
 class GeneratedMessageReportResponse {
   final String message;
 
-  const GeneratedMessageReportResponse({required this.message});
+  const GeneratedMessageReportResponse({
+    required this.message,
+  });
 
   factory GeneratedMessageReportResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMessageReportResponse(
-      message: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["message"]),
-          "message",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "message",
-      ),
+      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'message': message};
+    return {
+      'message': message,
+    };
   }
 }
 
@@ -913,32 +414,23 @@ class GeneratedVoiceMessageTranscriptionResponse {
   final String? language;
   final String transcript;
 
-  const GeneratedVoiceMessageTranscriptionResponse({this.language, required this.transcript});
+  const GeneratedVoiceMessageTranscriptionResponse({
+    this.language,
+    required this.transcript,
+  });
 
   factory GeneratedVoiceMessageTranscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedVoiceMessageTranscriptionResponse(
-      language: _readFieldValue<String>(
-        _readField(json, const ["language"]),
-        "language",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      transcript: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["transcript"]),
-          "transcript",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "transcript",
-      ),
+      language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      transcript: _required(_readFieldValue<String>(_readField(json, const ["transcript"]), "transcript", _readString, requiredField: true, nullable: false), "transcript"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'language': language, 'transcript': transcript};
+    return {
+      'language': language,
+      'transcript': transcript,
+    };
   }
 }
 
@@ -1026,27 +518,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

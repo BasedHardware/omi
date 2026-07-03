@@ -25,66 +25,14 @@ class GeneratedTargeting {
 
   factory GeneratedTargeting.fromJson(Map<String, dynamic> json) {
     return GeneratedTargeting(
-      appVersionMax: _readFieldValue<String>(
-        _readField(json, const ["app_version_max"]),
-        "app_version_max",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      appVersionMin: _readFieldValue<String>(
-        _readField(json, const ["app_version_min"]),
-        "app_version_min",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      deviceModels: _readFieldValue<List<String>>(
-        _readField(json, const ["device_models"]),
-        "device_models",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      firmwareVersionMax: _readFieldValue<String>(
-        _readField(json, const ["firmware_version_max"]),
-        "firmware_version_max",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      firmwareVersionMin: _readFieldValue<String>(
-        _readField(json, const ["firmware_version_min"]),
-        "firmware_version_min",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      platforms: _readFieldValue<List<String>>(
-        _readField(json, const ["platforms"]),
-        "platforms",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      testUids: _readFieldValue<List<String>>(
-        _readField(json, const ["test_uids"]),
-        "test_uids",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      trigger: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["trigger"]),
-          "trigger",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "version_upgrade",
-        ),
-        "trigger",
-      ),
+      appVersionMax: _readFieldValue<String>(_readField(json, const ["app_version_max"]), "app_version_max", _readString, requiredField: false, nullable: true),
+      appVersionMin: _readFieldValue<String>(_readField(json, const ["app_version_min"]), "app_version_min", _readString, requiredField: false, nullable: true),
+      deviceModels: _readFieldValue<List<String>>(_readField(json, const ["device_models"]), "device_models", _readStringList, requiredField: false, nullable: true),
+      firmwareVersionMax: _readFieldValue<String>(_readField(json, const ["firmware_version_max"]), "firmware_version_max", _readString, requiredField: false, nullable: true),
+      firmwareVersionMin: _readFieldValue<String>(_readField(json, const ["firmware_version_min"]), "firmware_version_min", _readString, requiredField: false, nullable: true),
+      platforms: _readFieldValue<List<String>>(_readField(json, const ["platforms"]), "platforms", _readStringList, requiredField: false, nullable: true),
+      testUids: _readFieldValue<List<String>>(_readField(json, const ["test_uids"]), "test_uids", _readStringList, requiredField: false, nullable: true),
+      trigger: _required(_readFieldValue<String>(_readField(json, const ["trigger"]), "trigger", _readString, requiredField: false, nullable: false, defaultValue: "version_upgrade"), "trigger"),
     );
   }
 
@@ -119,53 +67,11 @@ class GeneratedDisplay {
 
   factory GeneratedDisplay.fromJson(Map<String, dynamic> json) {
     return GeneratedDisplay(
-      dismissible: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["dismissible"]),
-          "dismissible",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: true,
-        ),
-        "dismissible",
-      ),
-      expiresAt: _readFieldValue<DateTime>(
-        _readField(json, const ["expires_at"]),
-        "expires_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      priority: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["priority"]),
-          "priority",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "priority",
-      ),
-      showOnce: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["show_once"]),
-          "show_once",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: true,
-        ),
-        "show_once",
-      ),
-      startAt: _readFieldValue<DateTime>(
-        _readField(json, const ["start_at"]),
-        "start_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
+      dismissible: _required(_readFieldValue<bool>(_readField(json, const ["dismissible"]), "dismissible", _readBool, requiredField: false, nullable: false, defaultValue: true), "dismissible"),
+      expiresAt: _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: false, nullable: true),
+      priority: _required(_readFieldValue<int>(_readField(json, const ["priority"]), "priority", _readInt, requiredField: false, nullable: false, defaultValue: 0), "priority"),
+      showOnce: _required(_readFieldValue<bool>(_readField(json, const ["show_once"]), "show_once", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_once"),
+      startAt: _readFieldValue<DateTime>(_readField(json, const ["start_at"]), "start_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
@@ -209,99 +115,17 @@ class GeneratedAnnouncement {
 
   factory GeneratedAnnouncement.fromJson(Map<String, dynamic> json) {
     return GeneratedAnnouncement(
-      active: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["active"]),
-          "active",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: true,
-        ),
-        "active",
-      ),
-      appVersion: _readFieldValue<String>(
-        _readField(json, const ["app_version"]),
-        "app_version",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      content: _required(
-        _readFieldValue<Map<String, dynamic>>(
-          _readField(json, const ["content"]),
-          "content",
-          _readMap,
-          requiredField: true,
-          nullable: false,
-        ),
-        "content",
-      ),
-      createdAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["created_at"]),
-          "created_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "created_at",
-      ),
-      deviceModels: _readFieldValue<List<String>>(
-        _readField(json, const ["device_models"]),
-        "device_models",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      display: _readFieldValue<GeneratedDisplay>(
-        _readField(json, const ["display"]),
-        "display",
-        (value) => _readObject(value, GeneratedDisplay.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      expiresAt: _readFieldValue<DateTime>(
-        _readField(json, const ["expires_at"]),
-        "expires_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      firmwareVersion: _readFieldValue<String>(
-        _readField(json, const ["firmware_version"]),
-        "firmware_version",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      targeting: _readFieldValue<GeneratedTargeting>(
-        _readField(json, const ["targeting"]),
-        "targeting",
-        (value) => _readObject(value, GeneratedTargeting.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      type: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["type"]),
-          "type",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "type",
-      ),
+      active: _required(_readFieldValue<bool>(_readField(json, const ["active"]), "active", _readBool, requiredField: false, nullable: false, defaultValue: true), "active"),
+      appVersion: _readFieldValue<String>(_readField(json, const ["app_version"]), "app_version", _readString, requiredField: false, nullable: true),
+      content: _required(_readFieldValue<Map<String, dynamic>>(_readField(json, const ["content"]), "content", _readMap, requiredField: true, nullable: false), "content"),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      deviceModels: _readFieldValue<List<String>>(_readField(json, const ["device_models"]), "device_models", _readStringList, requiredField: false, nullable: true),
+      display: _readFieldValue<GeneratedDisplay>(_readField(json, const ["display"]), "display", (value) => _readObject(value, GeneratedDisplay.fromJson), requiredField: false, nullable: true),
+      expiresAt: _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: false, nullable: true),
+      firmwareVersion: _readFieldValue<String>(_readField(json, const ["firmware_version"]), "firmware_version", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      targeting: _readFieldValue<GeneratedTargeting>(_readField(json, const ["targeting"]), "targeting", (value) => _readObject(value, GeneratedTargeting.fromJson), requiredField: false, nullable: true),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
   }
 
@@ -406,27 +230,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

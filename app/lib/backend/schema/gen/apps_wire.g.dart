@@ -6,35 +6,23 @@ class GeneratedAppSelectOption {
   final String id;
   final String title;
 
-  const GeneratedAppSelectOption({required this.id, required this.title});
+  const GeneratedAppSelectOption({
+    required this.id,
+    required this.title,
+  });
 
   factory GeneratedAppSelectOption.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSelectOption(
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      title: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["title"]),
-          "title",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "title",
-      ),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'id': id, 'title': title};
+    return {
+      'id': id,
+      'title': title,
+    };
   }
 }
 
@@ -44,49 +32,29 @@ class GeneratedAppCapabilityAction {
   final String id;
   final String title;
 
-  const GeneratedAppCapabilityAction({this.description, this.docUrl, required this.id, required this.title});
+  const GeneratedAppCapabilityAction({
+    this.description,
+    this.docUrl,
+    required this.id,
+    required this.title,
+  });
 
   factory GeneratedAppCapabilityAction.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCapabilityAction(
-      description: _readFieldValue<String>(
-        _readField(json, const ["description"]),
-        "description",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      docUrl: _readFieldValue<String>(
-        _readField(json, const ["doc_url"]),
-        "doc_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      title: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["title"]),
-          "title",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "title",
-      ),
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      docUrl: _readFieldValue<String>(_readField(json, const ["doc_url"]), "doc_url", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'description': description, 'doc_url': docUrl, 'id': id, 'title': title};
+    return {
+      'description': description,
+      'doc_url': docUrl,
+      'id': id,
+      'title': title,
+    };
   }
 }
 
@@ -107,47 +75,11 @@ class GeneratedAppCapabilityResponse {
 
   factory GeneratedAppCapabilityResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCapabilityResponse(
-      actions: _readFieldValue<List<GeneratedAppCapabilityAction>>(
-        _readField(json, const ["actions"]),
-        "actions",
-        (value) => _readObjectList(value, GeneratedAppCapabilityAction.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      scopes: _readFieldValue<List<GeneratedAppSelectOption>>(
-        _readField(json, const ["scopes"]),
-        "scopes",
-        (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      title: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["title"]),
-          "title",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "title",
-      ),
-      triggers: _readFieldValue<List<GeneratedAppSelectOption>>(
-        _readField(json, const ["triggers"]),
-        "triggers",
-        (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
+      actions: _readFieldValue<List<GeneratedAppCapabilityAction>>(_readField(json, const ["actions"]), "actions", (value) => _readObjectList(value, GeneratedAppCapabilityAction.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      scopes: _readFieldValue<List<GeneratedAppSelectOption>>(_readField(json, const ["scopes"]), "scopes", (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      triggers: _readFieldValue<List<GeneratedAppSelectOption>>(_readField(json, const ["triggers"]), "triggers", (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -166,60 +98,43 @@ class GeneratedAppThumbnailUploadResponse {
   final String thumbnailId;
   final String thumbnailUrl;
 
-  const GeneratedAppThumbnailUploadResponse({required this.thumbnailId, required this.thumbnailUrl});
+  const GeneratedAppThumbnailUploadResponse({
+    required this.thumbnailId,
+    required this.thumbnailUrl,
+  });
 
   factory GeneratedAppThumbnailUploadResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppThumbnailUploadResponse(
-      thumbnailId: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["thumbnail_id"]),
-          "thumbnail_id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "thumbnail_id",
-      ),
-      thumbnailUrl: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["thumbnail_url"]),
-          "thumbnail_url",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "thumbnail_url",
-      ),
+      thumbnailId: _required(_readFieldValue<String>(_readField(json, const ["thumbnail_id"]), "thumbnail_id", _readString, requiredField: true, nullable: false), "thumbnail_id"),
+      thumbnailUrl: _required(_readFieldValue<String>(_readField(json, const ["thumbnail_url"]), "thumbnail_url", _readString, requiredField: true, nullable: false), "thumbnail_url"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'thumbnail_id': thumbnailId, 'thumbnail_url': thumbnailUrl};
+    return {
+      'thumbnail_id': thumbnailId,
+      'thumbnail_url': thumbnailUrl,
+    };
   }
 }
 
 class GeneratedAppMutationResponse {
   final String status;
 
-  const GeneratedAppMutationResponse({required this.status});
+  const GeneratedAppMutationResponse({
+    required this.status,
+  });
 
   factory GeneratedAppMutationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppMutationResponse(
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'status': status};
+    return {
+      'status': status,
+    };
   }
 }
 
@@ -227,35 +142,23 @@ class GeneratedAppCreateResponse {
   final String appId;
   final String status;
 
-  const GeneratedAppCreateResponse({required this.appId, required this.status});
+  const GeneratedAppCreateResponse({
+    required this.appId,
+    required this.status,
+  });
 
   factory GeneratedAppCreateResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCreateResponse(
-      appId: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["app_id"]),
-          "app_id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "app_id",
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      appId: _required(_readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: true, nullable: false), "app_id"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'app_id': appId, 'status': status};
+    return {
+      'app_id': appId,
+      'status': status,
+    };
   }
 }
 
@@ -263,35 +166,23 @@ class GeneratedAppMigrationResponse {
   final String message;
   final String status;
 
-  const GeneratedAppMigrationResponse({required this.message, required this.status});
+  const GeneratedAppMigrationResponse({
+    required this.message,
+    required this.status,
+  });
 
   factory GeneratedAppMigrationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppMigrationResponse(
-      message: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["message"]),
-          "message",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "message",
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'message': message, 'status': status};
+    return {
+      'message': message,
+      'status': status,
+    };
   }
 }
 
@@ -312,47 +203,11 @@ class GeneratedMcpAddServerResponse {
 
   factory GeneratedMcpAddServerResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMcpAddServerResponse(
-      appId: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["app_id"]),
-          "app_id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "app_id",
-      ),
-      authUrl: _readFieldValue<String>(
-        _readField(json, const ["auth_url"]),
-        "auth_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      requiresOauth: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["requires_oauth"]),
-          "requires_oauth",
-          _readBool,
-          requiredField: true,
-          nullable: false,
-        ),
-        "requires_oauth",
-      ),
-      toolNames: _readFieldValue<List<String>>(
-        _readField(json, const ["tool_names"]),
-        "tool_names",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-      ),
-      toolsCount: _readFieldValue<int>(
-        _readField(json, const ["tools_count"]),
-        "tools_count",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
+      appId: _required(_readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: true, nullable: false), "app_id"),
+      authUrl: _readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: false, nullable: true),
+      requiresOauth: _required(_readFieldValue<bool>(_readField(json, const ["requires_oauth"]), "requires_oauth", _readBool, requiredField: true, nullable: false), "requires_oauth"),
+      toolNames: _readFieldValue<List<String>>(_readField(json, const ["tool_names"]), "tool_names", _readStringList, requiredField: false, nullable: true),
+      toolsCount: _readFieldValue<int>(_readField(json, const ["tools_count"]), "tools_count", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -370,25 +225,20 @@ class GeneratedMcpAddServerResponse {
 class GeneratedAppDescriptionGenerationResponse {
   final String description;
 
-  const GeneratedAppDescriptionGenerationResponse({required this.description});
+  const GeneratedAppDescriptionGenerationResponse({
+    required this.description,
+  });
 
   factory GeneratedAppDescriptionGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppDescriptionGenerationResponse(
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'description': description};
+    return {
+      'description': description,
+    };
   }
 }
 
@@ -396,60 +246,43 @@ class GeneratedAppDescriptionEmojiGenerationResponse {
   final String description;
   final String emoji;
 
-  const GeneratedAppDescriptionEmojiGenerationResponse({required this.description, required this.emoji});
+  const GeneratedAppDescriptionEmojiGenerationResponse({
+    required this.description,
+    required this.emoji,
+  });
 
   factory GeneratedAppDescriptionEmojiGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppDescriptionEmojiGenerationResponse(
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
-      emoji: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["emoji"]),
-          "emoji",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "emoji",
-      ),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: true, nullable: false), "emoji"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'description': description, 'emoji': emoji};
+    return {
+      'description': description,
+      'emoji': emoji,
+    };
   }
 }
 
 class GeneratedAppPromptsGenerationResponse {
   final List<String> prompts;
 
-  const GeneratedAppPromptsGenerationResponse({required this.prompts});
+  const GeneratedAppPromptsGenerationResponse({
+    required this.prompts,
+  });
 
   factory GeneratedAppPromptsGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppPromptsGenerationResponse(
-      prompts: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["prompts"]),
-          "prompts",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "prompts",
-      ),
+      prompts: _required(_readFieldValue<List<String>>(_readField(json, const ["prompts"]), "prompts", _readStringList, requiredField: true, nullable: false), "prompts"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'prompts': prompts};
+    return {
+      'prompts': prompts,
+    };
   }
 }
 
@@ -472,60 +305,12 @@ class GeneratedAppDraftGenerationResponse {
 
   factory GeneratedAppDraftGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppDraftGenerationResponse(
-      capabilities: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["capabilities"]),
-          "capabilities",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "capabilities",
-      ),
-      category: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["category"]),
-          "category",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "category",
-      ),
-      chatPrompt: _readFieldValue<String>(
-        _readField(json, const ["chat_prompt"]),
-        "chat_prompt",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
-      memoryPrompt: _readFieldValue<String>(
-        _readField(json, const ["memory_prompt"]),
-        "memory_prompt",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
+      capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
+      chatPrompt: _readFieldValue<String>(_readField(json, const ["chat_prompt"]), "chat_prompt", _readString, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      memoryPrompt: _readFieldValue<String>(_readField(json, const ["memory_prompt"]), "memory_prompt", _readString, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
     );
   }
 
@@ -545,35 +330,23 @@ class GeneratedAppGenerationResponse {
   final GeneratedAppDraftGenerationResponse app;
   final String status;
 
-  const GeneratedAppGenerationResponse({required this.app, required this.status});
+  const GeneratedAppGenerationResponse({
+    required this.app,
+    required this.status,
+  });
 
   factory GeneratedAppGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppGenerationResponse(
-      app: _required(
-        _readFieldValue<GeneratedAppDraftGenerationResponse>(
-          _readField(json, const ["app"]),
-          "app",
-          (value) => _readObject(value, GeneratedAppDraftGenerationResponse.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "app",
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      app: _required(_readFieldValue<GeneratedAppDraftGenerationResponse>(_readField(json, const ["app"]), "app", (value) => _readObject(value, GeneratedAppDraftGenerationResponse.fromJson), requiredField: true, nullable: false), "app"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'app': app.toJson(), 'status': status};
+    return {
+      'app': app.toJson(),
+      'status': status,
+    };
   }
 }
 
@@ -582,45 +355,26 @@ class GeneratedAppIconGenerationResponse {
   final String mimeType;
   final String status;
 
-  const GeneratedAppIconGenerationResponse({required this.iconBase64, required this.mimeType, required this.status});
+  const GeneratedAppIconGenerationResponse({
+    required this.iconBase64,
+    required this.mimeType,
+    required this.status,
+  });
 
   factory GeneratedAppIconGenerationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppIconGenerationResponse(
-      iconBase64: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["icon_base64"]),
-          "icon_base64",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "icon_base64",
-      ),
-      mimeType: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["mime_type"]),
-          "mime_type",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "mime_type",
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "status",
-      ),
+      iconBase64: _required(_readFieldValue<String>(_readField(json, const ["icon_base64"]), "icon_base64", _readString, requiredField: true, nullable: false), "icon_base64"),
+      mimeType: _required(_readFieldValue<String>(_readField(json, const ["mime_type"]), "mime_type", _readString, requiredField: true, nullable: false), "mime_type"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'icon_base64': iconBase64, 'mime_type': mimeType, 'status': status};
+    return {
+      'icon_base64': iconBase64,
+      'mime_type': mimeType,
+      'status': status,
+    };
   }
 }
 
@@ -645,67 +399,13 @@ class GeneratedAppReview {
 
   factory GeneratedAppReview.fromJson(Map<String, dynamic> json) {
     return GeneratedAppReview(
-      ratedAt: _required(
-        _readFieldValue<DateTime>(
-          _readField(json, const ["rated_at"]),
-          "rated_at",
-          _readDateTime,
-          requiredField: true,
-          nullable: false,
-        ),
-        "rated_at",
-      ),
-      respondedAt: _readFieldValue<DateTime>(
-        _readField(json, const ["responded_at"]),
-        "responded_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      response: _readFieldValue<String>(
-        _readField(json, const ["response"]),
-        "response",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      review: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["review"]),
-          "review",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "review",
-      ),
-      score: _required(
-        _readFieldValue<double>(
-          _readField(json, const ["score"]),
-          "score",
-          _readDouble,
-          requiredField: true,
-          nullable: false,
-        ),
-        "score",
-      ),
-      uid: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["uid"]),
-          "uid",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "uid",
-      ),
-      username: _readFieldValue<String>(
-        _readField(json, const ["username"]),
-        "username",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
+      ratedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["rated_at"]), "rated_at", _readDateTime, requiredField: true, nullable: false), "rated_at"),
+      respondedAt: _readFieldValue<DateTime>(_readField(json, const ["responded_at"]), "responded_at", _readDateTime, requiredField: false, nullable: true),
+      response: _readFieldValue<String>(_readField(json, const ["response"]), "response", _readString, requiredField: false, nullable: true),
+      review: _required(_readFieldValue<String>(_readField(json, const ["review"]), "review", _readString, requiredField: true, nullable: false), "review"),
+      score: _required(_readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: true, nullable: false), "score"),
+      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
+      username: _readFieldValue<String>(_readField(json, const ["username"]), "username", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -726,60 +426,43 @@ class GeneratedAuthStep {
   final String name;
   final String url;
 
-  const GeneratedAuthStep({required this.name, required this.url});
+  const GeneratedAuthStep({
+    required this.name,
+    required this.url,
+  });
 
   factory GeneratedAuthStep.fromJson(Map<String, dynamic> json) {
     return GeneratedAuthStep(
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      url: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["url"]),
-          "url",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "url",
-      ),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'name': name, 'url': url};
+    return {
+      'name': name,
+      'url': url,
+    };
   }
 }
 
 class GeneratedAction {
   final String action;
 
-  const GeneratedAction({required this.action});
+  const GeneratedAction({
+    required this.action,
+  });
 
   factory GeneratedAction.fromJson(Map<String, dynamic> json) {
     return GeneratedAction(
-      action: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["action"]),
-          "action",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "action",
-      ),
+      action: _required(_readFieldValue<String>(_readField(json, const ["action"]), "action", _readString, requiredField: true, nullable: false), "action"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'action': action};
+    return {
+      'action': action,
+    };
   }
 }
 
@@ -818,122 +501,20 @@ class GeneratedExternalIntegration {
 
   factory GeneratedExternalIntegration.fromJson(Map<String, dynamic> json) {
     return GeneratedExternalIntegration(
-      actions: _readFieldValue<List<GeneratedAction>>(
-        _readField(json, const ["actions"]),
-        "actions",
-        (value) => _readObjectList(value, GeneratedAction.fromJson),
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      appHomeUrl: _readFieldValue<String>(
-        _readField(json, const ["app_home_url"]),
-        "app_home_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      authSteps: _readFieldValue<List<GeneratedAuthStep>>(
-        _readField(json, const ["auth_steps"]),
-        "auth_steps",
-        (value) => _readObjectList(value, GeneratedAuthStep.fromJson),
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      chatMessagesEnabled: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["chat_messages_enabled"]),
-          "chat_messages_enabled",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "chat_messages_enabled",
-      ),
-      chatMessagesNotify: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["chat_messages_notify"]),
-          "chat_messages_notify",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "chat_messages_notify",
-      ),
-      chatMessagesTarget: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["chat_messages_target"]),
-          "chat_messages_target",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "app",
-        ),
-        "chat_messages_target",
-      ),
-      chatToolsManifestUrl: _readFieldValue<String>(
-        _readField(json, const ["chat_tools_manifest_url"]),
-        "chat_tools_manifest_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      isInstructionsUrl: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["is_instructions_url"]),
-          "is_instructions_url",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: true,
-        ),
-        "is_instructions_url",
-      ),
-      mcpOauthTokens: _readFieldValue<Map<String, dynamic>>(
-        _readField(json, const ["mcp_oauth_tokens"]),
-        "mcp_oauth_tokens",
-        _readMap,
-        requiredField: false,
-        nullable: true,
-      ),
-      mcpServerUrl: _readFieldValue<String>(
-        _readField(json, const ["mcp_server_url"]),
-        "mcp_server_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      setupCompletedUrl: _readFieldValue<String>(
-        _readField(json, const ["setup_completed_url"]),
-        "setup_completed_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      setupInstructionsFilePath: _readFieldValue<String>(
-        _readField(json, const ["setup_instructions_file_path"]),
-        "setup_instructions_file_path",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      triggersOn: _readFieldValue<String>(
-        _readField(json, const ["triggers_on"]),
-        "triggers_on",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      webhookUrl: _readFieldValue<String>(
-        _readField(json, const ["webhook_url"]),
-        "webhook_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
+      actions: _readFieldValue<List<GeneratedAction>>(_readField(json, const ["actions"]), "actions", (value) => _readObjectList(value, GeneratedAction.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      appHomeUrl: _readFieldValue<String>(_readField(json, const ["app_home_url"]), "app_home_url", _readString, requiredField: false, nullable: true),
+      authSteps: _readFieldValue<List<GeneratedAuthStep>>(_readField(json, const ["auth_steps"]), "auth_steps", (value) => _readObjectList(value, GeneratedAuthStep.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      chatMessagesEnabled: _required(_readFieldValue<bool>(_readField(json, const ["chat_messages_enabled"]), "chat_messages_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "chat_messages_enabled"),
+      chatMessagesNotify: _required(_readFieldValue<bool>(_readField(json, const ["chat_messages_notify"]), "chat_messages_notify", _readBool, requiredField: false, nullable: false, defaultValue: false), "chat_messages_notify"),
+      chatMessagesTarget: _required(_readFieldValue<String>(_readField(json, const ["chat_messages_target"]), "chat_messages_target", _readString, requiredField: false, nullable: false, defaultValue: "app"), "chat_messages_target"),
+      chatToolsManifestUrl: _readFieldValue<String>(_readField(json, const ["chat_tools_manifest_url"]), "chat_tools_manifest_url", _readString, requiredField: false, nullable: true),
+      isInstructionsUrl: _required(_readFieldValue<bool>(_readField(json, const ["is_instructions_url"]), "is_instructions_url", _readBool, requiredField: false, nullable: false, defaultValue: true), "is_instructions_url"),
+      mcpOauthTokens: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["mcp_oauth_tokens"]), "mcp_oauth_tokens", _readMap, requiredField: false, nullable: true),
+      mcpServerUrl: _readFieldValue<String>(_readField(json, const ["mcp_server_url"]), "mcp_server_url", _readString, requiredField: false, nullable: true),
+      setupCompletedUrl: _readFieldValue<String>(_readField(json, const ["setup_completed_url"]), "setup_completed_url", _readString, requiredField: false, nullable: true),
+      setupInstructionsFilePath: _readFieldValue<String>(_readField(json, const ["setup_instructions_file_path"]), "setup_instructions_file_path", _readString, requiredField: false, nullable: true),
+      triggersOn: _readFieldValue<String>(_readField(json, const ["triggers_on"]), "triggers_on", _readString, requiredField: false, nullable: true),
+      webhookUrl: _readFieldValue<String>(_readField(json, const ["webhook_url"]), "webhook_url", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -960,25 +541,20 @@ class GeneratedExternalIntegration {
 class GeneratedProactiveNotification {
   final List<String> scopes;
 
-  const GeneratedProactiveNotification({required this.scopes});
+  const GeneratedProactiveNotification({
+    required this.scopes,
+  });
 
   factory GeneratedProactiveNotification.fromJson(Map<String, dynamic> json) {
     return GeneratedProactiveNotification(
-      scopes: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["scopes"]),
-          "scopes",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "scopes",
-      ),
+      scopes: _required(_readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: true, nullable: false), "scopes"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'scopes': scopes};
+    return {
+      'scopes': scopes,
+    };
   }
 }
 
@@ -1007,94 +583,15 @@ class GeneratedChatTool {
 
   factory GeneratedChatTool.fromJson(Map<String, dynamic> json) {
     return GeneratedChatTool(
-      authRequired: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["auth_required"]),
-          "auth_required",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: true,
-        ),
-        "auth_required",
-      ),
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
-      endpoint: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["endpoint"]),
-          "endpoint",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "endpoint",
-      ),
-      isMcp: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["is_mcp"]),
-          "is_mcp",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "is_mcp",
-      ),
-      method: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["method"]),
-          "method",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "POST",
-        ),
-        "method",
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      parameters: _readFieldValue<Map<String, dynamic>>(
-        _readField(json, const ["parameters"]),
-        "parameters",
-        _readMap,
-        requiredField: false,
-        nullable: true,
-      ),
-      statusMessage: _readFieldValue<String>(
-        _readField(json, const ["status_message"]),
-        "status_message",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      transport: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["transport"]),
-          "transport",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "streamable_http",
-        ),
-        "transport",
-      ),
+      authRequired: _required(_readFieldValue<bool>(_readField(json, const ["auth_required"]), "auth_required", _readBool, requiredField: false, nullable: false, defaultValue: true), "auth_required"),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      endpoint: _required(_readFieldValue<String>(_readField(json, const ["endpoint"]), "endpoint", _readString, requiredField: true, nullable: false), "endpoint"),
+      isMcp: _required(_readFieldValue<bool>(_readField(json, const ["is_mcp"]), "is_mcp", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_mcp"),
+      method: _required(_readFieldValue<String>(_readField(json, const ["method"]), "method", _readString, requiredField: false, nullable: false, defaultValue: "POST"), "method"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      parameters: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["parameters"]), "parameters", _readMap, requiredField: false, nullable: true),
+      statusMessage: _readFieldValue<String>(_readField(json, const ["status_message"]), "status_message", _readString, requiredField: false, nullable: true),
+      transport: _required(_readFieldValue<String>(_readField(json, const ["transport"]), "transport", _readString, requiredField: false, nullable: false, defaultValue: "streamable_http"), "transport"),
     );
   }
 
@@ -1192,322 +689,42 @@ class GeneratedAppBaseModel {
 
   factory GeneratedAppBaseModel.fromJson(Map<String, dynamic> json) {
     return GeneratedAppBaseModel(
-      approved: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["approved"]),
-          "approved",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "approved",
-      ),
-      author: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["author"]),
-          "author",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "author",
-      ),
-      capabilities: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["capabilities"]),
-          "capabilities",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "capabilities",
-      ),
-      category: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["category"]),
-          "category",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "category",
-      ),
-      chatTools: _readFieldValue<List<GeneratedChatTool>>(
-        _readField(json, const ["chat_tools"]),
-        "chat_tools",
-        (value) => _readObjectList(value, GeneratedChatTool.fromJson),
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      connectedAccounts: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["connected_accounts"]),
-          "connected_accounts",
-          _readStringList,
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "connected_accounts",
-      ),
-      createdAt: _readFieldValue<DateTime>(
-        _readField(json, const ["created_at"]),
-        "created_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
-      disabled: _readFieldValue<bool>(
-        _readField(json, const ["disabled"]),
-        "disabled",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      disabledReason: _readFieldValue<String>(
-        _readField(json, const ["disabled_reason"]),
-        "disabled_reason",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      enabled: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["enabled"]),
-          "enabled",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "enabled",
-      ),
-      externalIntegration: _readFieldValue<GeneratedExternalIntegration>(
-        _readField(json, const ["external_integration"]),
-        "external_integration",
-        (value) => _readObject(value, GeneratedExternalIntegration.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      image: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["image"]),
-          "image",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "image",
-      ),
-      installs: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["installs"]),
-          "installs",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "installs",
-      ),
-      isInfluencer: _readFieldValue<bool>(
-        _readField(json, const ["is_influencer"]),
-        "is_influencer",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      isPaid: _readFieldValue<bool>(
-        _readField(json, const ["is_paid"]),
-        "is_paid",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      isPopular: _readFieldValue<bool>(
-        _readField(json, const ["is_popular"]),
-        "is_popular",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      isUserPaid: _readFieldValue<bool>(
-        _readField(json, const ["is_user_paid"]),
-        "is_user_paid",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      official: _readFieldValue<bool>(
-        _readField(json, const ["official"]),
-        "official",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      paymentLink: _readFieldValue<String>(
-        _readField(json, const ["payment_link"]),
-        "payment_link",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      paymentPlan: _readFieldValue<String>(
-        _readField(json, const ["payment_plan"]),
-        "payment_plan",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      price: _readFieldValue<double>(
-        _readField(json, const ["price"]),
-        "price",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-        defaultValue: 0.0,
-      ),
-      private: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["private"]),
-          "private",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "private",
-      ),
-      proactiveNotification: _readFieldValue<GeneratedProactiveNotification>(
-        _readField(json, const ["proactive_notification"]),
-        "proactive_notification",
-        (value) => _readObject(value, GeneratedProactiveNotification.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      ratingAvg: _readFieldValue<double>(
-        _readField(json, const ["rating_avg"]),
-        "rating_avg",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-        defaultValue: 0,
-      ),
-      ratingCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["rating_count"]),
-          "rating_count",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "rating_count",
-      ),
-      score: _readFieldValue<double>(
-        _readField(json, const ["score"]),
-        "score",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-      ),
-      sourceCodeUrl: _readFieldValue<String>(
-        _readField(json, const ["source_code_url"]),
-        "source_code_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "approved",
-        ),
-        "status",
-      ),
-      thumbnailUrls: _readFieldValue<List<String>>(
-        _readField(json, const ["thumbnail_urls"]),
-        "thumbnail_urls",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      thumbnails: _readFieldValue<List<String>>(
-        _readField(json, const ["thumbnails"]),
-        "thumbnails",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      triggerWorkflowMemories: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["trigger_workflow_memories"]),
-          "trigger_workflow_memories",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: true,
-        ),
-        "trigger_workflow_memories",
-      ),
-      uid: _readFieldValue<String>(
-        _readField(json, const ["uid"]),
-        "uid",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      username: _readFieldValue<String>(
-        _readField(json, const ["username"]),
-        "username",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
+      approved: _required(_readFieldValue<bool>(_readField(json, const ["approved"]), "approved", _readBool, requiredField: false, nullable: false, defaultValue: false), "approved"),
+      author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: true, nullable: false), "author"),
+      capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
+      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      connectedAccounts: _required(_readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "connected_accounts"),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      disabledReason: _readFieldValue<String>(_readField(json, const ["disabled_reason"]), "disabled_reason", _readString, requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "enabled"),
+      externalIntegration: _readFieldValue<GeneratedExternalIntegration>(_readField(json, const ["external_integration"]), "external_integration", (value) => _readObject(value, GeneratedExternalIntegration.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      image: _required(_readFieldValue<String>(_readField(json, const ["image"]), "image", _readString, requiredField: true, nullable: false), "image"),
+      installs: _required(_readFieldValue<int>(_readField(json, const ["installs"]), "installs", _readInt, requiredField: false, nullable: false, defaultValue: 0), "installs"),
+      isInfluencer: _readFieldValue<bool>(_readField(json, const ["is_influencer"]), "is_influencer", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPaid: _readFieldValue<bool>(_readField(json, const ["is_paid"]), "is_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPopular: _readFieldValue<bool>(_readField(json, const ["is_popular"]), "is_popular", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isUserPaid: _readFieldValue<bool>(_readField(json, const ["is_user_paid"]), "is_user_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      official: _readFieldValue<bool>(_readField(json, const ["official"]), "official", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      paymentLink: _readFieldValue<String>(_readField(json, const ["payment_link"]), "payment_link", _readString, requiredField: false, nullable: true),
+      paymentPlan: _readFieldValue<String>(_readField(json, const ["payment_plan"]), "payment_plan", _readString, requiredField: false, nullable: true),
+      price: _readFieldValue<double>(_readField(json, const ["price"]), "price", _readDouble, requiredField: false, nullable: true, defaultValue: 0.0),
+      private: _required(_readFieldValue<bool>(_readField(json, const ["private"]), "private", _readBool, requiredField: false, nullable: false, defaultValue: false), "private"),
+      proactiveNotification: _readFieldValue<GeneratedProactiveNotification>(_readField(json, const ["proactive_notification"]), "proactive_notification", (value) => _readObject(value, GeneratedProactiveNotification.fromJson), requiredField: false, nullable: true),
+      ratingAvg: _readFieldValue<double>(_readField(json, const ["rating_avg"]), "rating_avg", _readDouble, requiredField: false, nullable: true, defaultValue: 0),
+      ratingCount: _required(_readFieldValue<int>(_readField(json, const ["rating_count"]), "rating_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "rating_count"),
+      score: _readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: false, nullable: true),
+      sourceCodeUrl: _readFieldValue<String>(_readField(json, const ["source_code_url"]), "source_code_url", _readString, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
+      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      triggerWorkflowMemories: _required(_readFieldValue<bool>(_readField(json, const ["trigger_workflow_memories"]), "trigger_workflow_memories", _readBool, requiredField: false, nullable: false, defaultValue: true), "trigger_workflow_memories"),
+      uid: _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: false, nullable: true),
+      username: _readFieldValue<String>(_readField(json, const ["username"]), "username", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -1656,410 +873,54 @@ class GeneratedApp {
 
   factory GeneratedApp.fromJson(Map<String, dynamic> json) {
     return GeneratedApp(
-      approved: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["approved"]),
-          "approved",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "approved",
-      ),
-      author: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["author"]),
-          "author",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "author",
-      ),
-      capabilities: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["capabilities"]),
-          "capabilities",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "capabilities",
-      ),
-      category: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["category"]),
-          "category",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "category",
-      ),
-      chatPrompt: _readFieldValue<String>(
-        _readField(json, const ["chat_prompt"]),
-        "chat_prompt",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      chatTools: _readFieldValue<List<GeneratedChatTool>>(
-        _readField(json, const ["chat_tools"]),
-        "chat_tools",
-        (value) => _readObjectList(value, GeneratedChatTool.fromJson),
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      connectedAccounts: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["connected_accounts"]),
-          "connected_accounts",
-          _readStringList,
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "connected_accounts",
-      ),
-      createdAt: _readFieldValue<DateTime>(
-        _readField(json, const ["created_at"]),
-        "created_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      description: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["description"]),
-          "description",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "description",
-      ),
-      disabled: _readFieldValue<bool>(
-        _readField(json, const ["disabled"]),
-        "disabled",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      disabledReason: _readFieldValue<String>(
-        _readField(json, const ["disabled_reason"]),
-        "disabled_reason",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      email: _readFieldValue<String>(
-        _readField(json, const ["email"]),
-        "email",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      enabled: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["enabled"]),
-          "enabled",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "enabled",
-      ),
-      externalIntegration: _readFieldValue<GeneratedExternalIntegration>(
-        _readField(json, const ["external_integration"]),
-        "external_integration",
-        (value) => _readObject(value, GeneratedExternalIntegration.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      image: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["image"]),
-          "image",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "image",
-      ),
-      installs: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["installs"]),
-          "installs",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "installs",
-      ),
-      isInfluencer: _readFieldValue<bool>(
-        _readField(json, const ["is_influencer"]),
-        "is_influencer",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      isPaid: _readFieldValue<bool>(
-        _readField(json, const ["is_paid"]),
-        "is_paid",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      isPopular: _readFieldValue<bool>(
-        _readField(json, const ["is_popular"]),
-        "is_popular",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      isUserPaid: _readFieldValue<bool>(
-        _readField(json, const ["is_user_paid"]),
-        "is_user_paid",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      memoryPrompt: _readFieldValue<String>(
-        _readField(json, const ["memory_prompt"]),
-        "memory_prompt",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      moneyMade: _readFieldValue<double>(
-        _readField(json, const ["money_made"]),
-        "money_made",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-      ),
-      name: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["name"]),
-          "name",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "name",
-      ),
-      official: _readFieldValue<bool>(
-        _readField(json, const ["official"]),
-        "official",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-        defaultValue: false,
-      ),
-      paymentLink: _readFieldValue<String>(
-        _readField(json, const ["payment_link"]),
-        "payment_link",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      paymentLinkId: _readFieldValue<String>(
-        _readField(json, const ["payment_link_id"]),
-        "payment_link_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      paymentPlan: _readFieldValue<String>(
-        _readField(json, const ["payment_plan"]),
-        "payment_plan",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      paymentPriceId: _readFieldValue<String>(
-        _readField(json, const ["payment_price_id"]),
-        "payment_price_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      paymentProductId: _readFieldValue<String>(
-        _readField(json, const ["payment_product_id"]),
-        "payment_product_id",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      personaPrompt: _readFieldValue<String>(
-        _readField(json, const ["persona_prompt"]),
-        "persona_prompt",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      price: _readFieldValue<double>(
-        _readField(json, const ["price"]),
-        "price",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-        defaultValue: 0.0,
-      ),
-      private: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["private"]),
-          "private",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: false,
-        ),
-        "private",
-      ),
-      proactiveNotification: _readFieldValue<GeneratedProactiveNotification>(
-        _readField(json, const ["proactive_notification"]),
-        "proactive_notification",
-        (value) => _readObject(value, GeneratedProactiveNotification.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      ratingAvg: _readFieldValue<double>(
-        _readField(json, const ["rating_avg"]),
-        "rating_avg",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-        defaultValue: 0,
-      ),
-      ratingCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["rating_count"]),
-          "rating_count",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "rating_count",
-      ),
-      reviews: _required(
-        _readFieldValue<List<GeneratedAppReview>>(
-          _readField(json, const ["reviews"]),
-          "reviews",
-          (value) => _readObjectList(value, GeneratedAppReview.fromJson),
-          requiredField: false,
-          nullable: false,
-          defaultValue: const [],
-        ),
-        "reviews",
-      ),
-      score: _readFieldValue<double>(
-        _readField(json, const ["score"]),
-        "score",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-      ),
-      sourceCodeUrl: _readFieldValue<String>(
-        _readField(json, const ["source_code_url"]),
-        "source_code_url",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      status: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["status"]),
-          "status",
-          _readString,
-          requiredField: false,
-          nullable: false,
-          defaultValue: "approved",
-        ),
-        "status",
-      ),
-      thumbnailUrls: _readFieldValue<List<String>>(
-        _readField(json, const ["thumbnail_urls"]),
-        "thumbnail_urls",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      thumbnails: _readFieldValue<List<String>>(
-        _readField(json, const ["thumbnails"]),
-        "thumbnails",
-        _readStringList,
-        requiredField: false,
-        nullable: true,
-        defaultValue: const [],
-      ),
-      triggerWorkflowMemories: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["trigger_workflow_memories"]),
-          "trigger_workflow_memories",
-          _readBool,
-          requiredField: false,
-          nullable: false,
-          defaultValue: true,
-        ),
-        "trigger_workflow_memories",
-      ),
-      twitter: _readFieldValue<Map<String, dynamic>>(
-        _readField(json, const ["twitter"]),
-        "twitter",
-        _readMap,
-        requiredField: false,
-        nullable: true,
-      ),
-      uid: _readFieldValue<String>(
-        _readField(json, const ["uid"]),
-        "uid",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      usageCount: _readFieldValue<int>(
-        _readField(json, const ["usage_count"]),
-        "usage_count",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
-      userReview: _readFieldValue<GeneratedAppReview>(
-        _readField(json, const ["user_review"]),
-        "user_review",
-        (value) => _readObject(value, GeneratedAppReview.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      username: _readFieldValue<String>(
-        _readField(json, const ["username"]),
-        "username",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
+      approved: _required(_readFieldValue<bool>(_readField(json, const ["approved"]), "approved", _readBool, requiredField: false, nullable: false, defaultValue: false), "approved"),
+      author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: true, nullable: false), "author"),
+      capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
+      chatPrompt: _readFieldValue<String>(_readField(json, const ["chat_prompt"]), "chat_prompt", _readString, requiredField: false, nullable: true),
+      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      connectedAccounts: _required(_readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "connected_accounts"),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      disabledReason: _readFieldValue<String>(_readField(json, const ["disabled_reason"]), "disabled_reason", _readString, requiredField: false, nullable: true),
+      email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "enabled"),
+      externalIntegration: _readFieldValue<GeneratedExternalIntegration>(_readField(json, const ["external_integration"]), "external_integration", (value) => _readObject(value, GeneratedExternalIntegration.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      image: _required(_readFieldValue<String>(_readField(json, const ["image"]), "image", _readString, requiredField: true, nullable: false), "image"),
+      installs: _required(_readFieldValue<int>(_readField(json, const ["installs"]), "installs", _readInt, requiredField: false, nullable: false, defaultValue: 0), "installs"),
+      isInfluencer: _readFieldValue<bool>(_readField(json, const ["is_influencer"]), "is_influencer", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPaid: _readFieldValue<bool>(_readField(json, const ["is_paid"]), "is_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isPopular: _readFieldValue<bool>(_readField(json, const ["is_popular"]), "is_popular", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      isUserPaid: _readFieldValue<bool>(_readField(json, const ["is_user_paid"]), "is_user_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      memoryPrompt: _readFieldValue<String>(_readField(json, const ["memory_prompt"]), "memory_prompt", _readString, requiredField: false, nullable: true),
+      moneyMade: _readFieldValue<double>(_readField(json, const ["money_made"]), "money_made", _readDouble, requiredField: false, nullable: true),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      official: _readFieldValue<bool>(_readField(json, const ["official"]), "official", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      paymentLink: _readFieldValue<String>(_readField(json, const ["payment_link"]), "payment_link", _readString, requiredField: false, nullable: true),
+      paymentLinkId: _readFieldValue<String>(_readField(json, const ["payment_link_id"]), "payment_link_id", _readString, requiredField: false, nullable: true),
+      paymentPlan: _readFieldValue<String>(_readField(json, const ["payment_plan"]), "payment_plan", _readString, requiredField: false, nullable: true),
+      paymentPriceId: _readFieldValue<String>(_readField(json, const ["payment_price_id"]), "payment_price_id", _readString, requiredField: false, nullable: true),
+      paymentProductId: _readFieldValue<String>(_readField(json, const ["payment_product_id"]), "payment_product_id", _readString, requiredField: false, nullable: true),
+      personaPrompt: _readFieldValue<String>(_readField(json, const ["persona_prompt"]), "persona_prompt", _readString, requiredField: false, nullable: true),
+      price: _readFieldValue<double>(_readField(json, const ["price"]), "price", _readDouble, requiredField: false, nullable: true, defaultValue: 0.0),
+      private: _required(_readFieldValue<bool>(_readField(json, const ["private"]), "private", _readBool, requiredField: false, nullable: false, defaultValue: false), "private"),
+      proactiveNotification: _readFieldValue<GeneratedProactiveNotification>(_readField(json, const ["proactive_notification"]), "proactive_notification", (value) => _readObject(value, GeneratedProactiveNotification.fromJson), requiredField: false, nullable: true),
+      ratingAvg: _readFieldValue<double>(_readField(json, const ["rating_avg"]), "rating_avg", _readDouble, requiredField: false, nullable: true, defaultValue: 0),
+      ratingCount: _required(_readFieldValue<int>(_readField(json, const ["rating_count"]), "rating_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "rating_count"),
+      reviews: _required(_readFieldValue<List<GeneratedAppReview>>(_readField(json, const ["reviews"]), "reviews", (value) => _readObjectList(value, GeneratedAppReview.fromJson), requiredField: false, nullable: false, defaultValue: const []), "reviews"),
+      score: _readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: false, nullable: true),
+      sourceCodeUrl: _readFieldValue<String>(_readField(json, const ["source_code_url"]), "source_code_url", _readString, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
+      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      triggerWorkflowMemories: _required(_readFieldValue<bool>(_readField(json, const ["trigger_workflow_memories"]), "trigger_workflow_memories", _readBool, requiredField: false, nullable: false, defaultValue: true), "trigger_workflow_memories"),
+      twitter: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["twitter"]), "twitter", _readMap, requiredField: false, nullable: true),
+      uid: _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: false, nullable: true),
+      usageCount: _readFieldValue<int>(_readField(json, const ["usage_count"]), "usage_count", _readInt, requiredField: false, nullable: true),
+      userReview: _readFieldValue<GeneratedAppReview>(_readField(json, const ["user_review"]), "user_review", (value) => _readObject(value, GeneratedAppReview.fromJson), requiredField: false, nullable: true),
+      username: _readFieldValue<String>(_readField(json, const ["username"]), "username", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -2121,29 +982,23 @@ class GeneratedAppPaginationLinks {
   final String? next;
   final String? previous;
 
-  const GeneratedAppPaginationLinks({this.next, this.previous});
+  const GeneratedAppPaginationLinks({
+    this.next,
+    this.previous,
+  });
 
   factory GeneratedAppPaginationLinks.fromJson(Map<String, dynamic> json) {
     return GeneratedAppPaginationLinks(
-      next: _readFieldValue<String>(
-        _readField(json, const ["next"]),
-        "next",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      previous: _readFieldValue<String>(
-        _readField(json, const ["previous"]),
-        "previous",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
+      next: _readFieldValue<String>(_readField(json, const ["next"]), "next", _readString, requiredField: false, nullable: true),
+      previous: _readFieldValue<String>(_readField(json, const ["previous"]), "previous", _readString, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'next': next, 'previous': previous};
+    return {
+      'next': next,
+      'previous': previous,
+    };
   }
 }
 
@@ -2168,73 +1023,13 @@ class GeneratedAppPagination {
 
   factory GeneratedAppPagination.fromJson(Map<String, dynamic> json) {
     return GeneratedAppPagination(
-      count: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["count"]),
-          "count",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "count",
-      ),
-      hasNext: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["hasNext"]),
-          "hasNext",
-          _readBool,
-          requiredField: true,
-          nullable: false,
-        ),
-        "hasNext",
-      ),
-      hasPrevious: _required(
-        _readFieldValue<bool>(
-          _readField(json, const ["hasPrevious"]),
-          "hasPrevious",
-          _readBool,
-          requiredField: true,
-          nullable: false,
-        ),
-        "hasPrevious",
-      ),
-      limit: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["limit"]),
-          "limit",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "limit",
-      ),
-      links: _readFieldValue<GeneratedAppPaginationLinks>(
-        _readField(json, const ["links"]),
-        "links",
-        (value) => _readObject(value, GeneratedAppPaginationLinks.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      offset: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["offset"]),
-          "offset",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "offset",
-      ),
-      total: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["total"]),
-          "total",
-          _readInt,
-          requiredField: true,
-          nullable: false,
-        ),
-        "total",
-      ),
+      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: true, nullable: false), "count"),
+      hasNext: _required(_readFieldValue<bool>(_readField(json, const ["hasNext"]), "hasNext", _readBool, requiredField: true, nullable: false), "hasNext"),
+      hasPrevious: _required(_readFieldValue<bool>(_readField(json, const ["hasPrevious"]), "hasPrevious", _readBool, requiredField: true, nullable: false), "hasPrevious"),
+      limit: _required(_readFieldValue<int>(_readField(json, const ["limit"]), "limit", _readInt, requiredField: true, nullable: false), "limit"),
+      links: _readFieldValue<GeneratedAppPaginationLinks>(_readField(json, const ["links"]), "links", (value) => _readObject(value, GeneratedAppPaginationLinks.fromJson), requiredField: false, nullable: true),
+      offset: _required(_readFieldValue<int>(_readField(json, const ["offset"]), "offset", _readInt, requiredField: true, nullable: false), "offset"),
+      total: _required(_readFieldValue<int>(_readField(json, const ["total"]), "total", _readInt, requiredField: true, nullable: false), "total"),
     );
   }
 
@@ -2258,45 +1053,21 @@ class GeneratedAppCatalogGroup {
   final List<GeneratedAppBaseModel>? data;
   final GeneratedAppPagination? pagination;
 
-  const GeneratedAppCatalogGroup({this.capability, this.category, this.count, this.data, this.pagination});
+  const GeneratedAppCatalogGroup({
+    this.capability,
+    this.category,
+    this.count,
+    this.data,
+    this.pagination,
+  });
 
   factory GeneratedAppCatalogGroup.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCatalogGroup(
-      capability: _readFieldValue<GeneratedAppSelectOption>(
-        _readField(json, const ["capability"]),
-        "capability",
-        (value) => _readObject(value, GeneratedAppSelectOption.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      category: _readFieldValue<GeneratedAppSelectOption>(
-        _readField(json, const ["category"]),
-        "category",
-        (value) => _readObject(value, GeneratedAppSelectOption.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      count: _readFieldValue<int>(
-        _readField(json, const ["count"]),
-        "count",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
-      data: _readFieldValue<List<GeneratedAppBaseModel>>(
-        _readField(json, const ["data"]),
-        "data",
-        (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      pagination: _readFieldValue<GeneratedAppPagination>(
-        _readField(json, const ["pagination"]),
-        "pagination",
-        (value) => _readObject(value, GeneratedAppPagination.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
+      capability: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["capability"]), "capability", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      category: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["category"]), "category", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      count: _readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: true),
+      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      pagination: _readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -2318,49 +1089,21 @@ class GeneratedAppCatalogMeta {
   final int? offset;
   final int? totalApps;
 
-  const GeneratedAppCatalogMeta({this.capabilities, this.groupCount = 0, this.limit, this.offset, this.totalApps});
+  const GeneratedAppCatalogMeta({
+    this.capabilities,
+    this.groupCount = 0,
+    this.limit,
+    this.offset,
+    this.totalApps,
+  });
 
   factory GeneratedAppCatalogMeta.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCatalogMeta(
-      capabilities: _readFieldValue<List<GeneratedAppSelectOption>>(
-        _readField(json, const ["capabilities"]),
-        "capabilities",
-        (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      groupCount: _required(
-        _readFieldValue<int>(
-          _readField(json, const ["groupCount"]),
-          "groupCount",
-          _readInt,
-          requiredField: false,
-          nullable: false,
-          defaultValue: 0,
-        ),
-        "groupCount",
-      ),
-      limit: _readFieldValue<int>(
-        _readField(json, const ["limit"]),
-        "limit",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
-      offset: _readFieldValue<int>(
-        _readField(json, const ["offset"]),
-        "offset",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
-      totalApps: _readFieldValue<int>(
-        _readField(json, const ["totalApps"]),
-        "totalApps",
-        _readInt,
-        requiredField: false,
-        nullable: true,
-      ),
+      capabilities: _readFieldValue<List<GeneratedAppSelectOption>>(_readField(json, const ["capabilities"]), "capabilities", (value) => _readObjectList(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      groupCount: _required(_readFieldValue<int>(_readField(json, const ["groupCount"]), "groupCount", _readInt, requiredField: false, nullable: false, defaultValue: 0), "groupCount"),
+      limit: _readFieldValue<int>(_readField(json, const ["limit"]), "limit", _readInt, requiredField: false, nullable: true),
+      offset: _readFieldValue<int>(_readField(json, const ["offset"]), "offset", _readInt, requiredField: false, nullable: true),
+      totalApps: _readFieldValue<int>(_readField(json, const ["totalApps"]), "totalApps", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -2394,48 +1137,12 @@ class GeneratedAppCatalogResponse {
 
   factory GeneratedAppCatalogResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppCatalogResponse(
-      capability: _readFieldValue<GeneratedAppSelectOption>(
-        _readField(json, const ["capability"]),
-        "capability",
-        (value) => _readObject(value, GeneratedAppSelectOption.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      category: _readFieldValue<GeneratedAppSelectOption>(
-        _readField(json, const ["category"]),
-        "category",
-        (value) => _readObject(value, GeneratedAppSelectOption.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      data: _readFieldValue<List<GeneratedAppBaseModel>>(
-        _readField(json, const ["data"]),
-        "data",
-        (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      groups: _readFieldValue<List<GeneratedAppCatalogGroup>>(
-        _readField(json, const ["groups"]),
-        "groups",
-        (value) => _readObjectList(value, GeneratedAppCatalogGroup.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      meta: _readFieldValue<GeneratedAppCatalogMeta>(
-        _readField(json, const ["meta"]),
-        "meta",
-        (value) => _readObject(value, GeneratedAppCatalogMeta.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      pagination: _readFieldValue<GeneratedAppPagination>(
-        _readField(json, const ["pagination"]),
-        "pagination",
-        (value) => _readObject(value, GeneratedAppPagination.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
+      capability: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["capability"]), "capability", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      category: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["category"]), "category", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
+      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      groups: _readFieldValue<List<GeneratedAppCatalogGroup>>(_readField(json, const ["groups"]), "groups", (value) => _readObjectList(value, GeneratedAppCatalogGroup.fromJson), requiredField: false, nullable: true),
+      meta: _readFieldValue<GeneratedAppCatalogMeta>(_readField(json, const ["meta"]), "meta", (value) => _readObject(value, GeneratedAppCatalogMeta.fromJson), requiredField: false, nullable: true),
+      pagination: _readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -2472,58 +1179,13 @@ class GeneratedAppSearchFilters {
 
   factory GeneratedAppSearchFilters.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSearchFilters(
-      capability: _readFieldValue<String>(
-        _readField(json, const ["capability"]),
-        "capability",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      category: _readFieldValue<String>(
-        _readField(json, const ["category"]),
-        "category",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      installedApps: _readFieldValue<bool>(
-        _readField(json, const ["installed_apps"]),
-        "installed_apps",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-      ),
-      myApps: _readFieldValue<bool>(
-        _readField(json, const ["my_apps"]),
-        "my_apps",
-        _readBool,
-        requiredField: false,
-        nullable: true,
-      ),
-      query: _readFieldValue<String>(
-        _readField(json, const ["query"]),
-        "query",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
-      rating: _readFieldValue<double>(
-        _readField(json, const ["rating"]),
-        "rating",
-        _readDouble,
-        requiredField: false,
-        nullable: true,
-      ),
-      sort: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["sort"]),
-          "sort",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "sort",
-      ),
+      capability: _readFieldValue<String>(_readField(json, const ["capability"]), "capability", _readString, requiredField: false, nullable: true),
+      category: _readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: true),
+      installedApps: _readFieldValue<bool>(_readField(json, const ["installed_apps"]), "installed_apps", _readBool, requiredField: false, nullable: true),
+      myApps: _readFieldValue<bool>(_readField(json, const ["my_apps"]), "my_apps", _readBool, requiredField: false, nullable: true),
+      query: _readFieldValue<String>(_readField(json, const ["query"]), "query", _readString, requiredField: false, nullable: true),
+      rating: _readFieldValue<double>(_readField(json, const ["rating"]), "rating", _readDouble, requiredField: false, nullable: true),
+      sort: _required(_readFieldValue<String>(_readField(json, const ["sort"]), "sort", _readString, requiredField: true, nullable: false), "sort"),
     );
   }
 
@@ -2545,37 +1207,17 @@ class GeneratedAppSearchResponse {
   final GeneratedAppSearchFilters filters;
   final GeneratedAppPagination pagination;
 
-  const GeneratedAppSearchResponse({this.data, required this.filters, required this.pagination});
+  const GeneratedAppSearchResponse({
+    this.data,
+    required this.filters,
+    required this.pagination,
+  });
 
   factory GeneratedAppSearchResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSearchResponse(
-      data: _readFieldValue<List<GeneratedAppBaseModel>>(
-        _readField(json, const ["data"]),
-        "data",
-        (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson),
-        requiredField: false,
-        nullable: true,
-      ),
-      filters: _required(
-        _readFieldValue<GeneratedAppSearchFilters>(
-          _readField(json, const ["filters"]),
-          "filters",
-          (value) => _readObject(value, GeneratedAppSearchFilters.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "filters",
-      ),
-      pagination: _required(
-        _readFieldValue<GeneratedAppPagination>(
-          _readField(json, const ["pagination"]),
-          "pagination",
-          (value) => _readObject(value, GeneratedAppPagination.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "pagination",
-      ),
+      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      filters: _required(_readFieldValue<GeneratedAppSearchFilters>(_readField(json, const ["filters"]), "filters", (value) => _readObject(value, GeneratedAppSearchFilters.fromJson), requiredField: true, nullable: false), "filters"),
+      pagination: _required(_readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: true, nullable: false), "pagination"),
     );
   }
 
@@ -2592,35 +1234,23 @@ class GeneratedConversationSuggestedAppsResponse {
   final String conversationId;
   final List<GeneratedApp> suggestedApps;
 
-  const GeneratedConversationSuggestedAppsResponse({required this.conversationId, required this.suggestedApps});
+  const GeneratedConversationSuggestedAppsResponse({
+    required this.conversationId,
+    required this.suggestedApps,
+  });
 
   factory GeneratedConversationSuggestedAppsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationSuggestedAppsResponse(
-      conversationId: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["conversation_id"]),
-          "conversation_id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "conversation_id",
-      ),
-      suggestedApps: _required(
-        _readFieldValue<List<GeneratedApp>>(
-          _readField(json, const ["suggested_apps"]),
-          "suggested_apps",
-          (value) => _readObjectList(value, GeneratedApp.fromJson),
-          requiredField: true,
-          nullable: false,
-        ),
-        "suggested_apps",
-      ),
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      suggestedApps: _required(_readFieldValue<List<GeneratedApp>>(_readField(json, const ["suggested_apps"]), "suggested_apps", (value) => _readObjectList(value, GeneratedApp.fromJson), requiredField: true, nullable: false), "suggested_apps"),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'conversation_id': conversationId, 'suggested_apps': suggestedApps.map((value) => value.toJson()).toList()};
+    return {
+      'conversation_id': conversationId,
+      'suggested_apps': suggestedApps.map((value) => value.toJson()).toList(),
+    };
   }
 }
 
@@ -2630,78 +1260,55 @@ class GeneratedAppApiKeyResponse {
   final String label;
   final String? secret;
 
-  const GeneratedAppApiKeyResponse({this.createdAt, required this.id, required this.label, this.secret});
+  const GeneratedAppApiKeyResponse({
+    this.createdAt,
+    required this.id,
+    required this.label,
+    this.secret,
+  });
 
   factory GeneratedAppApiKeyResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppApiKeyResponse(
-      createdAt: _readFieldValue<DateTime>(
-        _readField(json, const ["created_at"]),
-        "created_at",
-        _readDateTime,
-        requiredField: false,
-        nullable: true,
-      ),
-      id: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["id"]),
-          "id",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "id",
-      ),
-      label: _required(
-        _readFieldValue<String>(
-          _readField(json, const ["label"]),
-          "label",
-          _readString,
-          requiredField: true,
-          nullable: false,
-        ),
-        "label",
-      ),
-      secret: _readFieldValue<String>(
-        _readField(json, const ["secret"]),
-        "secret",
-        _readString,
-        requiredField: false,
-        nullable: true,
-      ),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      label: _required(_readFieldValue<String>(_readField(json, const ["label"]), "label", _readString, requiredField: true, nullable: false), "label"),
+      secret: _readFieldValue<String>(_readField(json, const ["secret"]), "secret", _readString, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'created_at': createdAt?.toUtc().toIso8601String(), 'id': id, 'label': label, 'secret': secret};
+    return {
+      'created_at': createdAt?.toUtc().toIso8601String(),
+      'id': id,
+      'label': label,
+      'secret': secret,
+    };
   }
 }
 
 class GeneratedEnabledAppsResponse {
   final List<String> items;
 
-  const GeneratedEnabledAppsResponse({required this.items});
+  const GeneratedEnabledAppsResponse({
+    required this.items,
+  });
 
   factory GeneratedEnabledAppsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedEnabledAppsResponse(
-      items: _required(
-        _readFieldValue<List<String>>(
-          _readField(json, const ["items"]),
-          "items",
-          _readStringList,
-          requiredField: true,
-          nullable: false,
-        ),
-        "items",
-      ),
+      items: _required(_readFieldValue<List<String>>(_readField(json, const ["items"]), "items", _readStringList, requiredField: true, nullable: false), "items"),
     );
   }
 
   factory GeneratedEnabledAppsResponse.fromJsonList(List<dynamic> json) {
-    return GeneratedEnabledAppsResponse(items: _required(_readStringList(json), "items"));
+    return GeneratedEnabledAppsResponse(
+      items: _required(_readStringList(json), "items"),
+    );
   }
 
   Map<String, dynamic> toJson() {
-    return {'items': items};
+    return {
+      'items': items,
+    };
   }
 }
 
@@ -2789,27 +1396,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;
