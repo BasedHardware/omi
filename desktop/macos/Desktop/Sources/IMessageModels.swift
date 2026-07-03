@@ -141,11 +141,13 @@ struct IMessageDraftMessagePayload: Encodable, Sendable {
   let text: String
   let isFromMe: Bool
   var sender: String? = nil  // group-chat sender name/handle; lets the backend attribute messages
+  var imageB64: String? = nil  // downscaled JPEG of an inline photo, for the backend's vision step
   var timestamp: Date? = nil  // send time; lets the backend order the thread deterministically
 
   enum CodingKeys: String, CodingKey {
     case text, timestamp, sender
     case isFromMe = "is_from_me"
+    case imageB64 = "image_b64"
   }
 
   func encode(to encoder: Encoder) throws {
@@ -153,6 +155,7 @@ struct IMessageDraftMessagePayload: Encodable, Sendable {
     try c.encode(text, forKey: .text)
     try c.encode(isFromMe, forKey: .isFromMe)
     try c.encodeIfPresent(sender, forKey: .sender)
+    try c.encodeIfPresent(imageB64, forKey: .imageB64)
     if let timestamp {
       try c.encode(IMessagePayloadFormat.string(from: timestamp), forKey: .timestamp)
     }
@@ -222,12 +225,20 @@ struct IMessageChat: Identifiable, Sendable {
 
   /// Recent thread as draft-reply context (last N messages). In group chats each
   /// incoming bubble carries its sender so the backend can attribute messages and
-  /// judge whether the user is actually being addressed.
+  /// judge whether the user is actually being addressed. The last few inline photos
+  /// are downscaled + base64-encoded so the backend can actually see them.
   func draftContext(limit: Int = 20) -> [IMessageDraftMessagePayload] {
-    bubbles.suffix(limit).map {
-      IMessageDraftMessagePayload(
-        text: $0.text, isFromMe: $0.isFromMe,
-        sender: isGroup ? $0.senderName : nil, timestamp: $0.date)
+    let recent = Array(bubbles.suffix(limit))
+    // Encode at most the last 2 images to bound the request size.
+    let imageIDs = Set(
+      recent
+        .filter { ($0.attachmentMime?.hasPrefix("image/") ?? false) && $0.attachmentPath != nil }
+        .suffix(2).map { $0.id })
+    return recent.map { b in
+      let img = imageIDs.contains(b.id) ? b.attachmentPath.flatMap { MessagingMedia.base64JPEG(path: $0) } : nil
+      return IMessageDraftMessagePayload(
+        text: b.text, isFromMe: b.isFromMe,
+        sender: isGroup ? b.senderName : nil, imageB64: img, timestamp: b.date)
     }
   }
 }

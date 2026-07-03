@@ -54,6 +54,8 @@ class WhatsAppDraftMessage(BaseModel):
     # drafter attribute messages to real senders and judge whether the user is
     # actually being addressed. Ignored for 1:1 threads.
     sender: Optional[str] = None
+    # Downscaled base64 JPEG of an inline photo, so the drafter can see the image.
+    image_b64: Optional[str] = None
     # Optional send time; when every message in a thread carries one, draft_reply
     # sorts by it so ordering is correct regardless of client-supplied order.
     timestamp: Optional[datetime] = None

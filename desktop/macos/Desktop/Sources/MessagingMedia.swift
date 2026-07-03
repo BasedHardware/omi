@@ -1,0 +1,37 @@
+import AppKit
+import Foundation
+
+/// Shared helper to prepare inline image attachments for the reply-draft backend's
+/// vision step: downscale + JPEG-encode to base64, bounded in dimension and bytes
+/// so the draft request stays small. Used by all three inboxes' `draftContext`.
+enum MessagingMedia {
+  /// Returns a base64 JPEG for the image at `path`, or nil for unreadable /
+  /// non-image files. Downscaled to `maxDimension` and re-compressed until under
+  /// `maxBytes` so we never send a multi-MB photo.
+  static func base64JPEG(
+    path: String, maxDimension: CGFloat = 1024, quality: CGFloat = 0.6, maxBytes: Int = 1_500_000
+  ) -> String? {
+    guard let image = NSImage(contentsOfFile: path) else { return nil }
+    let size = image.size
+    guard size.width > 0, size.height > 0 else { return nil }
+
+    let scale = min(1, maxDimension / max(size.width, size.height))
+    let target = NSSize(width: size.width * scale, height: size.height * scale)
+    let resized = NSImage(size: target)
+    resized.lockFocus()
+    image.draw(
+      in: NSRect(origin: .zero, size: target),
+      from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1)
+    resized.unlockFocus()
+
+    guard let tiff = resized.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
+    var q = quality
+    var data = rep.representation(using: .jpeg, properties: [.compressionFactor: q])
+    while let d = data, d.count > maxBytes, q > 0.2 {
+      q -= 0.15
+      data = rep.representation(using: .jpeg, properties: [.compressionFactor: q])
+    }
+    guard let final = data, final.count <= maxBytes else { return nil }
+    return final.base64EncodedString()
+  }
+}
