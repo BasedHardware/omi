@@ -123,6 +123,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationSpacing: CGFloat = 8
     private static let askOmiAnimationDuration: TimeInterval = 0.14
     private static let askOmiSettleDelay: TimeInterval = 0.16
+    private static let frameNoopEpsilon: CGFloat = 0.5
     private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
@@ -159,6 +160,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
     private var frameAnimationToken: Int = 0
+    private var pendingFrameAnimationTarget: NSRect?
     private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
 
     private var notchModeEnabled: Bool {
@@ -1288,8 +1290,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             ? originForTopCenterAnchor(newSize: constrainedSize)
             : originForCenterAnchor(newSize: constrainedSize)
 
-        log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
-
         let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
         if animated, anchorTop, notchModeEnabled {
             let currentTopCenteredFrame = NSRect(
@@ -1316,11 +1316,29 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         animated: Bool = false,
         animationDuration: TimeInterval = 0.18
     ) {
+        let wasResizable = styleMask.contains(.resizable)
         if makeResizable {
             styleMask.insert(.resizable)
         } else {
             styleMask.remove(.resizable)
         }
+
+        let alreadyAtTarget = Self.framesEquivalent(frame, targetFrame)
+        let alreadyAnimatingToTarget = pendingFrameAnimationTarget.map {
+            Self.framesEquivalent($0, targetFrame)
+        } ?? false
+
+        if alreadyAtTarget, wasResizable == makeResizable {
+            frameAnimationToken += 1
+            pendingFrameAnimationTarget = nil
+            isResizingProgrammatically = false
+            return
+        }
+        if alreadyAnimatingToTarget, wasResizable == makeResizable {
+            return
+        }
+
+        log("FloatingControlBar: resizeToFrame to \(targetFrame.size) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
         isResizingProgrammatically = true
 
@@ -1336,9 +1354,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
+    private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool {
+        abs(lhs.origin.x - rhs.origin.x) <= frameNoopEpsilon
+            && abs(lhs.origin.y - rhs.origin.y) <= frameNoopEpsilon
+            && abs(lhs.size.width - rhs.size.width) <= frameNoopEpsilon
+            && abs(lhs.size.height - rhs.size.height) <= frameNoopEpsilon
+    }
+
     private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
         frameAnimationToken += 1
         let token = frameAnimationToken
+        pendingFrameAnimationTarget = frame
         let startFrame = self.frame
         let steps = max(1, Int((duration * 120).rounded()))
         for step in 1...steps {
@@ -1356,6 +1382,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 self.setFrame(interpolated, display: true, animate: false)
                 if step == steps {
                     self.setFrame(frame, display: true, animate: false)
+                    if self.frameAnimationToken == token {
+                        self.pendingFrameAnimationTarget = nil
+                    }
                     completion?()
                 }
             }
@@ -2718,55 +2747,18 @@ class FloatingControlBarManager {
                 provider.stopAgent()
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
-            let availability = LocalAgentProviderDetector.availability(for: directive.provider)
-            guard availability.isAvailable else {
-                let assistantText = availability.setupPrompt
-                let recordedTurn = provider.recordCompletedTurn(
-                    userText: message,
-                    assistantText: assistantText,
-                    logLabel: "floating-agent-provider-unavailable"
-                )
-                switch presentation {
-                case .visible:
-                    completeVisibleAgentResponse(
-                        userText: message,
-                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
-                        barWindow: barWindow
-                    )
-                case .voiceOnly:
-                    barWindow.state.currentQueryFromVoice = false
-                    barWindow.state.isVoiceResponseActive = false
-                    FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)
-                }
-                return
-            }
-            let pill = AgentPillsManager.shared.spawnFromUserQuery(
-                directive.rewrittenQuery,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice,
-                preFetchedTitle: directive.title,
-                preFetchedAck: directive.ack,
-                bridgeHarnessOverride: directive.provider.harnessMode
-            )
-            let assistantText = "I started \(directive.provider.displayName) in a background agent titled \"\(pill.title)\"."
-            let recordedTurn = provider.recordCompletedTurn(
-                userText: message,
-                assistantText: assistantText,
+            await resolveDelegationAndDispatch(
+                originalRequest: message,
+                proposedBrief: directive.rewrittenQuery,
+                proposedTitle: directive.title,
+                proposedAck: directive.ack,
+                directedProvider: directive.provider,
+                explicitDelegationRequested: true,
+                barWindow: barWindow,
+                provider: provider,
+                presentation: presentation,
                 logLabel: "floating-agent-provider"
             )
-            switch presentation {
-            case .visible:
-                completeVisibleAgentHandoff(
-                    .init(originalRequest: message, agentTask: directive.rewrittenQuery),
-                    pill: pill,
-                    assistantMessage: recordedTurn.assistant,
-                    assistantText: assistantText,
-                    barWindow: barWindow
-                )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
-            }
             return
         }
 
@@ -2776,30 +2768,18 @@ class FloatingControlBarManager {
                 provider.stopAgent()
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "source": "explicit"])
-            let pill = AgentPillsManager.shared.spawnFromHandoff(
-                handoff,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice
-            )
-            let assistantText = "I started a background agent titled \"\(pill.title)\" for that."
-            let recordedTurn = provider.recordCompletedTurn(
-                userText: handoff.originalRequest,
-                assistantText: assistantText,
+            await resolveDelegationAndDispatch(
+                originalRequest: handoff.originalRequest,
+                proposedBrief: handoff.agentTask,
+                proposedTitle: nil,
+                proposedAck: nil,
+                directedProvider: nil,
+                explicitDelegationRequested: true,
+                barWindow: barWindow,
+                provider: provider,
+                presentation: presentation,
                 logLabel: "floating-agent-explicit"
             )
-            switch presentation {
-            case .visible:
-                completeVisibleAgentHandoff(
-                    handoff,
-                    pill: pill,
-                    assistantMessage: recordedTurn.assistant,
-                    assistantText: assistantText,
-                    barWindow: barWindow
-                )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
-            }
             return
         }
 
@@ -2821,42 +2801,157 @@ class FloatingControlBarManager {
         let decision = await AgentPillsManager.classify(message)
         routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
-            let pill = AgentPillsManager.shared.spawnFromUserQuery(
-                message,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice,
-                preFetchedTitle: decision.title,
-                preFetchedAck: decision.ack
-            )
-            let title = decision.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
-            let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let assistantText = ack?.isEmpty == false
-                ? "\(ack!) I started a background agent\(titleSuffix) for that."
-                : "I started a background agent\(titleSuffix) for that."
-            let recordedTurn = provider.recordCompletedTurn(
-                userText: message,
-                assistantText: assistantText,
+            await resolveDelegationAndDispatch(
+                originalRequest: message,
+                proposedBrief: message,
+                proposedTitle: decision.title,
+                proposedAck: decision.ack,
+                directedProvider: nil,
+                explicitDelegationRequested: false,
+                barWindow: barWindow,
+                provider: provider,
+                presentation: presentation,
                 logLabel: "floating-agent"
             )
-            switch presentation {
-            case .visible:
-                completeVisibleAgentHandoff(
-                    .init(originalRequest: message, agentTask: message),
-                    pill: pill,
-                    assistantMessage: recordedTurn.assistant,
-                    assistantText: assistantText,
-                    barWindow: barWindow
-                )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
-            }
             return
         }
 
         // Chat route: continue with the requested delivery surface.
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func resolveDelegationAndDispatch(
+        originalRequest: String,
+        proposedBrief: String,
+        proposedTitle: String?,
+        proposedAck: String?,
+        directedProvider: AgentPillsManager.DirectedProvider?,
+        explicitDelegationRequested: Bool,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        presentation: QueryPresentation,
+        logLabel: String
+    ) async {
+        let decision = await AgentDelegationResolver.shared.resolve(
+            .init(
+                surface: .floatingText,
+                userText: originalRequest,
+                proposedBrief: proposedBrief,
+                proposedTitle: proposedTitle,
+                proposedAck: proposedAck,
+                directedProvider: directedProvider,
+                topLevelContext: topLevelVoiceContinuityContext(),
+                agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
+                explicitDelegationRequested: explicitDelegationRequested
+            )
+        )
+
+        guard decision.action == .spawn, let brief = decision.brief?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !brief.isEmpty
+        else {
+            let assistantText = decision.userFacingText
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: originalRequest,
+                assistantText: assistantText,
+                logLabel: "\(logLabel)-resolver-\(decision.action.rawValue)"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentResponse(
+                    userText: originalRequest,
+                    assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+                FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
+            }
+            return
+        }
+
+        let resolvedProvider = decision.directedProvider ?? directedProvider
+        if let resolvedProvider {
+            let availability = LocalAgentProviderDetector.availability(for: resolvedProvider)
+            guard availability.isAvailable else {
+                let assistantText = availability.setupPrompt
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: originalRequest,
+                    assistantText: assistantText,
+                    logLabel: "\(logLabel)-provider-unavailable"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentResponse(
+                        userText: originalRequest,
+                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)
+                }
+                return
+            }
+        }
+
+        guard let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+            .init(
+                originalUserText: originalRequest,
+                brief: brief,
+                title: decision.title ?? proposedTitle,
+                spokenAck: decision.ack ?? proposedAck,
+                directedProvider: resolvedProvider
+            ),
+            model: selectedFloatingModel,
+            fromVoice: presentation.fromVoice
+        ) else {
+            let assistantText = "What should the background agent do?"
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: originalRequest,
+                assistantText: assistantText,
+                logLabel: "\(logLabel)-invalid-brief"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentResponse(
+                    userText: originalRequest,
+                    assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+                FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
+            }
+            return
+        }
+        let title = (decision.title ?? proposedTitle)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
+        let providerPrefix = resolvedProvider.map { "\($0.displayName) in " } ?? ""
+        let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistantText = ack?.isEmpty == false
+            ? "\(ack!) I started \(providerPrefix)a background agent\(titleSuffix) for that."
+            : "I started \(providerPrefix)a background agent\(titleSuffix) for that."
+        let recordedTurn = provider.recordCompletedTurn(
+            userText: originalRequest,
+            assistantText: assistantText,
+            logLabel: logLabel
+        )
+        switch presentation {
+        case .visible:
+            completeVisibleAgentHandoff(
+                .init(originalRequest: originalRequest, agentTask: brief),
+                pill: pill,
+                assistantMessage: recordedTurn.assistant,
+                assistantText: assistantText,
+                barWindow: barWindow
+            )
+        case .voiceOnly:
+            barWindow.state.currentQueryFromVoice = false
+            barWindow.state.isVoiceResponseActive = false
+        }
     }
 
     private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
@@ -3112,6 +3207,36 @@ class FloatingControlBarManager {
     /// only way voice turns reach chat history. No-op if the bar isn't set up yet.
     func recordVoiceTurn(userText: String, assistantText: String) {
         historyChatProvider?.recordVoiceTurn(userText: userText, assistantText: assistantText)
+    }
+
+    func recordVoiceAgentHandoff(userText: String, agentTitle: String, agentBrief: String) {
+        let title = agentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let brief = agentBrief.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistantText = "Started background agent\(title.isEmpty ? "" : " \"\(title)\"")\(brief.isEmpty ? "." : " for: \(brief)")"
+        historyChatProvider?.recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: "voice_agent_handoff",
+            messageSource: "realtime_voice"
+        )
+    }
+
+    func topLevelVoiceContinuityContext() -> String {
+        var sections: [String] = []
+        if let history = historyChatProvider?.buildTopLevelVoiceContinuityContext(),
+           !history.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sections.append(history)
+        }
+        // Use a stable signal (pills.isEmpty) rather than parsing a
+        // human-readable English substring from statusSummary().
+        if !AgentPillsManager.shared.pills.isEmpty {
+            let floatingStatus = AgentPillsManager.shared.statusSummary()
+            sections.append("""
+            Recent floating background agents:
+            \(floatingStatus)
+            """)
+        }
+        return sections.joined(separator: "\n\n")
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {

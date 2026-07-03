@@ -1,0 +1,3 @@
+{
+  "change": "Fixed rapid push-to-talk follow-ups losing context by carrying recent voice turns into fresh realtime sessions after barge-in."
+}

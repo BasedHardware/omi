@@ -535,7 +535,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         final ringStatus = await connection.getRingStatus();
         if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
         Logger.debug(
-            'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)');
+          'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
+        );
         onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
         return;
       }

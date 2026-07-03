@@ -125,6 +125,10 @@ function localApiOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailabi
   };
 }
 
+function trustedDirectControlOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
+  return {};
+}
+
 export const swiftToolManifest: OmiToolManifestEntry[] = [
   {
     name: "execute_sql",
@@ -268,11 +272,11 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     name: "spawn_agent",
     label: "Spawn Agent",
     description:
-      "Start a floating background agent pill through the legacy floating-bar UI workflow. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
-    promptSnippet: "spawn_agent - Start a floating background agent pill",
+      "Start canonical Omi background work and show it in the floating-bar pill UI. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
+    promptSnippet: "spawn_agent - Start a canonical background agent with pill UI",
     promptGuidelines: [
       "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
-      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+      "Use delegate_agent instead when the new work must be linked to a known parent run.",
       "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes' instead of treating that name as a session to inspect.",
       "Return immediately after spawning; the pill keeps working in the background.",
     ],
@@ -776,6 +780,7 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
 ] satisfies OmiToolManifestEntry[];
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
+  const adapters = tool.name === "resolve_desktop_dispatch" ? trustedDirectControlOnly() : piAndStdio();
   return {
     name: tool.name,
     label: tool.label,
@@ -797,7 +802,7 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     executor: { kind: "runtimeControl" },
     intendedForAgents: true,
     runtimePreconditions: tool.runtimePreconditions,
-    adapters: piAndStdio(),
+    adapters,
   };
 }
 

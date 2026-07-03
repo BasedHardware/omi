@@ -136,11 +136,7 @@ class ActionItemExportService {
       final hasPermission = await service.hasPermission() || await service.requestPermission();
       if (!hasPermission) return ExportResult.failed;
 
-      final calendarItemId = await service.addReminder(
-        title: item.description,
-        notes: 'From Omi',
-        dueDate: item.dueAt,
-      );
+      final calendarItemId = await service.addReminder(title: item.description, notes: 'From Omi', dueDate: item.dueAt);
       if (calendarItemId == null) return ExportResult.failed;
 
       final exportTime = DateTime.now();

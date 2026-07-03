@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activeControlToolOwnerId,
+  AGENT_CONTROL_TOOL_NAMES,
   agentControlToolDefinitions,
+  agentControlToolSchemas,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
@@ -44,10 +46,19 @@ describe("agent control tools", () => {
     expect(agentControlToolDefinitions.map((tool) => tool.name)).toEqual([
       "list_agent_sessions",
       "get_agent_run",
+      "build_desktop_awareness_snapshot",
+      "list_desktop_action_queue",
+      "get_desktop_open_loops",
+      "build_desktop_context_packet",
+      "route_desktop_intent",
+      "evaluate_desktop_tool_policy",
+      "create_desktop_dispatch",
+      "resolve_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
+      "spawn_background_agent",
       "delegate_agent",
     ]);
     for (const tool of agentControlToolDefinitions) {
@@ -64,6 +75,57 @@ describe("agent control tools", () => {
         inputSchema: agentControlInputSchema(tool),
       })),
     );
+  });
+
+  it("keeps agent-control registry, manifest, and schemas in parity", () => {
+    expect(new Set(AGENT_CONTROL_TOOL_NAMES)).toEqual(new Set(Object.keys(agentControlToolSchemas)));
+    expect(new Set(agentControlCapabilityManifest.map((tool) => tool.name))).toEqual(new Set(AGENT_CONTROL_TOOL_NAMES));
+  });
+
+  it("validates the canonical Swift background-agent spawn payload", () => {
+    const parsed = agentControlToolSchemas.spawn_background_agent.safeParse({
+      prompt: "Search my recent memories and write a short story.",
+      title: "Create Memory Story",
+      surfaceKind: "background_agent",
+      externalRefKind: "pill",
+      externalRefId: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      clientId: "desktop-floating-pill",
+      mode: "act",
+      adapterId: "pi-mono",
+      cwd: "/tmp/omi-test",
+      metadata: {
+        uiProjection: "floating_pill",
+        pillId: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(agentControlToolSchemas.spawn_background_agent.safeParse({
+      prompt: "Do work",
+      surfaceKind: "floating_pill",
+      externalRefKind: "pill",
+    }).success).toBe(false);
+  });
+
+  it("declares coordinator policy metadata for every control tool", () => {
+    for (const tool of agentControlCapabilityManifest) {
+      expect(tool.riskTier).toMatch(/^(low|medium|high)$/);
+      expect(tool.privacyTier).toMatch(/^(low|local_private|sensitive)$/);
+      expect(tool.approvalPolicy).toMatch(/^(allow|user_approval|policy_grant)$/);
+      expect(tool.bundles.length).toBeGreaterThan(0);
+      expect(tool.allowedSurfaces.length).toBeGreaterThan(0);
+    }
+
+    expect(agentControlCapabilityManifest.find((tool) => tool.name === "list_agent_sessions")).toMatchObject({
+      riskTier: "low",
+      approvalPolicy: "allow",
+      bundles: ["desktop.agent_control.read"],
+    });
+    expect(agentControlCapabilityManifest.find((tool) => tool.name === "cancel_agent_run")).toMatchObject({
+      riskTier: "medium",
+      approvalPolicy: "policy_grant",
+      bundles: ["desktop.agent_control.manage"],
+    });
   });
 
   it("constrains canonical list surfaceKind to known surfaces", async () => {
@@ -89,17 +151,289 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("rejects unknown coordinator bundles at the control-tool boundary", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const result = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "evaluate_desktop_tool_policy", {
+        selectedBundles: ["desktop.context.local_read", "desktop.context.magic_root"],
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_tool_input" },
+    });
+    store.close();
+  });
+
   it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
     const delegateAgent = agentControlCapabilityManifest.find((tool) => tool.name === "delegate_agent");
     expect(delegateAgent?.description).toContain("canonical child handles");
     expect(delegateAgent?.description).toContain("does not create or manage floating pill UI");
     expect(delegateAgent?.promptSnippet).toContain("canonical Omi child agent");
     expect(delegateAgent?.promptGuidelines).toContain(
-      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
     );
     expect(delegateAgent?.runtimePreconditions).toContain(
       "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI.",
     );
+  });
+
+  it("resolves desktop approval dispatches with a scoped grant and event evidence", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "waiting_approval",
+      mode: "act",
+    });
+    const created = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "create_desktop_dispatch", {
+      kind: "approval",
+      priority: 100,
+      title: "Approve screenshot",
+      decisionPrompt: "Allow screenshot image bytes?",
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      capability: "desktop.context.screenshot_image",
+      operation: "get_screenshot",
+      resourceRef: "screenshot:42",
+    }));
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: created.dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.context.screenshot_image",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: true,
+      dispatch: { status: "resolved" },
+      grant: {
+        sessionId: session.sessionId,
+        runId: run.runId,
+        capability: "desktop.context.screenshot_image",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        source: "user",
+      },
+      event: { type: "approval.resolved" },
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(1);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM events WHERE type = ?", ["approval.resolved"]).count).toBe(1);
+    store.close();
+  });
+
+  it("rejects desktop dispatch grants that do not match the approval request", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 100,
+      title: "Approve screenshot",
+      decisionPrompt: "Allow screenshot image bytes?",
+      sourceSessionId: session.sessionId,
+      capability: "desktop.context.screenshot_image",
+      operation: "get_screenshot",
+      resourceRef: "screenshot:42",
+    });
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.context.local_read",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(String(resolved.error.message)).toContain("capability must match");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [dispatch.dispatchId]).status).toBe("pending");
+    store.close();
+  });
+
+  it("rejects grant creation for non-approval desktop dispatches", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "routing_choice",
+      priority: 10,
+      title: "Choose route",
+      decisionPrompt: "Resume or fork?",
+      sourceSessionId: session.sessionId,
+      capability: "desktop.agent_control.manage",
+      operation: "route_desktop_intent",
+      resourceRef: "route:1",
+    });
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.agent_control.manage",
+        operation: "route_desktop_intent",
+        resourcePattern: "route:1",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(String(resolved.error.message)).toContain("Only approval dispatches");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [dispatch.dispatchId]).status).toBe("pending");
+    store.close();
+  });
+
+  it("denies desktop dispatch resolution from untrusted tool callers", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 100,
+      title: "Approve screenshot",
+      decisionPrompt: "Allow screenshot image bytes?",
+      sourceSessionId: session.sessionId,
+      capability: "desktop.context.screenshot_image",
+      operation: "get_screenshot",
+      resourceRef: "screenshot:42",
+    });
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.context.screenshot_image",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: false,
+      error: { code: "policy_denied" },
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    store.close();
+  });
+
+  it("requires verified approved dispatches for sensitive context packet snippets", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "screen_context",
+      priority: 100,
+      title: "Approve current screen",
+      decisionPrompt: "Allow current screen summary?",
+      capability: "desktop.context.screen_summary",
+      operation: "get_work_context",
+      resourceRef: "screen:current",
+    });
+
+    const unapproved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "build_desktop_context_packet", {
+      surfaceKind: "main_chat",
+      objective: "Inspect screen",
+      ttlMs: 60_000,
+      retentionClass: "ephemeral",
+      packetJson: {
+        snippets: [
+          {
+            snippetId: "screen",
+            sourceKind: "screen_current",
+            operation: "get_work_context",
+            provenance: { scope: "current" },
+            content: "Visible app title",
+            sensitivityTier: "sensitive",
+            policyDecision: "dispatch_created",
+            dispatchId: dispatch.dispatchId,
+          },
+        ],
+      },
+    }));
+    expect(unapproved).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(String(unapproved.error.message)).toContain("not approved");
+
+    store.resolveDesktopDispatch(dispatch.dispatchId, {
+      ownerId: "owner",
+      status: "resolved",
+      resolutionJson: JSON.stringify({ decision: "allow" }),
+    });
+
+    const approved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "build_desktop_context_packet", {
+      surfaceKind: "main_chat",
+      objective: "Inspect screen",
+      ttlMs: 60_000,
+      retentionClass: "ephemeral",
+      packetJson: {
+        snippets: [
+          {
+            snippetId: "screen",
+            sourceKind: "screen_current",
+            operation: "get_work_context",
+            provenance: { scope: "current" },
+            content: "Visible app title",
+            sensitivityTier: "sensitive",
+            policyDecision: "dispatch_created",
+            dispatchId: dispatch.dispatchId,
+          },
+        ],
+      },
+    }));
+
+    expect(approved.ok).toBe(true);
+    expect(approved.accessLogs[0]).toMatchObject({
+      sourceKind: "screen_current",
+      dispatchId: dispatch.dispatchId,
+      policyDecision: "dispatch_created",
+    });
+    store.close();
   });
 
   it("lists sessions and inspects runs using canonical runtime ids", async () => {
@@ -659,9 +993,22 @@ describe("agent control tools", () => {
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
       },
-      event: null,
+      event: {
+        omiSessionId: result.session.sessionId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        type: "artifact.lifecycle_updated",
+        payload: {
+          artifactId: artifact.artifactId,
+          previousState: "retained",
+          state: "dismissed",
+          reason: "not useful",
+          metadata: { source: "test" },
+        },
+      },
     });
     expect(dismissed.artifact.lifecycleUpdatedAtMs).toEqual(expect.any(Number));
+    expect(dismissed.event.payload.lifecycleUpdatedAtMs).toEqual(dismissed.artifact.lifecycleUpdatedAtMs);
 
     const idempotent = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "update_agent_artifact_lifecycle", {
@@ -693,13 +1040,24 @@ describe("agent control tools", () => {
         artifactId: artifact.artifactId,
         lifecycleState: "opened",
       },
-      event: null,
+      event: {
+        type: "artifact.lifecycle_updated",
+        payload: {
+          artifactId: artifact.artifactId,
+          previousState: "dismissed",
+          state: "opened",
+        },
+      },
     });
 
     const events = kernel
       .getRun({ runId: result.run.runId, includeEvents: true, eventLimit: 100 })
       .events.filter((event) => event.type.startsWith("artifact."));
-    expect(events.map((event) => event.type)).toEqual(["artifact.created"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "artifact.created",
+      "artifact.lifecycle_updated",
+      "artifact.lifecycle_updated",
+    ]);
     expect(store.getRow("SELECT lifecycle_state FROM artifacts WHERE artifact_id = ?", [artifact.artifactId]).lifecycle_state).toBe("opened");
     store.close();
   });
@@ -1124,6 +1482,37 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("spawns a canonical top-level background agent without a parent run", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_background_agent", {
+        prompt: "draft a story idea",
+        title: "Story Idea",
+        externalRefKind: "pill",
+        externalRefId: "pill-1",
+        requestId: "background-1",
+        clientId: "background-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    expect(spawned.session).toMatchObject({
+      ownerId: "owner",
+      title: "Story Idea",
+      surfaceKind: "background_agent",
+      externalRefKind: "pill",
+      externalRefId: "pill-1",
+    });
+    expect(spawned.run).toMatchObject({
+      omiSessionId: spawned.session.omiSessionId,
+      parentRunId: null,
+      mode: "act",
+      status: "queued",
+    });
+    store.close();
+  });
+
   it("delegates call mode with distinct parent and child sessions linked by a delegation row", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
@@ -1463,6 +1852,10 @@ function newDatabasePath(): string {
 
 function ownerContext(kernel: AgentControlToolContext["kernel"]): AgentControlToolContext {
   return { kernel, getOwnerId: () => "owner" };
+}
+
+function trustedOwnerContext(kernel: AgentControlToolContext["kernel"]): AgentControlToolContext {
+  return { kernel, trustedUserControl: true, getOwnerId: () => "owner" };
 }
 
 function startControlRelay(context: AgentControlToolContext): Promise<string> {

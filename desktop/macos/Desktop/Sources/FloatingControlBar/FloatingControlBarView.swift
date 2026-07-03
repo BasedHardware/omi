@@ -1852,11 +1852,21 @@ private struct AgentMainChatView: View {
         guard !trimmed.isEmpty else { return }
         followUpText = ""
         if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
-            let sibling = manager.spawnFromHandoff(
-                handoff,
+            guard let sibling = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+                .init(
+                    originalUserText: handoff.originalRequest,
+                    brief: handoff.agentTask,
+                    title: nil,
+                    spokenAck: nil,
+                    directedProvider: nil,
+                    harnessOverride: pill.bridgeHarnessOverride
+                ),
                 model: pill.model,
-                bridgeHarnessOverride: pill.bridgeHarnessOverride
-            )
+                fromVoice: false
+            ) else {
+                manager.continueAgent(from: pill, text: trimmed)
+                return
+            }
             state.present(.agent(sibling.id))
             // Route through the window resize/observer setup so the new
             // sibling's reportContentHeight(.agent(sibling.id)) updates are
@@ -1867,7 +1877,6 @@ private struct AgentMainChatView: View {
         }
         manager.continueAgent(from: pill, text: trimmed)
     }
-
 }
 
 /// Re-renders when any individual pill's @Published status changes — the
