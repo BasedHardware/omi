@@ -3,7 +3,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(BACKEND_DIR) not in sys.path:
@@ -104,13 +104,17 @@ def test_generate_person_profile_does_not_bump_timestamp_on_empty_llm_output():
     person = {'id': 'p1', 'name': 'Alice'}
     convo = {'transcript_segments': _segments(8)}
     empty_json = '{"relationship": "", "profile_summary": "  ", "tone_notes": null}'
+    invoke_mock = MagicMock(return_value=SimpleNamespace(content=empty_json))
     with patch.object(pp.users_db, 'get_person', return_value=person), patch.object(
         pp.conversations_db, 'get_conversations_by_person_id', return_value=[convo]
     ), patch.object(pp.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
         pp.users_db, 'update_person_profile'
     ) as upd, patch.object(
-        pp, 'get_llm', return_value=SimpleNamespace(invoke=lambda prompt: SimpleNamespace(content=empty_json))
+        pp, 'get_llm', return_value=SimpleNamespace(invoke=invoke_mock)
     ):
         updated = pp.generate_person_profile('uid', 'p1', force=True)
     assert updated is False
+    # The empty-output branch must actually be reached — guard against a future
+    # early-return that would make this test pass without exercising the LLM path.
+    invoke_mock.assert_called_once()
     upd.assert_not_called()
