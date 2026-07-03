@@ -14,7 +14,7 @@ struct ChatEntry {
 #[component]
 pub fn FloatingBar() -> Element {
     let visible: Signal<bool> = use_context();
-    let config: Signal<AppConfig> = use_context();
+    let mut config: Signal<AppConfig> = use_context();
     let db: Signal<Option<Db>> = use_context();
     let recording_status: Signal<RecordingStatus> = use_context();
     let live_transcript: Signal<LiveTranscript> = use_context();
