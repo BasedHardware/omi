@@ -336,6 +336,8 @@ check_backend_typecheck_if_needed() {
     'backend/scripts/rollout_schema_readiness.py' \
     'backend/pusher/main.py' \
     'backend/database/__init__.py' \
+    'backend/database/_client.py' \
+    'backend/database/app_review_config.py' \
     'backend/database/document_ids.py' \
     'backend/database/firestore_cache_metrics.py' \
     'backend/database/firestore_cache.py' \
