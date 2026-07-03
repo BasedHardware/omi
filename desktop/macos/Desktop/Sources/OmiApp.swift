@@ -1289,6 +1289,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
 
+    // Terminate the WhatsApp sidecar (its stdin tether would catch this anyway).
+    WhatsAppSendService.terminateSidecarOnQuit()
+
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
 

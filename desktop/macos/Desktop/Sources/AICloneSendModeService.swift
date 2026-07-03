@@ -40,9 +40,10 @@ enum AIClonePlatform: String, Sendable {
   case telegram
   case whatsapp
 
-  /// Whether the clone can actually *send* on this platform. WhatsApp is import-only for
-  /// training (its contact id is an export filename, not an addressable number).
-  var canSend: Bool { self != .whatsapp }
+  /// Whether the clone can actually *send* on this platform. All three platforms route to a
+  /// real send backend now — WhatsApp goes through the local Baileys sidecar once linked
+  /// (imported-export contacts are resolved to a number by name or a learned mapping).
+  var canSend: Bool { true }
 
   static func of(contactId: String) -> AIClonePlatform {
     if contactId.hasPrefix("telegram:") { return .telegram }
@@ -114,6 +115,10 @@ final class AICloneSendModeService: ObservableObject {
     static let modes = "aiCloneSendModes"  // [contactId: SendMode.rawValue]
     static let isPaused = "aiCloneAutonomousPaused"
     static let sentLog = "aiCloneSentLog"
+    // One-time explicit acknowledgment that WhatsApp autonomous sending rides an unofficial
+    // connection (Baileys / Linked Devices) that carries account-flagging risk.
+    static let whatsAppAutonomousAcknowledged = "aiCloneWhatsAppAutonomousAcknowledged"
+    static let whatsAppPhones = "aiCloneWhatsAppPhoneMap"  // [contactId: phone digits]
   }
 
   /// How many sent entries we keep. The log is a convenience surface, not an audit store.
@@ -129,6 +134,15 @@ final class AICloneSendModeService: ObservableObject {
 
   /// Per-contact send mode. Absent → `.manual`.
   @Published private(set) var modes: [String: SendMode]
+
+  /// One-time acknowledgment gate for WhatsApp Autonomous mode (see `setMode`). False until
+  /// the user explicitly confirms the unofficial-connection risk dialog.
+  @Published private(set) var whatsAppAutonomousAcknowledged: Bool
+
+  /// Learned contactId → phone-number mapping for WhatsApp contacts imported from export
+  /// files (whose ids aren't addressable). Populated by name-matched incoming messages and
+  /// sidecar name resolution; consulted on every WhatsApp send.
+  private(set) var whatsAppPhoneByContactId: [String: String]
 
   /// Drafts awaiting Approve/Edit/Reject, newest first.
   @Published private(set) var pendingDrafts: [AIClonePendingDraft] = []
@@ -168,13 +182,28 @@ final class AICloneSendModeService: ObservableObject {
     } else {
       sentLog = []
     }
+
+    whatsAppAutonomousAcknowledged = defaults.bool(forKey: Keys.whatsAppAutonomousAcknowledged)
+    whatsAppPhoneByContactId =
+      (defaults.dictionary(forKey: Keys.whatsAppPhones) as? [String: String]) ?? [:]
   }
 
   // MARK: - Mode
 
   func mode(for contactId: String) -> SendMode { modes[contactId] ?? .manual }
 
-  func setMode(_ mode: SendMode, for contactId: String) {
+  /// Set a contact's send mode. Returns false (and changes nothing) when the WhatsApp
+  /// Autonomous acknowledgment gate blocks it — the UI must first show the one-time
+  /// unofficial-connection risk confirmation and call `acknowledgeWhatsAppAutonomousRisk()`.
+  @discardableResult
+  func setMode(_ mode: SendMode, for contactId: String) -> Bool {
+    guard
+      !Self.requiresWhatsAppAutonomousAcknowledgment(
+        mode: mode, contactId: contactId, acknowledged: whatsAppAutonomousAcknowledged)
+    else {
+      log("AICloneSendModeService: blocked Autonomous for \(contactId) — WhatsApp risk not acknowledged")
+      return false
+    }
     if mode == .manual {
       modes.removeValue(forKey: contactId)
     } else {
@@ -182,6 +211,23 @@ final class AICloneSendModeService: ObservableObject {
     }
     UserDefaults.standard.set(
       modes.mapValues(\.rawValue), forKey: Keys.modes)
+    return true
+  }
+
+  /// The WhatsApp-specific extra safety step: Autonomous mode on a WhatsApp contact requires
+  /// a one-time explicit acknowledgment that the connection method is unofficial (Baileys via
+  /// Linked Devices) and carries some account-flagging risk. Manual and Draft-Review don't.
+  /// Pure and side-effect-free so the gate is unit-testable in isolation.
+  nonisolated static func requiresWhatsAppAutonomousAcknowledgment(
+    mode: SendMode, contactId: String, acknowledged: Bool
+  ) -> Bool {
+    mode == .autonomous && AIClonePlatform.of(contactId: contactId) == .whatsapp && !acknowledged
+  }
+
+  /// Record the user's explicit acceptance of the WhatsApp-autonomous risk dialog.
+  func acknowledgeWhatsAppAutonomousRisk() {
+    whatsAppAutonomousAcknowledged = true
+    UserDefaults.standard.set(true, forKey: Keys.whatsAppAutonomousAcknowledged)
   }
 
   // MARK: - Pause switch
@@ -234,6 +280,34 @@ final class AICloneSendModeService: ObservableObject {
         }
       }
     }
+
+    // WhatsApp: only if the sidecar session is already linked — never spawns a link flow.
+    startWhatsAppListenerIfLinked()
+  }
+
+  /// Attach the WhatsApp live listener when a linked session exists. Also called by the
+  /// linking UI right after a successful QR scan so listening starts without a page reload.
+  func startWhatsAppListenerIfLinked() {
+    guard isListening else { return }
+    Task {
+      // Only resume an existing session; if there's none this is a cheap no-op.
+      guard WhatsAppSendService.hasSavedSession() else {
+        log("AICloneSendModeService: WhatsApp not linked — skipping live listener")
+        return
+      }
+      _ = await WhatsAppSendService.shared.startLinking()  // spawn + resume saved session
+      let state = await WhatsAppSendService.shared.state()
+      guard state.isLinked || state == .connecting else {
+        log("AICloneSendModeService: WhatsApp session not usable (\(state)) — skipping live listener")
+        return
+      }
+      await WhatsAppSendService.shared.startListening { [weak self] phone, fromMe, text, date, senderName in
+        Task { @MainActor in
+          self?.handleIncomingWhatsApp(
+            phone: phone, fromMe: fromMe, text: text, date: date, senderName: senderName)
+        }
+      }
+    }
   }
 
   func stopListening() {
@@ -241,6 +315,7 @@ final class AICloneSendModeService: ObservableObject {
     isListening = false
     Task { await IMessageSendService.shared.stopListening() }
     Task { await TelegramSendService.shared.stopListening() }
+    Task { await WhatsAppSendService.shared.stopListening() }
     handledIncomingKeys.removeAll()
   }
 
@@ -280,6 +355,63 @@ final class AICloneSendModeService: ObservableObject {
     case .autoSend:
       autoRespond(for: entry.contact, persona: entry.persona, incoming: text)
     }
+  }
+
+  /// WhatsApp incoming: live events carry a phone number (and often the sender's push-name),
+  /// but imported-export contacts are keyed by filename — so resolve to whichever registered
+  /// contact this message belongs to, learning the phone mapping for future sends.
+  func handleIncomingWhatsApp(
+    phone: String, fromMe: Bool, text: String, date: Date, senderName: String?
+  ) {
+    guard !fromMe else { return }
+    let candidates = activeContacts.values
+      .filter { AIClonePlatform.of(contactId: $0.contact.id) == .whatsapp }
+      .map { (id: $0.contact.id, displayName: $0.contact.displayName) }
+    guard
+      let contactId = Self.resolveWhatsAppContactId(
+        phone: phone, senderName: senderName, activeWhatsAppContacts: candidates,
+        phoneMap: whatsAppPhoneByContactId)
+    else { return }
+    // Remember the number so Draft-Review/Autonomous replies to this contact can send.
+    if contactId != "whatsapp:\(phone)" {
+      recordWhatsAppPhone(phone, for: contactId)
+    }
+    handleIncoming(
+      platform: .whatsapp, peerKey: String(contactId.dropFirst("whatsapp:".count)),
+      fromMe: fromMe, text: text, date: date)
+  }
+
+  /// Map a live WhatsApp message (phone + optional push-name) onto a registered contact id.
+  /// Precedence: exact `whatsapp:<phone>` id → learned phone mapping → unique
+  /// case-insensitive display-name match. Pure for unit testing.
+  nonisolated static func resolveWhatsAppContactId(
+    phone: String,
+    senderName: String?,
+    activeWhatsAppContacts: [(id: String, displayName: String)],
+    phoneMap: [String: String]
+  ) -> String? {
+    let direct = "whatsapp:\(phone)"
+    if activeWhatsAppContacts.contains(where: { $0.id == direct }) { return direct }
+    if let mapped = phoneMap.first(where: { $0.value == phone })?.key,
+      activeWhatsAppContacts.contains(where: { $0.id == mapped })
+    {
+      return mapped
+    }
+    if let senderName {
+      let needle = senderName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      guard !needle.isEmpty else { return nil }
+      let matches = activeWhatsAppContacts.filter {
+        $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == needle
+      }
+      if matches.count == 1 { return matches[0].id }
+    }
+    return nil
+  }
+
+  func recordWhatsAppPhone(_ phone: String, for contactId: String) {
+    guard whatsAppPhoneByContactId[contactId] != phone else { return }
+    whatsAppPhoneByContactId[contactId] = phone
+    UserDefaults.standard.set(whatsAppPhoneByContactId, forKey: Keys.whatsAppPhones)
   }
 
   /// What an incoming message should trigger, given the contact's mode and the global kill
@@ -387,13 +519,42 @@ final class AICloneSendModeService: ObservableObject {
       }
       try await TelegramSendService.shared.sendMessage(chatId: chatId, text: trimmed)
     case .whatsapp:
-      throw IMessageSendError.sendScriptFailed("Sending to WhatsApp isn't supported yet.")
+      let target = try await whatsAppSendTarget(contactId: contactId, displayName: displayName)
+      try await WhatsAppSendService.shared.send(to: target, text: trimmed)
     }
 
     recordSent(
       AICloneSentLogEntry(
         contactId: contactId, contactDisplayName: displayName, text: trimmed, mode: mode,
         timestamp: Date()))
+  }
+
+  /// Resolve a WhatsApp contact id to something the sidecar can address. Contact ids are
+  /// either `whatsapp:<phone/JID>` (live contacts — addressable as-is) or
+  /// `whatsapp:<export-filename>` (imported training chats — resolved via the learned phone
+  /// mapping, then the linked account's contact list by display name).
+  private func whatsAppSendTarget(contactId: String, displayName: String) async throws -> String {
+    let raw = String(contactId.dropFirst("whatsapp:".count))
+    if let direct = Self.whatsAppDirectTarget(rawId: raw) { return direct }
+    if let learned = whatsAppPhoneByContactId[contactId] { return learned }
+    if let resolved = await WhatsAppSendService.shared.resolvePhone(forName: displayName) {
+      recordWhatsAppPhone(resolved, for: contactId)
+      return resolved
+    }
+    throw WhatsAppSendError.contactNotResolvable(displayName)
+  }
+
+  /// A raw WhatsApp contact-id suffix that is directly addressable: a full JID, or a
+  /// phone-number-shaped string (digits with optional +, spaces, dashes, parens). Returns
+  /// the normalized target, or nil for non-addressable ids (imported export filenames).
+  /// Pure for unit testing.
+  nonisolated static func whatsAppDirectTarget(rawId: String) -> String? {
+    let raw = rawId.trimmingCharacters(in: .whitespacesAndNewlines)
+    if raw.hasSuffix("@s.whatsapp.net") { return raw }
+    let phoneLike = !raw.isEmpty && raw.allSatisfy { $0.isNumber || "+-() .".contains($0) }
+    guard phoneLike else { return nil }
+    let digits = raw.filter(\.isNumber)
+    return digits.count >= 5 ? digits : nil
   }
 
   // MARK: - Sent log

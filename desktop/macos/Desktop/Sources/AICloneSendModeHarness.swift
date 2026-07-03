@@ -53,7 +53,15 @@ enum AICloneSendModeHarness {
       guard let raw = params["mode"], let mode = SendMode(rawValue: raw) else {
         return ["error": "invalid 'mode' (manual | draftReview | autonomous)"]
       }
-      service.setMode(mode, for: contactId)
+      let accepted = service.setMode(mode, for: contactId)
+      if !accepted {
+        return [
+          "error":
+            "blocked: WhatsApp Autonomous requires the one-time unofficial-connection risk acknowledgment",
+          "contact_id": contactId,
+          "mode": service.mode(for: contactId).rawValue,
+        ]
+      }
       return ["contact_id": contactId, "mode": service.mode(for: contactId).rawValue]
     }
 
