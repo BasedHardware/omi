@@ -73,6 +73,18 @@ def test_search_constructs_typesense_client_on_first_use(monkeypatch):
     ]
 
 
+def test_search_preserves_typesense_protocol_override(monkeypatch):
+    monkeypatch.setenv('TYPESENSE_HOST', 'localhost')
+    monkeypatch.setenv('TYPESENSE_HOST_PORT', '8108')
+    monkeypatch.setenv('TYPESENSE_API_KEY', 'dev-key')
+    monkeypatch.setenv('TYPESENSE_PROTOCOL', 'http')
+    search_module, client_configs = _import_search_module(monkeypatch)
+
+    search_module.search_conversations(uid='user-1', query='meeting')
+
+    assert client_configs[0]['nodes'][0]['protocol'] == 'http'
+
+
 def test_typesense_client_initializes_once_for_concurrent_first_use(monkeypatch):
     monkeypatch.setenv('TYPESENSE_HOST', 'localhost')
     monkeypatch.setenv('TYPESENSE_HOST_PORT', '8108')
