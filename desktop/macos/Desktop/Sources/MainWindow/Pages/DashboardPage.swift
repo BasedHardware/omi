@@ -223,6 +223,8 @@ struct DashboardPage: View {
     @State private var selectedImportConnector: ImportConnector?
     @State private var selectedExportDestination: MemoryExportDestination?
     @State private var isShowingAppsPopup = false
+    @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
+    @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
     @State private var screenshotCount: Int?
     // True totals for the "What omi knows" tiles. Without these the tiles showed
@@ -518,10 +520,12 @@ struct DashboardPage: View {
             AppsPage(
                 appProvider: appProvider,
                 appState: appState,
+                initialSection: appsPopupInitialSection,
                 onDismiss: {
                     isShowingAppsPopup = false
                 }
             )
+            .id(appsPopupPresentationID)
             .frame(width: popupSize.width, height: popupSize.height)
             .background(OmiColors.backgroundPrimary)
             .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
@@ -673,7 +677,7 @@ struct DashboardPage: View {
                 openOmiDeviceWebsite()
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPopup()
+                openAppsPopup(initialSection: .imports)
             }
         }
     }
@@ -708,7 +712,7 @@ struct DashboardPage: View {
                 openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPopup()
+                openAppsPopup(initialSection: .exports)
             }
         }
     }
@@ -779,7 +783,9 @@ struct DashboardPage: View {
         AnalyticsManager.shared.tabChanged(tabName: item.title)
     }
 
-    private func openAppsPopup() {
+    private func openAppsPopup(initialSection: AppsCatalogInitialSection) {
+        appsPopupInitialSection = initialSection
+        appsPopupPresentationID = UUID()
         isShowingAppsPopup = true
     }
 

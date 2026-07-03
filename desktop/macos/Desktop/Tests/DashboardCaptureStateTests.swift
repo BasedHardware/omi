@@ -53,27 +53,40 @@ final class DashboardCaptureStateTests: XCTestCase {
         let popupMethod = try methodBody(named: "openAppsPopup", in: source)
 
         XCTAssertTrue(source.contains("@State private var isShowingAppsPopup = false"))
+        XCTAssertTrue(source.contains("@State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports"))
+        XCTAssertTrue(source.contains("@State private var appsPopupPresentationID = UUID()"))
         XCTAssertTrue(source.contains("private func appsPopupOverlay("))
         XCTAssertTrue(source.contains("AppsPage(\n                appProvider: appProvider,\n                appState: appState,"))
+        XCTAssertTrue(source.contains("initialSection: appsPopupInitialSection"))
+        XCTAssertTrue(source.contains(".id(appsPopupPresentationID)"))
         XCTAssertTrue(source.contains("onDismiss: {\n                    isShowingAppsPopup = false"))
         XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
         XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
         XCTAssertTrue(source.contains(".onTapGesture {\n                    isShowingAppsPopup = false"))
         XCTAssertTrue(source.contains(".onExitCommand {\n                isShowingAppsPopup = false"))
-        XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup()"))
+        XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .imports)"))
+        XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .exports)"))
         XCTAssertFalse(source.contains("@State private var dashboardContentSize"))
         XCTAssertFalse(source.contains(".dismissableSheet(isPresented: $isShowingAppsPopup)"))
         XCTAssertFalse(source.contains("HomeMoreConnectorsSheet"))
         XCTAssertFalse(source.contains("openAppsPage()"))
+        XCTAssertTrue(popupMethod.contains("appsPopupInitialSection = initialSection"))
+        XCTAssertTrue(popupMethod.contains("appsPopupPresentationID = UUID()"))
         XCTAssertTrue(popupMethod.contains("isShowingAppsPopup = true"))
         XCTAssertFalse(popupMethod.contains("navigate(to: .apps)"))
     }
 
-    func testAppsPageSupportsPopupDismissal() throws {
+    func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
         let source = try appsSource()
 
+        XCTAssertTrue(source.contains("enum AppsCatalogInitialSection"))
+        XCTAssertTrue(source.contains("var initialSection: AppsCatalogInitialSection = .imports"))
         XCTAssertTrue(source.contains("var onDismiss: (() -> Void)? = nil"))
         XCTAssertTrue(source.contains("if let onDismiss {\n                DismissButton(action: onDismiss)"))
+        XCTAssertTrue(source.contains("case .imports:\n                                ImportsSection(statusStore: connectorStatusStore)"))
+        XCTAssertTrue(source.contains("case .exports:\n                                ExportsSection(statuses: exportStatuses)"))
+        XCTAssertTrue(source.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
+        XCTAssertFalse(source.contains("struct AppsCatalogContent: View"))
     }
 
     private func dashboardSource() throws -> String {

@@ -105,9 +105,15 @@ struct DismissButton: View {
     }
 }
 
+enum AppsCatalogInitialSection {
+    case imports
+    case exports
+}
+
 struct AppsPage: View {
     @ObservedObject var appProvider: AppProvider
     var appState: AppState? = nil
+    var initialSection: AppsCatalogInitialSection = .imports
     var onDismiss: (() -> Void)? = nil
     @StateObject private var connectorStatusStore = ImportConnectorStatusStore()
     @State private var searchText = ""
@@ -205,12 +211,23 @@ struct AppsPage: View {
                                 }
                             }
                         } else {
-                            ImportsSection(statusStore: connectorStatusStore) { connector in
-                                selectedConnector = connector
-                            }
+                            switch initialSection {
+                            case .imports:
+                                ImportsSection(statusStore: connectorStatusStore) { connector in
+                                    selectedConnector = connector
+                                }
 
-                            ExportsSection(statuses: exportStatuses) { destination in
-                                selectedExportDestination = destination
+                                ExportsSection(statuses: exportStatuses) { destination in
+                                    selectedExportDestination = destination
+                                }
+                            case .exports:
+                                ExportsSection(statuses: exportStatuses) { destination in
+                                    selectedExportDestination = destination
+                                }
+
+                                ImportsSection(statusStore: connectorStatusStore) { connector in
+                                    selectedConnector = connector
+                                }
                             }
 
                             // Featured section (apps marked as is_popular in backend)
