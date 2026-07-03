@@ -715,7 +715,7 @@ struct MemoryExportDestinationSheet: View {
         .foregroundColor(OmiColors.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
 
-      Button(model.isExecuting ? "Starting Omi…" : executeButtonTitle) {
+      Button {
         Task {
           await model.executeWithOmi(destination: destination)
           statuses[destination] = await MemoryExportService.shared.status(for: destination)
@@ -725,8 +725,13 @@ struct MemoryExportDestinationSheet: View {
             showManualSetup = true
           }
         }
+      } label: {
+        ConnectionModalActionButton(
+          title: model.isExecuting ? "Starting Omi…" : executeButtonTitle,
+          isConnected: isConnected
+        )
       }
-      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .buttonStyle(.plain)
       .disabled(model.isExecuting || isConnected)
     }
   }

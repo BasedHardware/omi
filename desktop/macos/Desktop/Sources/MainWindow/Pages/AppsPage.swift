@@ -1103,6 +1103,27 @@ struct ImportConnectorActionButton: View {
     }
 }
 
+struct ConnectionModalActionButton: View {
+    let title: String
+    var isConnected = false
+
+    var body: some View {
+        Text(title)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .frame(minWidth: isConnected ? 84 : 72)
+            .frame(height: 28)
+            .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
+            .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(OmiColors.border, lineWidth: 1)
+            )
+    }
+}
+
 @MainActor
 private final class ImportConnectorSheetModel: ObservableObject {
     struct SyncResult {
@@ -1504,7 +1525,7 @@ struct ImportConnectorSheet: View {
                     .foregroundColor(OmiColors.textTertiary)
             }
 
-            Button(primaryActionTitle) {
+            Button {
                 Task {
                     switch connector.id {
                     case "calendar":
@@ -1559,8 +1580,13 @@ struct ImportConnectorSheet: View {
                         break
                     }
                 }
+            } label: {
+                ConnectionModalActionButton(
+                    title: primaryActionTitle,
+                    isConnected: snapshot.isConnected
+                )
             }
-            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+            .buttonStyle(.plain)
             .disabled(model.isRunning)
 
             if connector.id == "local-files" {
@@ -1577,10 +1603,12 @@ struct ImportConnectorSheet: View {
                 .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textSecondary)
 
-            Button("Open \(connector.title) and Copy Prompt") {
+            Button {
                 model.openAndCopyPrompt(for: memorySource)
+            } label: {
+                ConnectionModalActionButton(title: "Open \(connector.title) and Copy Prompt")
             }
-            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+            .buttonStyle(.plain)
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -1606,7 +1634,7 @@ struct ImportConnectorSheet: View {
                     .padding(8)
             }
 
-            Button(model.isRunning ? "Importing…" : "Import \(connector.title)") {
+            Button {
                 Task {
                     if let result = await model.importMemoryLog(source: memorySource) {
                         statusStore.markSynced(
@@ -1618,8 +1646,12 @@ struct ImportConnectorSheet: View {
                         )
                     }
                 }
+            } label: {
+                ConnectionModalActionButton(
+                    title: model.isRunning ? "Importing…" : "Import \(connector.title)"
+                )
             }
-            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+            .buttonStyle(.plain)
             .disabled(model.isRunning)
         }
     }
