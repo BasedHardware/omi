@@ -146,11 +146,13 @@ class TestSpeakerFilteredConversationSearch:
         search = MagicMock(return_value={'hits': []})
         collection = MagicMock()
         collection.documents.search = search
-        return search, {'conversations': collection}
+        client = MagicMock()
+        client.collections = {'conversations': collection}
+        return search, client
 
     def test_named_speaker_filter_combines_with_existing_filters(self):
-        search, collections = self._search_mock()
-        with patch.object(search_module.client, 'collections', collections, create=True):
+        search, client = self._search_mock()
+        with patch.object(search_module, '_get_typesense_client', return_value=client):
             search_conversations(
                 uid='uid1',
                 query='launch',
@@ -168,8 +170,8 @@ class TestSpeakerFilteredConversationSearch:
         )
 
     def test_user_speaker_filter_uses_is_user_field(self):
-        search, collections = self._search_mock()
-        with patch.object(search_module.client, 'collections', collections, create=True):
+        search, client = self._search_mock()
+        with patch.object(search_module, '_get_typesense_client', return_value=client):
             search_conversations(uid='uid1', query='', speaker_id='user')
 
         params = search.call_args.args[0]
@@ -177,16 +179,16 @@ class TestSpeakerFilteredConversationSearch:
         assert params['filter_by'] == 'userId:=uid1 && transcript_segments.is_user:=true'
 
     def test_empty_query_without_structured_filter_returns_empty_without_wildcard_search(self):
-        search, collections = self._search_mock()
-        with patch.object(search_module.client, 'collections', collections, create=True):
+        search, client = self._search_mock()
+        with patch.object(search_module, '_get_typesense_client', return_value=client):
             results = search_conversations(uid='uid1', query='   ')
 
         assert results == {'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10}
         search.assert_not_called()
 
     def test_search_without_speaker_keeps_existing_filter_behavior(self):
-        search, collections = self._search_mock()
-        with patch.object(search_module.client, 'collections', collections, create=True):
+        search, client = self._search_mock()
+        with patch.object(search_module, '_get_typesense_client', return_value=client):
             search_conversations(uid='uid1', query='planning')
 
         params = search.call_args.args[0]
