@@ -4,6 +4,13 @@ import SwiftUI
 /// Backing store for the Messages tab: recent iMessage chats with full history.
 @MainActor
 final class IMessageInboxStore: ObservableObject {
+  /// App-wide singleton so the incremental watcher (and therefore auto-reply)
+  /// keeps running even when the Messages tab isn't on screen — auto-reply must
+  /// fire on new inbound messages app-wide, not only while the inbox is open. A
+  /// per-view @StateObject would be torn down on navigation, silently killing it
+  /// (mirrors WhatsAppInboxStore / TelegramInboxStore).
+  static let shared = IMessageInboxStore()
+
   @Published var chats: [IMessageChat] = []
   @Published var isLoading = false
   @Published var errorMessage: String?
@@ -52,19 +59,33 @@ final class IMessageInboxStore: ObservableObject {
       // iMessages can't be unsent. autoReply() also re-checks membership before send
       // as a second guard against races the cancel can't win.
       autoReplyTasks.removeValue(forKey: chatGUID)?.cancel()
+      // Release the once-per-message guard synchronously here too: the cancelled task
+      // clears it only asynchronously, so without this a quick toggle off→on for the
+      // same still-waiting message would hit the guard and never fire the "reply now".
+      lastAutoRepliedInboundID.removeValue(forKey: chatGUID)
     }
   }
 
   /// Track the auto-reply Task per chat so disabling the toggle can cancel an
   /// in-flight draft+send. A newer request for the same chat supersedes an older one.
   private func scheduleAutoReply(_ chat: IMessageChat) {
+    // Idempotency guard: auto-reply to any given inbound message AT MOST once.
+    // A watcher burst, the fallback poll, and a fresh refresh can each schedule the
+    // same chat; without this, overlapping runs could send the same reply more than
+    // once, and sends can't be unsent. Keyed on the latest inbound message id.
+    let inboundID = chat.bubbles.last?.id ?? ""
+    guard lastAutoRepliedInboundID[chat.chatGUID] != inboundID else { return }
+    lastAutoRepliedInboundID[chat.chatGUID] = inboundID
     autoReplyTasks[chat.chatGUID]?.cancel()
     autoReplyTasks[chat.chatGUID] = Task { [weak self] in
-      await self?.autoReply(chat)
+      await self?.autoReply(chat, inboundID: inboundID)
       self?.autoReplyTasks[chat.chatGUID] = nil
     }
   }
 
+  /// Latest inbound message id we've already scheduled an auto-reply for, per chat —
+  /// so the same incoming message is never auto-replied to twice.
+  private var lastAutoRepliedInboundID: [String: String] = [:]
   private var lastLatestMessageID: [String: String] = [:]
   /// In-flight auto-reply tasks keyed by chat GUID, so disabling auto-reply mid-draft
   /// can cancel the pending send.
@@ -224,27 +245,48 @@ final class IMessageInboxStore: ObservableObject {
   /// 1:1 chats the user explicitly enabled auto-reply on. Sent messages can't be
   /// unsent, so a send failure is logged and the draft is simply dropped (never
   /// silently retried into a duplicate send). Group chats are draft-only (see below).
-  private func autoReply(_ chat: IMessageChat) async {
+  private func autoReply(_ chat: IMessageChat, inboundID: String) async {
+    // Release the once-per-message guard so a later attempt (e.g. the user
+    // re-enables auto-reply for this still-waiting thread) can try again when this
+    // attempt did NOT actually send — draft failed, was cancelled, or the backend
+    // returned nothing to send. On a real send (or a group predraft) we KEEP the
+    // guard so the same inbound message is never replied to twice.
+    func allowRetry() {
+      if lastAutoRepliedInboundID[chat.chatGUID] == inboundID {
+        lastAutoRepliedInboundID[chat.chatGUID] = nil
+      }
+    }
     guard
       let resp = try? await APIClient.shared.imessageDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
-    else { return }
+    else {
+      allowRetry()
+      return
+    }
     // NEVER auto-send when the person is ambiguous — the "draft" is a
     // disambiguation ask, and auto-reply sends without review.
     guard !resp.ambiguous else {
       NSLog("iMessage auto-reply skipped for \(chat.chatGUID): ambiguous contact needs disambiguation")
+      allowRetry()
       return
     }
     // Backend abstained (group message not directed at the user) → nothing to send.
-    guard !resp.abstain else { return }
+    guard !resp.abstain else {
+      allowRetry()
+      return
+    }
     let text = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else { return }
+    guard !text.isEmpty else {
+      allowRetry()
+      return
+    }
     // Final guard: the draft round-trip is async, so re-check that auto-reply is still
     // enabled (and this task wasn't cancelled) BEFORE either publishing a group draft
     // or sending a 1:1. The user may have toggled it off while the draft was being
     // generated — in which case we must neither send nor surface a draft for it.
     guard !Task.isCancelled, autoReplyChats.contains(chat.chatGUID) else {
       NSLog("iMessage auto-reply cancelled for \(chat.chatGUID) before send (toggled off mid-draft)")
+      allowRetry()
       return
     }
     // Groups are DRAFT-ONLY: never auto-send to a group chat (higher blast radius and
@@ -258,6 +300,9 @@ final class IMessageInboxStore: ObservableObject {
       try await IMessageSenderService.send(text: text, toChatGUID: chat.chatGUID)
       appendSent(text, to: chat.id)
     } catch {
+      // Sent messages can't be unsent and a thrown error doesn't prove the message
+      // didn't go out, so we deliberately do NOT release the guard here — never
+      // silently retry into a possible duplicate send.
       NSLog("iMessage auto-reply send failed for \(chat.chatGUID): \(error.localizedDescription)")
     }
   }

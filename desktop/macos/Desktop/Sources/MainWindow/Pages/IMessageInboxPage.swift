@@ -8,7 +8,7 @@ import SwiftUI
 /// Shared row/header/bubble/compose UI lives in `MessagingInboxKit` so this tab,
 /// WhatsApp, and Telegram look and behave identically.
 struct IMessageInboxPage: View {
-  @StateObject private var store = IMessageInboxStore()
+  @ObservedObject private var store = IMessageInboxStore.shared
 
   private static let iMessageBlue = Color(red: 0.0, green: 0.478, blue: 1.0)
 
@@ -33,9 +33,11 @@ struct IMessageInboxPage: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await store.load()
+      // Idempotent: the watcher is also started app-wide at launch (OmiApp) so
+      // auto-reply runs off-tab / backgrounded. We do NOT stopWatching on
+      // disappear — leaving the Messages tab must not kill auto-reply.
       store.startWatching()
     }
-    .onDisappear { store.stopWatching() }
   }
 
   // MARK: conversation list
