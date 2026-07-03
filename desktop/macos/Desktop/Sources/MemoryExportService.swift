@@ -319,15 +319,17 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       )
     case .openclaw:
       let serverJSON =
-        #"{"enabled":true,"url":"\#(url)","transport":"sse","headers":{"Authorization":"Bearer \#(key)"}}"#
+        #"{"enabled":true,"url":"\#(url)","transport":"streamable-http","headers":{"Authorization":"Bearer \#(key)"}}"#
       return MCPSetup(
         serverURL: url,
         copyTitle: "Copy command",
         copyText: """
           openclaw mcp set omi-memory \(Self.shellQuote(serverJSON))
+          openclaw mcp reload
           """,
         steps: [
           "Run the command below to add the Omi MCP server to ~/.openclaw/openclaw.json",
+          "Reload OpenClaw MCP so open sessions rebuild their tool list",
           "Add a SOUL.md note asking OpenClaw to search Omi memory first",
         ],
         openURL: nil,
