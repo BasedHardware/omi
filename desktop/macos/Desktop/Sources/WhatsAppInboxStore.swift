@@ -204,6 +204,9 @@ final class WhatsAppInboxStore: ObservableObject {
   }
 
   private func predraft(_ chat: WhatsAppChat) async {
+    // Snapshot the message being replied to; discard if a newer one arrives during the
+    // async call so a stale draft can't overwrite the fresher one.
+    let draftedForID = chat.bubbles.last?.id
     guard
       let resp = try? await APIClient.shared.whatsappDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
@@ -213,6 +216,7 @@ final class WhatsAppInboxStore: ObservableObject {
     guard !resp.ambiguous, !resp.abstain else { return }
     let draft = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !draft.isEmpty else { return }
+    guard chats.first(where: { $0.id == chat.id })?.bubbles.last?.id == draftedForID else { return }
     preDrafts[chat.id] = draft
   }
 

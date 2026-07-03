@@ -203,6 +203,10 @@ final class IMessageInboxStore: ObservableObject {
   }
 
   private func predraft(_ chat: IMessageChat) async {
+    // Snapshot the message we're drafting a reply to. If a newer message arrives for
+    // this chat during the async call (a racing predraft from selection change / poll),
+    // discard this now-stale draft rather than overwriting the fresher one.
+    let draftedForID = chat.bubbles.last?.id
     guard
       let resp = try? await APIClient.shared.imessageDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
@@ -212,6 +216,7 @@ final class IMessageInboxStore: ObservableObject {
     guard !resp.ambiguous, !resp.abstain else { return }
     let draft = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !draft.isEmpty else { return }
+    guard chats.first(where: { $0.id == chat.id })?.bubbles.last?.id == draftedForID else { return }
     preDrafts[chat.id] = draft
   }
 

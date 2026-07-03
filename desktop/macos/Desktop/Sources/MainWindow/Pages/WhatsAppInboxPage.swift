@@ -77,7 +77,7 @@ struct WhatsAppInboxPage: View {
               InboxConversationRow(
                 name: chat.displayName, preview: chat.lastPreview, time: chat.lastDate,
                 avatarData: chat.avatarImageData, isSelected: chat.id == store.selectedChatID,
-                awaitingReply: chat.awaitingReply, draftReady: store.preDrafts[chat.id] != nil,
+                draftReady: store.preDrafts[chat.id] != nil,
                 accent: Self.whatsappGreen
               )
               .onTapGesture { store.selectedChatID = chat.id }
@@ -269,8 +269,10 @@ private struct ChatDetailView: View {
     defer { isSending = false }
     do {
       try await WhatsAppSenderService.send(text: text, toChatID: chat.chatID, phone: chat.dialablePhone)
-      // Only reflect a sent message once the Return keystroke actually fired.
-      store.appendSent(text)
+      // Only reflect a sent message once the Return keystroke actually fired. Pin the
+      // append to THIS chat: send is awaited, so the user may have switched chats
+      // during it, and the no-arg appendSent writes to whatever is selected now.
+      store.appendSent(text, to: chat.id)
       draft = ""
     } catch let error as WhatsAppSenderError {
       switch error {

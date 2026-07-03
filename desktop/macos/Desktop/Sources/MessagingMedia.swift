@@ -8,9 +8,22 @@ enum MessagingMedia {
   /// Returns a base64 JPEG for the image at `path`, or nil for unreadable /
   /// non-image files. Downscaled to `maxDimension` and re-compressed until under
   /// `maxBytes` so we never send a multi-MB photo.
+  /// Cache of encoded results keyed by (path + params). Attachment files are immutable
+  /// (Messages/WhatsApp/Telegram store them content-addressed), so a path maps to a
+  /// stable encoding. This avoids re-decoding/resizing/encoding the same photo every
+  /// time `draftContext()` runs (re-renders, repeated predraft/auto-reply) — the main
+  /// source of the main-thread churn. (NSCache is thread-safe.)
+  private static let cache: NSCache<NSString, NSString> = {
+    let c = NSCache<NSString, NSString>()
+    c.countLimit = 256
+    return c
+  }()
+
   static func base64JPEG(
     path: String, maxDimension: CGFloat = 1024, quality: CGFloat = 0.6, maxBytes: Int = 1_500_000
   ) -> String? {
+    let cacheKey = "\(path)|\(maxDimension)|\(quality)|\(maxBytes)" as NSString
+    if let cached = cache.object(forKey: cacheKey) { return cached as String }
     guard let image = NSImage(contentsOfFile: path) else { return nil }
     let size = image.size
     guard size.width > 0, size.height > 0 else { return nil }
@@ -32,6 +45,8 @@ enum MessagingMedia {
       data = rep.representation(using: .jpeg, properties: [.compressionFactor: q])
     }
     guard let final = data, final.count <= maxBytes else { return nil }
-    return final.base64EncodedString()
+    let b64 = final.base64EncodedString()
+    cache.setObject(b64 as NSString, forKey: cacheKey)
+    return b64
   }
 }

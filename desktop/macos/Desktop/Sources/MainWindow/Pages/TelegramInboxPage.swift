@@ -131,7 +131,7 @@ struct TelegramInboxPage: View {
               InboxConversationRow(
                 name: chat.displayName, preview: chat.lastPreview, time: chat.lastDate,
                 avatarData: chat.avatarImageData, isSelected: chat.chatID == store.selectedChatID,
-                awaitingReply: chat.awaitingReply, draftReady: store.preDrafts[chat.chatID] != nil,
+                draftReady: store.preDrafts[chat.chatID] != nil,
                 accent: Self.telegramBlue
               )
               .onTapGesture { store.selectedChatID = chat.chatID }

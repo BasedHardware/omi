@@ -117,7 +117,6 @@ struct InboxConversationRow: View {
   let time: Date
   let avatarData: Data?
   let isSelected: Bool
-  let awaitingReply: Bool
   let draftReady: Bool
   let accent: Color
 
@@ -142,8 +141,8 @@ struct InboxConversationRow: View {
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
           // Show the pill ONLY once a reply has actually been drafted for this
-          // chat — never on every awaiting thread. `awaitingReply` is kept for
-          // callers that still gate other behavior on it.
+          // chat — never on every awaiting thread. (Awaiting-reply gating lives in the
+          // store, not this row.)
           if draftReady {
             InboxDraftBadge(accent: accent)
           }

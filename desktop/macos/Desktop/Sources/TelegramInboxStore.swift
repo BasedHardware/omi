@@ -239,6 +239,9 @@ final class TelegramInboxStore: ObservableObject {
   }
 
   private func predraft(_ chat: TelegramChat) async {
+    // Snapshot the message being replied to; discard if a newer one arrives during the
+    // async call (racing predraft from selection-change didSet vs handleThread).
+    let draftedForID = chat.bubbles.last?.id
     guard
       let resp = try? await APIClient.shared.telegramDraftReply(
         person: chat.personRef, thread: chat.draftContext(), intent: nil, isGroup: chat.isGroup)
@@ -248,6 +251,7 @@ final class TelegramInboxStore: ObservableObject {
     guard !resp.ambiguous, !resp.abstain else { return }
     let draft = resp.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !draft.isEmpty else { return }
+    guard chats.first(where: { $0.chatID == chat.chatID })?.bubbles.last?.id == draftedForID else { return }
     preDrafts[chat.chatID] = draft
   }
 

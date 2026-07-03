@@ -75,7 +75,7 @@ struct IMessageInboxPage: View {
               InboxConversationRow(
                 name: chat.displayName, preview: chat.lastPreview, time: chat.lastDate,
                 avatarData: chat.avatarImageData, isSelected: chat.id == store.selectedChatID,
-                awaitingReply: chat.awaitingReply, draftReady: store.preDrafts[chat.id] != nil,
+                draftReady: store.preDrafts[chat.id] != nil,
                 accent: Self.iMessageBlue
               )
               .onTapGesture { store.selectedChatID = chat.id }
