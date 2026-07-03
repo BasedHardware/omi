@@ -1,3 +1,0 @@
-{
-  "change": "Fixed background-agent startup during push-to-talk so spawned pills wait for the agent bridge to finish initializing before dispatching."
-}

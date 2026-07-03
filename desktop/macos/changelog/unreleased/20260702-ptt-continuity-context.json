@@ -1,3 +1,0 @@
-{
-  "change": "Improved push-to-talk continuity so follow-up voice turns retain recent Omi chat, voice context, and background-agent handoffs after realtime provider reconnects."
-}

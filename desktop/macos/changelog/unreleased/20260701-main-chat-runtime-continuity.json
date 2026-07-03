@@ -1,3 +1,0 @@
-{
-  "change": "Improved desktop chat continuity so follow-up answers stay tied to the same runtime conversation after restarts or runtime rebinding."
-}

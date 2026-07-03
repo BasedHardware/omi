@@ -1,3 +1,0 @@
-{
-  "change": "Migrated visible background-agent pills onto canonical Omi agent runtime sessions so push-to-talk and chat-spawned agents share the new control-plane context."
-}

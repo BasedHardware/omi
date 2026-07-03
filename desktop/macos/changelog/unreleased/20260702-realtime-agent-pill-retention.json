@@ -1,3 +1,0 @@
-{
-  "change": "Realtime voice agents no longer dismiss completed floating agent pills unless the user explicitly asks, and silent background-agent handoffs can receive a same-provider spoken acknowledgement instead of switching to cached local voice."
-}

@@ -1,3 +1,0 @@
-{
-  "change": "PTT and floating-bar chat now resolve background-agent requests through a shared delegation resolver before spawning a child agent, preventing vague follow-up briefs from being handed to subagents."
-}
