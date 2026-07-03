@@ -17,6 +17,8 @@ from database import conversations as conversations_db
 from database import memories as memories_db
 from database import users as users_db
 from database.entities import person_entity_id
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llm.clients import get_llm
@@ -131,13 +133,13 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
         else "\n"
     )
 
-    prompt = (
+    # System = trusted instructions only; user = the untrusted (contact-supplied)
+    # transcript and facts, so the injection boundary the UNTRUSTED_DATA_NOTICE
+    # describes is real rather than a single concatenated string.
+    system_prompt = (
         f"You are building a concise profile of {name} for the user, based on their messages "
-        f"together. Use ONLY the material below — never invent details.\n\n"
+        f"together. Use ONLY the material in the user message — never invent details.\n\n"
         f"{UNTRUSTED_DATA_NOTICE}\n\n"
-        f"CONVERSATIONS (the user is \"User\"; the other person is \"{name}\"):\n"
-        f"<conversations>\n{transcript_text}\n</conversations>\n\n"
-        f"KNOWN FACTS ABOUT {name}:\n<known_facts>\n{facts_text}\n</known_facts>\n\n"
         "Respond ONLY with valid JSON (no markdown, no code fences):\n"
         "{\n"
         f"  \"relationship\": \"one short phrase for who {name} is to the user "
@@ -147,9 +149,14 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
         f"{tone_field}"
         "}"
     )
+    user_prompt = (
+        f"CONVERSATIONS (the user is \"User\"; the other person is \"{name}\"):\n"
+        f"<conversations>\n{transcript_text}\n</conversations>\n\n"
+        f"KNOWN FACTS ABOUT {name}:\n<known_facts>\n{facts_text}\n</known_facts>"
+    )
 
     try:
-        response = get_llm('memories').invoke(prompt)
+        response = get_llm('memories').invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
         content = response.content if hasattr(response, 'content') else str(response)
         parsed = _extract_json(content)
     except Exception as e:

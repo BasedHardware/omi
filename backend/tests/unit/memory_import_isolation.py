@@ -155,6 +155,15 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     langchain_core.callbacks.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
     _set("langchain_core.callbacks", langchain_core.callbacks)
 
+    langchain_core.messages = types.ModuleType("langchain_core.messages")
+
+    def _msg_init(self, content=None, **kwargs):
+        self.content = content
+
+    langchain_core.messages.HumanMessage = type("HumanMessage", (), {"__init__": _msg_init})
+    langchain_core.messages.SystemMessage = type("SystemMessage", (), {"__init__": _msg_init})
+    _set("langchain_core.messages", langchain_core.messages)
+
     usage_tracker_mod = types.ModuleType("utils.llm.usage_tracker")
     usage_tracker_mod.track_usage = lambda *args, **kwargs: None
 
