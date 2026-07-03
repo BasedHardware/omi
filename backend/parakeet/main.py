@@ -22,6 +22,7 @@ from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
+from stream_engine import StreamEngine, TooManyStreamsError
 from transcribe import (
     transcribe_file,
     transcribe_file_v2,
@@ -29,7 +30,7 @@ from transcribe import (
     INFERENCE_MODE,
     _transcribe_from_gpu_result,
 )
-from stream_handler import StreamSession, warmup_rnnt_decoder
+from stream_handler import StreamSession
 
 logging.basicConfig(level=logging.INFO)
 # httpx logs every outbound request at INFO; the per-segment diarizer embedding
@@ -81,6 +82,7 @@ REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', 
 
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
+stream_engine: Optional[StreamEngine] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
@@ -121,7 +123,7 @@ def _on_gpu_oom():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global gpu_worker, batch_engine, start_time
+    global gpu_worker, batch_engine, stream_engine, start_time
     start_time = time.monotonic()
 
     os.makedirs("_temp", exist_ok=True)
@@ -144,14 +146,23 @@ async def lifespan(app: FastAPI):
             max_inflight=int(os.getenv("PARAKEET_MAX_INFLIGHT", "2")),
         )
         await batch_engine.start()
+
+        stream_engine = StreamEngine(
+            gpu_worker=gpu_worker,
+            max_concurrent_streams=int(os.getenv("PARAKEET_MAX_CONCURRENT_STREAMS", "128")),
+            idle_timeout=int(os.getenv("PARAKEET_STREAM_IDLE_TIMEOUT", "300")),
+        )
+        await stream_engine.start()
+
         logger.info("Server started, GPU model loading in background...")
     else:
         logger.info("Parakeet ASR server ready (NIM mode)")
 
-    warmup_rnnt_decoder()
     yield
 
     logger.info("Shutting down...")
+    if stream_engine:
+        await stream_engine.stop()
     if batch_engine:
         await batch_engine.stop()
     if gpu_worker:
@@ -334,6 +345,58 @@ async def stream_transcribe(
         session.cleanup()
 
 
+@app.websocket("/v4/stream")
+async def stream_transcribe_v4(
+    websocket: WebSocket,
+    sample_rate: int = Query(16000),
+):
+    if stream_engine is None or gpu_worker is None or not gpu_worker.has_stream:
+        await websocket.close(code=1013, reason="Streaming not available")
+        return
+    if not gpu_worker.is_ready:
+        await websocket.close(code=1013, reason="Model loading, try again shortly")
+        return
+
+    await websocket.accept()
+    ACTIVE_STREAMS.inc()
+    t0 = time.monotonic()
+    stream_result = None
+    try:
+        stream_result = await stream_engine.open_stream()
+        stream_id = stream_result["stream_id"]
+
+        while True:
+            try:
+                msg = await asyncio.wait_for(websocket.receive(), timeout=_WS_RECEIVE_TIMEOUT)
+            except asyncio.TimeoutError:
+                continue
+
+            if "bytes" in msg:
+                result = await stream_engine.process_chunk(stream_id, msg["bytes"])
+                await websocket.send_json(result)
+            elif "text" in msg:
+                if msg["text"] == "finalize":
+                    break
+    except TooManyStreamsError:
+        await websocket.close(code=1013, reason="Too many concurrent streams")
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"v4/stream error: {e}")
+    finally:
+        if stream_result:
+            try:
+                close_result = await stream_engine.close_stream(stream_result["stream_id"])
+                try:
+                    await websocket.send_json(close_result)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.error(f"v4/stream close error: {e}")
+        ACTIVE_STREAMS.dec()
+        STREAM_DURATION.observe(time.monotonic() - t0)
+
+
 @app.get("/health")
 async def health_check():
     if gpu_worker is not None:
@@ -342,6 +405,7 @@ async def health_check():
             "status": "healthy" if ready else "loading",
             "ready": ready,
             "uptime_seconds": round(time.monotonic() - start_time, 1),
+            "streaming": gpu_worker.has_stream if ready else False,
         }
         if not ready:
             return JSONResponse(status_code=503, content=body)
@@ -354,4 +418,11 @@ async def batch_metrics():
     if batch_engine is not None:
         PENDING_REQUESTS.set(len(batch_engine._pending))
         return batch_engine.metrics
+    return {}
+
+
+@app.get("/stream/metrics")
+async def stream_metrics():
+    if stream_engine is not None:
+        return stream_engine.metrics
     return {}
