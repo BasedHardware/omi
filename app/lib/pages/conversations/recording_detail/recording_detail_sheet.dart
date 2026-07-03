@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
