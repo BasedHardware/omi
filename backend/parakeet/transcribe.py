@@ -271,7 +271,9 @@ def _diarize_segments(
                 embeddings.append(np.squeeze(emb))
                 valid_indices.append(idx)
         except Exception as e:
-            logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {e}")
+            logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {type(e).__name__}")
+
+    del audio_bytes
 
     if not embeddings:
         for seg in base["segments"]:
@@ -321,6 +323,11 @@ def _diarize_segments(
 
     for j, seg in enumerate(base["segments"]):
         seg["speaker"] = f"SPEAKER_{assigned_labels[j]}"
+
+    embeddings.clear()
+    valid_indices.clear()
+    valid_labels.clear()
+    assigned_labels.clear()
 
     return base
 
