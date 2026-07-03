@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "Fixed OpenClaw memory setup so Omi reloads OpenClaw MCP after wiring Omi memory, uses the current streamable HTTP MCP transport, and tells OpenClaw to call the Omi MCP tools instead of local memory tools"
-  ]
-}
