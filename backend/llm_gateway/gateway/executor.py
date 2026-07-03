@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,6 +28,8 @@ from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRe
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.log_sanitizer import sanitize
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ExecutorResult:
@@ -47,10 +51,23 @@ class ProviderRegistry:
         return self._providers.get(provider.strip().lower())
 
     async def aclose(self) -> None:
-        for provider in self._providers.values():
-            close = getattr(provider, 'aclose', None)
-            if close is not None:
-                await close()
+        cleanup_tasks = [
+            _close_provider(provider_name, provider)
+            for provider_name, provider in self._providers.items()
+            if getattr(provider, 'aclose', None) is not None
+        ]
+        if cleanup_tasks:
+            await asyncio.gather(*cleanup_tasks)
+
+
+async def _close_provider(provider_name: str, provider: ChatCompletionProvider) -> None:
+    close = getattr(provider, 'aclose', None)
+    if close is None:
+        return
+    try:
+        await close()
+    except Exception:
+        logger.exception('LLM gateway provider cleanup failed: %s', provider_name)
 
 
 async def execute_chat_completion(

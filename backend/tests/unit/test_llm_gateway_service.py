@@ -1,9 +1,8 @@
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from llm_gateway import main
-from llm_gateway.main import app, lifespan
-from llm_gateway.routers import openai_compatible
+from llm_gateway.main import app
 
 
 def test_llm_gateway_app_imports_and_health_is_public():
@@ -26,10 +25,10 @@ async def test_lifespan_runs_registry_cleanup_when_image_cleanup_fails(monkeypat
     async def close_registry():
         calls.append('registry')
 
-    monkeypatch.setattr(openai_compatible, 'close_image_generation_client', fail_image_cleanup)
+    monkeypatch.setattr(main.openai_compatible, 'close_image_generation_client', fail_image_cleanup)
     monkeypatch.setattr(main, 'close_provider_registry', close_registry)
 
-    async with lifespan(app):
+    async with main.lifespan(app):
         pass
 
     assert calls == ['image', 'registry']
