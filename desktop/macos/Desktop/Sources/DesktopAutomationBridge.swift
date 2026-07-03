@@ -344,6 +344,7 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+
     register(
       name: "toggle_transcription",
       summary: "Enable or disable live transcription (mirrors the menu-bar toggle)",

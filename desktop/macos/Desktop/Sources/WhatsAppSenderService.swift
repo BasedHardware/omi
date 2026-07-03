@@ -72,12 +72,11 @@ enum WhatsAppSenderService {
 
     try prefill(text: text, phone: phone)
 
-    guard WhatsAppPermissionPolicy.accessibilityGranted() else {
-      // Text is prefilled; the user reviews it and presses Enter in WhatsApp.
-      throw WhatsAppSenderError.manualSendRequired
-    }
-
-    // Let WhatsApp open the chat and focus the compose box, then press Return.
+    // Send by driving System Events (via osascript) to press Return in WhatsApp's
+    // focused compose box — this needs Automation permission for the bundle, which
+    // macOS prompts for on first use (not the app's own Accessibility trust, which
+    // only mattered for the old CGEvent path). Let WhatsApp open the chat + focus
+    // the prefilled box first.
     DispatchQueue.main.asyncAfter(deadline: .now() + returnPressDelay) {
       _ = pressReturnInWhatsApp()
     }
@@ -113,23 +112,29 @@ enum WhatsAppSenderService {
     runningWhatsApp()?.activate(options: [.activateIgnoringOtherApps])
   }
 
-  /// Presses Return in the frontmost WhatsApp window via a synthetic key event to
-  /// send the prefilled reply. Requires Accessibility. Returns whether the event
-  /// was posted (not a delivery/send confirmation — WhatsApp gives none).
+  /// Presses Return in WhatsApp to send the prefilled reply. WhatsApp on macOS is a
+  /// Catalyst app that ignores raw `CGEvent` key posts, but does honor a System
+  /// Events keystroke — so we drive it through `osascript`, which atomically
+  /// activates WhatsApp, lets the prefilled compose field focus, then keys Return.
+  /// Requires Accessibility (already required) and Automation permission for the
+  /// bundle to control System Events/WhatsApp. Fire-and-forget.
   @MainActor
   @discardableResult
   private static func pressReturnInWhatsApp() -> Bool {
-    guard let app = runningWhatsApp() else { return false }
-    app.activate(options: [.activateIgnoringOtherApps])
-
-    let returnKeyCode: CGKeyCode = 36
-    guard let source = CGEventSource(stateID: .combinedSessionState),
-      let keyDown = CGEvent(keyboardEventSource: source, virtualKey: returnKeyCode, keyDown: true),
-      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: returnKeyCode, keyDown: false)
-    else { return false }
-
-    keyDown.post(tap: .cghidEventTap)
-    keyUp.post(tap: .cghidEventTap)
-    return true
+    let script = """
+      tell application "WhatsApp" to activate
+      delay 0.6
+      tell application "System Events" to key code 36
+      """
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    proc.arguments = ["-e", script]
+    do {
+      try proc.run()
+      return true
+    } catch {
+      NSLog("WhatsApp send: osascript keystroke failed: \(error.localizedDescription)")
+      return false
+    }
   }
 }
