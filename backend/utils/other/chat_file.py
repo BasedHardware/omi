@@ -316,7 +316,6 @@ class FileChatTool:
 
     def cleanup(self):
         """Cleanup chat session files, thread, and assistant"""
-        _assert_direct_file_chat_allowed()
         logger.info("start cleanup thread chat with file")
         files = chat_db.get_chat_files(self.uid)
         # delete file in db

@@ -6,6 +6,7 @@ import pytest
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_byok_credential_context, build_omi_managed_credential_context
 from llm_gateway.gateway.providers import (
+    AnthropicMessagesProvider,
     MAX_RESPONSE_BYTES_ENV_VAR,
     OpenAICompatibleChatCompletionProvider,
     ProviderFailure,
@@ -76,6 +77,43 @@ async def test_openai_compatible_provider_streams_chat_completion_bytes(monkeypa
     assert b''.join(chunks).startswith(b'data:')
     assert seen_requests[0].url == 'https://api.openai.com/v1/chat/completions'
     assert seen_requests[0].headers['authorization'] == 'Bearer test-key'
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_flattens_system_text_parts_and_normalizes_finish_reason(monkeypatch):
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'test-key')
+    seen_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                'id': 'msg_test',
+                'content': [{'type': 'text', 'text': 'ok'}],
+                'stop_reason': 'end_turn',
+            },
+        )
+
+    provider = AnthropicMessagesProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    response = await provider.create_chat_completion(
+        {
+            'model': 'claude-sonnet-4-6',
+            'messages': [
+                {'role': 'system', 'content': [{'type': 'text', 'text': 'A'}, {'type': 'text', 'text': 'B'}]},
+                {'role': 'user', 'content': 'hello'},
+            ],
+        },
+        provider_ref=ProviderRef(provider='anthropic', model='claude-sonnet-4-6'),
+        credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+        timeout_ms=8000,
+    )
+
+    assert b'"system":"A\\nB"' in seen_requests[0].content
+    assert response['choices'][0]['finish_reason'] == 'stop'
 
 
 @pytest.mark.asyncio

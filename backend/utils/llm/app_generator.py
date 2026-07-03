@@ -10,6 +10,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from langchain_core.messages import SystemMessage, HumanMessage
+from utils.executors import llm_executor, run_blocking
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import generate_image_via_gateway
 
@@ -169,8 +170,15 @@ Design requirements:
 - Vibrant but not overwhelming colors
 - Style: Similar to modern iOS/Android app icons"""
 
-    response = generate_image_via_gateway(
-        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
+    response = await run_blocking(
+        llm_executor,
+        generate_image_via_gateway,
+        model="dall-e-3",
+        prompt=icon_prompt,
+        size="1024x1024",
+        quality="standard",
+        n=1,
+        response_format="b64_json",
     )
 
     # Get the base64 image data and decode it

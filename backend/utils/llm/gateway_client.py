@@ -82,8 +82,8 @@ def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> N
 
 def _is_local_or_dev_runtime() -> bool:
     explicit_stage = os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or os.getenv('APP_ENV')
-    if explicit_stage and explicit_stage.strip().lower() in {'prod', 'production'}:
-        return False
+    if explicit_stage:
+        return explicit_stage.strip().lower() in {'dev', 'development', 'local', 'test'}
     if os.getenv('K_SERVICE') and not explicit_stage:
         return False
     return True

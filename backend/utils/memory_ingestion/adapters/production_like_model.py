@@ -11,6 +11,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from models.transcript_segment import TranscriptSegment
 from pydantic import BaseModel, Field
 from utils.llm.clients import get_llm
+from utils.llm.model_config import get_model, get_provider
 from utils.prompts import extract_memories_prompt
 from utils.memory_ingestion.adapters.typed_extraction_prompt import (
     TYPED_PREDICATES,
@@ -766,14 +767,11 @@ _memory_llm_logged = False  # module-level flag: has the LLM endpoint been logge
 
 def _memory_llm(temperature: float = 0.0):
     global _memory_llm_logged
-    model = os.environ.get("OMI_MEMORY_PIPELINE_MODEL", "gpt-4.1-mini")
-    base_url = os.environ.get("OPENAI_BASE_URL", "")
     # Log resolved endpoint once for debuggability — catches credential mismatches early
     if not _memory_llm_logged:
-        url_preview = base_url or "(default OpenAI)"
-        print(f"[pipeline-llm] model={model}  base_url={url_preview}")
+        print(f"[pipeline-llm] feature=memories route={get_provider('memories')}/{get_model('memories')}")
         _memory_llm_logged = True
-    if temperature:
+    if temperature is not None:
         return get_llm("memories").bind(temperature=temperature)
     return get_llm("memories")
 

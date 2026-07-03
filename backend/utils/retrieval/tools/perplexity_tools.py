@@ -4,6 +4,7 @@ Tools for performing web searches using Perplexity AI.
 
 import httpx
 from langchain_core.tools import tool
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.providers import get_or_create_omi_gateway_llm
 import logging
@@ -48,7 +49,7 @@ async def perplexity_web_search_tool(
 
     try:
         response = await get_or_create_omi_gateway_llm(feature_auto_lane_id('web_search')).ainvoke(
-            query, config={'max_tokens': 1000, 'temperature': 0.2}
+            query, max_tokens=1000, temperature=0.2
         )
         content = response.content if hasattr(response, 'content') else str(response)
         if content:
@@ -59,6 +60,15 @@ async def perplexity_web_search_tool(
     except ValueError as e:
         logger.error(f"❌ perplexity_web_search_tool - Gateway routing unavailable: {e}")
         return "Error: Perplexity gateway route not configured"
+    except APIStatusError as e:
+        logger.error(f"❌ perplexity_web_search_tool - API error: {e.status_code}")
+        return f"Error: Perplexity API returned status {e.status_code}. Please try again later."
+    except APITimeoutError:
+        logger.warning("❌ perplexity_web_search_tool - Request timeout")
+        return "Error: Request to Perplexity API timed out. Please try again later."
+    except APIConnectionError as e:
+        logger.error(f"❌ perplexity_web_search_tool - Request error: {e}")
+        return f"Error: Failed to connect to Perplexity API. {str(e)}"
     except httpx.HTTPStatusError as e:
         logger.error(f"❌ perplexity_web_search_tool - API error: {e.response.status_code}")
         return f"Error: Perplexity API returned status {e.response.status_code}. Please try again later."

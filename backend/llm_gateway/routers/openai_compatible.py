@@ -23,10 +23,12 @@ from llm_gateway.gateway.executor import (
     selected_serving_route_artifact_id,
 )
 from llm_gateway.gateway.metrics import observe_error, observe_success, time_request
-from llm_gateway.gateway.resolver import resolve_chat_completion_route
+from llm_gateway.gateway.providers import ProviderFailure
+from llm_gateway.gateway.resolver import is_lkg_eligible, resolve_chat_completion_route
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
 router = APIRouter()
+_image_generation_client: httpx.AsyncClient | None = None
 
 
 @router.post('/v1/chat/completions')
@@ -139,12 +141,11 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
             content={'error': {'message': 'provider request failed: invalid_config', 'type': 'api_error'}},
         )
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                'https://api.openai.com/v1/images/generations',
-                headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
-                json=request_body,
-            )
+        response = await _get_image_generation_client().post(
+            'https://api.openai.com/v1/images/generations',
+            headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+            json=request_body,
+        )
         return JSONResponse(status_code=response.status_code, content=response.json())
     except (httpx.HTTPError, ValueError):
         return JSONResponse(
@@ -153,21 +154,38 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
         )
 
 
+def _get_image_generation_client() -> httpx.AsyncClient:
+    global _image_generation_client
+    if _image_generation_client is None:
+        _image_generation_client = httpx.AsyncClient(timeout=120.0)
+    return _image_generation_client
+
+
 def _streaming_response(resolved_route, credentials, provider_registry: ProviderRegistry) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
-    provider_ref = route.primary
-    provider = provider_registry.provider_for(provider_ref.provider)
-    stream_chat_completion = getattr(provider, 'stream_chat_completion', None)
-    if stream_chat_completion is None:
-        raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
 
     async def event_stream():
-        async for chunk in stream_chat_completion(
-            provider_request_for(resolved_route, provider_ref),
-            provider_ref=provider_ref,
-            credentials=credentials,
-            timeout_ms=route.timeouts.request_ms,
-        ):
-            yield chunk
+        last_error: ProviderFailure | None = None
+        for provider_ref in [route.primary, *route.fallbacks]:
+            provider = provider_registry.provider_for(provider_ref.provider)
+            stream_chat_completion = getattr(provider, 'stream_chat_completion', None)
+            if stream_chat_completion is None:
+                continue
+            try:
+                async for chunk in stream_chat_completion(
+                    provider_request_for(resolved_route, provider_ref),
+                    provider_ref=provider_ref,
+                    credentials=credentials,
+                    timeout_ms=route.timeouts.request_ms,
+                ):
+                    yield chunk
+                return
+            except ProviderFailure as exc:
+                last_error = exc
+                if not is_lkg_eligible(route, exc.failure_class):
+                    raise
+        if last_error is not None:
+            raise last_error
+        raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')

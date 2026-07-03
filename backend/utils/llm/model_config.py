@@ -211,7 +211,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
 _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
-    'fair_use': ('gpt-5.1', 'openai'),
+    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1').strip() or 'gpt-5.1', 'openai'),
 }
 
 # Resolve active profile once at startup.

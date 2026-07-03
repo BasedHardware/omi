@@ -18,7 +18,7 @@ from langchain_core.language_models import BaseChatModel
 try:
     from langchain_core.messages import BaseMessage
 except ImportError:
-    BaseMessage = Any
+    BaseMessage = None
 try:
     from langchain_core.outputs import ChatResult
 except ImportError:
@@ -227,7 +227,7 @@ def _comparison_value(value: Any) -> Any:
         value = value.get('parsed')
     if hasattr(value, 'model_dump'):
         return value.model_dump(mode='json')
-    if isinstance(value, BaseMessage):
+    if BaseMessage is not None and isinstance(value, BaseMessage):
         return {'type': value.type, 'content': value.content}
     return value
 

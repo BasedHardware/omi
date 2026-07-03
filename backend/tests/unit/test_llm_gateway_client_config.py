@@ -77,15 +77,21 @@ def test_gateway_langchain_client_uses_internal_gateway_base_url_and_auth(monkey
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway.internal:8080/')
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'service-token')
     monkeypatch.setattr(providers, 'ChatOpenAI', FakeChatOpenAI)
+    original_cache = dict(providers._llm_cache)
     providers._llm_cache.clear()
 
-    result = get_llm_gateway_chat_structured()
+    try:
+        result = get_llm_gateway_chat_structured()
 
-    assert isinstance(result, FakeChatOpenAI)
-    assert captured['model'] == 'omi:auto:chat-structured'
-    assert captured['base_url'] == 'http://gateway.internal:8080/v1'
-    assert captured['default_headers']['X-Omi-Service-Caller'] == 'backend'
-    assert captured['default_headers']['Authorization'] == 'Bearer service-token'
+        assert isinstance(result, FakeChatOpenAI)
+        assert captured['model'] == 'omi:auto:chat-structured'
+        assert captured['base_url'] == 'http://gateway.internal:8080/v1'
+        assert captured['request_timeout'] == 35.0
+        assert captured['default_headers']['X-Omi-Service-Caller'] == 'backend'
+        assert captured['default_headers']['Authorization'] == 'Bearer service-token'
+    finally:
+        providers._llm_cache.clear()
+        providers._llm_cache.update(original_cache)
 
 
 def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
@@ -191,6 +197,19 @@ def test_gateway_feature_mode_is_blocked_in_prod_without_explicit_allow(monkeypa
         assert LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR in str(exc)
     else:
         raise AssertionError('expected prod gateway feature mode to require explicit allow env')
+
+
+def test_gateway_feature_mode_is_blocked_in_non_dev_cloud_stage_without_explicit_allow(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'staging')
+    monkeypatch.delenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, raising=False)
+
+    try:
+        should_route_features_through_gateway()
+    except RuntimeError as exc:
+        assert LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected non-dev gateway feature mode to require explicit allow env')
 
 
 def test_gateway_feature_mode_in_prod_requires_gateway_url(monkeypatch):

@@ -247,7 +247,7 @@ async def _attempt_provider(
     for _attempt in range(max_attempts):
         try:
             response = await provider.create_chat_completion(
-                _provider_request(resolved_route, provider_ref),
+                _provider_request(resolved_route, provider_ref, route=route),
                 provider_ref=provider_ref,
                 credentials=credential_context,
                 timeout_ms=route.timeouts.request_ms,
@@ -260,8 +260,13 @@ async def _attempt_provider(
     return None, error
 
 
-def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
-    route = selected_serving_route(resolved_route)
+def _provider_request(
+    resolved_route: ResolvedRoute,
+    provider_ref: ProviderRef,
+    *,
+    route: RouteArtifact | None = None,
+) -> dict[str, Any]:
+    route = route or selected_serving_route(resolved_route)
     provider_request = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),

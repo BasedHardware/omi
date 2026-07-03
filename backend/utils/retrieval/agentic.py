@@ -393,8 +393,6 @@ async def _run_anthropic_agent_stream(
     while loop that calls Anthropic's messages API, executes any tool calls,
     and feeds results back until the model stops requesting tools.
     """
-    raise_if_gateway_feature_mode_blocks_direct_model_surface('chat_agent.anthropic_stream')
-
     # System prompt with cache_control for Anthropic prompt caching
     # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
     # sessions have gaps >5min between turns, so the 5-min default kills cache hit rate.
@@ -619,6 +617,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
     anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid, tz=tz))
+
+    raise_if_gateway_feature_mode_blocks_direct_model_surface('chat_agent.anthropic_stream')
 
     callback = AsyncStreamingCallback()
 

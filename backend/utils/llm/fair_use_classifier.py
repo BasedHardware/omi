@@ -14,10 +14,11 @@ from typing import Optional
 import database.conversations as conversations_db
 from utils.executors import db_executor, run_blocking
 from utils.llm.clients import get_llm
+from utils.llm.model_config import get_model, get_provider
 
 logger = logging.getLogger(__name__)
 
-CLASSIFIER_MODEL = os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1')
+CLASSIFIER_ROUTE = f"{get_provider('fair_use')}/{get_model('fair_use')}"
 CLASSIFIER_LOOKBACK_DAYS = int(os.getenv('FAIR_USE_CLASSIFIER_LOOKBACK_DAYS', '7'))
 CLASSIFIER_MAX_CONVERSATIONS = 30
 _classifier_llm = None
@@ -204,7 +205,7 @@ async def classify_user_purpose(uid: str) -> dict:
         'usage_type': 'none',
         'confidence': 0.0,
         'evidence': [],
-        'model': CLASSIFIER_MODEL,
+        'model': CLASSIFIER_ROUTE,
         'prompt_version': 'v2',
     }
 
@@ -249,7 +250,7 @@ Respond with ONLY the JSON output, no other text."""
         result['confidence'] = max(0.0, min(1.0, float(result.get('confidence', 0.0))))
         result['usage_type'] = result.get('usage_type', 'none')
         result['evidence'] = result.get('evidence', [])[:10]  # Cap evidence entries
-        result['model'] = CLASSIFIER_MODEL
+        result['model'] = CLASSIFIER_ROUTE
         result['prompt_version'] = 'v2'
 
         return result

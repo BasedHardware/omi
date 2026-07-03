@@ -52,7 +52,9 @@ from utils.llm.providers import (
 
 try:
     from utils.llm.providers import get_or_create_omi_gateway_llm
-except ImportError:
+except ImportError as exc:
+    if exc.name != 'utils.llm.providers' and 'get_or_create_omi_gateway_llm' not in str(exc):
+        raise
 
     def get_or_create_omi_gateway_llm(*_args, **_kwargs):
         raise RuntimeError('Omi gateway LangChain client is unavailable')
@@ -60,12 +62,17 @@ except ImportError:
 
 try:
     from utils.llm.gateway_client import (
+        BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
         CHAT_STRUCTURED_AUTO_LANE_ID,
         feature_auto_lane_id,
         raise_if_gateway_feature_mode_blocks_direct_model_surface,
         should_route_features_through_gateway,
     )
-except ImportError:
+except ImportError as exc:
+    if exc.name != 'utils.llm.gateway_client':
+        raise
+
+    BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
     CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
 
     def feature_auto_lane_id(feature: str) -> str:
@@ -80,7 +87,9 @@ except ImportError:
 
 try:
     from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
-except ImportError:
+except ImportError as exc:
+    if exc.name != 'utils.llm.gateway_shadow':
+        raise
 
     def maybe_wrap_dev_gateway_shadow(*, legacy_model, **_kwargs):
         return legacy_model
@@ -378,7 +387,11 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     return result
 
 
-def get_llm_gateway_chat_structured(streaming: bool = False, cache_key: Optional[str] = None) -> BaseChatModel:
+def get_llm_gateway_chat_structured(
+    streaming: bool = False,
+    cache_key: Optional[str] = None,
+    request_timeout: float | None = None,
+) -> BaseChatModel:
     """Return the gateway chat-structured lane as a LangChain chat model.
 
     Use this for shadow/eval comparisons that must preserve the existing
@@ -387,7 +400,11 @@ def get_llm_gateway_chat_structured(streaming: bool = False, cache_key: Optional
     gateway provider for that feature.
     """
 
-    result = get_or_create_omi_gateway_llm(CHAT_STRUCTURED_AUTO_LANE_ID, streaming)
+    result = get_or_create_omi_gateway_llm(
+        CHAT_STRUCTURED_AUTO_LANE_ID,
+        streaming,
+        options={'request_timeout': request_timeout or BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS},
+    )
     if cache_key:
         return result.bind(prompt_cache_key=cache_key)
     return result

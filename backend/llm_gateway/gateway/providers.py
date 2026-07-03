@@ -214,7 +214,9 @@ def _anthropic_request(request: Mapping[str, Any], provider_ref: ProviderRef) ->
         if not isinstance(message, Mapping):
             continue
         if message.get('role') == 'system':
-            system_blocks.append(message.get('content') or '')
+            system_text = _text_content(message.get('content'))
+            if system_text:
+                system_blocks.append(system_text)
         else:
             messages.append(message)
 
@@ -268,10 +270,32 @@ def _anthropic_to_openai_response(response: Mapping[str, Any], *, requested_mode
             {
                 'index': 0,
                 'message': message,
-                'finish_reason': 'tool_calls' if tool_calls else response.get('stop_reason') or 'stop',
+                'finish_reason': 'tool_calls' if tool_calls else _openai_finish_reason(response.get('stop_reason')),
             }
         ],
     }
+
+
+def _text_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, Mapping) and part.get('type') == 'text' and isinstance(part.get('text'), str):
+                parts.append(part['text'])
+        return '\n'.join(parts)
+    return ''
+
+
+def _openai_finish_reason(stop_reason: Any) -> str:
+    if stop_reason in {'end_turn', 'stop_sequence'}:
+        return 'stop'
+    if stop_reason == 'max_tokens':
+        return 'length'
+    if stop_reason == 'tool_use':
+        return 'tool_calls'
+    return 'stop'
 
 
 class FakeChatCompletionProvider:

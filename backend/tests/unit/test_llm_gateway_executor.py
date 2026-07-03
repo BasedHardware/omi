@@ -65,6 +65,32 @@ async def test_executor_forwards_prompt_parser_request_without_response_format()
 
 
 @pytest.mark.asyncio
+async def test_executor_uses_executing_route_provider_options_for_lkg_fallback():
+    active_route = active_route_with_fallbacks([]).model_copy(
+        update={
+            'provider_options': {'temperature': 0.9},
+            'rollout': RolloutPolicy(stage=RolloutStage.SHADOW, percent=0),
+        }
+    )
+    lkg_route = (
+        load_gateway_config(prod_mode=True)
+        .route_artifacts[LKG_ROUTE]
+        .model_copy(update={'provider_options': {'temperature': 0.1}})
+    )
+    config = config_with_routes(active_route, lkg_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.last_known_good_route.primary)])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['temperature'] == 0.1
+
+
+@pytest.mark.asyncio
 async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
     config = config_with_active_route(active_route_with_fallbacks([fallback_ref]))
