@@ -236,6 +236,14 @@ pub struct AppConfig {
     /// Saved floating bar position as [x, y] pixels. None = default bottom-center.
     #[serde(default)]
     pub floating_bar_position: Option<(i32, i32)>,
+
+    // ── Webhook Integrations ──────────────────────────────────────────────────
+    #[serde(default)]
+    pub webhook_slack: String,
+    #[serde(default)]
+    pub webhook_github: String,
+    #[serde(default)]
+    pub webhook_notion: String,
 }
 
 fn default_backend_url() -> String {
@@ -346,6 +354,9 @@ impl Default for AppConfig {
             video_chunk_encoding_enabled: false,
             ffmpeg_path: String::new(),
             floating_bar_position: None,
+            webhook_slack: String::new(),
+            webhook_github: String::new(),
+            webhook_notion: String::new(),
         }
     }
 }
