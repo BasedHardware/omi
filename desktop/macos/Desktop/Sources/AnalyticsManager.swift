@@ -663,12 +663,20 @@ class AnalyticsManager {
 
   // MARK: - Update Events
 
-  func updateAvailable(version: String) {
-    PostHogManager.shared.updateAvailable(version: version)
+  func updateAvailable(
+    version: String,
+    context: UpdateAnalyticsContext,
+    item: UpdateItemAnalytics
+  ) {
+    PostHogManager.shared.updateAvailable(version: version, context: context, item: item)
   }
 
-  func updateInstalled(version: String) {
-    PostHogManager.shared.updateInstalled(version: version)
+  func updateInstalled(
+    version: String,
+    context: UpdateAnalyticsContext,
+    item: UpdateItemAnalytics
+  ) {
+    PostHogManager.shared.updateInstalled(version: version, context: context, item: item)
   }
 
   func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {

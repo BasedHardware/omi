@@ -1,0 +1,3 @@
+{
+  "change": "Improved macOS updater failure diagnostics so nested Sparkle network errors are classified correctly."
+}
