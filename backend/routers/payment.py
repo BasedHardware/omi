@@ -66,12 +66,12 @@ router = APIRouter()
 
 
 class CreateCheckoutRequest(BaseModel):
-    price_id: str
+    price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
 
 
 class UpgradeSubscriptionRequest(BaseModel):
-    price_id: str
+    price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
 
 
