@@ -2832,7 +2832,7 @@ function intentCandidateStatus(
     runUpdatedAtMs !== undefined &&
     nowMs !== undefined &&
     staleAfterMs !== undefined &&
-    ["queued", "starting", "running", "waiting_input", "waiting_approval"].includes(status ?? "")
+    ACTIVE_STATUSES.includes((status ?? "") as RunStatus)
   ) {
     if (nowMs - runUpdatedAtMs >= staleAfterMs) return "stale";
   }
