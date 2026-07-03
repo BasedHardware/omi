@@ -23,6 +23,7 @@ class AssistantSettings {
     private let transcriptionEnabledKey = "transcriptionEnabled"
     private let transcriptionLanguageKey = "transcriptionLanguage"
     private let transcriptionAutoDetectKey = "transcriptionAutoDetect"
+    private let voiceLanguagesKey = "voiceAssistantLanguages"
     private let transcriptionVocabularyKey = "transcriptionVocabulary"
     private let vadGateEnabledKey = "vadGateEnabled"
     private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
@@ -131,6 +132,44 @@ class AssistantSettings {
             UserDefaults.standard.set(Self.normalizeTranscriptionLanguageCode(newValue), forKey: transcriptionLanguageKey)
             NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
         }
+    }
+
+    /// Ordered languages the user speaks to the VOICE ASSISTANT (push-to-talk), primary
+    /// first, as normalized codes (e.g. ["ru", "en"]). Drives per-turn language
+    /// identification for the realtime hub only — the ambient transcription pipeline
+    /// (transcriptionLanguage/transcriptionAutoDetect) is intentionally not coupled to it.
+    /// Empty storage falls back to [transcriptionLanguage] so existing users keep behavior.
+    var voiceLanguages: [String] {
+        get {
+            let stored = UserDefaults.standard.stringArray(forKey: voiceLanguagesKey) ?? []
+            let normalized = Self.dedupedNormalizedLanguageCodes(stored)
+            if !normalized.isEmpty { return normalized }
+            return [Self.normalizeTranscriptionLanguageCode(transcriptionLanguage)]
+        }
+        set {
+            let normalized = Self.dedupedNormalizedLanguageCodes(newValue)
+            UserDefaults.standard.set(normalized, forKey: voiceLanguagesKey)
+            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+        }
+    }
+
+    /// Base ISO-639-1 codes of `voiceLanguages` (region stripped: "en-US" → "en"),
+    /// order-preserving and deduped. This is the candidate set for PTT language ID.
+    var voiceBaseLanguages: [String] {
+        var seen = Set<String>()
+        return voiceLanguages.map { Self.baseLanguageCode($0) }.filter { seen.insert($0).inserted }
+    }
+
+    nonisolated static func baseLanguageCode(_ code: String) -> String {
+        code.split(separator: "-").first.map(String.init)?.lowercased() ?? code.lowercased()
+    }
+
+    nonisolated static func dedupedNormalizedLanguageCodes(_ raw: [String]) -> [String] {
+        var seen = Set<String>()
+        return
+            raw
+            .map { normalizeTranscriptionLanguageCode($0) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
     }
 
     /// Whether auto-detect (multi-language) mode is enabled
@@ -362,8 +401,37 @@ class AssistantSettings {
             return supported.code
         }
 
+        // A typed language NAME ("Russian", "portuguese", "español") — not a code. Without
+        // this, onboarding saved the literal word (e.g. language="russian"), which every
+        // ISO-code consumer (Deepgram, backend) rejects.
+        if let supported = supportedLanguages.first(where: {
+            $0.name.compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }) {
+            return supported.code
+        }
+        if let code = localizedNameToCode[trimmed.lowercased()] {
+            return code
+        }
+
         return normalizedSeparator
     }
+
+    /// Language names (in every locale the OS knows) → ISO 639-1 code, restricted to codes
+    /// we support. Lets "русский", "español", or "german" resolve to ru/es/de.
+    nonisolated private static let localizedNameToCode: [String: String] = {
+        var map: [String: String] = [:]
+        let baseCodes = Set(supportedLanguages.map { baseLanguageCode($0.code) })
+        for code in baseCodes {
+            for localeID in ["en", code] {
+                if let name = Locale(identifier: localeID)
+                    .localizedString(forLanguageCode: code)?.lowercased()
+                {
+                    map[name] = map[name] ?? code
+                }
+            }
+        }
+        return map
+    }()
 
     /// Normalizes legacy, backend, and user-entered aliases into codes accepted by `/v4/listen`.
     nonisolated private static let transcriptionLanguageAliases: [String: String] = [

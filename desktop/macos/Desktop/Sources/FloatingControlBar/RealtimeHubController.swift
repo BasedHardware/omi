@@ -146,6 +146,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// Guards against recording the same turn to chat history twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
+
+  // Per-turn language identification (multi-language PTT).
+  /// Local copy of this turn's mic audio (16 kHz s16le mono) for on-device language ID.
+  private var turnAudio16k = Data()
+  /// Monotonic turn counter guarding async language-ID results against cross-turn races.
+  private var turnEpoch = 0
+  /// Early (mid-hold) language verdict — kicked off ~1.5 s into the hold so it's already
+  /// computed by PTT-up and the provider hint adds zero perceived latency.
+  private var earlyLIDTask: Task<PTTLanguageIdentifier.Verdict, Never>?
+  /// Full-buffer decode kicked at commit; supplies the fallback transcript when the
+  /// provider's transcript comes back in a language the user doesn't speak.
+  private var fullLIDTask: Task<PTTLanguageIdentifier.Verdict, Never>?
+  /// Diagnostics of the last completed turn, for the `ptt_test_turn` automation action.
+  private var lastTurnDiagnostics: [String: String] = [:]
+  private static let maxTurnAudioBytes = 3_840_000  // 120 s @ 16 kHz s16le
+  private static let earlyLIDBytes = 48_000  // 1.5 s
   /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   private var lastTurnAt: Date?
@@ -285,7 +301,59 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       name: NSWorkspace.didWakeNotification, object: nil)
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
+    registerPTTLanguageTestAction()
+    // Load the multilingual language-ID model off the hot path so the first PTT turn's
+    // early verdict doesn't miss its window paying model-load latency.
+    if AssistantSettings.shared.voiceBaseLanguages.count > 1 {
+      Task.detached(priority: .utility) { await PTTLanguageIdentifier.shared.prewarm() }
+    }
     refreshAboutUserCard()
+  }
+
+  /// Headless E2E for the PTT language path: drives the REAL controller turn flow
+  /// (beginTurn → paced feedAudio → commitTurn → turn-done) with a PCM file, so the
+  /// early language ID, the provider hint, and the bubble fallback run exactly as a
+  /// real hold-to-talk. `omi-ctl action ptt_test_turn pcm=/tmp/q.pcm [timeout=30]`.
+  private func registerPTTLanguageTestAction() {
+    DesktopAutomationActionRegistry.shared.register(
+      name: "ptt_test_turn",
+      summary: "Drive a real PTT hub turn from a PCM16/16k mono file through the controller "
+        + "(language ID + provider hint + bubble fallback); returns turn diagnostics.",
+      params: ["pcm", "timeout"]
+    ) { [weak self] params in
+      guard let path = params["pcm"],
+        let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+      let timeout = Double(params["timeout"] ?? "") ?? 30
+      guard let self else { return ["error": "hub controller unavailable"] }
+      return await self.runHeadlessPTTTurn(pcm16k: data, timeout: timeout)
+    }
+  }
+
+  private func runHeadlessPTTTurn(pcm16k: Data, timeout: Double) async -> [String: String] {
+    ensureWarm()
+    guard await waitUntilActive(timeout: 15) else {
+      return ["error": "hub session did not become active (check sign-in / provider keys)"]
+    }
+    lastTurnDiagnostics = [:]
+    beginTurn()
+    // Pace the audio like real speech (100 ms chunks) so the mid-hold early language ID
+    // triggers on the same timeline as a real hold.
+    let chunkBytes = 3_200  // 100 ms @ 16 kHz s16le
+    var offset = 0
+    while offset < pcm16k.count {
+      let end = min(offset + chunkBytes, pcm16k.count)
+      feedAudio(pcm16k.subdata(in: offset..<end))
+      offset = end
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    commitTurn()
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if !lastTurnDiagnostics.isEmpty { return lastTurnDiagnostics }
+      try? await Task.sleep(nanoseconds: 200_000_000)
+    }
+    return ["error": "turn did not complete within \(Int(timeout))s"]
   }
 
   /// System woke from sleep — proactively replace a possibly-stale socket so the first PTT
@@ -397,7 +465,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
-    let instructions = RealtimeHubTools.systemInstruction(aboutUser: aboutUserCard)
+    let instructions = RealtimeHubTools.systemInstruction(
+      aboutUser: aboutUserCard,
+      userLanguages: AssistantSettings.shared.voiceBaseLanguages)
     let s = RealtimeHubSession(provider: provider, auth: auth, instructions: instructions, delegate: self)
     lastWarmAt = nil
     hubConnected = false
@@ -579,6 +649,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     audioReceivedThisTurn = false
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
+    turnEpoch += 1
+    turnAudio16k.removeAll(keepingCapacity: true)
+    earlyLIDTask = nil
+    fullLIDTask = nil
     lastTurnAt = Date()
     if bargeIn {
       pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
@@ -637,6 +711,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
   func feedAudio(_ pcm16k: Data) {
+    bufferTurnAudio(pcm16k)
     guard let s = session else {
       if bargeInReplacementInFlight {
         bargeInReplacementAudioBuffer.append(pcm16k)
@@ -644,6 +719,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       return
     }
     sendAudio(pcm16k, to: s)
+  }
+
+  /// Keep a local copy of the turn's audio and kick the early language-ID pass once
+  /// ~1.5 s has accumulated — it runs WHILE the user is still holding the key, so the
+  /// verdict is ready at PTT-up and hinting the provider costs zero perceived latency.
+  /// Skipped for single-language users (no identification needed to pick the hint).
+  private func bufferTurnAudio(_ pcm16k: Data) {
+    guard turnAudio16k.count < Self.maxTurnAudioBytes else { return }
+    turnAudio16k.append(pcm16k)
+    guard earlyLIDTask == nil, turnAudio16k.count >= Self.earlyLIDBytes else { return }
+    let candidates = AssistantSettings.shared.voiceBaseLanguages
+    guard candidates.count > 1 else { return }
+    let audio = Data(turnAudio16k.prefix(Self.earlyLIDBytes * 2))
+    earlyLIDTask = Task.detached(priority: .userInitiated) {
+      await PTTLanguageIdentifier.shared.identify(pcm16k: audio, candidates: candidates)
+    }
   }
 
   private func sendAudio(_ pcm16k: Data, to s: RealtimeHubSession) {
@@ -657,7 +748,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     responding = true
     // (The screen frame is sent at turn START — see beginTurn — so it has time to
     // upload/decode before the model answers. Nothing to attach here.)
-    guard session != nil else {
+    guard let s = session else {
       if bargeInReplacementInFlight {
         bargeInReplacementPendingCommit = true
       } else {
@@ -666,7 +757,48 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       }
       return
     }
-    session?.commitInputTurn()
+    let candidates = AssistantSettings.shared.voiceBaseLanguages
+    // Full-buffer decode for the bubble-fallback transcript (both providers). Runs during
+    // the seconds the model spends answering; consumed at turn-done, never blocks.
+    if !turnAudio16k.isEmpty, !candidates.isEmpty {
+      let audio = turnAudio16k
+      fullLIDTask = Task.detached(priority: .userInitiated) {
+        await PTTLanguageIdentifier.shared.identify(pcm16k: audio, candidates: candidates)
+      }
+    }
+    guard s.supportsInputTranscriptionLanguage, !candidates.isEmpty else {
+      s.commitInputTurn()
+      return
+    }
+    // Hint the provider's transcription with the identified language before committing.
+    // One configured language → hint it directly (no identification needed). Several →
+    // use the early mid-hold verdict, waiting at most 300 ms for a straggler (it's
+    // normally already done); no verdict in the user's set → no hint, provider decides.
+    let epoch = turnEpoch
+    let early = earlyLIDTask
+    Task { @MainActor [weak self] in
+      var hint: String? = candidates.count == 1 ? candidates[0] : nil
+      if hint == nil, let early {
+        hint = await Self.value(of: early, timeoutMs: 300)?.languageCode
+      }
+      guard let self, self.turnEpoch == epoch, let live = self.session, live === s else { return }
+      s.setInputTranscriptionLanguage(hint)
+      s.commitInputTurn()
+    }
+  }
+
+  /// Await a task's value with a deadline; nil when the deadline wins.
+  private static func value<T: Sendable>(of task: Task<T, Never>, timeoutMs: UInt64) async -> T? {
+    await withTaskGroup(of: T?.self) { group in
+      group.addTask { await task.value }
+      group.addTask {
+        try? await Task.sleep(nanoseconds: timeoutMs * 1_000_000)
+        return nil
+      }
+      let first = await group.next() ?? nil
+      group.cancelAll()
+      return first
+    }
   }
 
   /// Abandon the turn without committing (silent tap / cancel). Must leave NO open
@@ -1101,7 +1233,51 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // fire-and-forget so it never stalls the warm socket or the next PTT press.
     if !turnRecorded {
       turnRecorded = true
-      FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
+      let candidates = AssistantSettings.shared.voiceBaseLanguages
+      let fullTask = fullLIDTask
+      let provider = providerTag
+      Task { @MainActor [weak self] in
+        var userText = heard
+        var providerLang: String?
+        var usedLocal = false
+        var localTranscript: String?
+        var localLang: String?
+        // Bubble-language guard: the provider transcript is auto-detected per utterance
+        // and can come back in a language the user doesn't speak (Russian speech saved
+        // as an Italian bubble). When it does — or when it's empty — substitute the
+        // on-device transcript from the language-ID pass, but only if that transcript
+        // itself is confidently in one of the user's languages.
+        if !candidates.isEmpty, let fullTask {
+          providerLang =
+            heard.isEmpty ? nil : PTTLanguageIdentifier.detectLanguage(of: heard, candidates: [])
+          let mismatch = heard.isEmpty || (providerLang.map { !candidates.contains($0) } ?? false)
+          if mismatch {
+            // The decode started at commit and the reply takes seconds — normally long done.
+            let verdict = await Self.value(of: fullTask, timeoutMs: 1500)
+            localTranscript = verdict?.transcript
+            localLang = verdict?.languageCode
+            if let local = localTranscript, !local.isEmpty, localLang != nil {
+              log(
+                "RealtimeHub: provider transcript lang=\(providerLang ?? "none") outside user "
+                  + "languages \(candidates) — using local \(localLang ?? "?") transcript for chat"
+              )
+              userText = local
+              usedLocal = true
+            }
+          }
+        }
+        FloatingControlBarManager.shared.recordVoiceTurn(userText: userText, assistantText: reply)
+        self?.lastTurnDiagnostics = [
+          "provider": provider,
+          "provider_transcript": heard,
+          "provider_transcript_language": providerLang ?? "",
+          "saved_user_text": userText,
+          "used_local_transcript": usedLocal ? "true" : "false",
+          "local_transcript": localTranscript ?? "",
+          "local_language": localLang ?? "",
+          "assistant_reply": reply,
+        ]
+      }
     }
     exitVoiceUI()
   }
