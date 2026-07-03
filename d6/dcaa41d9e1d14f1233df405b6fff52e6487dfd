@@ -1,0 +1,21 @@
+backend/.gitignore
+  s_d9b279e6f46a50::t_744f1c8073f857 2-4,6
+  s_d9b279e6f46a50::t_1c7ec986b423e2 5
+  s_d9b279e6f46a50::t_beac0be7eada56 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d6dcaa41d9e1d14f1233df405b6fff52e6487dfd",
+  "prompts": {},
+  "sessions": {
+    "s_d9b279e6f46a50": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c954d140-dd18-484c-84c7-7e2bf1d146f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
