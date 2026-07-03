@@ -1495,15 +1495,18 @@ struct ImportConnectorSheet: View {
                 DismissButton(action: onDismiss)
             }
 
-            if connector.id == "chatgpt" || connector.id == "claude" {
-                memoryImportContent
-            } else {
-                connectorActionContent
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if connector.id == "chatgpt" || connector.id == "claude" {
+                        memoryImportContent
+                    } else {
+                        connectorActionContent
+                    }
+
+                    statusSection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            statusSection
-
-            Spacer(minLength: 0)
         }
         .padding(24)
         .background(OmiColors.backgroundPrimary)
