@@ -272,13 +272,26 @@ final class AICloneSendModeService: ObservableObject {
     handledIncomingKeys.insert(key)
     if handledIncomingKeys.count > 500 { handledIncomingKeys.removeAll() }
 
-    switch mode {
-    case .manual:
+    switch Self.action(for: mode, isPaused: isPaused) {
+    case .ignore:
       return
-    case .draftReview:
+    case .draft:
       generateDraft(for: entry.contact, persona: entry.persona, incoming: text)
-    case .autonomous:
+    case .autoSend:
       autoRespond(for: entry.contact, persona: entry.persona, incoming: text)
+    }
+  }
+
+  /// What an incoming message should trigger, given the contact's mode and the global kill
+  /// switch. Pure and side-effect-free so the safety-critical rule — Autonomous NEVER sends
+  /// while paused — is unit-testable in isolation.
+  enum IncomingAction: Equatable { case ignore, draft, autoSend }
+
+  nonisolated static func action(for mode: SendMode, isPaused: Bool) -> IncomingAction {
+    switch mode {
+    case .manual: return .ignore
+    case .draftReview: return .draft
+    case .autonomous: return isPaused ? .draft : .autoSend
     }
   }
 
