@@ -1,11 +1,14 @@
 use dioxus::prelude::*;
 
 use crate::app::Route;
+use crate::notification_history::NotificationEntry;
 use crate::sidecar::BackendStatus;
 
 #[component]
 pub fn Sidebar() -> Element {
     let backend_status: Signal<BackendStatus> = use_context();
+    let mut notif_history: Signal<Vec<NotificationEntry>> = use_context();
+    let mut notif_open = use_signal(|| false);
 
     let status_class = match *backend_status.read() {
         BackendStatus::Starting => "status-starting",
@@ -19,12 +22,59 @@ pub fn Sidebar() -> Element {
         BackendStatus::Error(e) => format!("Backend error: {e}"),
     };
 
+    let notif_count = notif_history.read().len();
+
     rsx! {
         nav { class: "sidebar",
-            // Brand
+            // Brand + notification bell
             div { class: "sidebar-brand",
                 span { class: "brand-logo", "O" }
                 span { class: "brand-text", "Omi" }
+                div { class: "notif-bell-container",
+                    button {
+                        class: "notif-bell-btn",
+                        title: "Notification history",
+                        onclick: move |_| {
+                            let cur = *notif_open.read();
+                            notif_open.set(!cur);
+                        },
+                        span { "🔔" }
+                        if notif_count > 0 {
+                            span { class: "notif-badge", "{notif_count}" }
+                        }
+                    }
+                    if *notif_open.read() {
+                        div { class: "notif-dropdown",
+                            div { class: "notif-dropdown-header",
+                                span { "Notifications" }
+                                if notif_count > 0 {
+                                    button {
+                                        class: "notif-clear-btn",
+                                        onclick: move |_| {
+                                            notif_history.write().clear();
+                                        },
+                                        "Clear"
+                                    }
+                                }
+                            }
+                            if notif_count == 0 {
+                                p { class: "notif-empty text-muted", "No notifications yet." }
+                            } else {
+                                div { class: "notif-list",
+                                    for entry in notif_history.read().iter().rev().take(20) {
+                                        div { class: "notif-item",
+                                            div { class: "notif-item-header",
+                                                span { class: "notif-item-title", "{entry.title}" }
+                                                span { class: "notif-item-time text-muted", "{entry.time_str()}" }
+                                            }
+                                            p { class: "notif-item-body", "{entry.body}" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Navigation links
