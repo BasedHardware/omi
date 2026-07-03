@@ -47,6 +47,7 @@ class DirectUse:
 
 DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
+    DirectUse('utils/llm/app_generator.py', 'OpenAI'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
@@ -59,6 +60,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/other/chat_file.py', 'openai.beta'),
     DirectUse('utils/other/chat_file.py', 'openai.files'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
+    DirectUse('utils/retrieval/tools/perplexity_tools.py', 'PERPLEXITY_API_KEY'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }

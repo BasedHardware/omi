@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
 from typing import Any
 
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
@@ -7,6 +9,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
+import pytest
 
 from utils.llm import clients, gateway_shadow
 from utils.llm import providers
@@ -252,3 +255,41 @@ def test_gateway_feature_mode_allows_acknowledged_direct_exception(monkeypatch):
     monkeypatch.delenv('K_SERVICE', raising=False)
 
     raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
+
+
+@pytest.mark.asyncio
+async def test_app_icon_generation_uses_legacy_provider_when_gateway_feature_mode_off(monkeypatch):
+    from utils.llm import app_generator
+
+    monkeypatch.setattr(app_generator, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.setattr(app_generator, '_generate_app_icon_via_openai', lambda _prompt: b'legacy-image')
+
+    def fail_gateway(**_kwargs):
+        raise AssertionError('gateway image generation should not run with feature mode off')
+
+    monkeypatch.setattr(app_generator, 'generate_image_via_gateway', fail_gateway)
+
+    assert await app_generator.generate_app_icon('Name', 'Description', 'other') == b'legacy-image'
+
+
+@pytest.mark.asyncio
+async def test_perplexity_tool_uses_legacy_provider_when_gateway_feature_mode_off(monkeypatch):
+    module_path = Path(__file__).parents[2] / 'utils' / 'retrieval' / 'tools' / 'perplexity_tools.py'
+    spec = importlib.util.spec_from_file_location('perplexity_tools_under_test', module_path)
+    assert spec is not None and spec.loader is not None
+    perplexity_tools = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(perplexity_tools)
+
+    monkeypatch.setattr(perplexity_tools, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.setattr(perplexity_tools, '_perplexity_legacy_search', lambda _query: _async_return('legacy-search'))
+    monkeypatch.setattr(perplexity_tools, '_perplexity_gateway_search', lambda _query: _raise_gateway_called())
+
+    assert await perplexity_tools.perplexity_web_search_tool.coroutine('query') == 'legacy-search'
+
+
+async def _async_return(value):
+    return value
+
+
+async def _raise_gateway_called():
+    raise AssertionError('gateway web search should not run with feature mode off')
