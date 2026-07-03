@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from database._client import get_firestore_client
 
@@ -35,7 +35,8 @@ def _as_string(value: Any) -> Optional[str]:
 def _as_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    narrowed: list[object] = cast(list[object], value)
+    return [item.strip() for item in narrowed if isinstance(item, str) and item.strip()]
 
 
 def _default_policy() -> dict[str, Any]:
@@ -82,19 +83,23 @@ def _normalize_policy(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _applies_to_platform(policy: dict[str, Any], platform: str) -> bool:
-    platforms = policy.get("platforms") or []
-    return not platforms or platform in platforms
+    raw_platforms = policy.get("platforms")
+    platforms: list[object] = cast(list[object], raw_platforms) if isinstance(raw_platforms, list) else []
+    if not platforms:
+        return True
+    return platform in [p for p in platforms if isinstance(p, str)]
 
 
 def get_desktop_update_policy(
     current_build: Optional[int], platform: str = "macos", *, firestore_client: Any = None
 ) -> dict[str, Any]:
-    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client: Any = firestore_client if firestore_client is not None else get_firestore_client()
     doc = client.collection("desktop_update_policy").document("current").get()
     if not getattr(doc, "exists", False):
         return _default_policy()
 
-    raw = doc.to_dict() or {}
+    raw_doc: object = doc.to_dict()
+    raw: dict[str, Any] = cast(dict[str, Any], raw_doc) if isinstance(raw_doc, dict) else {}
     policy = _normalize_policy(raw)
     if not _applies_to_platform(policy, platform):
         return _default_policy()

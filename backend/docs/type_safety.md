@@ -30,6 +30,7 @@ The first required surface covers migration-sensitive gateway, config, memory re
 - adjacent memory boundaries:
   - `database/document_ids.py`
   - `database/firestore_cache_metrics.py`
+  - `database/desktop_update_policy.py`
   - `database/memory_app_key_grants.py`
   - `database/memory_imports.py`
   - `database/memory_collections.py`
