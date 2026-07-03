@@ -261,15 +261,26 @@ async def _attempt_provider(
 
 
 def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
+    route = selected_serving_route(resolved_route)
     provider_request = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),
         'stream': False,
     }
+    _apply_provider_options(provider_request, route.provider_options)
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
     return provider_request
+
+
+def _apply_provider_options(provider_request: dict[str, Any], provider_options: Mapping[str, Any]) -> None:
+    extra_body = provider_options.get('extra_body')
+    if isinstance(extra_body, Mapping):
+        provider_request.update(dict(extra_body))
+    for key, value in provider_options.items():
+        if key != 'extra_body':
+            provider_request[key] = value
 
 
 def _executor_result(

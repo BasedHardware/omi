@@ -68,7 +68,7 @@ model_config_features:
     pinned:
       - fair_use
   gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm can centrally switch Omi-managed feature traffic to the generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; BYOK remains direct user-key routing.
+  migration_status: get_llm can centrally switch Omi-managed feature traffic to the generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; BYOK remains direct user-key routing outside the gateway flip and fails closed during the gateway flip unless explicitly acknowledged; direct exception surfaces fail closed during the gateway flip unless explicitly acknowledged.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
@@ -85,7 +85,7 @@ surfaces:
     current_provider_model: anthropic/chat_agent
     request_shape: streaming, native tool calling, server-side web search
     gateway_lane_capability_needed: anthropic provider adapter with tools enabled on omi:auto:chat-agent
-    migration_status: gateway_capability_implemented; legacy native stream remains serving until the dev gateway flip validates equivalent streaming behavior
+    migration_status: inventoried_explicit_direct_anthropic_stream_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: perplexity_web_search_tool
     code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
@@ -106,21 +106,21 @@ surfaces:
     current_provider_model: openai/gpt-4.1
     request_shape: streaming vision chat completion
     gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
-    migration_status: inventoried_explicit_direct_file_lifecycle_exception; not silently missed during dev flip
+    migration_status: inventoried_explicit_direct_file_lifecycle_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: file_chat_assistants
     code_path: backend/utils/other/chat_file.py:FileChatTool
     current_provider_model: openai/gpt-4.1 with Assistants, Threads, Files, File Search
     request_shape: file upload, assistants, file_search, streaming run deltas
     gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
-    migration_status: inventoried_explicit_direct_file_lifecycle_exception; not silently missed during dev flip
+    migration_status: inventoried_explicit_direct_file_lifecycle_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: omni_realtime_relay
     code_path: backend/routers/omni_relay.py
     current_provider_model: openai realtime or gemini live selected by client query
     request_shape: realtime websocket relay
     gateway_lane_capability_needed: gateway-owned realtime websocket relay
-    migration_status: inventoried_explicit_realtime_exception; prod behavior unchanged
+    migration_status: inventoried_explicit_realtime_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged; prod behavior unchanged
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: fair_use_classifier
     code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose

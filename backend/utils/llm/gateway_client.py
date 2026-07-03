@@ -20,6 +20,8 @@ DEFAULT_LLM_GATEWAY_URL = 'http://127.0.0.1:9080'
 LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
 LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
+LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
+LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
 LLM_GATEWAY_CALLER = 'backend'
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
@@ -49,7 +51,42 @@ def feature_auto_lane_id(feature: str) -> str:
 
 
 def should_route_features_through_gateway() -> bool:
-    return os.getenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes', 'gateway'}
+    enabled = os.getenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes', 'gateway'}
+    if not enabled:
+        return False
+    if _is_local_or_dev_runtime():
+        return True
+    if os.getenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, '').strip().lower() not in {'1', 'true', 'yes'}:
+        raise RuntimeError(
+            f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway is blocked outside dev/local unless '
+            f'{LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR}=true is set'
+        )
+    if not os.getenv(LLM_GATEWAY_URL_ENV_VAR, '').strip():
+        raise RuntimeError(
+            f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway outside dev/local requires {LLM_GATEWAY_URL_ENV_VAR}'
+        )
+    return True
+
+
+def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> None:
+    if not should_route_features_through_gateway():
+        return
+    if os.getenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}:
+        return
+    raise RuntimeError(
+        f'{surface} is a direct provider LLM surface and is blocked while '
+        f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
+        f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
+    )
+
+
+def _is_local_or_dev_runtime() -> bool:
+    explicit_stage = os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or os.getenv('APP_ENV')
+    if explicit_stage and explicit_stage.strip().lower() in {'prod', 'production'}:
+        return False
+    if os.getenv('K_SERVICE') and not explicit_stage:
+        return False
+    return True
 
 
 def invoke_chat_structured_gateway(

@@ -11,7 +11,15 @@ from langchain_core.runnables import Runnable
 from utils.llm import clients, gateway_shadow
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, get_llm_gateway_base_url
-from utils.llm.gateway_client import LLM_GATEWAY_FEATURE_MODE_ENV_VAR, feature_auto_lane_id
+from utils.llm.gateway_client import (
+    LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
+    LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
+    LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
+    LLM_GATEWAY_URL_ENV_VAR,
+    feature_auto_lane_id,
+    raise_if_gateway_feature_mode_blocks_direct_model_surface,
+    should_route_features_through_gateway,
+)
 from utils.llm.clients import get_llm_gateway_chat_structured
 
 
@@ -156,3 +164,65 @@ def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
 
     assert result.content == 'gateway response'
     assert captured == {'lane_id': feature_auto_lane_id('conv_discard'), 'streaming': True}
+
+
+def test_get_llm_feature_gateway_mode_blocks_byok_direct_bypass(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.delenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-test-byok' if provider == 'openai' else None)
+
+    try:
+        clients.get_llm('conv_discard')
+    except RuntimeError as exc:
+        assert 'get_llm.conv_discard.byok' in str(exc)
+    else:
+        raise AssertionError('expected gateway mode to block BYOK direct bypass')
+
+
+def test_gateway_feature_mode_is_blocked_in_prod_without_explicit_allow(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('K_SERVICE', 'omi-backend')
+    monkeypatch.delenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, raising=False)
+
+    try:
+        should_route_features_through_gateway()
+    except RuntimeError as exc:
+        assert LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected prod gateway feature mode to require explicit allow env')
+
+
+def test_gateway_feature_mode_in_prod_requires_gateway_url(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR, 'true')
+    monkeypatch.setenv('K_SERVICE', 'omi-backend')
+    monkeypatch.delenv(LLM_GATEWAY_URL_ENV_VAR, raising=False)
+
+    try:
+        should_route_features_through_gateway()
+    except RuntimeError as exc:
+        assert LLM_GATEWAY_URL_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected prod gateway feature mode to require gateway url')
+
+
+def test_gateway_feature_mode_blocks_direct_exception_surfaces(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.delenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    try:
+        raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
+    except RuntimeError as exc:
+        assert 'file_chat.openai_files' in str(exc)
+    else:
+        raise AssertionError('expected direct model surface to be blocked')
+
+
+def test_gateway_feature_mode_allows_acknowledged_direct_exception(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, 'true')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')

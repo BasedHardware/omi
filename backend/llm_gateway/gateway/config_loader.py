@@ -188,6 +188,7 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
             }
         )
         primary = {'provider': provider, 'model': _provider_model_name(provider, model)}
+        provider_options = get_route_options(feature, model, provider)
         artifacts.append(
             {
                 'route_artifact_id': route_id,
@@ -195,6 +196,7 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
                 'surface': 'openai.chat_completions',
                 'primary': primary,
                 'fallbacks': [],
+                'provider_options': provider_options,
                 'timeouts': {'request_ms': 120000 if capabilities['streaming'] else 30000},
                 'retry': {'max_attempts': 1},
                 'capabilities': capabilities,
@@ -235,11 +237,12 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
 
 def _capabilities_for_feature(feature: str) -> dict[str, Any]:
     structured_output = 'json_schema' if is_structured_output_feature(feature) else 'none'
+    provider = get_provider(feature)
     return {
         'text_input': True,
-        'streaming': True,
+        'streaming': provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
         'structured_output': structured_output,
-        'tools': feature in {'chat_agent', 'memory_l2'},
+        'tools': feature == 'memory_l2',
     }
 
 

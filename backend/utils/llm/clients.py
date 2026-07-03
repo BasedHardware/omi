@@ -62,6 +62,7 @@ try:
     from utils.llm.gateway_client import (
         CHAT_STRUCTURED_AUTO_LANE_ID,
         feature_auto_lane_id,
+        raise_if_gateway_feature_mode_blocks_direct_model_surface,
         should_route_features_through_gateway,
     )
 except ImportError:
@@ -72,6 +73,9 @@ except ImportError:
 
     def should_route_features_through_gateway() -> bool:
         return False
+
+    def raise_if_gateway_feature_mode_blocks_direct_model_surface(_surface: str) -> None:
+        return None
 
 
 try:
@@ -345,6 +349,9 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             logger.debug('BYOK QoS upgrade: feature=%s %s/%s→%s/%s', feature, model, provider, byok_model, byok_prov)
             model, provider = byok_model, byok_prov
             byok_key = byok_key_for_profile
+
+    if byok_key and gateway_feature_mode:
+        raise_if_gateway_feature_mode_blocks_direct_model_surface(f'get_llm.{feature}.byok')
 
     if byok_key:
         byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
