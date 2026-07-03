@@ -124,7 +124,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 ## Running Backend Test Preflight
 
-Before running the full backend test suite, use the preflight script for your shell. It checks the Python test runner, key packages, optional service environment variables, Redis reachability, and `test.sh` file references.
+Before running the full backend test suite, use the preflight script for your shell. It checks the Python test runner and version, key packages, optional service environment variables, Redis reachability, backend unit-test discovery, and OpenAPI export startup.
 
 macOS/Linux:
 ```bash

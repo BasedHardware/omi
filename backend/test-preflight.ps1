@@ -8,7 +8,9 @@ Push-Location $RootDir
 $PassCount = 0
 $WarnCount = 0
 $FailCount = 0
+$ExpectedPythonVersion = if (Test-Path ".python-version") { (Get-Content ".python-version" -Raw).Trim() } else { "" }
 $Script:PythonLauncher = $null
+$Script:PythonLauncherName = $null
 $Script:PythonLauncherArgs = @()
 
 function Add-Pass {
@@ -93,6 +95,7 @@ foreach ($candidate in $pythonCandidates) {
     }
     if (Test-PythonCandidate $candidate @("-m", "pytest", "--version")) {
         $Script:PythonLauncher = $candidate.Command
+        $Script:PythonLauncherName = $candidate.Name
         $Script:PythonLauncherArgs = $candidate.Args
         break
     }
@@ -100,12 +103,25 @@ foreach ($candidate in $pythonCandidates) {
 
 if (-not $Script:PythonLauncher -and $firstRunnablePython) {
     $Script:PythonLauncher = $firstRunnablePython.Command
+    $Script:PythonLauncherName = $firstRunnablePython.Name
     $Script:PythonLauncherArgs = $firstRunnablePython.Args
 }
 
 if ($Script:PythonLauncher) {
-    $pythonVersion = Invoke-SelectedPython @("--version") 2>&1
-    Add-Pass "python $pythonVersion"
+    if (-not $Script:PythonLauncherName) {
+        $Script:PythonLauncherName = $Script:PythonLauncher
+    }
+    $pythonVersionOutput = Invoke-SelectedPython @("--version") 2>&1
+    $pythonVersion = (($pythonVersionOutput -join " ").Trim() -replace "^Python\s+", "")
+    Add-Pass "$Script:PythonLauncherName $pythonVersion"
+    if ($ExpectedPythonVersion) {
+        if ($pythonVersion -eq $ExpectedPythonVersion) {
+            Add-Pass "Python version matches .python-version ($ExpectedPythonVersion)"
+        } else {
+            Add-Fail "Python version mismatch: expected $ExpectedPythonVersion from .python-version, got $pythonVersion from $Script:PythonLauncherName"
+            Write-Host "  -> Run: .\scripts\sync-python-deps.ps1, then `$env:PYTHON = '.\.venv\Scripts\python.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1" -ForegroundColor Yellow
+        }
+    }
 } else {
     Add-Fail "python not found"
 }
@@ -131,7 +147,7 @@ Write-Host ""
 Write-Host "Python packages:"
 
 $missingPackages = @()
-foreach ($pkg in @("pydantic", "fastapi", "firebase_admin", "google.cloud.firestore", "redis", "deepgram_sdk", "openpipe")) {
+foreach ($pkg in @("pydantic", "fastapi", "firebase_admin", "google.cloud.firestore", "redis", "deepgram_sdk", "openpipe", "pytest_asyncio", "fake_firestore", "fakeredis")) {
     if (-not $Script:PythonLauncher) {
         $missingPackages += $pkg
         Add-Warn "$pkg not checked because python is missing"
@@ -148,7 +164,8 @@ foreach ($pkg in @("pydantic", "fastapi", "firebase_admin", "google.cloud.firest
 }
 
 if ($missingPackages.Count -gt 0) {
-    Write-Host "  -> Run: pip install -r requirements.txt" -ForegroundColor Yellow
+    $pythonPip = if ($Script:PythonLauncherName) { $Script:PythonLauncherName } else { "python" }
+    Write-Host "  -> Run: $pythonPip -m pip install -r requirements.txt" -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -215,24 +232,28 @@ if ($unitTests.Count -gt 0) {
     Add-Fail "No unit test files found in tests/unit/"
 }
 
-$missingTests = @()
-if (Test-Path "test.sh") {
-    foreach ($line in Get-Content "test.sh") {
-        if ($line -match '^pytest\s+(tests/\S+)') {
-            $testFile = $Matches[1]
-            if (-not (Test-Path $testFile)) {
-                $missingTests += $testFile
-            }
-        }
-    }
-
-    if ($missingTests.Count -gt 0) {
-        Add-Fail "test.sh references missing files: $($missingTests -join ', ')"
+$selectedTestsPath = Join-Path ([System.IO.Path]::GetTempPath()) "backend-unit-tests-preflight.txt"
+if ($Script:PythonLauncher) {
+    Invoke-SelectedPython @("scripts/select_backend_unit_tests.py", "--all") > $selectedTestsPath
+    if ($LASTEXITCODE -eq 0) {
+        $selectedTestCount = @(Get-Content $selectedTestsPath -ErrorAction SilentlyContinue).Count
+        Add-Pass "$selectedTestCount backend unit test files selected"
     } else {
-        Add-Pass "All test.sh references resolve to existing files"
+        Add-Fail "backend unit test selection failed"
     }
 } else {
-    Add-Fail "test.sh not found"
+    Add-Fail "backend unit test selection skipped because python is missing"
+}
+
+if ($Script:PythonLauncher) {
+    Invoke-SelectedPython @("scripts/export_openapi.py", "--help") *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Add-Pass "OpenAPI export script is runnable"
+    } else {
+        Add-Fail "OpenAPI export script failed to start"
+    }
+} else {
+    Add-Fail "OpenAPI export script check skipped because python is missing"
 }
 
 Write-Host ""
