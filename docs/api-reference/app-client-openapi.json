@@ -7471,6 +7471,45 @@
         "title": "ExternalIntegrationConversationSource",
         "type": "string"
       },
+      "FairUseDailyGenerationsBudgetResponse": {
+        "properties": {
+          "daily_limit_ms": {
+            "title": "Daily Limit Ms",
+            "type": "integer"
+          },
+          "exhausted": {
+            "title": "Exhausted",
+            "type": "boolean"
+          },
+          "remaining_ms": {
+            "title": "Remaining Ms",
+            "type": "integer"
+          },
+          "resets_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resets At"
+          },
+          "used_ms": {
+            "title": "Used Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_limit_ms",
+          "used_ms",
+          "remaining_ms",
+          "exhausted"
+        ],
+        "title": "FairUseDailyGenerationsBudgetResponse",
+        "type": "object"
+      },
       "FairUseLimitsResponse": {
         "properties": {
           "daily_hours": {
@@ -7501,9 +7540,7 @@
             "type": "string"
           },
           "dg_budget": {
-            "additionalProperties": true,
-            "title": "Dg Budget",
-            "type": "object"
+            "$ref": "#/components/schemas/FairUseDailyGenerationsBudgetResponse"
           },
           "limits": {
             "$ref": "#/components/schemas/FairUseLimitsResponse"
