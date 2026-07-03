@@ -1,0 +1,3 @@
+{
+    "change": "Voice mode now knows your git state — branch, recent commits, and uncommitted changes are injected into the system prompt so you can ask 'what am I working on?' without explaining context"
+}
