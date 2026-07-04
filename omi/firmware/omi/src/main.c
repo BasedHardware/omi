@@ -246,6 +246,8 @@ int main(void)
     }
 
     (void) lsm6dsl_time_boot_adjust_rtc();
+    /* IMU only needed at boot + before power-down; shut it off to save power. */
+    lsm6dsl_power_off();
 
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system
