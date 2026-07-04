@@ -90,10 +90,10 @@ class MainActivity: FlutterActivity() {
     override fun onDestroy() {
         if (isFinishing) {
             OmiBleManager.isFlutterAlive = false
-            // With Background Mode on, the foreground service keeps the pendant connected and
-            // transcribing after a task close. With it off (default), tear it down so the device
-            // disconnects when the app is closed.
-            if (!OmiBleForegroundService.isBackgroundModeEnabled(this)) {
+            // Background Mode and Transcribe Later both need the foreground service to keep
+            // the device connected/capturing after a task close. With both off (default),
+            // tear it down so the device disconnects when the app is closed.
+            if (!OmiBleForegroundService.isPersistentModeEnabled(this)) {
                 OmiBleForegroundService.stopService(this)
             }
         }
