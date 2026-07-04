@@ -119,6 +119,26 @@ export interface RefreshTokenMessage {
   ownerId?: string;
 }
 
+export interface RecordSurfaceTurnMessage extends ProtocolEnvelope {
+  type: "record_surface_turn";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  userText: string;
+  assistantText: string;
+  origin: string;
+  interrupted?: boolean;
+  idempotencyKey?: string;
+}
+
+export interface GetVoiceSeedContextMessage extends ProtocolEnvelope {
+  type: "get_voice_seed_context";
+  conversationId?: string;
+  surfaceKind?: string;
+  externalRefKind?: string;
+  externalRefId?: string;
+}
+
 export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
@@ -129,6 +149,8 @@ export type InboundMessage =
   | InvalidateSessionMessage
   | ClearOwnerStateMessage
   | ImportLegacyMainChatSessionsMessage
+  | RecordSurfaceTurnMessage
+  | GetVoiceSeedContextMessage
   | AuthenticateMessage
   | WarmupMessage
   | RefreshTokenMessage;
@@ -266,6 +288,27 @@ export interface ControlToolResultMessage extends OutboundEnvelope {
   result: string;
 }
 
+export interface TurnRecordedMessage extends OutboundEnvelope {
+  type: "turn_recorded";
+  conversationId: string;
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  userText: string;
+  assistantText: string;
+  origin: string;
+  interrupted: boolean;
+  idempotencyKey?: string;
+  userTurnId?: string;
+  assistantTurnId?: string;
+}
+
+export interface VoiceSeedContextMessage extends OutboundEnvelope {
+  type: "voice_seed_context";
+  conversationId: string;
+  context: string;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -278,7 +321,9 @@ export type OutboundMessage =
   | AuthRequiredMessage
   | AuthSuccessMessage
   | CancelAckMessage
-  | ControlToolResultMessage;
+  | ControlToolResultMessage
+  | TurnRecordedMessage
+  | VoiceSeedContextMessage;
 
 export function requestIdFor(message: ProtocolEnvelope & { id?: string }): string | undefined {
   return message.requestId ?? message.id;

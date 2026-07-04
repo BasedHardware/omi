@@ -24,12 +24,15 @@ import {
   appendConversationTurn,
   conversationIdForSession,
   importConversationTurnsForSurface,
+  recordSurfaceTurn as persistSurfaceTurn,
   type ConversationTurnImportEntry,
+  type RecordSurfaceTurnResult,
 } from "./conversation-turns.js";
 import {
   acknowledgeCompletionDelta,
   assembleTurnContext,
   bindingCarriesNativeHistory,
+  getVoiceSeedContext,
 } from "./turn-context.js";
 import type {
   AdapterBinding,
@@ -1392,6 +1395,38 @@ export class AgentRuntimeKernel {
       turns: input.turns,
       nowMs: () => Date.now(),
     });
+  }
+
+  recordSurfaceTurn(input: {
+    ownerId: string;
+    surfaceRef: SurfaceRef;
+    userText: string;
+    assistantText: string;
+    origin: string;
+    interrupted?: boolean;
+    idempotencyKey?: string;
+  }): RecordSurfaceTurnResult {
+    return this.withTransaction(() =>
+      persistSurfaceTurn(this.store, {
+        ...input,
+        nowMs: Date.now(),
+      }),
+    );
+  }
+
+  getVoiceSeedContext(input: { conversationId: string }): string {
+    return getVoiceSeedContext(this.store, input.conversationId);
+  }
+
+  getVoiceSeedContextForSurface(input: { ownerId: string; surfaceRef: SurfaceRef }): {
+    conversationId: string;
+    context: string;
+  } {
+    const resolved = resolveSurfaceSession(this.store, input, () => Date.now());
+    return {
+      conversationId: resolved.conversationId,
+      context: getVoiceSeedContext(this.store, resolved.conversationId),
+    };
   }
 
   clearOwnerState(ownerId: string): { invalidatedBindingIds: string[] } {

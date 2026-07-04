@@ -2842,6 +2842,15 @@ class FloatingControlBarManager {
         presentation: QueryPresentation,
         logLabel: String
     ) async {
+        var topLevelSections: [String] = []
+        let kernelSeed = await kernelVoiceSeedContext()
+        if !kernelSeed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            topLevelSections.append(kernelSeed)
+        }
+        let floatingAgents = floatingAgentStatusContext()
+        if !floatingAgents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            topLevelSections.append(floatingAgents)
+        }
         let decision = await AgentDelegationResolver.shared.resolve(
             .init(
                 surface: .floatingText,
@@ -2850,7 +2859,7 @@ class FloatingControlBarManager {
                 proposedTitle: proposedTitle,
                 proposedAck: proposedAck,
                 directedProvider: directedProvider,
-                topLevelContext: topLevelVoiceContinuityContext(),
+                topLevelContext: topLevelSections.joined(separator: "\n\n"),
                 agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
                 explicitDelegationRequested: explicitDelegationRequested
             )
@@ -3249,38 +3258,41 @@ class FloatingControlBarManager {
         mostRecentNotificationID = notification.id
     }
 
-    /// Show the user's spoken question in the main chat history the instant its
-    /// transcript is known — before the reply is generated — so a voice/PTT question
-    /// appears on the home-page chat immediately, the same as a typed message. Returns
-    /// the bubble's id; the caller keeps it for THIS turn and passes it back to
-    /// `recordVoiceTurn`/`recordVoiceAgentHandoff` for reconciliation. Nil if not set up.
-    func beginVoiceUserMessage(userText: String) -> String? {
-        historyChatProvider?.beginVoiceUserMessage(userText: userText)?.id
+    func mainChatSurfaceReference() -> AgentSurfaceReference {
+        historyChatProvider?.mainChatSurfaceReference()
+            ?? .mainChat(chatId: "default")
     }
 
-    /// Record a completed realtime-hub voice turn into the main chat history (+ backend
-    /// sync) via the shared history provider — the same provider notifications use. The
-    /// hub plays its own audio and never routes through the query path, so this is the
-    /// only way voice turns reach chat history. No-op if the bar isn't set up yet.
-    /// `earlyUserMessageId` reconciles this turn's early bubble (see beginVoiceUserMessage).
-    func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil) {
-        historyChatProvider?.recordVoiceTurn(
-            userText: userText, assistantText: assistantText, earlyUserMessageId: earlyUserMessageId)
+    func kernelVoiceSeedContext() async -> String {
+        guard let provider = historyChatProvider else { return "" }
+        return await provider.fetchKernelVoiceSeedContext(surface: provider.mainChatSurfaceReference())
     }
 
-    func recordVoiceAgentHandoff(
-        userText: String, agentTitle: String, agentBrief: String, earlyUserMessageId: String? = nil
-    ) {
-        let title = agentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let brief = agentBrief.trimmingCharacters(in: .whitespacesAndNewlines)
-        let assistantText = "Started background agent\(title.isEmpty ? "" : " \"\(title)\"")\(brief.isEmpty ? "." : " for: \(brief)")"
-        historyChatProvider?.recordCompletedTurn(
+    func recordSurfaceTurn(
+        surface: AgentSurfaceReference,
+        userText: String,
+        assistantText: String,
+        origin: String = "realtime_voice",
+        interrupted: Bool = false,
+        idempotencyKey: String? = nil
+    ) async {
+        await historyChatProvider?.recordSurfaceTurnViaKernel(
+            surface: surface,
             userText: userText,
             assistantText: assistantText,
-            logLabel: "voice_agent_handoff",
-            messageSource: "realtime_voice",
-            earlyUserMessageId: earlyUserMessageId
+            origin: origin,
+            interrupted: interrupted,
+            idempotencyKey: idempotencyKey
         )
+    }
+
+    func floatingAgentStatusContext() -> String {
+        guard !AgentPillsManager.shared.pills.isEmpty else { return "" }
+        let floatingStatus = AgentPillsManager.shared.statusSummary()
+        return """
+        Recent floating background agents:
+        \(floatingStatus)
+        """
     }
 
     func recordAgentArtifactCompletion(
@@ -3319,24 +3331,6 @@ class FloatingControlBarManager {
         )
         let visibleMessage = historyMessage ?? ChatMessage(text: messageText, sender: .ai, resources: resources)
         deliverAgentArtifactCompletionToFloatingSurface(visibleMessage)
-    }
-
-    func topLevelVoiceContinuityContext() -> String {
-        var sections: [String] = []
-        if let history = historyChatProvider?.buildTopLevelVoiceContinuityContext(),
-           !history.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append(history)
-        }
-        // Use a stable signal (pills.isEmpty) rather than parsing a
-        // human-readable English substring from statusSummary().
-        if !AgentPillsManager.shared.pills.isEmpty {
-            let floatingStatus = AgentPillsManager.shared.statusSummary()
-            sections.append("""
-            Recent floating background agents:
-            \(floatingStatus)
-            """)
-        }
-        return sections.joined(separator: "\n\n")
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {

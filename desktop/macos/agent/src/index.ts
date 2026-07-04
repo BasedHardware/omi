@@ -44,6 +44,8 @@ import type {
   ProtocolVersion,
   WarmupMessage,
   RefreshTokenMessage,
+  RecordSurfaceTurnMessage,
+  GetVoiceSeedContextMessage,
   AuthMethod,
 } from "./protocol.js";
 import { requestIdFor } from "./protocol.js";
@@ -1392,6 +1394,76 @@ async function main(): Promise<void> {
             .filter((turn): turn is NonNullable<typeof turn> => turn !== null),
         });
         logErr(`Imported ${imported} conversation turn(s) for ${ownerId}/${surfaceKind}`);
+        break;
+      }
+
+      case "record_surface_turn": {
+        const record = msg as RecordSurfaceTurnMessage;
+        const ownerId = record.ownerId?.trim() || currentOwnerId;
+        const surfaceKind = typeof record.surfaceKind === "string" ? record.surfaceKind : "";
+        const externalRefKind = typeof record.externalRefKind === "string" ? record.externalRefKind : "";
+        const externalRefId = typeof record.externalRefId === "string" ? record.externalRefId : "";
+        const userText = typeof record.userText === "string" ? record.userText : "";
+        const assistantText = typeof record.assistantText === "string" ? record.assistantText : "";
+        const origin = typeof record.origin === "string" ? record.origin : "surface";
+        const result = kernel.recordSurfaceTurn({
+          ownerId,
+          surfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          userText,
+          assistantText,
+          origin,
+          interrupted: record.interrupted === true,
+          idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
+        });
+        if (result.recorded) {
+          send({
+            type: "turn_recorded",
+            protocolVersion: record.protocolVersion,
+            requestId: record.requestId,
+            clientId: record.clientId,
+            conversationId: result.conversationId,
+            surfaceKind,
+            externalRefKind,
+            externalRefId,
+            userText: userText.trim(),
+            assistantText: assistantText.trim(),
+            origin,
+            interrupted: record.interrupted === true,
+            idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
+            userTurnId: result.userTurn?.turnId,
+            assistantTurnId: result.assistantTurn?.turnId,
+          });
+        }
+        break;
+      }
+
+      case "get_voice_seed_context": {
+        const seed = msg as GetVoiceSeedContextMessage;
+        const ownerId = seed.ownerId?.trim() || currentOwnerId;
+        const requestId = seed.protocolVersion === 2 ? seed.requestId?.trim() : requestIdFor(seed);
+        let conversationId = typeof seed.conversationId === "string" ? seed.conversationId : "";
+        let context = "";
+        if (conversationId) {
+          context = kernel.getVoiceSeedContext({ conversationId });
+        } else {
+          const surfaceKind = typeof seed.surfaceKind === "string" ? seed.surfaceKind : "main_chat";
+          const externalRefKind = typeof seed.externalRefKind === "string" ? seed.externalRefKind : "chat";
+          const externalRefId = typeof seed.externalRefId === "string" ? seed.externalRefId : "default";
+          const resolved = kernel.getVoiceSeedContextForSurface({
+            ownerId,
+            surfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          });
+          conversationId = resolved.conversationId;
+          context = resolved.context;
+        }
+        send({
+          type: "voice_seed_context",
+          protocolVersion: seed.protocolVersion,
+          requestId,
+          clientId: seed.clientId,
+          conversationId,
+          context,
+        });
         break;
       }
 

@@ -43,6 +43,8 @@ actor AgentRuntimeProcess {
       case authSuccess
       case cancelAck
       case controlToolResult
+      case turnRecorded
+      case voiceSeedContext
       case unknown(String)
     }
 
@@ -87,6 +89,8 @@ actor AgentRuntimeProcess {
       case "auth_success": return .authSuccess
       case "cancel_ack": return .cancelAck
       case "control_tool_result": return .controlToolResult
+      case "turn_recorded": return .turnRecorded
+      case "voice_seed_context": return .voiceSeedContext
       default: return .unknown(type)
       }
     }
@@ -120,6 +124,28 @@ actor AgentRuntimeProcess {
     let continuation: CheckedContinuation<String, Error>
   }
 
+  private struct ActiveVoiceSeedRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<(conversationId: String, context: String), Error>
+  }
+
+  struct KernelTurnRecorded: Sendable {
+    let conversationId: String
+    let surfaceKind: String
+    let externalRefKind: String
+    let externalRefId: String
+    let userText: String
+    let assistantText: String
+    let origin: String
+    let interrupted: Bool
+    let idempotencyKey: String?
+    let userTurnId: String?
+    let assistantTurnId: String?
+  }
+
+  typealias TurnRecordedHandler = @Sendable (KernelTurnRecorded) -> Void
+
   private var process: Process?
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
@@ -131,6 +157,8 @@ actor AgentRuntimeProcess {
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
+  private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
+  private var turnRecordedHandlers: [TurnRecordedHandler] = []
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
@@ -294,6 +322,78 @@ actor AgentRuntimeProcess {
       dict["ownerId"] = ownerId
     }
     sendJson(dict)
+  }
+
+  func setTurnRecordedHandlers(_ handlers: [TurnRecordedHandler]) {
+    turnRecordedHandlers = handlers
+  }
+
+  func addTurnRecordedHandler(_ handler: @escaping TurnRecordedHandler) {
+    turnRecordedHandlers.append(handler)
+  }
+
+  func recordSurfaceTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    interrupted: Bool = false,
+    idempotencyKey: String? = nil
+  ) {
+    var dict: [String: Any] = [
+      "type": "record_surface_turn",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "userText": userText,
+      "assistantText": assistantText,
+      "origin": origin,
+      "interrupted": interrupted,
+    ]
+    if let idempotencyKey, !idempotencyKey.isEmpty {
+      dict["idempotencyKey"] = idempotencyKey
+    }
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func getVoiceSeedContext(
+    clientId: String,
+    harnessMode: String,
+    surface: AgentSurfaceReference
+  ) async throws -> (conversationId: String, context: String) {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeVoiceSeedRequests[requestKey] = ActiveVoiceSeedRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "get_voice_seed_context",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      let sent = sendJson(dict)
+      if !sent, let request = activeVoiceSeedRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send voice seed request"))
+      }
+    }
   }
 
   func refreshAuthToken(_ token: String) {
@@ -863,6 +963,16 @@ actor AgentRuntimeProcess {
     case .controlToolResult:
       completeControlRequest(message)
 
+    case .voiceSeedContext:
+      completeVoiceSeedRequest(message)
+
+    case .turnRecorded:
+      if let recorded = kernelTurnRecorded(from: message) {
+        for handler in turnRecordedHandlers {
+          handler(recorded)
+        }
+      }
+
     case .result:
       completeRequest(message)
 
@@ -952,6 +1062,36 @@ actor AgentRuntimeProcess {
       return
     }
     request.continuation.resume(returning: message.payload["result"] as? String ?? "")
+  }
+
+  private func completeVoiceSeedRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeVoiceSeedRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable voice seed context")
+      return
+    }
+    let conversationId = message.payload["conversationId"] as? String ?? ""
+    let context = message.payload["context"] as? String ?? ""
+    request.continuation.resume(returning: (conversationId: conversationId, context: context))
+  }
+
+  private func kernelTurnRecorded(from message: RuntimeMessage) -> KernelTurnRecorded? {
+    let payload = message.payload
+    guard let conversationId = payload["conversationId"] as? String else { return nil }
+    return KernelTurnRecorded(
+      conversationId: conversationId,
+      surfaceKind: payload["surfaceKind"] as? String ?? "",
+      externalRefKind: payload["externalRefKind"] as? String ?? "",
+      externalRefId: payload["externalRefId"] as? String ?? "",
+      userText: payload["userText"] as? String ?? "",
+      assistantText: payload["assistantText"] as? String ?? "",
+      origin: payload["origin"] as? String ?? "",
+      interrupted: payload["interrupted"] as? Bool ?? false,
+      idempotencyKey: payload["idempotencyKey"] as? String,
+      userTurnId: payload["userTurnId"] as? String,
+      assistantTurnId: payload["assistantTurnId"] as? String
+    )
   }
 
   private func failRequest(_ message: RuntimeMessage) {
@@ -1065,6 +1205,11 @@ actor AgentRuntimeProcess {
     let controlRequests = activeControlRequests.values
     activeControlRequests.removeAll()
     for request in controlRequests {
+      request.continuation.resume(throwing: error)
+    }
+    let seedRequests = activeVoiceSeedRequests.values
+    activeVoiceSeedRequests.removeAll()
+    for request in seedRequests {
       request.continuation.resume(throwing: error)
     }
   }

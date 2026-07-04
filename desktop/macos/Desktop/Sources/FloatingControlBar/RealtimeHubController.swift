@@ -77,13 +77,6 @@ private struct PendingBargeInReplacementTurn {
   var audioBuffer: [Data] = []
 }
 
-private struct RealtimeVoiceContinuityTurn {
-  let userText: String
-  let assistantText: String
-  let interrupted: Bool
-  let recordedAt: Date
-}
-
 /// Keeps the response glow tied to perceived playback instead of raw PCM chunk
 /// boundaries. Realtime providers can leave short gaps between streamed audio
 /// buffers; clearing the glow on every empty queue makes the notch resize and
@@ -158,16 +151,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
   /// the realtime model sometimes continues with meta/control text; never speak it.
   private var suppressAssistantOutputForCurrentTurn = false
-  /// Guards against recording the same turn to chat history twice (a delegate that
+  /// Guards against recording the same turn to the kernel twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
-  /// Guards the one-time early append of the user's spoken question to chat history
-  /// (shown the instant the transcript is known, before the reply). Reset per turn.
-  private var earlyUserMessageShown = false
-  /// Chat id of THIS turn's early user bubble (from beginVoiceUserMessage). Captured
-  /// into the completion so recordVoiceTurn reconciles the right bubble even if the
-  /// async completion lands after the next turn has already begun. Reset per turn.
-  private var earlyUserMessageId: String?
+  /// Stable per-turn key for kernel idempotent voice-turn persistence.
+  private var turnIdempotencyKey = ""
+  /// Kernel-projected transcript tail prefetched when PTT is armed (key-down).
+  private var prefetchedVoiceSeedContext = ""
+  private var voiceSeedPrefetchTask: Task<Void, Never>?
 
   // Per-turn language identification (multi-language PTT).
   /// Local copy of this turn's mic audio (16 kHz s16le mono) for on-device language ID.
@@ -266,12 +257,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
   /// nil = on the primary; non-nil = the provider we failed over TO.
   private var fallbackProvider: RealtimeHubProvider?
-  /// Immediate, in-process continuity ledger for top-level PTT. ChatProvider and
-  /// backend history are still the durable record, but Gemini barge-in creates a
-  /// fresh realtime socket before those surfaces are always caught up. This ledger
-  /// is the hot-path truth we inject into every fresh realtime session.
-  private var voiceContinuityTurns: [RealtimeVoiceContinuityTurn] = []
-  private static let maxVoiceContinuityTurns = 8
 
   private override init() {
     super.init()
@@ -552,7 +537,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
-    let topLevelContext = combinedTopLevelVoiceContinuityContext()
+    let topLevelContext = voiceSessionSeedContext()
     let instructions = RealtimeHubTools.systemInstruction(
       aboutUser: aboutUserCard,
       topLevelConversationContext: topLevelContext,
@@ -572,7 +557,51 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     log(
       "RealtimeHub: warming \(provider.displayName) session "
         + "(\(auth.isEphemeral ? "ephemeral/managed" : "client-direct/BYOK"), "
-        + "continuityTurns=\(voiceContinuityTurns.count), contextChars=\(topLevelContext.count))")
+        + "contextChars=\(topLevelContext.count))")
+  }
+
+  /// Conversation seed for a fresh realtime session — kernel projection plus floating agents.
+  private func voiceSessionSeedContext() -> String {
+    var sections: [String] = []
+    let kernelSeed = prefetchedVoiceSeedContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !kernelSeed.isEmpty {
+      sections.append(kernelSeed)
+    }
+    let floatingAgents = FloatingControlBarManager.shared.floatingAgentStatusContext()
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    if !floatingAgents.isEmpty {
+      sections.append(floatingAgents)
+    }
+    return sections.joined(separator: "\n\n")
+  }
+
+  private func prefetchVoiceSeedContextIfNeeded() {
+    voiceSeedPrefetchTask?.cancel()
+    voiceSeedPrefetchTask = Task { [weak self] in
+      let seed = await FloatingControlBarManager.shared.kernelVoiceSeedContext()
+      await MainActor.run {
+        guard let self, !Task.isCancelled else { return }
+        self.prefetchedVoiceSeedContext = seed
+      }
+    }
+  }
+
+  private func recordTurnToKernel(
+    userText: String,
+    assistantText: String,
+    interrupted: Bool
+  ) {
+    let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
+    Task {
+      await FloatingControlBarManager.shared.recordSurfaceTurn(
+        surface: surface,
+        userText: userText,
+        assistantText: assistantText,
+        origin: "realtime_voice",
+        interrupted: interrupted,
+        idempotencyKey: turnIdempotencyKey
+      )
+    }
   }
 
   private func teardownSession() {
@@ -753,8 +782,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let screenshotTurnGeneration = turnGeneration
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
-    earlyUserMessageShown = false
-    earlyUserMessageId = nil
+    turnIdempotencyKey = UUID().uuidString
+    prefetchVoiceSeedContextIfNeeded()
     turnEpoch += 1
     turnAudio16k.removeAll(keepingCapacity: true)
     earlyLIDTask = nil
@@ -827,11 +856,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       interruptedReply = "\(partialReply)\n\n[Interrupted by the next push-to-talk turn before completion.]"
     }
     turnRecorded = true
-    rememberVoiceContinuityTurn(userText: heard, assistantText: interruptedReply, interrupted: true)
-    // Runs synchronously in beginTurn before earlyUserMessageId is reset, so this is
-    // still the interrupted turn's bubble id.
-    FloatingControlBarManager.shared.recordVoiceTurn(
-      userText: heard, assistantText: interruptedReply, earlyUserMessageId: earlyUserMessageId)
+    recordTurnToKernel(
+      userText: heard,
+      assistantText: interruptedReply,
+      interrupted: true)
   }
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
@@ -1004,9 +1032,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard isCurrentSession(source) else { return }
     if isFinal {
       if !text.isEmpty { turnTranscript = text }
-      // OpenAI marks the input transcript final before/as the model starts replying —
-      // surface the question in chat now instead of waiting for the whole turn.
-      showUserQuestionEarly()
     } else {
       turnTranscript += text
     }
@@ -1024,42 +1049,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  /// Surface the user's spoken question on the main chat page the instant we can —
-  /// the same immediacy as a typed message — instead of only when the whole voice turn
-  /// (reply + audio playback) finishes. Fires at most once per turn.
-  ///
-  /// Trigger timing differs by provider: OpenAI emits a final input transcript
-  /// (`hubDidReceiveInputTranscript` isFinal), while Gemini streams input transcription
-  /// only as partials and never marks one final — so for Gemini this is driven by the
-  /// first reply chunk (`hubDidReceiveAudio` / `hubDidEmitText`), by which point
-  /// `turnTranscript` holds the full question and the model is already answering it.
-  /// The completed reply is appended later by `recordVoiceTurn`, which reconciles
-  /// against this bubble (correcting its text if the language guard swapped it).
-  private func showUserQuestionEarly() {
-    guard !earlyUserMessageShown else { return }
-    let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !heard.isEmpty else { return }
-    earlyUserMessageShown = true  // decided this turn, whether we show or skip
-
-    // Don't surface a likely language-misdetect early. When the user has picked voice
-    // languages and this provider transcript classifies as none of them (e.g. Gemini —
-    // which ignores the language hint — transcribing English as Japanese), skip the
-    // instant show. The completed turn runs the on-device language-ID correction
-    // (see hubDidFinishTurn) and appends the corrected text, so we show the right
-    // language a beat later instead of flashing a wrong-language bubble.
-    let candidates = AssistantSettings.shared.voiceBaseLanguages
-    if !candidates.isEmpty,
-      let lang = PTTLanguageIdentifier.dominantLanguage(of: heard, hints: []),
-      !candidates.contains(lang) {
-      log(
-        "RealtimeHub: skipping early show — transcript language \(lang) not in user languages "
-          + "\(candidates) (likely provider misdetect); corrected text will appear at turn end")
-      return
-    }
-
-    earlyUserMessageId = FloatingControlBarManager.shared.beginVoiceUserMessage(userText: heard)
-  }
-
   func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
     guard !suppressAssistantOutputForCurrentTurn else { return }
@@ -1074,9 +1063,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     realtimePlaybackActive = true
     realtimePlaybackEpoch = pcmPlayer.playbackEpoch
     responseGlowGate.markPlaybackActive()
-    // Reply audio started → the question is fully transcribed; surface it now (covers
-    // Gemini, which never marks its input transcript final).
-    showUserQuestionEarly()
   }
 
   func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
@@ -1084,8 +1070,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard !suppressAssistantOutputForCurrentTurn else { return }
     if !text.isEmpty {
       assistantText += text
-      // Reply text started → surface the question now (covers Gemini / audio-less turns).
-      showUserQuestionEarly()
     }
     if isFinal {
       let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1469,7 +1453,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         proposedTitle: title,
         proposedAck: nil,
         directedProvider: directedProvider,
-        topLevelContext: combinedTopLevelVoiceContinuityContext(),
+        topLevelContext: voiceSessionSeedContext(),
         agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
         explicitDelegationRequested: true))
     guard isCurrentToolTurn(source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch) else {
@@ -1573,59 +1557,30 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if realtimePlaybackActive {
       log("RealtimeHub[\(providerTag)]: server turn done; waiting for local playback to drain")
     }
-    // Record the completed turn into chat history (+ backend sync) in the background.
-    // The hub plays its reply itself and never routes through the query path, so this is
-    // the only place voice turns get persisted. Idempotent per turn; recordVoiceTurn is
-    // fire-and-forget so it never stalls the warm socket or the next PTT press.
+    // Record the completed turn to the kernel; chat UI updates from turn_recorded events.
     if !turnRecorded {
       turnRecorded = true
       if let handoff = pendingVoiceAgentHandoff {
         pendingVoiceAgentHandoff = nil
-        let assistantText = "Started background agent \"\(handoff.title)\" for: \(handoff.brief)"
-        rememberVoiceContinuityTurn(userText: heard, assistantText: assistantText, interrupted: false)
-        FloatingControlBarManager.shared.recordVoiceAgentHandoff(
-          userText: heard,
-          agentTitle: handoff.title,
-          agentBrief: handoff.brief,
-          earlyUserMessageId: earlyUserMessageId)
+        let handoffReply = "Started background agent \"\(handoff.title)\" for: \(handoff.brief)"
+        recordTurnToKernel(userText: heard, assistantText: handoffReply, interrupted: false)
       } else {
         let candidates = AssistantSettings.shared.voiceBaseLanguages
         let fullTask = fullLIDTask
         let provider = providerTag
-        // Capture THIS turn's early bubble id NOW: the task below awaits language-ID (up to
-        // ~1.5s), by which point the next PTT turn may have reset/replaced the controller's
-        // earlyUserMessageId. Reconciling against the captured id keeps a late completion
-        // from rewriting a newer turn's bubble.
-        let capturedEarlyId = earlyUserMessageId
-        let provisionalHeard = heard
-        let provisionalReply = reply
-        rememberVoiceContinuityTurn(
-          userText: provisionalHeard,
-          assistantText: provisionalReply,
-          interrupted: false)
+        let capturedIdempotencyKey = turnIdempotencyKey
         Task { @MainActor [weak self] in
           var userText = heard
           var providerLang: String?
           var usedLocal = false
           var localTranscript: String?
           var localLang: String?
-          // Bubble-language guard: the provider transcript is auto-detected per utterance
-          // and can come back in a language the user doesn't speak (Russian speech saved
-          // as an Italian bubble). When it does — or when it's empty — substitute the
-          // on-device transcript from the language-ID pass, but only if that transcript
-          // itself is confidently in one of the user's languages.
           if !candidates.isEmpty, let fullTask {
-            // Classify the provider transcript UNBIASED: hinting toward the user's
-            // languages here masks genuinely foreign transcripts (tested: the Italian
-            // misdetect classified as "en" with hints and slipped through). Wrong swaps
-            // stay bounded because the local transcript must independently classify
-            // into the user's set before it can replace anything.
             providerLang =
               heard.isEmpty
               ? nil : PTTLanguageIdentifier.dominantLanguage(of: heard, hints: [])
             let mismatch = heard.isEmpty || (providerLang.map { !candidates.contains($0) } ?? false)
             if mismatch {
-              // The decode started at commit and the reply takes seconds — normally long done.
               let verdict = await Self.value(of: fullTask, timeoutMs: 1500)
               localTranscript = verdict?.transcript
               localLang = verdict?.languageCode
@@ -1639,18 +1594,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
               }
             }
           }
-          // Continuity memory + persistence use the CORRECTED text, so a swapped
-          // bubble and the model's follow-up context stay consistent.
-          if usedLocal {
-            self?.replaceVoiceContinuityTurn(
-              originalUserText: provisionalHeard,
-              originalAssistantText: provisionalReply,
-              correctedUserText: userText,
-              correctedAssistantText: reply,
-              interrupted: false)
-          }
-          FloatingControlBarManager.shared.recordVoiceTurn(
-            userText: userText, assistantText: reply, earlyUserMessageId: capturedEarlyId)
+          self?.turnIdempotencyKey = capturedIdempotencyKey
+          self?.recordTurnToKernel(userText: userText, assistantText: reply, interrupted: false)
           self?.lastTurnDiagnostics = [
             "provider": provider,
             "provider_transcript": heard,
@@ -1674,99 +1619,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
     exitVoiceUI()
-  }
-
-  private func replaceVoiceContinuityTurn(
-    originalUserText: String,
-    originalAssistantText: String,
-    correctedUserText: String,
-    correctedAssistantText: String,
-    interrupted: Bool
-  ) {
-    let originalUser = originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let originalAssistant = originalAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let correctedUser = correctedUserText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let correctedAssistant = correctedAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !correctedUser.isEmpty || !correctedAssistant.isEmpty else { return }
-
-    if let index = voiceContinuityTurns.lastIndex(where: {
-      $0.userText == originalUser
-        && $0.assistantText == originalAssistant
-        && $0.interrupted == interrupted
-    }) {
-      voiceContinuityTurns[index] = RealtimeVoiceContinuityTurn(
-        userText: correctedUser,
-        assistantText: correctedAssistant,
-        interrupted: interrupted,
-        recordedAt: voiceContinuityTurns[index].recordedAt
-      )
-      return
-    }
-
-    rememberVoiceContinuityTurn(
-      userText: correctedUser,
-      assistantText: correctedAssistant,
-      interrupted: interrupted)
-  }
-
-  private func rememberVoiceContinuityTurn(userText: String, assistantText: String, interrupted: Bool) {
-    let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !user.isEmpty || !assistant.isEmpty else { return }
-    let turn = RealtimeVoiceContinuityTurn(
-      userText: user,
-      assistantText: assistant,
-      interrupted: interrupted,
-      recordedAt: Date()
-    )
-    let duplicate = voiceContinuityTurns.last.map {
-      $0.userText == turn.userText && $0.assistantText == turn.assistantText
-    } ?? false
-    guard !duplicate else { return }
-    voiceContinuityTurns.append(turn)
-    if voiceContinuityTurns.count > Self.maxVoiceContinuityTurns {
-      voiceContinuityTurns.removeFirst(voiceContinuityTurns.count - Self.maxVoiceContinuityTurns)
-    }
-  }
-
-  private func combinedTopLevelVoiceContinuityContext() -> String {
-    var sections: [String] = []
-    let local = localVoiceContinuityContext()
-    if !local.isEmpty {
-      sections.append(local)
-    }
-    let shared = FloatingControlBarManager.shared.topLevelVoiceContinuityContext()
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    if !shared.isEmpty {
-      sections.append(shared)
-    }
-    return sections.joined(separator: "\n\n")
-  }
-
-  private func localVoiceContinuityContext(maxCharacters: Int = 2_000) -> String {
-    guard !voiceContinuityTurns.isEmpty else { return "" }
-    var lines: [String] = ["Recent push-to-talk turns from this app session:"]
-    var remaining = maxCharacters
-    for turn in voiceContinuityTurns.suffix(Self.maxVoiceContinuityTurns) {
-      guard remaining > 0 else { break }
-      let userLine = "User: \(sanitizeContinuityText(turn.userText))"
-      let assistantPrefix = turn.interrupted ? "Omi (interrupted): " : "Omi: "
-      let assistantLine = "\(assistantPrefix)\(sanitizeContinuityText(turn.assistantText))"
-      for line in [userLine, assistantLine] where !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        guard remaining > 0 else { break }
-        let clipped = String(line.prefix(remaining))
-        lines.append(clipped)
-        remaining -= clipped.count + 1
-      }
-    }
-    return lines.joined(separator: "\n")
-  }
-
-  private func sanitizeContinuityText(_ text: String) -> String {
-    text
-      .replacingOccurrences(of: "`", with: "'")
-      .replacingOccurrences(of: "\u{0000}", with: "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private nonisolated static func userExplicitlyRequestedPillManagement(

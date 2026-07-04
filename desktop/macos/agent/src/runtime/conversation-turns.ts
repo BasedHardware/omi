@@ -1,6 +1,7 @@
 import { generateAgentId } from "./sqlite-store.js";
 import type { AgentStore, ConversationTurn, NewConversationTurn } from "./types.js";
 import type { SurfaceRef } from "./surface-session.js";
+import { resolveSurfaceSession } from "./surface-session.js";
 
 export const CONVERSATION_TURN_BACKFILL_LIMIT = 50;
 export const CONVERSATION_TRANSCRIPT_TAIL_LIMIT = 10;
@@ -41,6 +42,108 @@ export function listRecentConversationTurns(
 
 export function appendConversationTurn(store: AgentStore, input: NewConversationTurn): ConversationTurn {
   return store.insertConversationTurn(input);
+}
+
+export interface RecordSurfaceTurnInput {
+  ownerId: string;
+  surfaceRef: SurfaceRef;
+  userText: string;
+  assistantText: string;
+  origin: string;
+  interrupted?: boolean;
+  idempotencyKey?: string;
+  nowMs?: number;
+}
+
+export interface RecordSurfaceTurnResult {
+  conversationId: string;
+  recorded: boolean;
+  duplicate: boolean;
+  userTurn?: ConversationTurn;
+  assistantTurn?: ConversationTurn;
+}
+
+export function recordSurfaceTurn(store: AgentStore, input: RecordSurfaceTurnInput): RecordSurfaceTurnResult {
+  const resolved = resolveSurfaceSession(
+    store,
+    { ownerId: input.ownerId, surfaceRef: input.surfaceRef },
+    () => input.nowMs ?? Date.now(),
+  );
+  const conversationId = resolved.conversationId;
+  const user = input.userText.trim();
+  const assistant = input.assistantText.trim();
+  if (!user && !assistant) {
+    return { conversationId, recorded: false, duplicate: false };
+  }
+
+  const idempotencyKey = input.idempotencyKey?.trim();
+  if (idempotencyKey && hasSurfaceTurnIdempotencyKey(store, conversationId, idempotencyKey)) {
+    return { conversationId, recorded: false, duplicate: true };
+  }
+
+  const now = input.nowMs ?? Date.now();
+  const baseMetadata = {
+    origin: input.origin,
+    interrupted: input.interrupted === true,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
+  };
+  let userTurn: ConversationTurn | undefined;
+  let assistantTurn: ConversationTurn | undefined;
+
+  if (user) {
+    userTurn = appendConversationTurn(store, {
+      conversationId,
+      role: "user",
+      surfaceKind: input.surfaceRef.surfaceKind,
+      content: user,
+      createdAtMs: now,
+      metadataJson: JSON.stringify({ ...baseMetadata, role: "user" }),
+    });
+  }
+  if (assistant) {
+    assistantTurn = appendConversationTurn(store, {
+      conversationId,
+      role: "assistant",
+      surfaceKind: input.surfaceRef.surfaceKind,
+      content: assistant,
+      createdAtMs: now + 1,
+      metadataJson: JSON.stringify({ ...baseMetadata, role: "assistant" }),
+    });
+  }
+
+  return {
+    conversationId,
+    recorded: Boolean(userTurn || assistantTurn),
+    duplicate: false,
+    userTurn,
+    assistantTurn,
+  };
+}
+
+function hasSurfaceTurnIdempotencyKey(
+  store: AgentStore,
+  conversationId: string,
+  idempotencyKey: string,
+): boolean {
+  const rows = store.allRows(
+    `SELECT metadata_json
+     FROM conversation_turns
+     WHERE conversation_id = ?
+     ORDER BY created_at_ms DESC
+     LIMIT 32`,
+    [conversationId],
+  );
+  for (const row of rows) {
+    try {
+      const metadata = JSON.parse(String(row.metadata_json ?? "{}")) as { idempotencyKey?: unknown };
+      if (metadata.idempotencyKey === idempotencyKey) {
+        return true;
+      }
+    } catch {
+      // ignore malformed metadata
+    }
+  }
+  return false;
 }
 
 export function importConversationTurnsBackfill(

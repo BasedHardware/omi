@@ -199,6 +199,38 @@ actor AgentBridge {
     )
   }
 
+  func recordSurfaceTurn(
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    interrupted: Bool = false,
+    idempotencyKey: String? = nil
+  ) async {
+    await runtime.recordSurfaceTurn(
+      clientId: clientId,
+      surface: surface,
+      userText: userText,
+      assistantText: assistantText,
+      origin: origin,
+      interrupted: interrupted,
+      idempotencyKey: idempotencyKey
+    )
+  }
+
+  func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> (conversationId: String, context: String) {
+    try await start()
+    return try await runtime.getVoiceSeedContext(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      surface: surface
+    )
+  }
+
+  func setTurnRecordedHandler(_ handler: @escaping AgentRuntimeProcess.TurnRecordedHandler) async {
+    await runtime.addTurnRecordedHandler(handler)
+  }
+
   func controlTool(name: String, input: [String: Any]) async throws -> String {
     try await start()
     return try await runtime.directControlTool(

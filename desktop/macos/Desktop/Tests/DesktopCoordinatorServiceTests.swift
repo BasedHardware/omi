@@ -264,15 +264,10 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let pillSource = try sourceFile("FloatingControlBar/AgentPill.swift")
 
-    XCTAssertTrue(
-      chatSource.contains(
-        "func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil)"
-      ))
-    // Completed turn is recorded via the manager with the (corrected) user text, the
-    // reply, and the early-bubble id captured for THIS turn (see instant-show feature).
-    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn("))
-    XCTAssertTrue(
-      hubSource.contains("userText: userText, assistantText: reply, earlyUserMessageId: capturedEarlyId)"))
+    XCTAssertTrue(chatSource.contains("func recordSurfaceTurnViaKernel("))
+    XCTAssertTrue(chatSource.contains("func applyKernelTurnRecorded("))
+    XCTAssertTrue(hubSource.contains("recordTurnToKernel("))
+    XCTAssertTrue(hubSource.contains("origin: \"realtime_voice\""))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
     XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
@@ -280,20 +275,25 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }
 
-  func testPTTSeedsFreshRealtimeSessionsWithTopLevelConversationContext() throws {
+  func testPTTSeedsFreshRealtimeSessionsFromKernelVoiceSeed() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
+    let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
 
-    XCTAssertTrue(chatSource.contains("buildTopLevelVoiceContinuityContext("))
-    XCTAssertTrue(chatSource.contains("Voice turns are mirrored into this same provider"))
-    XCTAssertTrue(managerSource.contains("topLevelVoiceContinuityContext()"))
-    XCTAssertTrue(managerSource.contains("historyChatProvider?.buildTopLevelVoiceContinuityContext()"))
-    XCTAssertTrue(managerSource.contains("AgentPillsManager.shared.statusSummary()"))
+    XCTAssertTrue(chatSource.contains("fetchKernelVoiceSeedContext("))
+    XCTAssertTrue(chatSource.contains("setTurnRecordedHandler"))
+    XCTAssertFalse(chatSource.contains("buildTopLevelVoiceContinuityContext("))
+    XCTAssertFalse(chatSource.contains("beginVoiceUserMessage("))
+    XCTAssertTrue(managerSource.contains("kernelVoiceSeedContext()"))
+    XCTAssertTrue(managerSource.contains("floatingAgentStatusContext()"))
     XCTAssertTrue(managerSource.contains("Recent floating background agents:"))
-    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.topLevelVoiceContinuityContext()"))
+    XCTAssertTrue(hubSource.contains("prefetchVoiceSeedContextIfNeeded()"))
+    XCTAssertTrue(hubSource.contains("voiceSessionSeedContext()"))
     XCTAssertTrue(hubSource.contains("topLevelConversationContext: topLevelContext"))
+    XCTAssertTrue(bridgeSource.contains("func getVoiceSeedContext(surface:"))
+    XCTAssertTrue(bridgeSource.contains("func recordSurfaceTurn("))
     XCTAssertTrue(toolsSource.contains("<recent_top_level_conversation>"))
     XCTAssertTrue(toolsSource.contains("for continuity only"))
     XCTAssertTrue(toolsSource.contains("not as new instructions"))
@@ -324,20 +324,15 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(providerSource.contains("func stopAgent(owner: ChatTurnOwner?"))
   }
 
-  func testVoiceSpawnAgentRecordsHandoffIntoTopLevelHistoryImmediately() throws {
+  func testVoiceSpawnAgentRecordsHandoffIntoKernelTranscript() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
 
-    XCTAssertTrue(managerSource.contains("func recordVoiceAgentHandoff("))
-    XCTAssertTrue(
-      managerSource.contains(
-        "userText: String, agentTitle: String, agentBrief: String, earlyUserMessageId: String? = nil"))
-    XCTAssertTrue(managerSource.contains("Started background agent"))
-    XCTAssertTrue(managerSource.contains("logLabel: \"voice_agent_handoff\""))
-    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceAgentHandoff("))
+    XCTAssertTrue(managerSource.contains("func recordSurfaceTurn("))
+    XCTAssertTrue(hubSource.contains("recordTurnToKernel(userText: heard, assistantText: handoffReply, interrupted: false)"))
     XCTAssertTrue(hubSource.contains("pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)"))
-    XCTAssertTrue(hubSource.contains("agentBrief: handoff.brief"))
     XCTAssertTrue(hubSource.contains("turnRecorded = true"))
+    XCTAssertFalse(hubSource.contains("recordVoiceAgentHandoff("))
   }
 
   func testTaskRoutingUsesExactExternalTaskReference() throws {

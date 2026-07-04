@@ -382,7 +382,7 @@ class GauntletRunner:
             if self.markers["ptt"] not in saved_user:
                 self.fail(f"PTT turn did not persist marker in saved_user_text ({saved_user!r})")
 
-        # Allow async chat persistence from recordVoiceTurn to settle.
+        # Allow kernel turn_recorded projection + backend persistence to settle.
         time.sleep(2.0)
         wait = bridge_action(self.port, "wait_main_chat_idle", {"timeoutMs": str(self.args.turn_timeout_ms)})
         snapshot = bridge_action(self.port, "main_chat_snapshot", {"limit": "80"})
@@ -419,6 +419,8 @@ class GauntletRunner:
         if self.markers["ptt"] not in assistant and self.markers["ptt"] not in flatten_trace_text(traces[-1] if traces else {}):
             self.fail("typed follow-up cannot see PTT turn (assistant + trace missing PTT marker)")
         self.assert_trace_contains(traces, self.markers["ptt"], "typed follow-up")
+        if traces and "<conversation_history>" not in flatten_trace_text(traces[-1]):
+            self.fail("typed follow-up trace missing kernel conversation_history injection")
 
         # Step 4 — background agent spawn
         spawn_query = (

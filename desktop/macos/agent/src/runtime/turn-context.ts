@@ -7,6 +7,9 @@ import {
   CONVERSATION_TRANSCRIPT_TAIL_LIMIT,
   listRecentConversationTurns,
 } from "./conversation-turns.js";
+
+export const VOICE_SEED_MAX_TURNS = 8;
+export const VOICE_SEED_MAX_CHARACTERS = 3_500;
 import type { AgentArtifact, AgentStore, ConversationTurn } from "./types.js";
 import type { SurfaceRef } from "./surface-session.js";
 import { surfaceRefKey as surfaceKeyFor } from "./surface-session.js";
@@ -404,6 +407,54 @@ function buildContextPacketSection(input: AssembleTurnContextInput): string | nu
 Use persisted DesktopContextPacket \`${built.packet.packetId}\` as the scoped ${input.surfaceRef.surfaceKind.replaceAll("_", "-")} context. Redacted preview:
 
 ${previewText}`;
+}
+
+export function sanitizeVoiceSeedText(text: string, maxLength = 2_000): string {
+  return text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+    .replace(/`/g, "'")
+    .trim()
+    .slice(0, maxLength);
+}
+
+export function getVoiceSeedContext(
+  store: AgentStore,
+  conversationId: string,
+  options?: { maxTurns?: number; maxCharacters?: number },
+): string {
+  const maxTurns = options?.maxTurns ?? VOICE_SEED_MAX_TURNS;
+  const maxCharacters = options?.maxCharacters ?? VOICE_SEED_MAX_CHARACTERS;
+  const recent = listRecentConversationTurns(store, conversationId, maxTurns);
+  if (recent.length === 0) return "";
+
+  const lines: string[] = [];
+  let remaining = maxCharacters;
+  for (const turn of recent) {
+    if (remaining <= 0) break;
+    const content = sanitizeVoiceSeedText(turn.content);
+    if (!content) continue;
+    let metadata: Record<string, unknown> = {};
+    try {
+      metadata = JSON.parse(turn.metadataJson || "{}") as Record<string, unknown>;
+    } catch {
+      metadata = {};
+    }
+    const interrupted = metadata.interrupted === true;
+    const role =
+      turn.role === "user"
+        ? "User"
+        : interrupted
+          ? "Omi (interrupted)"
+          : "Omi";
+    const prefix = `${role}: `;
+    const contentBudget = Math.max(0, remaining - prefix.length);
+    const line = `${prefix}${content.slice(0, contentBudget)}`;
+    if (!line.trim()) continue;
+    lines.push(line);
+    remaining -= line.length + 1;
+  }
+
+  return lines.join("\n");
 }
 
 function formatTranscriptTail(turns: readonly ConversationTurn[]): string | null {

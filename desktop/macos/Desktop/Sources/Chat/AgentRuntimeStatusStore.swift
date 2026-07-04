@@ -250,7 +250,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .authRequired, .authSuccess, .controlToolResult, .unknown:
+    case .initMessage, .toolUse, .authRequired, .authSuccess, .controlToolResult, .turnRecorded, .voiceSeedContext, .unknown:
       break
     }
   }
