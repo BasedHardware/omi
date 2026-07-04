@@ -11,8 +11,10 @@ import base64
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import firebase_admin
 import google.auth
@@ -24,6 +26,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
+from google.cloud.firestore import ArrayUnion
 from google.cloud.firestore_v1 import Query
 
 logging.basicConfig(level=logging.INFO)
@@ -32,11 +35,11 @@ logger = logging.getLogger(__name__)
 # Firebase init — uses GOOGLE_APPLICATION_CREDENTIALS or ADC
 cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 if cred_path:
-    firebase_admin.initialize_app(credentials.Certificate(cred_path))
+    firebase_admin.initialize_app(credentials.Certificate(cred_path))  # type: ignore[reportUnknownMemberType]
 else:
-    firebase_admin.initialize_app()
+    firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]
 
-db = firestore.client()
+db: Any = firestore.client()  # type: ignore[reportUnknownMemberType]  # google-cloud-firestore has no stubs
 
 app = FastAPI()
 logger.info("[agent-proxy] starting up")
@@ -50,25 +53,32 @@ ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
 _encryption_ok = len(ENCRYPTION_SECRET) >= 32
 
 
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
 @app.get("/health")
-def health():
+def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
-def _get_user_context(uid: str) -> tuple:
+def _get_user_context(uid: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """Get agent VM info and data protection level from the user document."""
     doc = db.collection('users').document(uid).get()
     if doc.exists:
-        data = doc.to_dict()
-        return data.get('agentVm'), data.get('data_protection_level', 'enhanced')
+        data: Dict[str, Any] = _typed_doc(doc)
+        agent_vm = cast(Optional[Dict[str, Any]], data.get('agentVm'))
+        level = cast(str, data.get('data_protection_level', 'enhanced'))
+        return agent_vm, level
     return None, 'enhanced'
 
 
-def _refresh_vm(uid: str) -> dict | None:
+def _refresh_vm(uid: str) -> Optional[Dict[str, Any]]:
     """Re-read the VM info from Firestore (called after restart to get new IP)."""
     doc = db.collection('users').document(uid).get()
     if doc.exists:
-        return doc.to_dict().get('agentVm')
+        return cast(Optional[Dict[str, Any]], _typed_doc(doc).get('agentVm'))
     return None
 
 
@@ -77,9 +87,9 @@ def _refresh_vm(uid: str) -> dict | None:
 
 def _get_gce_access_token() -> str:
     """Get a GCE access token via Application Default Credentials."""
-    creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
+    creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])  # type: ignore[reportUnknownMemberType]
     creds.refresh(google.auth.transport.requests.Request())
-    return creds.token
+    return cast(str, creds.token)
 
 
 async def _check_gce_status(vm_name: str, zone: str) -> str:
@@ -95,7 +105,6 @@ async def _check_gce_status(vm_name: str, zone: str) -> str:
 
 async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     """Start a stopped/terminated GCE VM and return the new IP."""
-    import time
 
     t0 = time.monotonic()
     token = _get_gce_access_token()
@@ -157,7 +166,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         return ip
 
 
-def _update_firestore_vm(uid: str, ip: str | None, status: str):
+def _update_firestore_vm(uid: str, ip: str | None, status: str) -> None:
     """Update the user's agentVm fields in Firestore."""
     update = {"agentVm.status": status}
     if ip:
@@ -165,7 +174,7 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str):
     db.collection('users').document(uid).update(update)
 
 
-async def _reset_vm(vm_name: str, zone: str):
+async def _reset_vm(vm_name: str, zone: str) -> None:
     """Hard-reset a RUNNING VM whose agent process is unresponsive."""
     token = _get_gce_access_token()
     reset_url = (
@@ -182,7 +191,7 @@ async def _reset_vm(vm_name: str, zone: str):
             op_url = (
                 f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
             )
-            for i in range(12):
+            for _ in range(12):
                 await asyncio.sleep(5)
                 t = _get_gce_access_token()
                 status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {t}"})
@@ -190,11 +199,11 @@ async def _reset_vm(vm_name: str, zone: str):
                     break
 
 
-async def _ensure_vm_running(uid: str, vm: dict, health_failed: bool = False) -> dict | None:
+async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool = False) -> Optional[Dict[str, Any]]:
     """If VM is stopped, restart it and return updated VM info. Returns None on failure."""
-    vm_name = vm.get("vmName")
-    zone = vm.get("zone", "us-central1-a")
-    fs_status = vm.get("status", "")
+    vm_name = cast(str, vm.get("vmName"))
+    zone = cast(str, vm.get("zone", "us-central1-a"))
+    fs_status = cast(str, vm.get("status", ""))
 
     if fs_status == "ready":
         # Verify it's actually running
@@ -288,15 +297,15 @@ def _decrypt_text(text: str, uid: str) -> str:
 # --------------- chat session helpers ---------------
 
 
-def _get_or_create_chat_session(uid: str) -> dict:
+def _get_or_create_chat_session(uid: str) -> Dict[str, Any]:
     """Get or create the default (plugin_id=None) chat session."""
     session_ref = (
         db.collection('users').document(uid).collection('chat_sessions').where('plugin_id', '==', None).limit(1)
     )
     for session in session_ref.stream():
-        return session.to_dict()
+        return _typed_doc(session)
 
-    session_data = {
+    session_data: Dict[str, Any] = {
         'id': str(uuid.uuid4()),
         'created_at': datetime.now(timezone.utc),
         'plugin_id': None,
@@ -310,7 +319,7 @@ def _get_or_create_chat_session(uid: str) -> dict:
 # --------------- message persistence ---------------
 
 
-def _fetch_chat_history(uid: str, chat_session_id: str) -> list:
+def _fetch_chat_history(uid: str, chat_session_id: str) -> List[Dict[str, Any]]:
     """Fetch last N messages from the chat session, returned oldest-first."""
     messages_ref = (
         db.collection('users')
@@ -321,17 +330,17 @@ def _fetch_chat_history(uid: str, chat_session_id: str) -> list:
         .order_by('created_at', direction=Query.DESCENDING)
         .limit(HISTORY_LIMIT)
     )
-    messages = []
+    messages: List[Dict[str, Any]] = []
     for doc in messages_ref.stream():
-        data = doc.to_dict()
+        data: Dict[str, Any] = _typed_doc(doc)
         text = data.get('text', '')
         if data.get('data_protection_level') == 'enhanced':
-            text = _decrypt_text(text, uid)
+            text = _decrypt_text(cast(str, text), uid)
         messages.append({'sender': data.get('sender', ''), 'text': text})
     return list(reversed(messages))
 
 
-def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_protection_level: str):
+def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_protection_level: str) -> None:
     """Save a message to Firestore with encryption and chat session linking."""
     msg_id = str(uuid.uuid4())
     store_text = text
@@ -342,7 +351,7 @@ def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_p
         else:
             level = 'standard'
 
-    msg_data = {
+    msg_data: Dict[str, Any] = {
         'id': msg_id,
         'text': store_text,
         'created_at': datetime.now(timezone.utc),
@@ -359,10 +368,10 @@ def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_p
     user_ref.collection('messages').add(msg_data)
     # Link message to chat session
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.set({'message_ids': firestore.ArrayUnion([msg_id])}, merge=True)
+    session_ref.set({'message_ids': ArrayUnion([msg_id])}, merge=True)
 
 
-def _build_prompt_with_history(prompt: str, history: list) -> str:
+def _build_prompt_with_history(prompt: str, history: List[Dict[str, Any]]) -> str:
     """Prepend conversation history to the current prompt."""
     if not history:
         return prompt
@@ -388,7 +397,8 @@ async def agent_ws(websocket: WebSocket):
 
     token = auth_header[7:].strip()
     try:
-        uid = auth.verify_id_token(token)["uid"]
+        decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        uid = cast(str, decoded_token["uid"])
     except Exception as e:
         logger.warning(f"[agent-proxy] WS rejected: invalid token: {e}")
         await websocket.close(code=4001, reason="Invalid token")
@@ -473,7 +483,7 @@ async def agent_ws(websocket: WebSocket):
 
             first_query_sent = False
 
-            async def _save_ai_response(uid, text, session_id, protection_level):
+            async def _save_ai_response(uid: str, text: str, session_id: str, protection_level: str) -> None:
                 """Fire-and-forget AI response save — never blocks event forwarding."""
                 try:
                     await asyncio.to_thread(_save_message, uid, text, 'ai', session_id, protection_level)
