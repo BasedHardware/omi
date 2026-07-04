@@ -133,6 +133,14 @@ config OMI_AAD_TEST_MODE
          The difference is the power the mic saves under hardware AAD. Keep 0 for
          production."
 
+config OMI_DEBUG_FAKE_RTC
+    bool "Debug: set a fake UTC time at boot if none is synced"
+    default n
+    help
+        "Debug-only. Offline recording is gated on a valid UTC time (writes are
+         dropped until a phone syncs the clock). Enable this in test builds so
+         the device records without a phone. Keep n for production."
+
 config OMI_WATCHDOG_TIMEOUT_MS
     int "Watchdog timeout (ms)"
     range 5000 300000

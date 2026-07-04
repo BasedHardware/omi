@@ -249,6 +249,13 @@ int main(void)
     /* IMU only needed at boot + before power-down; shut it off to save power. */
     lsm6dsl_power_off();
 
+#ifdef CONFIG_OMI_DEBUG_FAKE_RTC
+    if (!rtc_is_valid()) {
+        (void) rtc_set_utc_time(1720000000ULL); /* debug: enable offline recording without a phone */
+        LOG_WRN("DEBUG: fake RTC set (offline recording enabled)");
+    }
+#endif
+
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system
     LOG_INF("Initializing monitoring system...\n");
