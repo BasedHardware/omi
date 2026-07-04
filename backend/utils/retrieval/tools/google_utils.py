@@ -3,6 +3,7 @@ Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 """
 
 import asyncio
+import logging
 import os
 from typing import Optional
 
@@ -12,8 +13,14 @@ from google.cloud import firestore
 import database.users as users_db
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
+from utils.integration_telemetry import (
+    GOOGLE_CALENDAR,
+    IntegrationTelemetryContext,
+    emit_auth_refresh_attempted,
+    emit_auth_refresh_failed,
+    emit_auth_refresh_succeeded,
+)
 from utils.log_sanitizer import sanitize
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +56,24 @@ class GoogleAPIError(Exception):
         return self.status_code in _RETRYABLE_STATUS_CODES
 
 
-async def _mark_google_calendar_reauth_required(uid: str, integration: dict, reason: str) -> None:
+async def _mark_google_integration_reauth_required(
+    uid: str, integration: dict, integration_key: str, reason: str
+) -> None:
     updated = dict(integration)
     updated['connected'] = False
     updated['reauth_required'] = True
     updated['reauth_reason'] = reason
     updated['access_token'] = firestore.DELETE_FIELD
-    await run_blocking(db_executor, users_db.set_integration, uid, 'google_calendar', updated)
+    await run_blocking(db_executor, users_db.set_integration, uid, integration_key, updated)
 
 
-async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
+async def refresh_google_token(
+    uid: str,
+    integration: dict,
+    *,
+    integration_name: str = GOOGLE_CALENDAR,
+    integration_key: str = 'google_calendar',
+) -> Optional[str]:
     """
     Refresh Google access token using refresh token.
     Works for both Calendar and Gmail since they use the same OAuth.
@@ -66,14 +81,23 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
     Args:
         uid: User ID
         integration: Integration dict containing refresh_token
+        integration_name: Product-visible provider name for telemetry.
+        integration_key: Stored integration key to update after refresh.
 
     Returns:
         New access token or None if refresh failed
     """
     refresh_token = integration.get('refresh_token')
+    telemetry_context = IntegrationTelemetryContext(
+        integration_name=integration_name,
+        operation='refresh_token',
+        uid=uid,
+    )
+    emit_auth_refresh_attempted(telemetry_context)
     if not refresh_token:
         logger.warning(f"🔄 No refresh_token stored for uid={uid}, cannot refresh")
-        await _mark_google_calendar_reauth_required(uid, integration, 'missing_refresh_token')
+        emit_auth_refresh_failed(telemetry_context, 'missing_token')
+        await _mark_google_integration_reauth_required(uid, integration, integration_key, 'missing_refresh_token')
         return None
 
     client_id = os.getenv('GOOGLE_CLIENT_ID')
@@ -81,6 +105,7 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
 
     if not all([client_id, client_secret]):
         logger.error("🔄 Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET env vars")
+        emit_auth_refresh_failed(telemetry_context, 'missing_oauth_config')
         return None
 
     try:
@@ -104,8 +129,9 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
                 # DB executor so it does not block the event loop during
                 # concurrent chat/tool streaming.
                 integration['access_token'] = new_access_token
-                await run_blocking(db_executor, users_db.set_integration, uid, 'google_calendar', integration)
+                await run_blocking(db_executor, users_db.set_integration, uid, integration_key, integration)
                 logger.info(f"🔄 Successfully refreshed Google token for uid={uid}")
+                emit_auth_refresh_succeeded(telemetry_context)
                 return new_access_token
 
         # Detect token revocation (invalid_grant) — user revoked access in Google settings
@@ -115,17 +141,23 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
                 f"🔄 Google refresh token revoked for uid={uid} (invalid_grant). "
                 f"User needs to reconnect. Response: {error_body}"
             )
-            await _mark_google_calendar_reauth_required(uid, integration, 'invalid_grant')
+            await _mark_google_integration_reauth_required(uid, integration, integration_key, 'invalid_grant')
         else:
             logger.error(
                 f"🔄 Google token refresh failed for uid={uid}: " f"status={response.status_code}, body={error_body}"
             )
+        emit_auth_refresh_failed(
+            telemetry_context, response.text or 'token_refresh_failed', provider_status_code=response.status_code
+        )
     except httpx.TimeoutException:
         logger.error(f"🔄 Timeout refreshing Google token for uid={uid}")
+        emit_auth_refresh_failed(telemetry_context, 'timeout')
     except httpx.ConnectError:
         logger.error(f"🔄 Network error refreshing Google token for uid={uid}")
+        emit_auth_refresh_failed(telemetry_context, 'connect_error')
     except Exception as e:
         logger.error(f"🔄 Unexpected error refreshing Google token for uid={uid}: {e}")
+        emit_auth_refresh_failed(telemetry_context, e)
 
     return None
 

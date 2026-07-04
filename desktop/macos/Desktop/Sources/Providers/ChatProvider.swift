@@ -612,6 +612,7 @@ struct MessageMetadata {
 /// A single chat message
 struct ChatMessage: Identifiable {
     var id: String  // Mutable to sync with server-generated ID
+    let clientTurnId: String?
     var text: String
     let createdAt: Date
     let sender: ChatSender
@@ -633,8 +634,9 @@ struct ChatMessage: Identifiable {
     /// User-attached files (screenshots, images, documents) — populated for user messages.
     var attachments: [ChatAttachment]
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = []) {
+    init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = []) {
         self.id = id
+        self.clientTurnId = clientTurnId
         self.text = text
         self.createdAt = createdAt
         self.sender = sender
@@ -684,6 +686,30 @@ extension ChatContentBlock {
 enum ChatSender {
     case user
     case ai
+}
+
+enum ChatTurnOwner: Equatable {
+    case mainChat
+    case floatingDefault
+    case floatingVoice
+    case taskChat(String)
+    case agentPill(UUID)
+
+    func canInterrupt(_ activeOwner: ChatTurnOwner) -> Bool {
+        switch (self, activeOwner) {
+        case (.floatingDefault, .floatingDefault),
+             (.floatingDefault, .floatingVoice),
+             (.floatingVoice, .floatingDefault),
+             (.floatingVoice, .floatingVoice):
+            return true
+        case (.taskChat(let lhs), .taskChat(let rhs)):
+            return lhs == rhs
+        case (.agentPill(let lhs), .agentPill(let rhs)):
+            return lhs == rhs
+        default:
+            return self == activeOwner
+        }
+    }
 }
 
 extension ChatMessage {
@@ -795,6 +821,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
     @Published var isStopping = false
+    @Published private(set) var activeTurnOwner: ChatTurnOwner?
     @Published var isClearing = false
     @Published var errorMessage: String?
     /// Monotonic token that increments each time the local user sends a message.
@@ -3024,6 +3051,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let omiSessionId: String?
         let surfaceRef: AgentSurfaceReference?
         let legacyClientScope: String?
+        let turnOwner: ChatTurnOwner
     }
 
     /// Follow-ups queued while the current query is being interrupted.
@@ -3032,8 +3060,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var activeFollowUpContext: PendingFollowUpRequest?
 
     /// Stop the running agent, keeping partial response
-    func stopAgent() {
-        guard isSending else { return }
+    func canInterruptActiveTurn(owner: ChatTurnOwner) -> Bool {
+        guard isSending else { return true }
+        guard let activeTurnOwner else { return false }
+        return owner.canInterrupt(activeTurnOwner)
+    }
+
+    @discardableResult
+    func stopAgent(owner: ChatTurnOwner) -> Bool {
+        guard isSending else { return false }
+        guard let activeTurnOwner, owner.canInterrupt(activeTurnOwner) else {
+            log("ChatProvider: ignoring stop from non-owner turn")
+            return false
+        }
         isStopping = true
         let myGen = sendGeneration
         Task {
@@ -3054,6 +3093,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
         // Result flows back normally through the bridge with partial text
+        return true
     }
 
     /// Send a follow-up message while the agent is still running.
@@ -3116,7 +3156,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sessionKey: nil,
             omiSessionId: nil,
             surfaceRef: nil,
-            legacyClientScope: nil
+            legacyClientScope: nil,
+            turnOwner: activeTurnOwner ?? .mainChat
         )
         pendingFollowUps.append(PendingFollowUpRequest(
             text: trimmedText,
@@ -3127,18 +3168,30 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sessionKey: context.sessionKey,
             omiSessionId: context.omiSessionId,
             surfaceRef: context.surfaceRef,
-            legacyClientScope: context.legacyClientScope
+            legacyClientScope: context.legacyClientScope,
+            turnOwner: context.turnOwner
         ))
         await agentBridge.interrupt()
         log("ChatProvider: follow-up queued, interrupt sent")
     }
 
     @discardableResult
-    func appendAssistantMessage(_ text: String, notificationContext: String? = nil, notificationScreenshot: Data? = nil) -> ChatMessage? {
+    func appendAssistantMessage(
+        _ text: String,
+        clientTurnId: String? = nil,
+        notificationContext: String? = nil,
+        notificationScreenshot: Data? = nil
+    ) -> ChatMessage? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
 
-        let aiMessage = ChatMessage(text: trimmedText, sender: .ai, notificationContext: notificationContext, notificationScreenshot: notificationScreenshot)
+        let aiMessage = ChatMessage(
+            clientTurnId: clientTurnId,
+            text: trimmedText,
+            sender: .ai,
+            notificationContext: notificationContext,
+            notificationScreenshot: notificationScreenshot
+        )
         let localId = aiMessage.id
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -3409,7 +3462,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         surfaceRef: AgentSurfaceReference? = nil,
         legacyClientScope: String? = nil,
         resume: String? = nil,
-        imageData: Data? = nil
+        imageData: Data? = nil,
+        turnOwner: ChatTurnOwner = .mainChat,
+        clientTurnId: String = UUID().uuidString
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
@@ -3443,6 +3498,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let tracer = QueryTracerContext.current
 
         isSending = true
+        activeTurnOwner = turnOwner
         errorMessage = nil
         currentError = nil
         sendGeneration += 1
@@ -3456,7 +3512,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sessionKey: sessionKey,
             omiSessionId: omiSessionId,
             surfaceRef: surfaceRef,
-            legacyClientScope: legacyClientScope
+            legacyClientScope: legacyClientScope,
+            turnOwner: turnOwner
         )
 
         // Ensure bridge is running
@@ -3587,6 +3644,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             let userMessage = ChatMessage(
                 id: userMessageId,
+                clientTurnId: clientTurnId,
                 text: trimmedText,
                 sender: .user,
                 attachments: attachmentsForMessage
@@ -3631,6 +3689,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let aiMessageId = UUID().uuidString
         let aiMessage = ChatMessage(
             id: aiMessageId,
+            clientTurnId: clientTurnId,
             text: "",
             sender: .ai,
             isStreaming: true
@@ -3809,7 +3868,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                             if token.isEmpty {
                                 log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
                                 self?.needsBrowserExtensionSetup = true
-                                self?.stopAgent()
+                                self?.stopAgent(owner: turnOwner)
                                 // Keep floating-bar sessions non-intrusive: do not foreground
                                 // the main window when the query originated from the floating bar.
                                 if sessionKey != "floating" {
@@ -4299,7 +4358,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 sessionKey: followUp.sessionKey,
                 omiSessionId: followUp.omiSessionId,
                 surfaceRef: followUp.surfaceRef,
-                legacyClientScope: followUp.legacyClientScope
+                legacyClientScope: followUp.legacyClientScope,
+                turnOwner: followUp.turnOwner
             )
         }
         return completedResponseText
@@ -4310,6 +4370,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard sendGeneration == generation else { return false }
         isSending = false
         isStopping = false
+        activeTurnOwner = nil
         activeFollowUpContext = nil
         return true
     }

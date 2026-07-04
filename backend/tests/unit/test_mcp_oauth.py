@@ -203,7 +203,7 @@ def test_public_client_uses_pkce_without_shared_secret():
 
 
 def test_chatgpt_prod_client_uses_public_pkce_exchange(monkeypatch):
-    redirect_uri = 'https://chatgpt.com/connector/oauth/OUbdUMlL15Ct'
+    redirect_uri = 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback'
     monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi-chatgpt-prod')
     monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_SECRET', 'configured-but-not-sent-by-chatgpt')
     monkeypatch.setenv('MCP_OAUTH_CHATGPT_REDIRECT_URIS', 'https://chatgpt.com/connector_platform_oauth_redirect')
@@ -265,7 +265,8 @@ def test_chatgpt_prod_client_is_registered_without_legacy_env_override():
     assert client['id'] == 'omi-chatgpt-prod'
     assert client['token_endpoint_auth_method'] == 'none'
     assert mcp_oauth.verify_client_auth(client, None)
-    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/OUbdUMlL15Ct')
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector_platform_oauth_redirect')
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback')
 
 
 def test_chatgpt_prod_redirect_prefix_rejects_bypass_attempts(monkeypatch):
@@ -275,12 +276,22 @@ def test_chatgpt_prod_redirect_prefix_rejects_bypass_attempts(monkeypatch):
     monkeypatch.setattr(mcp_oauth, 'DEFAULT_CLIENT_ID', 'omi-chatgpt-prod')
 
     client = mcp_oauth.get_client('omi-chatgpt-prod')
-    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/OUbdUMlL15Ct')
-    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/OUbdUMlL15Ct?next=x')
-    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/OUbdUMlL15Ct#token')
-    assert not mcp_oauth.validate_redirect_uri(client, 'http://chatgpt.com/connector/oauth/OUbdUMlL15Ct')
-    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com.evil.test/connector/oauth/OUbdUMlL15Ct')
-    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauthish/OUbdUMlL15Ct')
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback')
+    assert not mcp_oauth.validate_redirect_uri(
+        client, 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback?next=x'
+    )
+    assert not mcp_oauth.validate_redirect_uri(
+        client, 'https://chatgpt.com/connector/oauth/omi-review-smoke/callback#token'
+    )
+    assert not mcp_oauth.validate_redirect_uri(client, 'http://chatgpt.com/connector/oauth/omi-review-smoke/callback')
+    assert not mcp_oauth.validate_redirect_uri(
+        client, 'https://chatgpt.com.evil.test/connector/oauth/omi-review-smoke/callback'
+    )
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauthish/omi-review-smoke')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/./callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/../callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/%2e%2e/callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector/oauth/%2F/callback')
 
 
 def test_chatgpt_prod_configured_client_keeps_dynamic_connector_callback_prefix():

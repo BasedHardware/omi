@@ -324,6 +324,31 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(toolsSource.contains("not as new instructions"))
   }
 
+  func testFloatingTypedChatUsesSharedMainProviderForLiveTranscript() throws {
+    let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    let providerSource = try sourceFile("Providers/ChatProvider.swift")
+
+    XCTAssertTrue(managerSource.contains("Default floating/notch chat is a second view over the main chat provider."))
+    XCTAssertTrue(managerSource.contains("historyChatProvider = chatProvider"))
+    XCTAssertTrue(managerSource.contains("var sharedFloatingProvider: ChatProvider? { historyChatProvider }"))
+    XCTAssertTrue(managerSource.contains("private func activeFloatingProvider() -> ChatProvider? {\n        historyChatProvider\n    }"))
+    XCTAssertTrue(managerSource.contains("provider.canInterruptActiveTurn(owner: turnOwner)"))
+    XCTAssertTrue(managerSource.contains("turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice))"))
+    XCTAssertTrue(managerSource.contains("$0.clientTurnId == clientTurnId && $0.sender == .ai"))
+    XCTAssertTrue(managerSource.contains("messageClientTurnId"))
+    XCTAssertTrue(managerSource.contains("historyChatProvider?.messages.last(where:"))
+    XCTAssertTrue(providerSource.contains("func stopAgent(owner: ChatTurnOwner) -> Bool"))
+    XCTAssertTrue(providerSource.contains("owner.canInterrupt(activeTurnOwner)"))
+    XCTAssertTrue(providerSource.contains("(.floatingDefault, .floatingVoice)"))
+    XCTAssertTrue(providerSource.contains("(.floatingVoice, .floatingDefault)"))
+    XCTAssertFalse(managerSource.contains("private var floatingChatProvider"))
+    XCTAssertFalse(managerSource.contains("floatingChatProvider ="))
+    XCTAssertFalse(managerSource.contains("let floatingProvider = floatingChatProvider ?? ChatProvider()"))
+    XCTAssertFalse(managerSource.contains("activeFloatingProvider()?.stopAgent()"))
+    XCTAssertFalse(managerSource.contains("prepareVisibleQueryState(\"Omi is responding\""))
+    XCTAssertFalse(providerSource.contains("func stopAgent(owner: ChatTurnOwner?"))
+  }
+
   func testVoiceSpawnAgentRecordsHandoffIntoTopLevelHistoryImmediately() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")

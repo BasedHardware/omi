@@ -381,7 +381,7 @@ struct ChatPage: View {
       sessionsLoadError: chatProvider.sessionsLoadError,
       onRetry: { Task { await chatProvider.retryLoad() } },
       localSendToken: chatProvider.localSendToken,
-      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent() },
+      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent(owner: .mainChat) },
       welcomeContent: { welcomeMessage }
     )
   }
@@ -457,7 +457,7 @@ struct ChatPage: View {
         Task { await chatProvider.sendFollowUp(text) }
       },
       onStop: {
-        chatProvider.stopAgent()
+        chatProvider.stopAgent(owner: .mainChat)
       },
       isSending: chatProvider.isSending,
       isStopping: chatProvider.isStopping,
