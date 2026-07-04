@@ -19,6 +19,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/atomic.h>
 
+#include "sd_card.h"
 #include "t5838_aad.h"
 #include "transport.h"
 #endif
@@ -343,7 +344,8 @@ static void enter_hw_aad(void)
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
     k_msleep(CONFIG_OMI_AAD_SETTLE_MS); /* settle noise floor; swallow entry transient */
 
-    transport_ble_pause(); /* turn BLE radio off while the mic is asleep (offline) */
+    transport_ble_pause();   /* turn BLE radio off while the mic is asleep (offline) */
+    sd_request_power(false); /* cut SD NAND power while idle */
 
     atomic_set(&aad_in_sleep, 1);
 
@@ -372,6 +374,7 @@ static void exit_hw_aad(void)
     t5838_aad_release_clk(); /* hand CLK back to the PDM peripheral */
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
+    sd_request_power(true);   /* power on + remount SD before audio starts flowing */
     mic_resume();             /* dmic START reclaims CLK via pinctrl */
     transport_ble_resume();   /* re-advertise so a phone can connect while recording */
     LOG_INF("AAD: WAKE -> mic resumed");
