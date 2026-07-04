@@ -72,14 +72,18 @@ async def _generate(api_id: int | None, api_hash: str | None) -> str:
 
     client = TelegramClient(StringSession(), api_id, api_hash)
     await client.start(phone=phone)
-    session_str = client.session.save()
-    await client.disconnect()
 
+    # Fetch user info BEFORE disconnecting — Telethon API calls
+    # require an active connection. cubic review 4629894864 P1:
+    # get_me() after disconnect() raises ConnectionError.
     me = await client.get_me()
     name = " ".join(filter(None, [getattr(me, "first_name", None), getattr(me, "last_name", None)]))
 
+    session_str = client.session.save()
+    await client.disconnect()
+
     print("", file=sys.stderr, flush=True)
-    print(f"✅ Signed in successfully as {name}!", file=sys.stderr, flush=True)
+    print(f"Signed in successfully as {name}!", file=sys.stderr, flush=True)
     print("Remember to not break the ToS or you will risk an account ban!", file=sys.stderr, flush=True)
 
     return session_str
