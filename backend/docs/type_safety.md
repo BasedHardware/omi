@@ -120,6 +120,7 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `routers/phone_calls.py`
   - `routers/x_connector.py`
   - `routers/task_integrations.py`
+  - `routers/omni_relay.py`
   - `routers/updates.py`
   - `routers/wrapped.py`
   - `utils/conversations/memories.py`
