@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
@@ -103,6 +103,14 @@ class TokenResponse(BaseModel):
 
 class RenamePhoneNumberRequest(BaseModel):
     friendly_name: str = Field(..., min_length=1, max_length=100)
+
+    @field_validator('friendly_name')
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('friendly_name cannot be blank')
+        return v
 
 
 # ************************************************
@@ -242,7 +250,7 @@ def rename_phone_number(
 ):
     """Rename a verified phone number's friendly_name label."""
     check_call_access(uid)
-    if not phone_calls_db.rename_phone_number(uid, phone_number_id, request.friendly_name.strip()):
+    if not phone_calls_db.rename_phone_number(uid, phone_number_id, request.friendly_name):
         raise HTTPException(status_code=404, detail="Phone number not found")
     return phone_calls_db.get_phone_number(uid, phone_number_id)
 

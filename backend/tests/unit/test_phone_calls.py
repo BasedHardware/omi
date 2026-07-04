@@ -365,10 +365,23 @@ def test_rename_rejects_empty(mock_db, client):
     mock_db.rename_phone_number.assert_not_called()
 
 
+@patch('routers.phone_calls.phone_calls_db')
+def test_rename_rejects_whitespace_only(mock_db, client):
+    resp = client.patch('/v1/phone/numbers/n1', json={'friendly_name': '   '})
+    assert resp.status_code == 422  # blank after strip
+    mock_db.rename_phone_number.assert_not_called()
+
+
+def _id_doc(doc_id):
+    d = MagicMock()
+    d.id = doc_id
+    return d
+
+
 def test_set_primary_reassigns_flags(monkeypatch):
-    numbers = [{'id': 'a'}, {'id': 'b'}, {'id': 'c'}]
-    monkeypatch.setattr(phone_db, 'get_phone_numbers', lambda uid: numbers)
     fake_db = MagicMock()
+    col = fake_db.collection.return_value.document.return_value.collection.return_value
+    col.select.return_value.stream.return_value = iter([_id_doc('a'), _id_doc('b'), _id_doc('c')])
     batch = fake_db.batch.return_value
     monkeypatch.setattr(phone_db, 'db', fake_db)
 
@@ -380,8 +393,9 @@ def test_set_primary_reassigns_flags(monkeypatch):
 
 
 def test_set_primary_missing_returns_false(monkeypatch):
-    monkeypatch.setattr(phone_db, 'get_phone_numbers', lambda uid: [{'id': 'a'}])
     fake_db = MagicMock()
+    col = fake_db.collection.return_value.document.return_value.collection.return_value
+    col.select.return_value.stream.return_value = iter([_id_doc('a')])
     monkeypatch.setattr(phone_db, 'db', fake_db)
     assert phone_db.set_primary_phone_number('uid', 'nope') is False
     fake_db.batch.return_value.commit.assert_not_called()

@@ -135,16 +135,16 @@ def set_primary_phone_number(uid: str, phone_number_id: str) -> bool:
     """Make one verified number the user's primary outbound caller ID.
 
     Sets is_primary=True on the chosen number and False on all others in a single batch. Returns
-    False if the id does not belong to the user. is_primary is unencrypted, so this touches only
-    that flag and never the encrypted phone_number field.
+    False if the id does not belong to the user. Keys off the Firestore document id (always
+    present) rather than a stored field, and touches only the unencrypted is_primary flag.
     """
-    numbers = get_phone_numbers(uid)
-    if not any(n.get('id') == phone_number_id for n in numbers):
-        return False
     col = db.collection('users').document(uid).collection(phone_numbers_collection)
+    doc_ids = [doc.id for doc in col.select([]).stream()]
+    if phone_number_id not in doc_ids:
+        return False
     batch = db.batch()
-    for n in numbers:
-        batch.update(col.document(n['id']), {'is_primary': n['id'] == phone_number_id})
+    for doc_id in doc_ids:
+        batch.update(col.document(doc_id), {'is_primary': doc_id == phone_number_id})
     batch.commit()
     return True
 

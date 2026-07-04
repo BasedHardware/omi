@@ -15916,6 +15916,21 @@
         "title": "RecordLlmUsageBucketRequest",
         "type": "object"
       },
+      "RenamePhoneNumberRequest": {
+        "properties": {
+          "friendly_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Friendly Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "friendly_name"
+        ],
+        "title": "RenamePhoneNumberRequest",
+        "type": "object"
+      },
       "ReorderFoldersRequest": {
         "description": "Request model for reordering folders.",
         "properties": {
@@ -42603,6 +42618,191 @@
           }
         ],
         "summary": "Remove Phone Number",
+        "tags": [
+          "phone-calls"
+        ]
+      },
+      "patch": {
+        "description": "Rename a verified phone number's friendly_name label.",
+        "operationId": "rename_phone_number_v1_phone_numbers__phone_number_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "phone_number_id",
+            "required": true,
+            "schema": {
+              "title": "Phone Number Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenamePhoneNumberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneNumberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Rename Phone Number",
+        "tags": [
+          "phone-calls"
+        ]
+      }
+    },
+    "/v1/phone/numbers/{phone_number_id}/primary": {
+      "post": {
+        "description": "Set a verified number as the user's primary outbound caller ID.",
+        "operationId": "make_phone_number_primary_v1_phone_numbers__phone_number_id__primary_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "phone_number_id",
+            "required": true,
+            "schema": {
+              "title": "Phone Number Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneNumberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Make Phone Number Primary",
         "tags": [
           "phone-calls"
         ]
