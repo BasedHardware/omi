@@ -10,6 +10,11 @@ import sys
 import time
 from typing import Any
 
+EXIT_REFRESH_OBSERVED = 0
+EXIT_HARD_ERROR = 1
+EXIT_TIMEOUT = 2
+EXIT_NOT_READY_AFTER_REFRESH = 3
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Wait for an ExternalSecret refresh observed after a force-sync.')
@@ -26,23 +31,38 @@ def main() -> int:
     min_refresh_time = parse_timestamp(args.min_refresh_time)
     deadline = time.monotonic() + args.timeout_seconds
     last_reason = 'ExternalSecret status unavailable'
+    saw_fresh_refresh = False
 
     while True:
-        state = load_json(args.state_json) if args.state_json else fetch_external_secret(args.namespace, args.name)
+        try:
+            state = load_json(args.state_json) if args.state_json else fetch_external_secret(args.namespace, args.name)
+        except Exception as exc:
+            print(f'ERROR: failed to read ExternalSecret state: {exc}', file=sys.stderr)
+            return EXIT_HARD_ERROR
         observed, reason = external_secret_refresh_observed(state, min_refresh_time)
         if observed:
             print(f'ExternalSecret refresh observed: {reason}')
-            return 0
+            return EXIT_REFRESH_OBSERVED
         last_reason = reason
+        if reason.startswith('status.refreshTime') and 'Ready condition is not true' in reason:
+            saw_fresh_refresh = True
         if args.state_json or time.monotonic() >= deadline:
             break
         time.sleep(args.interval_seconds)
+
+    if saw_fresh_refresh:
+        print(
+            f'ERROR: ExternalSecret refreshed after {min_refresh_time.isoformat()} but Ready condition is not true: '
+            f'{last_reason}',
+            file=sys.stderr,
+        )
+        return EXIT_NOT_READY_AFTER_REFRESH
 
     print(
         f'ERROR: timed out waiting for ExternalSecret refresh after {min_refresh_time.isoformat()}: {last_reason}',
         file=sys.stderr,
     )
-    return 1
+    return EXIT_TIMEOUT
 
 
 def fetch_external_secret(namespace: str, name: str) -> dict[str, Any]:

@@ -520,6 +520,31 @@ def test_provisional_cloud_run_env_missing_is_allowed():
     assert errors == []
 
 
+def test_empty_literal_env_matches_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={'MEMORY_ENABLED_USERS': {'value': ''}},
+        actual={'MEMORY_ENABLED_USERS': {'name': 'MEMORY_ENABLED_USERS'}},
+        strict_provisional=False,
+    )
+
+    assert errors == []
+
+
+def test_non_empty_literal_env_still_rejects_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={'MEMORY_MODE': {'value': 'off'}},
+        actual={'MEMORY_MODE': {'name': 'MEMORY_MODE'}},
+        strict_provisional=False,
+    )
+
+    assert len(errors) == 1
+    assert errors[0].message == "env MEMORY_MODE value mismatch: expected 'off'"
+
+
 def test_backend_listen_chart_only_workflow_preserves_runtime_project():
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend_listen_helm.yml'
     workflow_text = workflow_path.read_text(encoding='utf-8')
