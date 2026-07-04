@@ -391,6 +391,39 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
     # Map to the schema persona_client.chat expects.
     previous_messages = [{"role": m["role"], "text": m["text"]} for m in recent[-20:]]  # most recent 20
 
+    # Language-aware context: if the ring buffer doesn't have enough
+    # conversation history (e.g. first interaction with this contact),
+    # fetch real messages from Telegram so the LLM can detect the
+    # language and tone the user uses with this specific contact.
+    # Without this, the LLM defaults to the persona's primary language
+    # (e.g. Thai) even when the user has been chatting in English.
+    if len(previous_messages) < 5:
+        try:
+            tg_msgs = await client.get_chat_history(body.chat_id, limit=20)
+            # Get the user's own ID to determine message direction.
+            me = await client._client.get_me()
+            my_id = str(me.id) if me else None
+            # Telethon returns newest-first; reverse for chronological order.
+            tg_history = []
+            for msg in reversed(tg_msgs):
+                text = msg.get("text", "")
+                if not text or not text.strip():
+                    continue
+                sender_id = str(msg.get("sender_id", ""))
+                # Messages FROM the user = "ai" (we are imitating the user).
+                # Messages FROM the contact = "human" (the person talking to us).
+                role = "ai" if sender_id == my_id else "human"
+                tg_history.append({"role": role, "text": text})
+            if tg_history:
+                previous_messages = tg_history[-20:]
+                logger.info(
+                    "fetched %d messages from Telegram for language context (chat=%s)",
+                    len(previous_messages),
+                    body.chat_id,
+                )
+        except Exception as e:
+            logger.warning("could not fetch Telegram history for context: %s", type(e).__name__)
+
     # plan §8: rate-limit cap BEFORE the persona call. Saves LLM
     # tokens when the cap is hit -- otherwise we'd call the
     # persona API only to discover we can't send. can_send is

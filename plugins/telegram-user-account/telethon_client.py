@@ -155,6 +155,19 @@ class TelethonClient:
                 "desktop to generate a new session."
             )
         full_name = " ".join(filter(None, [me.first_name, me.last_name])).strip()
+
+        # Populate Telethon's entity cache by fetching dialogs.
+        # Without this, get_messages / send_message fail with
+        # "Could not find the input entity for PeerUser(user_id=N)"
+        # because the session's entity cache is empty on first
+        # connect. Fetching dialogs resolves all recent contacts
+        # and groups into the cache so subsequent operations work.
+        try:
+            await self._client.get_dialogs(limit=100)
+            logger.info("entity cache populated from dialogs")
+        except Exception:
+            logger.warning("could not populate entity cache; some contacts may fail")
+
         return {
             "phone": getattr(me, "phone", None),
             "name": full_name or (getattr(me, "username", None) or "Unknown"),
