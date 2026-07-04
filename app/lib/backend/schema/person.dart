@@ -1,3 +1,8 @@
+// Phase 4.1 SKIPPED — has custom behavior, so not typedef'd here.
+// Person.fromGenerated derives colorIdx from id.hashCode, throws FormatException on
+// missing created_at/updated_at, defaults speechSamplesVersion to 3, and toJson injects
+// color_idx. None of that survives a plain typedef; this file needs manual care.
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as wire;
 

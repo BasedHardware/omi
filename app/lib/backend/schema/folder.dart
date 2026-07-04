@@ -1,3 +1,7 @@
+// Phase 4.1 SKIPPED — has copyWith + computed accessors, so not typedef'd here.
+// Folder exposes copyWith(), a computed colorValue getter, and a custom toString();
+// per the refactor rules, files with copyWith need manual care and are excluded.
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire;
