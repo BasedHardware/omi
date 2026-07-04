@@ -78,6 +78,10 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertFalse(source.contains(".dismissableSheet(isPresented: $isShowingAppsPopup)"))
         XCTAssertFalse(source.contains("HomeMoreConnectorsSheet"))
         XCTAssertFalse(source.contains("openAppsPage()"))
+        XCTAssertTrue(
+            popupMethod.contains("appProvider.clearFilters()"),
+            "Opening the Home popup must clear stale marketplace filters or they replace the Imports/Exports sections"
+        )
         XCTAssertTrue(popupMethod.contains("appsPopupInitialSection = initialSection"))
         XCTAssertTrue(popupMethod.contains("appsPopupPresentationID = UUID()"))
         XCTAssertTrue(popupMethod.contains("isShowingAppsPopup = true"))

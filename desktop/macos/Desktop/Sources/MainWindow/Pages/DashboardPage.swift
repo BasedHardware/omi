@@ -949,6 +949,10 @@ struct DashboardPage: View {
     }
 
     private func openAppsPopup(initialSection: AppsCatalogInitialSection) {
+        // Filters left behind by earlier catalog visits (a category, a search,
+        // "Installed") would otherwise replace the Imports/Exports sections
+        // this popup exists to show.
+        appProvider.clearFilters()
         appsPopupInitialSection = initialSection
         appsPopupPresentationID = UUID()
         isShowingAppsPopup = true
