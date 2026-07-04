@@ -428,6 +428,18 @@ check_backend_typecheck_if_needed() {
     'backend/routers/updates.py' \
     'backend/routers/speech_profile.py' \
     'backend/routers/wrapped.py' \
+    'backend/routers/action_items.py' \
+    'backend/routers/agent_tools.py' \
+    'backend/routers/agents.py' \
+    'backend/routers/announcements.py' \
+    'backend/routers/auth.py' \
+    'backend/routers/auto_model.py' \
+    'backend/routers/chat_sessions.py' \
+    'backend/routers/goals.py' \
+    'backend/routers/integration.py' \
+    'backend/routers/integrations.py' \
+    'backend/routers/notifications.py' \
+    'backend/routers/oauth.py' \
     'backend/utils/conversations/memories.py' \
     'backend/utils/llm/__init__.py' \
     'backend/utils/llm/clients.py' \
