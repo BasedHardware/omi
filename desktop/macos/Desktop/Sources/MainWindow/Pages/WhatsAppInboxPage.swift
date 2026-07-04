@@ -18,14 +18,19 @@ struct WhatsAppInboxPage: View {
       if store.permissionNeeded {
         permissionCard
       } else {
-        HStack(spacing: 0) {
-          conversationList
-            .frame(width: 300)
-          Divider()
-          if let chat = store.selectedChat {
-            ChatDetailView(chat: chat, store: store, accent: Self.whatsappGreen)
-          } else {
-            emptyDetail
+        VStack(spacing: 0) {
+          if store.sendPermissionNeeded {
+            sendPermissionBanner
+          }
+          HStack(spacing: 0) {
+            conversationList
+              .frame(width: 300)
+            Divider()
+            if let chat = store.selectedChat {
+              ChatDetailView(chat: chat, store: store, accent: Self.whatsappGreen)
+            } else {
+              emptyDetail
+            }
           }
         }
       }
@@ -98,6 +103,36 @@ struct WhatsAppInboxPage: View {
       Text("Select a conversation").scaledFont(size: 14).foregroundColor(OmiColors.textSecondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  /// One-time banner shown when a send couldn't complete for lack of Accessibility /
+  /// Automation permission (needed to press Return in WhatsApp). Auto-clears on the next
+  /// successful send.
+  private var sendPermissionBanner: some View {
+    HStack(spacing: 10) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundColor(.orange)
+      Text(
+        "Omi needs Accessibility & Automation access to send replies in WhatsApp. Grant it once and replies will auto-send."
+      )
+      .scaledFont(size: 12)
+      .foregroundColor(OmiColors.textPrimary)
+      .fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 8)
+      Button("Open Settings") { WhatsAppPermissionPolicy.openAccessibilitySettings() }
+        .scaledFont(size: 12)
+      Button {
+        store.sendPermissionNeeded = false
+      } label: {
+        Image(systemName: "xmark").scaledFont(size: 11)
+      }
+      .buttonStyle(.plain)
+      .foregroundColor(OmiColors.textSecondary)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 9)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.orange.opacity(0.12))
   }
 
   private var permissionCard: some View {
@@ -275,6 +310,7 @@ private struct ChatDetailView: View {
       // selected now.
       store.appendSent(text, to: chat.id)
       draft = ""
+      store.sendPermissionNeeded = false
     } catch let error as WhatsAppSenderError {
       switch error {
       case .invalidTarget, .permissionRequired, .sendUnconfirmed:
@@ -282,6 +318,7 @@ private struct ChatDetailView: View {
         // the chat, grant the one-time permission, or check WhatsApp before resending) and
         // keep the draft so a possibly-unsent reply isn't lost. (Both the manual and
         // auto-reply paths keep the draft on .sendUnconfirmed.)
+        if case .permissionRequired = error { store.sendPermissionNeeded = true }
         infoText = error.errorDescription
       case .notConfirmed, .sendFailed:
         // Nothing was sent — keep the draft so the user can try again.

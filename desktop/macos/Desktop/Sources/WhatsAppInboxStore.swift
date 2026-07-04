@@ -13,6 +13,10 @@ final class WhatsAppInboxStore: ObservableObject {
   @Published var isLoading = false
   @Published var errorMessage: String?
   @Published var permissionNeeded = false
+  /// True when a send couldn't complete because Accessibility/Automation isn't granted
+  /// (auto-send needs both to press Return in WhatsApp). Surfaced as a banner so the user
+  /// can grant it once; cleared automatically the next time a send succeeds.
+  @Published var sendPermissionNeeded = false
   /// Drafts are generated on-demand when the user opens a chat (not eagerly for
   /// every inbound), so the "Draft ready" pill only appears on chats the user
   /// actually looked at.
@@ -271,6 +275,7 @@ final class WhatsAppInboxStore: ObservableObject {
         // Only reflect the send once WhatsApp's database confirms it (send() throws
         // otherwise), so auto-reply never optimistically shows an unsent message.
         appendSent(text, to: chat.id)
+        sendPermissionNeeded = false
         return
       } catch is CancellationError {
         // Auto-reply was toggled off (or the task cancelled) mid-send — nothing was sent
@@ -302,6 +307,8 @@ final class WhatsAppInboxStore: ObservableObject {
         } else {
           NSLog("WhatsApp auto-reply not sent for \(chat.chatID): \(error.localizedDescription)")
         }
+        // Surface a one-time "grant permission" banner if that's why it couldn't send.
+        if case WhatsAppSenderError.permissionRequired = error { sendPermissionNeeded = true }
         preDrafts[chat.id] = text
         return
       }
