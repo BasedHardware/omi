@@ -124,6 +124,7 @@
         "parakeet/gpu_worker.py",
         "parakeet/main.py",
         "parakeet/speaker_math.py",
+        "parakeet/stream_handler.py",
         "parakeet/transcribe.py",
         "pusher/main.py",
         "routers/__init__.py",

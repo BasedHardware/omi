@@ -17,7 +17,7 @@ import tempfile
 import threading
 import wave as _wave
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 import numpy as np
@@ -34,7 +34,7 @@ try:
         ContextSize,  # type: ignore[reportUnknownVariableType]
         StreamingBatchedAudioBuffer,  # type: ignore[reportUnknownVariableType]
     )
-    from omegaconf import open_dict  # type: ignore[reportMissingImports]
+    from omegaconf import open_dict
 except ImportError:
     RNNTDecodingConfig = None
     batched_hyps_to_hypotheses = None
@@ -331,7 +331,7 @@ class _NemoRNNTStreamingDecoder:
                 chunk_batched_hyps: Any = cast(Any, decode_result[0])
                 self._state = decode_result[1]
             else:
-                chunk_batched_hyps = cast(Any, decode_result)
+                chunk_batched_hyps = decode_result
                 self._state = None
 
             if self._current_batched_hyps is None:
@@ -402,7 +402,7 @@ class StreamSession:
         self._streaming_text: str = ""
         self._last_emitted_text: str = ""
 
-        self._spk_centroids: List[np.ndarray] = []
+        self._spk_centroids: List[np.ndarray[Any, Any]] = []
         self._spk_counts: List[int] = []
         self._last_speaker: int = 0
 
@@ -607,10 +607,7 @@ class StreamSession:
             return self._build_segments(text, speech_start, dur, speech_pcm)
 
         loop = asyncio.get_running_loop()
-        result = cast(
-            Dict[str, Any],
-            await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm),
-        )
+        result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm)
 
         text = result.get("text", "")
         raw_segments_obj: object = result.get("segments", [])
@@ -618,7 +615,8 @@ class StreamSession:
 
         if not raw_segments and text:
             dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
-            raw_segments = [{"text": text, "start": 0.0, "end": dur}]
+            new_seg: Dict[str, Any] = {"text": text, "start": 0.0, "end": dur}
+            raw_segments = [new_seg]
 
         detected_lang: str = "en"
         if text and len(text.strip()) >= 10:
@@ -690,8 +688,7 @@ class StreamSession:
         tmp.close()
         del wav_bytes
         try:
-            result: object = transcribe_file(tmp.name)
-            return cast(Dict[str, Any], result)
+            return transcribe_file(tmp.name)
         finally:
             os.unlink(tmp.name)
 
@@ -734,16 +731,16 @@ class StreamSession:
             logger.warning(f"Speaker assignment failed: {e}")
             return f"SPEAKER_{self._last_speaker}"
 
-    def _get_embedding(self, wav_bytes: bytes) -> Optional[np.ndarray]:
+    def _get_embedding(self, wav_bytes: bytes) -> Optional[np.ndarray[Any, Any]]:
         if has_builtin_embedding():
             return self._get_embedding_builtin(wav_bytes)
         if SPEAKER_EMBEDDING_URL:
             return self._get_embedding_http(wav_bytes)
         return None
 
-    def _get_embedding_builtin(self, wav_bytes: bytes) -> Optional[np.ndarray]:
+    def _get_embedding_builtin(self, wav_bytes: bytes) -> Optional[np.ndarray[Any, Any]]:
         try:
-            waveform, sample_rate = cast(Tuple[Any, int], wav_bytes_to_waveform(wav_bytes))
+            waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
             dur: float = waveform.shape[1] / sample_rate
             if dur < MIN_EMBEDDING_AUDIO_S:
                 return None
@@ -761,7 +758,7 @@ class StreamSession:
             logger.warning(f"Built-in embedding failed: {e}")
             return None
 
-    def _get_embedding_http(self, wav_bytes: bytes) -> Optional[np.ndarray]:
+    def _get_embedding_http(self, wav_bytes: bytes) -> Optional[np.ndarray[Any, Any]]:
         try:
             with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
                 resp = client.post(

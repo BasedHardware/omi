@@ -29,27 +29,27 @@ from database.users import (
 from models.users import PlanType, Subscription, SubscriptionStatus
 from utils import stripe as stripe_utils
 from utils import subscription as subscription_utils
-from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id  # type: ignore[reportUnknownVariableType]  # utils.apps partially typed
+from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
 from utils.executors import db_executor, run_blocking, stripe_executor
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.log_sanitizer import sanitize
-from utils.notifications import send_subscription_paid_personalized_notification  # type: ignore[reportUnknownVariableType]  # utils.notifications partially typed
+from utils.notifications import send_subscription_paid_personalized_notification
 from utils.other import endpoints as auth
 from utils.overage import (
     OVERAGE_EXPLAINER_TITLE,
     PROVIDER_REFERENCE_RATES,
     build_explainer_text,
-    get_user_overage,  # type: ignore[reportUnknownVariableType]  # utils.overage partially typed
+    get_user_overage,
     is_overage_plan,
 )
 from utils.stripe import base_url, create_connect_account, is_onboarding_complete, refresh_connect_account_link
 from utils.subscription import (
-    adapt_plans_for_legacy_client,  # type: ignore[reportUnknownVariableType]  # utils.subscription partially typed
+    adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
-    filter_plans_for_user,  # type: ignore[reportUnknownVariableType]  # utils.subscription partially typed
+    filter_plans_for_user,
     find_active_paid_subscription_for_user,
     get_basic_plan_limits,
-    get_paid_plan_definitions,  # type: ignore[reportUnknownVariableType]  # utils.subscription partially typed
+    get_paid_plan_definitions,
     get_plan_limits,
     get_plan_type_from_price_id,
     is_paid_plan,
@@ -275,9 +275,9 @@ def get_available_plans_endpoint(
         # desktop builds see the pre-rollout plan shape. Then legacy-filter so
         # existing subscribers still see their current plan.
         new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
-        all_definitions = cast(List[Dict[str, Any]], get_paid_plan_definitions())
+        all_definitions = get_paid_plan_definitions()
         if not new_plans_enabled:
-            all_definitions = cast(List[Dict[str, Any]], adapt_plans_for_legacy_client(all_definitions))
+            all_definitions = adapt_plans_for_legacy_client(all_definitions)
             # Operator subscriber on old client: map their Stripe prices to Unlimited
             # so is_active detection works against the legacy catalog.
             if current_subscription and current_subscription.plan == PlanType.operator:
@@ -296,11 +296,8 @@ def get_available_plans_endpoint(
         current_plan = current_subscription.plan if current_subscription else PlanType.basic
         ever_purchased = subscription_utils.has_ever_purchased(uid, current_subscription)
         pricing_options: List[PricingOption] = []
-        for definition in cast(
-            List[Dict[str, Any]],
-            filter_plans_for_user(
-                all_definitions, current_plan, platform=x_app_platform, ever_purchased=ever_purchased
-            ),
+        for definition in filter_plans_for_user(
+            all_definitions, current_plan, platform=x_app_platform, ever_purchased=ever_purchased
         ):
             monthly_price_id = cast(str, definition["monthly_price_id"])
             annual_price_id = cast(str, definition["annual_price_id"])
@@ -388,7 +385,7 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     """
     subscription = users_db.get_user_subscription(uid)
     plan = subscription.plan if subscription else PlanType.basic
-    snapshot = cast(Dict[str, Any], get_user_overage(uid, plan))
+    snapshot = get_user_overage(uid, plan)
 
     return OverageInfoResponse(
         plan=subscription_utils.get_plan_display_name(plan),
@@ -702,7 +699,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     payload = await request.body()
 
     try:
-        event = stripe_utils.parse_event(payload, stripe_signature)  # type: ignore[reportUnknownMemberType]  # utils.stripe.parse_event partially typed
+        event = stripe_utils.parse_event(payload, stripe_signature)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.SignatureVerificationError:
@@ -725,7 +722,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 subscription_id = session["subscription"]
                 await run_blocking(
                     stripe_executor,
-                    cast(Any, stripe_utils.modify_subscription),  # type: ignore[reportUnknownMemberType]  # utils.stripe.modify_subscription partially typed
+                    cast(Any, stripe_utils.modify_subscription),
                     subscription_id,
                     metadata={"uid": uid, "app_id": app_id},
                 )
@@ -1010,7 +1007,7 @@ async def stripe_connect_webhook(request: Request, stripe_signature: str = Heade
     payload = await request.body()
 
     try:
-        event = stripe_utils.parse_connect_event(payload, stripe_signature)  # type: ignore[reportUnknownMemberType]  # utils.stripe.parse_connect_event partially typed
+        event = stripe_utils.parse_connect_event(payload, stripe_signature)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.SignatureVerificationError:
@@ -1296,7 +1293,7 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
         if not paid_app_check:
             return {"subscription": None}
 
-        latest_subscription = cast(Optional[Dict[str, Any]], find_app_subscription(app_id, uid, status_filter='all'))
+        latest_subscription = find_app_subscription(app_id, uid, status_filter='all')
 
         if latest_subscription:
             items_data = cast(List[Dict[str, Any]], latest_subscription.get('items', {}).get('data', []))
@@ -1331,7 +1328,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
         if not paid_app_check:
             raise HTTPException(status_code=404, detail="No active subscription found for this app")
 
-        target_subscription = cast(Optional[Dict[str, Any]], find_app_subscription(app_id, uid, status_filter='active'))
+        target_subscription = find_app_subscription(app_id, uid, status_filter='active')
 
         if not target_subscription:
             raise HTTPException(status_code=404, detail="Active subscription not found for this app")
@@ -1341,7 +1338,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             raise HTTPException(status_code=404, detail="Invalid subscription data")
 
         # Cancel the subscription at period end
-        updated_sub = stripe_utils.modify_subscription(  # type: ignore[reportUnknownMemberType]  # utils.stripe.modify_subscription partially typed
+        updated_sub = stripe_utils.modify_subscription(
             cast(str, target_subscription_id),
             cancel_at_period_end=True,
         )
