@@ -396,10 +396,19 @@ check_backend_typecheck_if_needed() {
     'backend/database/users.py' \
     'backend/database/conversations.py' \
     'backend/database/memories.py' \
+    'backend/database/vector_db.py' \
+    'backend/database/entities.py' \
     'backend/routers/knowledge_graph.py' \
     'backend/routers/memory_admin.py' \
     'backend/routers/memories.py' \
     'backend/routers/memory_product.py' \
+    'backend/routers/__init__.py' \
+    'backend/routers/advice.py' \
+    'backend/routers/focus_sessions.py' \
+    'backend/routers/metrics.py' \
+    'backend/routers/onboarding.py' \
+    'backend/routers/other.py' \
+    'backend/routers/trends.py' \
     'backend/utils/conversations/memories.py' \
     'backend/utils/llm/__init__.py' \
     'backend/utils/llm/clients.py' \
