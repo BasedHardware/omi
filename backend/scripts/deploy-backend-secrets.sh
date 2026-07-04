@@ -12,6 +12,7 @@ NAMESPACE="${NAMESPACE:-}"
 RELEASE_NAME="${RELEASE_NAME:-}"
 DRY_RUN="${DRY_RUN:-false}"
 WAIT_EXTERNAL_SECRET="${WAIT_EXTERNAL_SECRET:-true}"
+EXTERNAL_SECRET_WAIT_TIMEOUT_SECONDS="${EXTERNAL_SECRET_WAIT_TIMEOUT_SECONDS:-120}"
 EXTERNAL_SECRET_NAME="${EXTERNAL_SECRET_NAME:-}"
 TARGET_SECRET_NAME="${TARGET_SECRET_NAME:-}"
 
@@ -98,6 +99,11 @@ HELM_ARGS=(
   --set "gsa.name=${BACKEND_SECRETS_GSA}"
 )
 
+verify_target_secret_keys() {
+  kubectl -n "$NAMESPACE" get secret "$TARGET_SECRET_NAME" -o json \
+    | python3 backend/scripts/verify_k8s_secret_keys.py "$VALUES_FILE"
+}
+
 helm template "${HELM_ARGS[@]}" >/dev/null
 
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -111,11 +117,14 @@ kubectl -n "$NAMESPACE" annotate externalsecret \
   "$EXTERNAL_SECRET_NAME" \
   force-sync="${force_sync_at}" --overwrite
 if [[ "$WAIT_EXTERNAL_SECRET" == "true" ]]; then
-  python3 backend/scripts/wait_external_secret_refresh.py \
+  if python3 backend/scripts/wait_external_secret_refresh.py \
     --namespace "$NAMESPACE" \
     --name "$EXTERNAL_SECRET_NAME" \
     --min-refresh-time "${force_sync_at}" \
-    --timeout-seconds 120
-  kubectl -n "$NAMESPACE" get secret "$TARGET_SECRET_NAME" -o json \
-    | python3 backend/scripts/verify_k8s_secret_keys.py "$VALUES_FILE"
+    --timeout-seconds "$EXTERNAL_SECRET_WAIT_TIMEOUT_SECONDS"; then
+    verify_target_secret_keys
+  else
+    echo "WARNING: ExternalSecret did not report a fresh refresh before timeout; verifying current target secret keys." >&2
+    verify_target_secret_keys
+  fi
 fi
