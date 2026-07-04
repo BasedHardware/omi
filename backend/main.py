@@ -241,9 +241,10 @@ paths_timeout = {
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
-    # STT proxy uploads ride the 300s parakeet client budget (get_stt_proxy_client);
-    # the default POST timeout would cut long files off mid-transcription.
-    "/v1/stt/transcribe": os.environ.get('HTTP_STT_TRANSCRIBE_TIMEOUT', 330),
+    # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
+    # + headroom for auth and the multipart spool read; the default POST timeout
+    # would cut long files off mid-transcription.
+    "/v1/stt/transcribe": os.environ.get('HTTP_STT_TRANSCRIBE_TIMEOUT', 350),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
