@@ -10,6 +10,7 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
     {"text": str, "segments": [{"start", "end", "text", "speaker"}], "detected_language": str}
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -17,7 +18,7 @@ import re
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
-from utils.http_client import get_stt_client, get_stt_semaphore
+from utils.http_client import get_stt_proxy_client, get_stt_proxy_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 
@@ -29,15 +30,20 @@ router = APIRouter()
 # duration cap (PARAKEET_MAX_FILE_DURATION); this only bounds backend memory.
 _MAX_UPLOAD_BYTES = 200_000_000
 
+# How long a request may wait for an upstream slot before failing fast with
+# 503 — each waiter pins its upload buffer, so the queue must stay short.
+_UPSTREAM_WAIT_SECS = 30.0
+
 _SAFE_FILENAME_RE = re.compile(r'[^A-Za-z0-9._-]')
+_MAX_FILENAME_LEN = 64
 
 
 def _safe_upstream_filename(filename) -> str:
     """Parakeet builds its temp file path from the client-supplied filename —
-    never forward path separators or dot-prefixed names upstream.
+    never forward path separators, dot-prefixed names, or overlong names.
     """
     base = os.path.basename(filename or '')
-    base = _SAFE_FILENAME_RE.sub('_', base).lstrip('.')
+    base = _SAFE_FILENAME_RE.sub('_', base).lstrip('.')[:_MAX_FILENAME_LEN]
     return base or 'audio.wav'
 
 
@@ -54,12 +60,17 @@ async def stt_transcribe(
         logger.error('stt_transcribe: HOSTED_PARAKEET_API_URL not configured')
         raise HTTPException(status_code=503, detail='Transcription service not configured')
 
-    # Reject oversized payloads from the Content-Length header before buffering.
+    # Starlette has already spooled the multipart body to disk by this point;
+    # these checks bound backend RAM, not the upload itself. The cheap header
+    # and part-size checks reject early; the bounded read below is the real
+    # enforcement (chunked requests carry no Content-Length).
     content_length = request.headers.get('content-length')
     if content_length and content_length.isdigit() and int(content_length) > _MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
+    if file.size is not None and file.size > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
-    audio_bytes = await file.read()
+    audio_bytes = await file.read(_MAX_UPLOAD_BYTES + 1)
     if not audio_bytes:
         raise HTTPException(status_code=400, detail='No audio data provided')
     if len(audio_bytes) > _MAX_UPLOAD_BYTES:
@@ -70,13 +81,21 @@ async def stt_transcribe(
     files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
     data = {'diarize': 'true' if diarize else 'false'}
 
-    client = get_stt_client()
+    client = get_stt_proxy_client()
+    semaphore = get_stt_proxy_semaphore()
     try:
-        async with get_stt_semaphore():
+        try:
+            await asyncio.wait_for(semaphore.acquire(), timeout=_UPSTREAM_WAIT_SECS)
+        except asyncio.TimeoutError:
+            logger.warning(f'stt_transcribe: no upstream slot within {_UPSTREAM_WAIT_SECS}s uid={uid}')
+            raise HTTPException(status_code=503, detail='Transcription service busy — try again shortly')
+        try:
             resp = await client.post(upstream_url, files=files, data=data)
-    except httpx.HTTPError as e:
-        logger.error(f'stt_transcribe: parakeet request failed uid={uid}: {sanitize(str(e))}')
-        raise HTTPException(status_code=502, detail='Transcription upstream unavailable')
+        except httpx.HTTPError as e:
+            logger.error(f'stt_transcribe: parakeet request failed uid={uid}: {sanitize(str(e))}')
+            raise HTTPException(status_code=502, detail='Transcription upstream unavailable')
+        finally:
+            semaphore.release()
     finally:
         del files
         del audio_bytes
@@ -88,9 +107,11 @@ async def stt_transcribe(
         if resp.status_code in (413, 503):
             detail = 'Transcription failed upstream'
             try:
-                detail = resp.json().get('detail') or detail
+                payload = resp.json()
             except ValueError:
-                pass
+                payload = None
+            if isinstance(payload, dict) and payload.get('detail'):
+                detail = str(payload['detail'])
             logger.warning(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(detail)}')
             raise HTTPException(status_code=resp.status_code, detail=detail)
         logger.error(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(resp.text[:200])}')

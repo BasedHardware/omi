@@ -2,10 +2,11 @@
 
 The route fronts parakeet's `/v2/transcribe` with the standard Omi auth guard
 plus per-UID rate limiting (issue #8854 step 1). These tests mount the real
-router with the auth dependency overridden and the shared STT httpx client
-replaced by a fake, and exercise: the auth requirement, the upstream config
-guard, payload validation, filename sanitization, response passthrough, and
-upstream error mapping.
+router with the auth dependency overridden and the dedicated STT-proxy httpx
+client replaced by a fake, and exercise: the auth requirement, the upstream
+config guard, payload validation (including chunked bodies that carry no
+Content-Length), filename sanitization, upstream slot exhaustion, response
+passthrough, and upstream error mapping.
 """
 
 import os
@@ -15,6 +16,8 @@ os.environ.setdefault(
     'ENCRYPTION_SECRET',
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
+
+import asyncio
 
 import httpx
 import pytest
@@ -61,7 +64,7 @@ def _make_client(monkeypatch, fake_stt_client, authed=True) -> TestClient:
     app.include_router(stt_router.router)
     if authed:
         app.dependency_overrides[auth.get_current_user_uid] = lambda: _UID
-    monkeypatch.setattr(stt_router, 'get_stt_client', lambda: fake_stt_client)
+    monkeypatch.setattr(stt_router, 'get_stt_proxy_client', lambda: fake_stt_client)
     # Rate limiting is fail-open on Redis errors, but skip it entirely so unit
     # tests never touch a Redis connection attempt.
     monkeypatch.setattr(auth, '_enforce_rate_limit', lambda *args, **kwargs: None)
@@ -74,6 +77,31 @@ def _upload(client: TestClient, content=b'RIFF-fake-wav', filename='audio.wav', 
         '/v1/stt/transcribe',
         files={'file': (filename, content, 'audio/wav')},
         data=data or {},
+    )
+
+
+def _chunked_upload(client: TestClient, content: bytes):
+    """Upload via a generator body — Transfer-Encoding: chunked, no
+    Content-Length header, so only the bounded read can enforce the cap.
+    """
+    boundary = 'sttproxyboundary'
+    body = (
+        (
+            f'--{boundary}\r\n'
+            'Content-Disposition: form-data; name="file"; filename="audio.wav"\r\n'
+            'Content-Type: audio/wav\r\n\r\n'
+        ).encode()
+        + content
+        + f'\r\n--{boundary}--\r\n'.encode()
+    )
+
+    def gen():
+        yield body
+
+    return client.post(
+        '/v1/stt/transcribe',
+        content=gen(),
+        headers={'content-type': f'multipart/form-data; boundary={boundary}'},
     )
 
 
@@ -112,13 +140,32 @@ def test_rejects_empty_file(monkeypatch):
     assert fake.calls == []
 
 
-def test_rejects_oversized_body(monkeypatch):
+def test_rejects_oversized_body_via_content_length(monkeypatch):
     fake = _FakeSttClient()
     client = _make_client(monkeypatch, fake)
     monkeypatch.setattr(stt_router, '_MAX_UPLOAD_BYTES', 10)
     response = _upload(client, content=b'x' * 32)
     assert response.status_code == 413
     assert fake.calls == []
+
+
+def test_rejects_oversized_chunked_body_via_bounded_read(monkeypatch):
+    # No Content-Length header — the pre-checks can't fire, so this pins the
+    # bounded-read enforcement (RAM never exceeds cap + 1 bytes).
+    fake = _FakeSttClient()
+    client = _make_client(monkeypatch, fake)
+    monkeypatch.setattr(stt_router, '_MAX_UPLOAD_BYTES', 10)
+    response = _chunked_upload(client, content=b'x' * 32)
+    assert response.status_code == 413
+    assert fake.calls == []
+
+
+def test_chunked_body_within_cap_succeeds(monkeypatch):
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': 'ok', 'segments': []}))
+    client = _make_client(monkeypatch, fake)
+    response = _chunked_upload(client, content=b'x' * 32)
+    assert response.status_code == 200
+    assert len(fake.calls[0]['files']['file'][1]) == 32
 
 
 @pytest.mark.parametrize(
@@ -130,6 +177,7 @@ def test_rejects_oversized_body(monkeypatch):
         (None, 'audio.wav'),
         ('my clip (1).wav', 'my_clip__1_.wav'),
         ('recording.m4a', 'recording.m4a'),
+        ('a' * 100 + '.wav', 'a' * 64),
     ],
 )
 def test_safe_upstream_filename(raw, expected):
@@ -144,6 +192,7 @@ def test_filename_sanitized_before_forwarding(monkeypatch):
     forwarded_name = fake.calls[0]['files']['file'][0]
     assert '/' not in forwarded_name
     assert not forwarded_name.startswith('.')
+    assert len(forwarded_name) <= stt_router._MAX_FILENAME_LEN
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +222,16 @@ def test_diarize_false_forwarded(monkeypatch):
     assert fake.calls[0]['data'] == {'diarize': 'false'}
 
 
+def test_busy_when_no_upstream_slot(monkeypatch):
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    client = _make_client(monkeypatch, fake)
+    monkeypatch.setattr(stt_router, 'get_stt_proxy_semaphore', lambda: asyncio.Semaphore(0))
+    monkeypatch.setattr(stt_router, '_UPSTREAM_WAIT_SECS', 0.05)
+    response = _upload(client)
+    assert response.status_code == 503
+    assert fake.calls == []
+
+
 @pytest.mark.parametrize('upstream_status', [413, 503])
 def test_actionable_upstream_errors_forwarded(monkeypatch, upstream_status):
     fake = _FakeSttClient(response=_FakeResponse(status_code=upstream_status, json_data={'detail': 'nope'}))
@@ -180,6 +239,24 @@ def test_actionable_upstream_errors_forwarded(monkeypatch, upstream_status):
     response = _upload(client)
     assert response.status_code == upstream_status
     assert response.json()['detail'] == 'nope'
+
+
+def test_actionable_upstream_error_with_non_json_body(monkeypatch):
+    # An LB in front of parakeet can 503 with an HTML body — fall back to the
+    # generic detail instead of 500ing.
+    fake = _FakeSttClient(response=_FakeResponse(status_code=503, json_data=None, text='<html>busy</html>'))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client)
+    assert response.status_code == 503
+    assert 'html' not in response.json()['detail']
+
+
+def test_actionable_upstream_error_with_non_dict_json_body(monkeypatch):
+    fake = _FakeSttClient(response=_FakeResponse(status_code=503, json_data=['unexpected', 'shape']))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client)
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Transcription failed upstream'
 
 
 def test_other_upstream_errors_become_502(monkeypatch):
