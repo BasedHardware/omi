@@ -2555,6 +2555,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// chat and the notch/floating "Omi Chat" (independent consumers), so a
     /// finished sub-agent's artifacts surface on whichever the user next uses.
     private func buildMainChatCoordinatorCompletionDeltaIfNeeded(
+        for userText: String,
         systemPromptStyle: ChatSystemPromptStyle,
         surfaceRef: AgentSurfaceReference?,
         sessionKey: String?,
@@ -2569,6 +2570,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
               imageData == nil,
               attachmentMetadataJSON == nil
         else { return nil }
+        guard shouldInjectCompletedAgentDelta(for: userText) else { return nil }
 
         let consumerSurface: AgentSurfaceReference
         switch systemPromptStyle {
@@ -2586,6 +2588,24 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return nil
         }
         return (delta, consumerSurface)
+    }
+
+    private func shouldInjectCompletedAgentDelta(for userText: String) -> Bool {
+        let normalized = userText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        let explicitNewWorkPatterns = [
+            #"ask\s+(an?\s+)?agent\s+to\s+"#,
+            #"\b(have|spawn|start)\s+(an?\s+)?agent\s+to\s+"#,
+            #"\b(build|create|generate|write|make)\b.*\b(file|html|page|artifact|app|site)\b"#,
+        ]
+        if explicitNewWorkPatterns.contains(where: { normalized.range(of: $0, options: .regularExpression) != nil }) {
+            return false
+        }
+        let completionFollowUpPatterns = [
+            #"\b(done|ready|finished|complete|completed|where|open|show|find|saved|file|artifact)\b"#,
+            #"\b(agent|subagent|background)\b.*\b(status|result|output|finished|done|ready)\b"#,
+        ]
+        return completionFollowUpPatterns.contains { normalized.range(of: $0, options: .regularExpression) != nil }
     }
 
     private func routeIntentJSONWithFailOpenTimeout(intent: String, surfaceKind: String) async throws -> String? {
@@ -3789,6 +3809,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             attachmentMetadataJSON: attachmentMetadataJSON
         )
         let coordinatorCompletionDeltaContext = await buildMainChatCoordinatorCompletionDeltaIfNeeded(
+            for: trimmedText,
             systemPromptStyle: systemPromptStyle,
             surfaceRef: surfaceRef,
             sessionKey: sessionKey,
