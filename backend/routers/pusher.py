@@ -14,7 +14,7 @@ import database.conversations as conversations_db
 from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.factory import deserialize_conversation  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.conversations.factory import deserialize_conversation
 from models.geolocation import Geolocation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (

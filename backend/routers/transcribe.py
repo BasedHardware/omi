@@ -11,7 +11,7 @@ from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 import av
 import numpy as np
@@ -55,7 +55,7 @@ from utils.transcribe_store import (
 )
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
-from utils.conversations.factory import deserialize_conversation  # type: ignore[reportUnknownVariableType]  # accepts partially-typed Mapping
+from utils.conversations.factory import deserialize_conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
@@ -88,12 +88,12 @@ from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
-    make_stream_callback,  # type: ignore[reportUnknownVariableType]
+    make_stream_callback,
     process_audio_dg,
-    process_audio_modulate,  # type: ignore[reportUnknownVariableType]
-    process_audio_parakeet,  # type: ignore[reportUnknownVariableType]
-    sort_segments_by_start,  # type: ignore[reportUnknownVariableType]
-    sort_transcript_segments_in_place,  # type: ignore[reportUnknownVariableType]
+    process_audio_modulate,
+    process_audio_parakeet,
+    sort_segments_by_start,
+    sort_transcript_segments_in_place,
 )
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
@@ -158,12 +158,12 @@ from utils.metrics import (
 )
 from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
 from utils.stt.speaker_embedding import (
-    extract_embedding_from_bytes,  # type: ignore[reportUnknownVariableType]
-    compare_embeddings,  # type: ignore[reportUnknownVariableType]
+    extract_embedding_from_bytes,
+    compare_embeddings,
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task  # type: ignore[reportUnknownVariableType]
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task
 from utils.log_sanitizer import sanitize, sanitize_pii
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 
@@ -488,7 +488,7 @@ async def _stream_handler(
     # === Speaker Identification State ===
     RING_BUFFER_DURATION = 60.0  # seconds
     SPEAKER_ID_MIN_AUDIO = 2.0
-    SPEAKER_ID_TARGET_AUDIO = 4.0
+    _SPEAKER_ID_TARGET_AUDIO = 4.0
 
     speaker_id_segment_queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, Dict[str, Any]] = {}  # person_id -> {embedding, name}
@@ -497,7 +497,7 @@ async def _stream_handler(
     speaker_match_tasks: Set[asyncio.Task[Any]] = set()
 
     def spawn(coro: Awaitable[Any], *, name: str) -> asyncio.Task[Any]:
-        return cast(asyncio.Task[Any], task_supervisor.create_task(coro, name=name))
+        return task_supervisor.create_task(cast(Coroutine[Any, Any, Any], coro), name=name)
 
     # Validate user before spawning any session-scoped tasks.
     if not user_db.is_exists_user(uid):
@@ -754,7 +754,7 @@ async def _stream_handler(
         return spawn(_asend_message_event(msg), name="message_event")
 
     # Heart beat
-    started_at = time.time()
+    _started_at = time.time()
     inactivity_timeout_seconds = 90
     session.last_audio_received_time = None
     session.last_activity_time = None
@@ -977,9 +977,9 @@ async def _stream_handler(
         return False
 
     # Process existing conversations
-    async def _prepare_in_progess_conversations():
+    async def _prepare_in_progess_conversations() -> Optional[str]:
 
-        if existing_conversation := retrieve_in_progress_conversation(uid):
+        if existing_conversation := cast(Optional[Dict[str, Any]], retrieve_in_progress_conversation(uid)):
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             action = decide_existing_conversation_action(
@@ -1156,10 +1156,7 @@ async def _stream_handler(
             passthrough = stt_service == STTService.modulate
 
             raw_socket = await _create_stt_socket(
-                cast(
-                    Callable[[List[Dict[str, Any]]], None],
-                    make_stream_callback(stream_transcript, vad_gate, passthrough),
-                ),
+                make_stream_callback(stream_transcript, vad_gate, passthrough),
                 stt_language,
                 sample_rate,
                 stt_model,
@@ -1189,7 +1186,7 @@ async def _stream_handler(
     request_conversation_processing: Optional[Callable[..., Any]] = None
     pusher_receive: Optional[Callable[..., Any]] = None
     pusher_is_connected: Optional[Callable[..., Any]] = None
-    pusher_is_degraded: Optional[Callable[..., Any]] = None
+    _pusher_is_degraded: Optional[Callable[..., Any]] = None
     pusher_start_degraded: Optional[Callable[..., Any]] = None
     send_speaker_sample_request: Optional[Callable[..., Any]] = None
     pusher_heartbeat: Optional[Callable[..., Any]] = None
@@ -1201,7 +1198,7 @@ async def _stream_handler(
     translation_service = TranslationService()
 
     # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
-    translation_language_base = translation_language.split('-')[0] if translation_language else None
+    _translation_language_base = translation_language.split('-')[0] if translation_language else None
 
     # Translation coordinator (issue #6155) — replaces debounce/per-segment state
     translation_persist_lock = asyncio.Lock()
@@ -1278,10 +1275,12 @@ async def _stream_handler(
     )
 
     # Keep legacy state for backward compatibility during transition
-    pending_translations = {}
-    translation_flushing = False
+    _pending_translations = {}
+    _translation_flushing = False
 
-    async def translate(segments: List[TranscriptSegment], conversation_id: str, removed_ids: List[str] = None):
+    async def translate(
+        segments: List[TranscriptSegment], conversation_id: str, removed_ids: Optional[List[str]] = None
+    ):
         """Route updated segments to the TranslationCoordinator."""
         if not translation_coordinator:
             return
@@ -1697,7 +1696,7 @@ async def _stream_handler(
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
-            segments_to_process = cast(List[Dict[str, Any]], sort_segments_by_start(list(realtime_segment_buffers)))
+            segments_to_process = sort_segments_by_start(list(realtime_segment_buffers))
             realtime_segment_buffers.clear()
 
             photos_to_process = list(realtime_photo_buffers)
@@ -1801,7 +1800,7 @@ async def _stream_handler(
                         person_id=segment.person_id,
                         is_user=segment.is_user,
                         segment_id=cast(str, segment.id),
-                        suggested_segments=suggested_segments,
+                        suggested_segments=cast(Sequence[str], suggested_segments),
                     ):
                         continue
 
@@ -2315,7 +2314,7 @@ async def _stream_handler(
         await _process_stt()
 
         # Init pusher
-        pusher_tasks = []
+        pusher_tasks: List[asyncio.Task[Any]] = []
         if PUSHER_ENABLED:
             pusher_session = ListenPusherSession(
                 ListenPusherSessionConfig(
@@ -2355,7 +2354,7 @@ async def _stream_handler(
             request_conversation_processing = pusher_session.request_conversation_processing
             pusher_receive = pusher_session.pusher_receive
             pusher_is_connected = pusher_session.is_connected
-            pusher_is_degraded = pusher_session.is_degraded
+            _pusher_is_degraded = pusher_session.is_degraded
             pusher_start_degraded = pusher_session.start_degraded
             send_speaker_sample_request = pusher_session.send_speaker_sample_request
             pusher_heartbeat = pusher_session.pusher_heartbeat
@@ -2503,7 +2502,7 @@ async def _stream_handler(
         if not is_multi_channel and session.current_conversation_id:
             try:
                 conversation = conversations_db.get_conversation(uid, session.current_conversation_id)
-                if should_process_on_disconnect(
+                if conversation is not None and should_process_on_disconnect(
                     is_multi_channel=is_multi_channel,
                     close_code=session.close_code,
                     conversation_id=session.current_conversation_id,
@@ -2559,7 +2558,8 @@ async def _stream_handler(
             try:
                 mixed = mix_n_channel_buffers(channel_mix_buffers)
                 if mixed:
-                    audio_bytes_send(mixed, time.time())
+                    if audio_bytes_send is not None:
+                        audio_bytes_send(mixed, time.time())
             except Exception:
                 pass
             for buf in channel_mix_buffers:
@@ -2586,10 +2586,8 @@ async def _stream_handler(
         try:
             if vad_gate is not None:
                 del vad_gate
-            if language_cache is not None:
-                language_cache.cache.clear()
-            if translation_service is not None:
-                translation_service.translation_cache.clear()
+            language_cache.cache.clear()
+            translation_service.translation_cache.clear()
         except NameError:
             pass
 

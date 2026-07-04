@@ -74,8 +74,8 @@ from database.users import (
 from utils.stt.streaming import deepgram_nova3_multi_languages
 from models.geolocation import Geolocation
 from utils.conversations.factory import (
-    deserialize_conversation,  # type: ignore[reportUnknownVariableType]  # factory uses bare Mapping/Sequence
-    deserialize_conversations,  # type: ignore[reportUnknownVariableType]  # factory uses bare Mapping/Sequence
+    deserialize_conversation,
+    deserialize_conversations,
 )
 from models.other import Person, CreatePerson
 from models.user_usage import UserUsageResponse, UsagePeriod
@@ -95,22 +95,22 @@ from models.users import (
     TrialMetadata,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
-from utils.apps import get_available_app_by_id  # type: ignore[reportUnknownVariableType]  # returns bare dict
+from utils.apps import get_available_app_by_id
 from utils.subscription import (
-    get_chat_quota_snapshot,  # type: ignore[reportUnknownVariableType]  # returns bare dict
+    get_chat_quota_snapshot,
     get_default_basic_subscription,
-    get_paid_plan_definitions,  # type: ignore[reportUnknownVariableType]  # returns list[dict]
+    get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
     get_plan_features,
-    get_monthly_usage_for_subscription,  # type: ignore[reportUnknownVariableType]  # returns bare dict
+    get_monthly_usage_for_subscription,
     is_trial_paywalled,
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
-    filter_plans_for_user,  # type: ignore[reportUnknownVariableType]  # returns list[dict]
+    filter_plans_for_user,
     has_ever_purchased,
     should_show_new_plans,
-    adapt_plans_for_legacy_client,  # type: ignore[reportUnknownVariableType]  # returns list[dict]
+    adapt_plans_for_legacy_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
     get_trial_metadata,
@@ -120,7 +120,7 @@ from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import (
-    send_notification,  # type: ignore[reportUnknownVariableType]  # send_notification uses bare dict/list
+    send_notification,
     send_training_data_submitted_notification,
 )
 from utils.llm.external_integrations import (
@@ -723,7 +723,7 @@ def set_preferred_app_for_user(
     """Sets the user's preferred app for future processing."""
     app_id_to_set = app_id
 
-    selected_app: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], get_available_app_by_id(app_id_to_set, uid))
+    selected_app: Optional[Dict[str, Any]] = get_available_app_by_id(app_id_to_set, uid)
     if not selected_app:
         raise HTTPException(status_code=410, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
 
@@ -924,7 +924,7 @@ def get_user_subscription_endpoint(
         subscription.plan = PlanType.unlimited
 
     # Get current usage
-    usage: Dict[str, Any] = cast(Dict[str, Any], get_monthly_usage_for_subscription(uid))
+    usage: Dict[str, Any] = get_monthly_usage_for_subscription(uid)
 
     # Calculate usage metrics
     transcription_seconds_used = usage.get('transcription_seconds', 0)
@@ -938,16 +938,13 @@ def get_user_subscription_endpoint(
 
     # Build available plans. Version-gated: new clients see Operator + Architect,
     # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
-    all_definitions: List[Dict[str, Any]] = cast(List[Dict[str, Any]], get_paid_plan_definitions())
+    all_definitions: List[Dict[str, Any]] = get_paid_plan_definitions()
     if not new_plans_enabled:
-        all_definitions = cast(List[Dict[str, Any]], adapt_plans_for_legacy_client(all_definitions))
+        all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
     ever_purchased = has_ever_purchased(uid, raw_subscription)
-    definitions_for_user: List[Dict[str, Any]] = cast(
-        List[Dict[str, Any]],
-        filter_plans_for_user(
-            all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
-        ),
+    definitions_for_user: List[Dict[str, Any]] = filter_plans_for_user(
+        all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
     )
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
@@ -1023,7 +1020,7 @@ def get_user_subscription_endpoint(
     phone_call_quota_dict = cast(Dict[str, Any], get_phone_call_quota_snapshot(uid).to_client_dict())  # type: ignore[reportUnknownMemberType]  # QuotaSnapshot.to_client_dict returns bare dict
     phone_call_quota = PhoneCallQuota(**phone_call_quota_dict)
     # Chat quota — reuse the shared snapshot helper
-    chat_snapshot: Dict[str, Any] = cast(Dict[str, Any], get_chat_quota_snapshot(uid, platform=x_app_platform))
+    chat_snapshot: Dict[str, Any] = get_chat_quota_snapshot(uid, platform=x_app_platform)
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
@@ -1073,7 +1070,7 @@ def get_user_chat_usage_quota(
             reset_at=None,
         )
 
-    snapshot: Dict[str, Any] = cast(Dict[str, Any], get_chat_quota_snapshot(uid, platform=x_app_platform))
+    snapshot: Dict[str, Any] = get_chat_quota_snapshot(uid, platform=x_app_platform)
     plan: PlanType = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:

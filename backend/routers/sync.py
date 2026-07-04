@@ -21,7 +21,7 @@ from utils.executors import (
     storage_executor,
     sync_executor,
     run_blocking,
-    start_background_task,  # type: ignore[reportUnknownVariableType]  # upstream coro param untyped
+    start_background_task,
 )
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response
@@ -49,7 +49,7 @@ from database.sync_jobs import (
 )
 from models.conversation import CreateConversation
 from models.conversation_enums import ConversationSource
-from utils.conversations.factory import deserialize_conversation  # type: ignore[reportUnknownVariableType]  # upstream param Mapping[Unknown, Unknown]
+from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
 from utils.analytics import record_usage
@@ -69,7 +69,7 @@ from utils.other.storage import (
 
 from utils.byok import set_byok_keys, has_byok_keys
 from utils.cloud_tasks import (
-    enqueue_sync_job,  # type: ignore[reportUnknownVariableType]  # upstream payload dict[Unknown, Unknown]
+    enqueue_sync_job,
     get_sync_tasks_max_attempts,
     is_cloud_tasks_dispatch_enabled,
     verify_cloud_tasks_oidc,
@@ -95,8 +95,8 @@ from utils.fair_use import (
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.speaker_embedding import (
-    extract_embedding_from_bytes,  # type: ignore[reportUnknownVariableType]  # upstream ndarray[Unknown, Unknown]
-    compare_embeddings,  # type: ignore[reportUnknownVariableType]  # upstream ndarray[Unknown, Unknown]
+    extract_embedding_from_bytes,
+    compare_embeddings,
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.subscription import has_transcription_credits
@@ -263,9 +263,7 @@ def retrieve_vad_segments(path: str, segmented_paths: Set[str], errors: Optional
             errors.append(error_msg)
         raise  # Re-raise to ensure thread failure is visible
 
-    voice_segments: List[_VadSegment] = (
-        cast(List[_VadSegment], voice_segments_raw) if isinstance(voice_segments_raw, list) else []
-    )
+    voice_segments: List[_VadSegment] = cast(List[_VadSegment], voice_segments_raw)
     segments = _merge_and_cap_vad_segments(voice_segments)
     logger.info(f"{path} {len(segments)}")
 
@@ -458,7 +456,7 @@ def identify_speakers_for_segments(
                 continue
 
             try:
-                query_embedding = extract_embedding_from_bytes(clip_wav, "sync_speaker.wav")  # type: ignore[reportUnknownVariableType]  # upstream ndarray[Unknown, Unknown]
+                query_embedding = extract_embedding_from_bytes(clip_wav, "sync_speaker.wav")
             except (ValueError, Exception) as e:
                 logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
                 continue
@@ -1536,7 +1534,7 @@ async def sync_local_files_v2(
                 await run_blocking(sync_executor, _stage_files_to_gcs, owned_paths)
                 await run_blocking(
                     db_executor,
-                    enqueue_sync_job,  # type: ignore[reportUnknownArgumentType]  # upstream payload dict[Unknown, Unknown]
+                    enqueue_sync_job,
                     {
                         'schema_version': 1,
                         'job_id': job_id,

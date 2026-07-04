@@ -30,9 +30,9 @@ from models.conversation import (
     UpdateSegmentTextRequest,
     UpdateSummaryRequest,
 )
-from utils.conversations.factory import deserialize_conversation  # type: ignore[reportUnknownVariableType]  # partially-typed import
-from utils.conversations.render import redact_conversations_for_list  # type: ignore[reportUnknownVariableType]  # partially-typed import
-from utils.conversations.render import conversation_to_dict  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.conversations.factory import deserialize_conversation
+from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
@@ -47,7 +47,7 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
-from utils.conversations.search import search_conversations  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.conversations.merge_conversations import (
     perform_merge_async,
@@ -62,7 +62,7 @@ from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
 )
-from utils.conversations.calendar_utils import extract_attendees, parse_event_times  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.retrieval.tools.calendar_tools import get_google_calendar_event  # type: ignore[reportUnknownVariableType]  # partially-typed import
 from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import get_google_maps_location
@@ -129,7 +129,7 @@ def process_in_progress_conversation(
     request: Optional[ProcessConversationRequest] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
-    conversation = retrieve_in_progress_conversation(uid)
+    conversation = cast(Optional[Dict[str, Any]], retrieve_in_progress_conversation(uid))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
     redis_db.remove_in_progress_conversation_id(uid)
@@ -999,7 +999,7 @@ def get_shared_conversation_by_id(conversation_id: str) -> Dict[str, Any]:
         people = [Person(**p) for p in people_data]
 
     # Return conversation with people data
-    response_dict = cast(Dict[str, Any], conversation_to_dict(conversation))
+    response_dict = conversation_to_dict(conversation)
     response_dict['people'] = [p.model_dump() for p in people]
     return response_dict
 
@@ -1030,22 +1030,17 @@ def search_conversations_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
-    return cast(
-        Dict[str, Any],
-        search_conversations(
-            query=search_request.query,
-            page=search_request.page if search_request.page is not None else 1,
-            per_page=search_request.per_page if search_request.per_page is not None else 10,
-            uid=uid,
-            include_discarded=(
-                search_request.include_discarded if search_request.include_discarded is not None else True
-            ),
-            # search_conversations accepts None for these (does `is None` checks internally)
-            # but its signature is declared non-Optional; cast carries that runtime contract.
-            start_date=cast(int, start_timestamp),
-            end_date=cast(int, end_timestamp),
-            speaker_id=cast(str, search_request.speaker_id),
-        ),
+    return search_conversations(
+        query=search_request.query,
+        page=search_request.page if search_request.page is not None else 1,
+        per_page=search_request.per_page if search_request.per_page is not None else 10,
+        uid=uid,
+        include_discarded=(search_request.include_discarded if search_request.include_discarded is not None else True),
+        # search_conversations accepts None for these (does `is None` checks internally)
+        # but its signature is declared non-Optional; cast carries that runtime contract.
+        start_date=cast(int, start_timestamp),
+        end_date=cast(int, end_timestamp),
+        speaker_id=cast(str, search_request.speaker_id),
     )
 
 

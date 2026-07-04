@@ -15,7 +15,7 @@ from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
 from models.other import SaveFcmTokenRequest
 from utils.notifications import (
-    send_notification,  # type: ignore[reportUnknownVariableType]  # takes bare dict params, narrowed at call site
+    send_notification,
 )
 from utils.other import endpoints as auth
 from models.app import App

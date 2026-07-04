@@ -21,12 +21,16 @@ cd /Users/david/.codex/worktrees/1ed8/omi/backend && bash scripts/typecheck.sh
 ```
 
 ## CRITICAL RULES
-1. **Preserve runtime behavior EXACTLY.** Only change signatures, type annotations,
+1. **NEVER run `git reset`, `git stash`, `git checkout -- .`, or any command that
+   could revert uncommitted changes.** These destroy other agents' work.
+2. **Only edit files you were explicitly assigned.** Do NOT fix upstream files
+   to resolve your file's type errors — use `# type: ignore` or `cast()` instead.
+3. **Do NOT spawn subagents.** Work serially to avoid edit collisions.
+4. **Preserve runtime behavior EXACTLY.** Only change signatures, type annotations,
    boundary narrowing, and adapter insertion. NEVER change logic to satisfy the typechecker.
-2. **No in-function imports.** All imports at module top level.
-3. `def` (not `async def`) for sync endpoints. `async def` only when genuinely awaiting.
-4. No new `TODO`/`FIXME`/`HACK` comments.
-5. Never use purple in UI (N/A for backend but noted).
+5. **No in-function imports.** All imports at module top level.
+6. `def` (not `async def`) for sync endpoints. `async def` only when genuinely awaiting.
+7. No new `TODO`/`FIXME`/`HACK` comments.
 
 ## Established Patterns (copy EXACTLY)
 

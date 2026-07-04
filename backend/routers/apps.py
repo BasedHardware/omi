@@ -22,27 +22,27 @@ from utils.llm.app_generator import (
     generate_app_from_prompt,
     generate_app_icon,
     generate_description,
-    generate_description_and_emoji,  # type: ignore[reportUnknownVariableType]  # utils.llm.app_generator returns bare dict
+    generate_description_and_emoji,
 )
 from utils.llm.clients import get_llm
 from utils.llm.persona import generate_persona_intro_message
 from utils.llm.usage_tracker import Features, track_usage
 from utils.mcp_client import (
-    build_authorization_url,  # type: ignore[reportUnknownVariableType]  # utils.mcp_client returns bare dict
+    build_authorization_url,
     discover_mcp_tools,
-    discover_oauth_metadata,  # type: ignore[reportUnknownVariableType]  # utils.mcp_client returns bare dict
-    exchange_oauth_code,  # type: ignore[reportUnknownVariableType]  # utils.mcp_client returns bare dict
+    discover_oauth_metadata,
+    exchange_oauth_code,
     fetch_brandfetch_logo,
     generate_pkce_pair,
     generate_state_token,
     parse_state_token,
-    refresh_oauth_token,  # type: ignore[reportUnknownVariableType]  # utils.mcp_client returns bare dict
-    register_oauth_client,  # type: ignore[reportUnknownVariableType]  # utils.mcp_client returns bare dict
+    refresh_oauth_token,
+    register_oauth_client,
 )
 from utils.notifications import (
     send_app_review_reply_notification,
     send_new_app_review_notification,
-    send_notification,  # type: ignore[reportUnknownVariableType]  # utils.notifications untyped
+    send_notification,
 )
 from utils.other import endpoints as auth
 from utils.other.storage import delete_app_logo, get_app_thumbnail_url, upload_app_logo, upload_app_thumbnail
@@ -104,19 +104,19 @@ from database.webhook_health import clear_app_webhook_health
 from utils.apps import (
     add_app_access_for_tester,
     add_tester,
-    build_capability_category_groups_response,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
-    build_capability_groups_response,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
-    build_pagination_metadata,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
+    build_capability_category_groups_response,
+    build_capability_groups_response,
+    build_pagination_metadata,
     filter_apps_by_capability,
     generate_api_key,
     generate_persona_desc,
-    generate_persona_prompt,
+    generate_persona_prompt,  # type: ignore[reportUnknownVariableType]  # utils.apps.generate_persona_prompt has partially-typed dict param
     get_app_reviews,
     get_approved_available_apps,
     get_available_app_by_id,
     get_available_app_by_id_with_reviews,
     get_available_apps,
-    get_capabilities_list,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
+    get_capabilities_list,
     get_is_user_paid_app,
     get_persona_by_uid,
     get_popular_apps,
@@ -125,12 +125,12 @@ from utils.apps import (
     invalidate_popular_apps_cache,
     is_permit_payment_plan_get,
     is_tester,
-    normalize_app_numeric_fields,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
+    normalize_app_numeric_fields,
     paginate_apps,
     remove_app_access_for_tester,
     set_app_review,
     sort_apps_by_installs,
-    group_apps_by_capability,  # type: ignore[reportUnknownVariableType]  # utils.apps takes bare dict
+    group_apps_by_capability,
     group_capability_apps_by_category,
     upsert_app_payment_link,
     validate_app_endpoints_for_reenable,
@@ -246,7 +246,7 @@ def get_apps_v2(
     - Always excludes persona type apps.
     """
 
-    capabilities = cast(List[Dict[str, Any]], get_capabilities_list())
+    capabilities = get_capabilities_list()
 
     if capability:
         cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
@@ -284,7 +284,7 @@ def get_apps_v2(
 
     # Grouped response by capability
     grouped_apps = group_apps_by_capability(approved_apps, capabilities)
-    groups = cast(List[Dict[str, Any]], build_capability_groups_response(grouped_apps, capabilities, offset, limit))
+    groups = build_capability_groups_response(grouped_apps, capabilities, offset, limit)
 
     res = {
         'groups': groups,
@@ -317,7 +317,7 @@ def get_capability_apps_grouped_by_category(
     if cached:
         return cached
 
-    capabilities = cast(List[Dict[str, Any]], get_capabilities_list())
+    capabilities = get_capabilities_list()
 
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
@@ -330,7 +330,7 @@ def get_capability_apps_grouped_by_category(
 
     # Group filtered apps by master category
     grouped_apps = group_capability_apps_by_category(filtered_apps, capability_id)
-    groups = cast(List[Dict[str, Any]], build_capability_category_groups_response(grouped_apps, capability_id))
+    groups = build_capability_category_groups_response(grouped_apps, capability_id)
 
     res: Dict[str, Any] = {
         'groups': groups,
@@ -1442,7 +1442,7 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
-            message = cast(str, generate_persona_intro_message(persona['persona_prompt'], persona['name']))
+            message = generate_persona_intro_message(persona['persona_prompt'], persona['name'])
         return {'message': message}
     return {'message': ''}
 
@@ -1535,7 +1535,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
     user: Dict[str, Any] = user_raw if isinstance(user_raw, dict) else {}
 
     # Check for OAuth metadata
-    oauth_meta = cast(Optional[Dict[str, Any]], await discover_oauth_metadata(server_url))
+    oauth_meta = await discover_oauth_metadata(server_url)
 
     if oauth_meta and oauth_meta.get('authorization_endpoint'):
         # OAuth required — register client and return auth URL
@@ -1548,11 +1548,8 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         client_info: Dict[str, Any] = {}
         if oauth_meta.get('registration_endpoint'):
             try:
-                client_info = cast(
-                    Dict[str, Any],
-                    await register_oauth_client(
-                        oauth_meta['registration_endpoint'], redirect_uri, scopes=oauth_meta.get('scopes_supported')
-                    ),
+                client_info = await register_oauth_client(
+                    oauth_meta['registration_endpoint'], redirect_uri, scopes=oauth_meta.get('scopes_supported')
                 )
             except Exception as e:
                 raise HTTPException(status_code=502, detail=f'OAuth client registration failed: {str(e)}')
@@ -1682,16 +1679,13 @@ async def mcp_oauth_callback(code: str, state: str) -> HTMLResponse:
 
     # Exchange code for tokens (include PKCE code_verifier)
     try:
-        token_data = cast(
-            Dict[str, Any],
-            await exchange_oauth_code(
-                oauth_tokens['token_endpoint'],
-                code,
-                oauth_tokens.get('redirect_uri', ''),
-                oauth_tokens['client_id'],
-                oauth_tokens.get('client_secret'),
-                code_verifier=oauth_tokens.get('code_verifier'),
-            ),
+        token_data = await exchange_oauth_code(
+            oauth_tokens['token_endpoint'],
+            code,
+            oauth_tokens.get('redirect_uri', ''),
+            oauth_tokens['client_id'],
+            oauth_tokens.get('client_secret'),
+            code_verifier=oauth_tokens.get('code_verifier'),
         )
     except Exception as e:
         return HTMLResponse(f'<html><body><h1>Token exchange failed</h1><p>{str(e)}</p></body></html>', status_code=502)
@@ -1776,14 +1770,11 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
     except PermissionError:
         # Try token refresh
         if oauth_tokens and oauth_tokens.get('refresh_token'):
-            new_tokens = cast(
-                Dict[str, Any],
-                await refresh_oauth_token(
-                    oauth_tokens['token_endpoint'],
-                    oauth_tokens['refresh_token'],
-                    oauth_tokens['client_id'],
-                    oauth_tokens.get('client_secret'),
-                ),
+            new_tokens = await refresh_oauth_token(
+                oauth_tokens['token_endpoint'],
+                oauth_tokens['refresh_token'],
+                oauth_tokens['client_id'],
+                oauth_tokens.get('client_secret'),
             )
             oauth_tokens['access_token'] = new_tokens['access_token']
             if new_tokens.get('refresh_token'):

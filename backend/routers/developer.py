@@ -30,7 +30,7 @@ from models.conversation_enums import (
 )
 from models.geolocation import Geolocation
 from models.structured import Structured
-from utils.conversations.render import populate_speaker_names, populate_folder_names  # type: ignore[reportUnknownVariableType]  # render helpers accept untyped Dict
+from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
@@ -553,7 +553,7 @@ def create_memory(
             require_canonical_promotion=True,
         )
         if memory.visibility == 'public':
-            postprocess_executor.submit(update_personas_async, uid)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit untyped
+            postprocess_executor.submit(update_personas_async, uid)
         return DeveloperMemory(
             id=memory_db.id,
             content=memory_db.content,
@@ -583,7 +583,7 @@ def create_memory(
         require_canonical_promotion=True,
     )
     if memory.visibility == 'public':
-        postprocess_executor.submit(update_personas_async, uid)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit untyped
+        postprocess_executor.submit(update_personas_async, uid)
     return DeveloperMemory(
         id=memory_db.id,
         content=memory_db.content,
@@ -657,7 +657,7 @@ def create_memories_batch(
         require_canonical_promotion=True,
     )
     if has_public:
-        postprocess_executor.submit(update_personas_async, uid)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit untyped
+        postprocess_executor.submit(update_personas_async, uid)
 
     created_memories = [
         DeveloperMemory(

@@ -22,7 +22,7 @@ from database.vector_db import (
 from utils.users import get_user_display_name
 from utils.other import endpoints as auth
 from utils.notifications import (
-    send_notification,  # type: ignore[reportUnknownVariableType]  # utils.notifications.send_notification has untyped dict/list params
+    send_notification,
     send_action_item_data_message,
     send_action_item_deletion_message,
     send_action_items_batch_deletion_message,
@@ -276,7 +276,7 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
             cast(Any, auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
         )
 
-    db_executor.submit(_run_auto_sync)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit is untyped
+    db_executor.submit(_run_auto_sync)
 
     return ActionItemResponse(**action_item)
 

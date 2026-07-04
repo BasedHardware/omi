@@ -41,7 +41,7 @@ from models.chat import (
     FileChat,
 )
 from utils.apps import get_available_app_by_id
-from utils.conversation_helpers import extract_memory_ids  # type: ignore[reportUnknownVariableType]  # conversation_helpers untyped
+from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     acquire_chat_session,
     initial_message_util,

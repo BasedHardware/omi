@@ -26,10 +26,10 @@ from utils.app_integrations import (
     trigger_external_integrations,
 )
 from utils.conversations.location import get_google_maps_location
-from utils.conversations.render import redact_conversation_for_integration  # type: ignore[reportUnknownVariableType]  # takes/returns bare Dict; narrowed at call site
+from utils.conversations.render import redact_conversation_for_integration
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.process_conversation import process_conversation
-from utils.conversations.search import search_conversations  # type: ignore[reportUnknownVariableType]  # returns bare Dict; narrowed at call site
+from utils.conversations.search import search_conversations
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import run_blocking, db_executor, postprocess_executor, critical_executor
 import logging
@@ -109,7 +109,7 @@ async def create_conversation_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability external_integration > action > create_conversation
-    if not apps_utils.app_can_create_conversation(app):  # type: ignore[reportUnknownMemberType]  # utils.apps.app_can_create_conversation takes bare dict
+    if not apps_utils.app_can_create_conversation(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to create conversations")
 
     # Time
@@ -191,7 +191,7 @@ def create_memories_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability external_integration > action > create_memories / create_facts
-    if not apps_utils.app_can_create_memories(app):  # type: ignore[reportUnknownMemberType]  # utils.apps.app_can_create_memories takes bare dict
+    if not apps_utils.app_can_create_memories(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
 
     # Validate that text is provided or explicit facts are provided
@@ -246,7 +246,7 @@ def get_memories_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read memories
-    if not apps_utils.app_can_read_memories(app):  # type: ignore[reportUnknownMemberType]  # utils.apps.app_can_read_memories takes bare dict
+    if not apps_utils.app_can_read_memories(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
     memory_system = pin_memory_system(uid, db_client=firestore_db)
@@ -336,7 +336,7 @@ def get_conversations_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read conversations
-    if not apps_utils.app_can_read_conversations(app):  # type: ignore[reportUnknownMemberType]  # utils.apps.app_can_read_conversations takes bare dict
+    if not apps_utils.app_can_read_conversations(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
     # Convert string dates to datetime objects if needed
@@ -443,7 +443,7 @@ def search_conversations_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read conversations
-    if not apps_utils.app_can_read_conversations(app):  # type: ignore[reportUnknownMemberType]  # utils.apps.app_can_read_conversations takes bare dict
+    if not apps_utils.app_can_read_conversations(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
     # Convert ISO datetime strings to Unix timestamps if provided
@@ -481,17 +481,14 @@ def search_conversations_via_integration(
             )
 
     # Search conversations
-    search_results = cast(
-        Dict[str, Any],
-        search_conversations(
-            query=search_request.query,
-            page=cast(int, search_request.page),
-            per_page=cast(int, search_request.per_page),
-            uid=uid,
-            include_discarded=cast(bool, search_request.include_discarded),
-            start_date=cast(int, start_timestamp),
-            end_date=cast(int, end_timestamp),
-        ),
+    search_results = search_conversations(
+        query=search_request.query,
+        page=cast(int, search_request.page),
+        per_page=cast(int, search_request.per_page),
+        uid=uid,
+        include_discarded=cast(bool, search_request.include_discarded),
+        start_date=cast(int, start_timestamp),
+        end_date=cast(int, end_timestamp),
     )
 
     # Extract conversation IDs from search results
@@ -638,7 +635,7 @@ def get_tasks_via_integration(
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
-    if not apps_utils.app_can_read_tasks(app):  # type: ignore[reportUnknownMemberType]  # utils.apps.app_can_read_tasks takes bare dict
+    if not apps_utils.app_can_read_tasks(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read tasks")
 
     if isinstance(start_date, str) and start_date:
