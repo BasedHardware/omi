@@ -493,7 +493,11 @@ class AppProvider: ObservableObject {
         apps.filter { $0.capabilities.contains(capability) }
     }
 
-    /// Clear search and filters
+    /// Clear all marketplace filter/search state. Fresh catalog presentations
+    /// (the Home popup) call this so they open on the unfiltered sections
+    /// instead of whatever filters an earlier visit left behind. Results from
+    /// searches still in flight are discarded by their `currentFilterKey`
+    /// guard once this runs.
     func clearFilters() {
         searchQuery = ""
         selectedCategory = nil

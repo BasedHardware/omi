@@ -124,10 +124,10 @@ private struct MemoryExportRow: View {
 
   private var actionTitle: String {
     if destination.supportsAgentSetup {
-      return status.isConfigured ? "Manage" : "Connect"
+      return showsConnectedState ? "Connected" : "Connect"
     }
     if destination.supportsMCP {
-      return status.isConfigured ? "Manage" : "Connect"
+      return showsConnectedState ? "Connected" : "Connect"
     }
     switch destination {
     case .obsidian:
@@ -135,6 +135,11 @@ private struct MemoryExportRow: View {
     case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return "Open"
     }
+  }
+
+  private var showsConnectedState: Bool {
+    guard destination.supportsMCP || destination.supportsAgentSetup else { return false }
+    return status.hasConnection
   }
 
   var body: some View {
@@ -158,7 +163,7 @@ private struct MemoryExportRow: View {
         Spacer(minLength: 12)
 
         ImportConnectorActionButton(
-          title: actionTitle, isConnected: status.hasConnection)
+          title: actionTitle, isConnected: showsConnectedState)
       }
       .padding(.horizontal, 14)
       .padding(.vertical, 11)
@@ -287,7 +292,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       case .assisted:
         statusMessage = outcome.taskTitle
       case .completed:
-        // Deterministic local write (OpenClaw/Hermes) — show the result directly.
+        // Deterministic local write — show the result directly.
         statusMessage = outcome.taskTitle
       }
     } catch {
@@ -486,7 +491,8 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
-      if destination.requiresHostedMCPKeyForSetup && destination == .claude && model.mcpKey == nil {
+      statuses[destination] = await MemoryExportService.shared.status(for: destination)
+      if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
         await model.generateMCPKey()
       }
     }
@@ -531,7 +537,7 @@ struct MemoryExportDestinationSheet: View {
 
   @ViewBuilder
   private var manualSetupDisclosure: some View {
-    DisclosureGroup(isExpanded: $showManualSetup) {
+    ManualInstallationDisclosure(isExpanded: $showManualSetup, fontSize: 13) {
       VStack(alignment: .leading, spacing: 18) {
         methodHeader(
           icon: "bolt.fill",
@@ -558,12 +564,7 @@ struct MemoryExportDestinationSheet: View {
         }
       }
       .padding(.top, 10)
-    } label: {
-      Text("Manual installation")
-        .scaledFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
     }
-    .tint(OmiColors.textTertiary)
   }
 
   private var agentSetupSection: some View {
@@ -625,10 +626,10 @@ struct MemoryExportDestinationSheet: View {
           .foregroundColor(OmiColors.textPrimary)
         Text("MCP + CLI")
           .scaledFont(size: 9, weight: .bold)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.success)
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
-          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
+          .background(Capsule().fill(OmiColors.success.opacity(0.15)))
       }
       Text(
         "Copy one setup prompt for your agent. It connects Omi memories through MCP, turns on local Desktop access through the Omi CLI, and includes a short Omi guide the agent can keep."
@@ -643,7 +644,7 @@ struct MemoryExportDestinationSheet: View {
     HStack(alignment: .top, spacing: 8) {
       Image(systemName: "checkmark.circle.fill")
         .scaledFont(size: 12)
-        .foregroundColor(OmiColors.purplePrimary)
+        .foregroundColor(OmiColors.success)
         .padding(.top, 1)
       Text(text)
         .scaledFont(size: 12)
@@ -654,6 +655,9 @@ struct MemoryExportDestinationSheet: View {
 
   private var executeButtonTitle: String {
     _ = permissionRefreshID
+    if isConnected {
+      return "Connected"
+    }
     switch destination.mcpExecuteKind {
     case .localAutonomous:
       return "Do it for me"
@@ -695,23 +699,23 @@ struct MemoryExportDestinationSheet: View {
       HStack(spacing: 8) {
         Image(systemName: "sparkles")
           .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.textSecondary)
         Text("Let Omi do it")
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text("FASTEST")
           .scaledFont(size: 9, weight: .bold)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.success)
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
-          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
+          .background(Capsule().fill(OmiColors.success.opacity(0.15)))
       }
       Text(executeBlockSubtitle)
         .scaledFont(size: 12)
         .foregroundColor(OmiColors.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
 
-      Button(model.isExecuting ? "Starting Omi…" : executeButtonTitle) {
+      Button {
         Task {
           await model.executeWithOmi(destination: destination)
           statuses[destination] = await MemoryExportService.shared.status(for: destination)
@@ -721,10 +725,20 @@ struct MemoryExportDestinationSheet: View {
             showManualSetup = true
           }
         }
+      } label: {
+        ConnectionModalActionButton(
+          title: model.isExecuting ? "Starting Omi…" : executeButtonTitle,
+          isConnected: isConnected
+        )
       }
-      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-      .disabled(model.isExecuting)
+      .buttonStyle(.plain)
+      .disabled(model.isExecuting || isConnected)
     }
+  }
+
+  private var isConnected: Bool {
+    guard destination.hasLocallyVerifiableLiveSetup else { return false }
+    return statuses[destination]?.hasConnection == true
   }
 
   /// Labeled header that makes the automatic (MCP) vs manual (pack) choice obvious.
