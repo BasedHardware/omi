@@ -1,9 +1,14 @@
 import omiApiClient, { adminInit } from "./client";
-import { get_apps_v1_apps_get } from "./omiApi.generated";
+import {
+  delete_app_v1_apps__app_id__delete,
+  get_app_details_v1_apps__app_id__get,
+  get_apps_v1_apps_get,
+  get_unapproved_public_apps_v1_apps_public_unapproved_get,
+  type UnapprovedPublicAppResponse,
+} from "./omiApi.generated";
 import type { OmiApp, OmiAppInput } from "./types";
 import { getDb } from "@/lib/firebase/admin";
 
-// Adjust endpoint paths based on actual API
 const APPS_ENDPOINT = "/v1/apps";
 
 /**
@@ -19,8 +24,10 @@ export async function getApps(uid: string): Promise<OmiApp[]> {
  * @param uid - The UID of the authenticated user.
  */
 export async function getAppById(uid: string, appId: string): Promise<OmiApp> {
-  const endpoint = `${APPS_ENDPOINT}/${appId}`;
-  return await omiApiClient<OmiApp>(endpoint, uid, { method: "GET" });
+  return get_app_details_v1_apps__app_id__get(
+    { app_id: appId },
+    adminInit(uid),
+  );
 }
 
 /**
@@ -31,6 +38,7 @@ export async function createApp(
   uid: string,
   appData: OmiAppInput,
 ): Promise<OmiApp> {
+  // Not wired: POST /v1/apps needs multipart form+file; generated client omits body.
   return await omiApiClient<OmiApp>(APPS_ENDPOINT, uid, {
     method: "POST",
     body: appData,
@@ -46,9 +54,10 @@ export async function updateApp(
   appId: string,
   appData: Partial<OmiAppInput>,
 ): Promise<OmiApp> {
+  // Not wired: PATCH /v1/apps/{id} needs multipart form; generated client omits body.
   const endpoint = `${APPS_ENDPOINT}/${appId}`;
   return await omiApiClient<OmiApp>(endpoint, uid, {
-    method: "PATCH", // Or 'PUT' depending on API design
+    method: "PATCH",
     body: appData,
   });
 }
@@ -58,18 +67,16 @@ export async function updateApp(
  * @param uid - The UID of the authenticated user.
  */
 export async function deleteApp(uid: string, appId: string): Promise<void> {
-  const endpoint = `${APPS_ENDPOINT}/${appId}`;
-  // Expecting a 204 No Content or similar on success
-  await omiApiClient<void>(endpoint, uid, { method: "DELETE" });
+  await delete_app_v1_apps__app_id__delete({ app_id: appId }, adminInit(uid));
 }
 
 // Fetch all public unapproved apps
-export const getUnapprovedApps = async (uid: string): Promise<OmiApp[]> => {
-  // Assuming this endpoint exists in the Omi API
-  // Pass a dummy/empty UID or adjust client if UID is mandatory but not used for this specific GET
-  return omiApiClient<OmiApp[]>("/v1/apps/public/unapproved", uid, {
-    method: "GET",
-  });
+export const getUnapprovedApps = async (
+  uid: string,
+): Promise<UnapprovedPublicAppResponse[]> => {
+  return get_unapproved_public_apps_v1_apps_public_unapproved_get(
+    adminInit(uid),
+  );
 };
 
 /**
