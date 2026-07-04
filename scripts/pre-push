@@ -426,6 +426,8 @@ check_backend_typecheck_if_needed() {
     'backend/routers/x_connector.py' \
     'backend/routers/task_integrations.py' \
     'backend/routers/updates.py' \
+    'backend/routers/speech_profile.py' \
+    'backend/routers/wrapped.py' \
     'backend/utils/conversations/memories.py' \
     'backend/utils/llm/__init__.py' \
     'backend/utils/llm/clients.py' \
