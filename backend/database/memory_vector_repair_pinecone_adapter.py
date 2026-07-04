@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, Optional, cast
 
 from database.memory_vector_metadata import build_memory_vector_metadata, deterministic_memory_vector_id
 from models.memory_evidence import SourceState
@@ -100,7 +100,7 @@ def _coerce_live_authoritative_item(item: Any) -> MemoryItem:
         return item
     if isinstance(item, dict):
         try:
-            return MemoryItem(**item)
+            return MemoryItem(**cast(Dict[str, Any], item))
         except Exception as exc:
             raise VectorRepairNotReady(f"authoritative item is not repairable: {exc}") from exc
     raise VectorRepairNotReady("authoritative item is missing or has unsupported type")
@@ -121,7 +121,7 @@ def _required_str(value: Dict[str, Any], key: str) -> str:
 
 
 def _validate_namespace(namespace: str) -> None:
-    if not isinstance(namespace, str) or not namespace.strip():
+    if not isinstance(namespace, str) or not namespace.strip():  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("namespace is required")
 
 

@@ -35,7 +35,7 @@ class ExpectedOutput(BaseModel):
 def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str]) -> List[Item]:
     people: list[Person] = []
     if person_ids:
-        people_data = cast(list[PersonRecord], users_db.get_people_by_ids(uid, list(set(person_ids))))
+        people_data: list[PersonRecord] = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
     raw_user_name = cast(object, get_user_name(uid, use_default=False))

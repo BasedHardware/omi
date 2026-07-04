@@ -72,6 +72,23 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `database/memory_non_active_routes.py`
   - `database/product_memory_items.py`
   - `database/short_term_memories.py`
+  - `database/action_items.py`
+  - `database/apps.py`
+  - `database/knowledge_graph.py`
+  - `database/mcp_api_key.py`
+  - `database/user_usage.py`
+  - `database/memory_compatibility_projection.py`
+  - `database/memory_ledger.py`
+  - `database/memory_apply_store.py`
+  - `database/review_queue.py`
+  - `database/memory_vector_repair_pinecone_adapter.py`
+  - `database/memory_vector_repair_outbox_worker.py`
+  - `database/redis_db.py`
+  - `database/mcp_oauth.py`
+  - `database/chat.py`
+  - `database/users.py`
+  - `database/conversations.py`
+  - `database/memories.py`
   - `routers/knowledge_graph.py`
   - `routers/memory_admin.py`
   - `routers/memories.py`
