@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { ArrowDown, Send } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
-import { useAppState } from '../state/AppStateProvider'
+import { useAppState } from '../state/appState'
 import { QuickTaskWidget } from '../components/home/QuickTaskWidget'
 import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
 import { Markdown } from '../components/Markdown'

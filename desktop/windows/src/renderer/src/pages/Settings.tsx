@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { SettingsSearchProvider, useSettingsSearch } from '../components/settings/searchContext'
+import { SettingsSearchProvider } from '../components/settings/SettingsSearchProvider'
+import { useSettingsSearch } from '../components/settings/searchContext'
 import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
