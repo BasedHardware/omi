@@ -5207,4 +5207,46 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         return groups
     }
+
+    // MARK: - Local automation (continuity gauntlet)
+
+    /// Snapshot for `main_chat_snapshot` / `wait_main_chat_idle` harness actions.
+    func automationMainChatSnapshot(limit: Int) -> [String: String] {
+        let boundedLimit = max(1, limit)
+        let runtimeChatId = currentSessionId ?? MainChatRuntimeSessionStore.defaultChatId
+        let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
+        let rows: [[String: String]] = messages.suffix(boundedLimit).map { message in
+            [
+                "id": message.id,
+                "role": message.sender == .user ? "user" : "assistant",
+                "text": message.copyableText,
+                "streaming": message.isStreaming ? "true" : "false",
+            ]
+        }
+        let messagesJSON: String
+        if let data = try? JSONSerialization.data(withJSONObject: rows),
+            let encoded = String(data: data, encoding: .utf8)
+        {
+            messagesJSON = encoded
+        } else {
+            messagesJSON = "[]"
+        }
+        var detail: [String: String] = [
+            "chat_session_id": currentSessionId ?? "",
+            "runtime_chat_id": runtimeChatId,
+            "omi_session_id": AgentRuntimeStatusStore.shared.knownSessionId(for: surface) ?? "",
+            "is_sending": isSending ? "true" : "false",
+            "is_streaming": messages.contains(where: { $0.isStreaming }) ? "true" : "false",
+            "message_count": "\(messages.count)",
+            "messages_json": messagesJSON,
+        ]
+        if let ownerId = runtimeOwnerId {
+            detail["owner_id"] = ownerId
+            detail["persisted_runtime_session_id"] = MainChatRuntimeSessionStore.sessionId(
+                ownerId: ownerId,
+                chatId: runtimeChatId
+            )
+        }
+        return detail
+    }
 }

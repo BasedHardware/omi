@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Network
 
@@ -448,8 +449,70 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      _ = await provider.sendMessage(query)
+      let tracer = QueryTracer(query: query, inputMode: .text)
+      await QueryTracerContext.$current.withValue(tracer) {
+        _ = await provider.sendMessage(query)
+      }
       return ["sent": query]
+    }
+
+    register(
+      name: "main_chat_snapshot",
+      summary: "Export main-chat transcript, session ids, and stream state for continuity harnesses",
+      params: ["limit"]
+    ) { params in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let limit = max(1, intParam(params["limit"], default: 50))
+      return provider.automationMainChatSnapshot(limit: limit)
+    }
+
+    register(
+      name: "wait_main_chat_idle",
+      summary: "Block until main chat is not sending or streaming (continuity harness)",
+      params: ["timeoutMs", "pollMs"]
+    ) { params in
+      let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
+      let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      while Date() < deadline {
+        if !provider.isSending && !provider.messages.contains(where: { $0.isStreaming }) {
+          var detail = provider.automationMainChatSnapshot(limit: 8)
+          detail["idle"] = "true"
+          return detail
+        }
+        try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
+      }
+      var detail = provider.automationMainChatSnapshot(limit: 8)
+      detail["error"] = "timeout"
+      detail["timeout_ms"] = "\(timeoutMs)"
+      return detail
+    }
+
+    register(
+      name: "agent_runtime_evidence",
+      summary: "Return omi-agentd.sqlite3 path and SHA-256 for continuity harness evidence bundles"
+    ) { _ in
+      let stateDir = AgentRuntimeProcess.defaultStateDirectory()
+      let dbPath = (stateDir as NSString).appendingPathComponent("omi-agentd.sqlite3")
+      var detail: [String: String] = [
+        "state_dir": stateDir,
+        "database_path": dbPath,
+        "database_exists": FileManager.default.fileExists(atPath: dbPath) ? "true" : "false",
+        "bundle_id": Bundle.main.bundleIdentifier ?? "",
+      ]
+      if FileManager.default.fileExists(atPath: dbPath),
+        let data = try? Data(contentsOf: URL(fileURLWithPath: dbPath))
+      {
+        let digest = SHA256.hash(data: data)
+        detail["database_sha256"] = digest.map { String(format: "%02x", $0) }.joined()
+        detail["database_bytes"] = "\(data.count)"
+      }
+      return detail
     }
 
     register(

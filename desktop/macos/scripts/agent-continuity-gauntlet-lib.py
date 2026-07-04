@@ -1,0 +1,543 @@
+#!/usr/bin/env python3
+"""Driver for the desktop agent continuity gauntlet (INV-6)."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+DESKTOP_DIR = SCRIPT_DIR.parent
+DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
+DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
+TRACE_LOG = Path.home() / "Library/Logs/Omi/traces.jsonl"
+DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def bridge_request(port: int, method: str, route: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = None
+    headers = {"Accept": "application/json"}
+    if body is not None:
+        payload = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{route}",
+        data=payload,
+        method=method,
+        headers=headers,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = {"ok": False, "error": raw}
+        parsed["http_status"] = exc.code
+        return parsed
+    except urllib.error.URLError as exc:
+        return {"ok": False, "error": f"connection_failed: {exc.reason}"}
+
+
+def bridge_action(port: int, name: str, params: dict[str, str] | None = None) -> dict[str, Any]:
+    return bridge_request(port, "POST", "/action", {"name": name, "params": params or {}})
+
+
+def bridge_state(port: int) -> dict[str, Any]:
+    return bridge_request(port, "GET", "/state")
+
+
+def write_json(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def append_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def git_sha() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(DESKTOP_DIR.parent.parent), "rev-parse", "--short", "HEAD"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
+
+def sine_pcm16k(seconds: float = 0.75, frequency: float = 220.0, amplitude: float = 3500.0) -> bytes:
+    sample_rate = 16_000
+    sample_count = int(sample_rate * seconds)
+    chunks: list[bytes] = []
+    for index in range(sample_count):
+        value = int(amplitude * math.sin(2.0 * math.pi * frequency * index / sample_rate))
+        chunks.append(struct.pack("<h", value))
+    return b"".join(chunks)
+
+
+def trace_line_count() -> int:
+    if not TRACE_LOG.exists():
+        return 0
+    with TRACE_LOG.open("r", encoding="utf-8", errors="replace") as handle:
+        return sum(1 for line in handle if line.strip())
+
+
+def read_new_traces(since_line: int) -> list[dict[str, Any]]:
+    if not TRACE_LOG.exists():
+        return []
+    traces: list[dict[str, Any]] = []
+    with TRACE_LOG.open("r", encoding="utf-8", errors="replace") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if line_number <= since_line:
+                continue
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                traces.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return traces
+
+
+def flatten_trace_text(trace: dict[str, Any]) -> str:
+    parts: list[str] = []
+    request = trace.get("request") or {}
+    if isinstance(request, dict):
+        if request.get("system_prompt"):
+            parts.append(str(request["system_prompt"]))
+        for message in request.get("messages") or []:
+            if isinstance(message, dict):
+                parts.append(str(message.get("content", "")))
+        if request.get("response_text"):
+            parts.append(str(request["response_text"]))
+    if trace.get("query_text"):
+        parts.append(str(trace["query_text"]))
+    if trace.get("response_text"):
+        parts.append(str(trace["response_text"]))
+    for tool in trace.get("tool_executions") or []:
+        if isinstance(tool, dict):
+            parts.append(str(tool.get("name", "")))
+            parts.append(str(tool.get("input", "")))
+            parts.append(str(tool.get("output", "")))
+    return "\n".join(parts)
+
+
+def latest_assistant_text(snapshot_detail: dict[str, str]) -> str:
+    try:
+        messages = json.loads(snapshot_detail.get("messages_json", "[]"))
+    except json.JSONDecodeError:
+        return ""
+    for message in reversed(messages):
+        if message.get("role") == "assistant" and message.get("streaming") != "true":
+            text = (message.get("text") or "").strip()
+            if text:
+                return text
+    return ""
+
+
+def identity_keys(detail: dict[str, str]) -> dict[str, str]:
+    return {
+        "chat_session_id": detail.get("chat_session_id", ""),
+        "runtime_chat_id": detail.get("runtime_chat_id", ""),
+        "omi_session_id": detail.get("omi_session_id", ""),
+        "persisted_runtime_session_id": detail.get("persisted_runtime_session_id", ""),
+    }
+
+
+def capture_log_excerpt(log_path: Path, offset: int, dest: Path, max_bytes: int = 200_000) -> None:
+    if not log_path.exists():
+        dest.write_text("(log missing)\n", encoding="utf-8")
+        return
+    data = log_path.read_bytes()
+    excerpt = data[offset : offset + max_bytes]
+    dest.write_bytes(excerpt)
+
+
+def run_agent_swift_screenshot(bundle_id: str, dest: Path) -> dict[str, Any]:
+    if shutil.which("agent-swift") is None:
+        return {"ok": False, "error": "agent-swift not installed"}
+    commands = [
+        ["agent-swift", "connect", "--bundle-id", bundle_id],
+        ["agent-swift", "screenshot", str(dest)],
+    ]
+    output: list[str] = []
+    for command in commands:
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        output.append(result.stdout)
+        if result.returncode != 0:
+            return {"ok": False, "error": result.stdout, "command": command}
+    return {"ok": True, "path": str(dest), "output": "\n".join(output)}
+
+
+class GauntletRunner:
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.args = args
+        self.port = args.port
+        self.bundle_id = args.bundle_id
+        self.run_id = args.run_id or now_iso()
+        self.run_dir = Path(args.run_dir or (DESKTOP_DIR / ".harness/agent-continuity-gauntlet" / self.run_id))
+        self.log_path = Path(args.log_path)
+        self.log_offset = self.log_path.stat().st_size if self.log_path.exists() else 0
+        self.markers = {
+            "typed": f"GAUNTLET-{self.run_id}-TYPED",
+            "ptt": f"GAUNTLET-{self.run_id}-PTT",
+            "spawn": f"GAUNTLET-{self.run_id}-SPAWN",
+        }
+        self.baseline_identity: dict[str, str] | None = None
+        self.failures: list[str] = []
+        self.steps: list[dict[str, Any]] = []
+        self.pcm_path = self.run_dir / "fixtures" / "ptt-voice.pcm"
+
+    def fail(self, message: str) -> None:
+        self.failures.append(message)
+
+    def ensure_bridge(self) -> None:
+        health = bridge_request(self.port, "GET", "/health")
+        if not health.get("ok"):
+            raise SystemExit(
+                f"automation bridge unavailable on port {self.port}: {health.get('error', health)}"
+            )
+
+    def navigate_chat(self) -> None:
+        navigate = bridge_request(
+            self.port,
+            "POST",
+            "/navigate",
+            {"target": "chat", "activateApp": True, "settleMs": 300},
+        )
+        if navigate.get("ok") is False:
+            raise SystemExit(f"navigate chat failed: {navigate.get('error', navigate)}")
+        ready = bridge_state(self.port)
+        write_json(self.run_dir / "preflight-state.json", ready)
+
+    def record_step(
+        self,
+        step_id: str,
+        name: str,
+        *,
+        user_text: str,
+        action_response: dict[str, Any],
+        snapshot_detail: dict[str, str],
+        traces: list[dict[str, Any]],
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        step_dir = self.run_dir / step_id
+        assistant_text = latest_assistant_text(snapshot_detail)
+        write_json(step_dir / "action-response.json", action_response)
+        write_json(step_dir / "chat-snapshot.json", snapshot_detail)
+        write_json(step_dir / "query-traces.json", traces)
+        write_json(
+            step_dir / "turn-text.json",
+            {"user": user_text, "assistant": assistant_text},
+        )
+        capture_log_excerpt(self.log_path, self.log_offset, step_dir / "app-log-excerpt.txt")
+        self.log_offset = self.log_path.stat().st_size if self.log_path.exists() else self.log_offset
+
+        runtime = bridge_action(self.port, "agent_runtime_evidence")
+        write_json(step_dir / "runtime-sqlite.json", runtime.get("result", {}).get("detail", runtime))
+
+        png_path = step_dir / "main-window.png"
+        screenshot = run_agent_swift_screenshot(self.bundle_id, png_path)
+        write_json(step_dir / "screenshot-meta.json", screenshot)
+
+        identity = identity_keys(snapshot_detail)
+        write_json(step_dir / "identity.json", identity)
+        if self.baseline_identity is None:
+            self.baseline_identity = identity
+        elif identity != self.baseline_identity:
+            self.fail(
+                f"{name}: conversation identity drifted "
+                f"(baseline={self.baseline_identity}, current={identity})"
+            )
+
+        record = {
+            "id": step_id,
+            "name": name,
+            "user_text": user_text,
+            "assistant_text": assistant_text,
+            "identity": identity,
+            "trace_ids": [trace.get("trace_id") for trace in traces],
+        }
+        if extra:
+            record["extra"] = extra
+        self.steps.append(record)
+
+    def send_and_wait(self, query: str, timeout_ms: int) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
+        trace_start = trace_line_count()
+        send = bridge_action(self.port, "ask_main_chat", {"query": query})
+        if send.get("ok") is False:
+            raise SystemExit(f"ask_main_chat failed: {send.get('error', send)}")
+        detail = send.get("result", {}).get("detail", {})
+        if detail.get("error"):
+            raise SystemExit(f"ask_main_chat error: {detail['error']}")
+
+        deadline = time.monotonic() + (timeout_ms / 1000.0)
+        snapshot_detail: dict[str, str] = {}
+        while time.monotonic() < deadline:
+            wait = bridge_action(
+                self.port,
+                "wait_main_chat_idle",
+                {"timeoutMs": "2000", "pollMs": "250"},
+            )
+            snapshot_detail = wait.get("result", {}).get("detail", {})
+            if wait.get("ok") and snapshot_detail.get("idle") == "true":
+                break
+            time.sleep(0.25)
+        else:
+            self.fail(f"timed out waiting for main chat idle after query: {query[:120]}")
+
+        snapshot = bridge_action(self.port, "main_chat_snapshot", {"limit": "80"})
+        snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
+        traces = read_new_traces(trace_start)
+        return send, snapshot_detail, traces
+
+    def assert_trace_contains(self, traces: list[dict[str, Any]], needle: str, label: str) -> None:
+        haystack = "\n".join(flatten_trace_text(trace) for trace in traces)
+        if needle not in haystack:
+            self.fail(f"{label}: model-visible trace missing marker {needle}")
+
+    def assert_assistant_mentions(self, assistant_text: str, needles: list[str], label: str) -> None:
+        lowered = assistant_text.lower()
+        if not any(needle.lower() in lowered for needle in needles):
+            self.fail(f"{label}: assistant response did not reference expected markers: {needles}")
+
+    def run(self) -> int:
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.pcm_path.parent.mkdir(parents=True, exist_ok=True)
+        self.pcm_path.write_bytes(sine_pcm16k())
+
+        manifest: dict[str, Any] = {
+            "run_id": self.run_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "git": git_sha(),
+            "bundle_id": self.bundle_id,
+            "port": self.port,
+            "markers": self.markers,
+            "trace_log": str(TRACE_LOG),
+            "app_log": str(self.log_path),
+        }
+        write_json(self.run_dir / "manifest.json", manifest)
+
+        self.ensure_bridge()
+        self.navigate_chat()
+
+        # Step 1 — typed turn
+        typed_query = (
+            f"Remember this continuity marker exactly: {self.markers['typed']}. "
+            "Reply with one short sentence acknowledging the marker."
+        )
+        send, snapshot, traces = self.send_and_wait(typed_query, self.args.turn_timeout_ms)
+        self.record_step("01-typed-turn", "typed turn", user_text=typed_query, action_response=send, snapshot_detail=snapshot, traces=traces)
+        self.assert_assistant_mentions(latest_assistant_text(snapshot), [self.markers["typed"]], "typed turn")
+
+        # Step 2 — PTT turn (real hub controller path; transcript forced for determinism)
+        ptt_user = (
+            f"In our push-to-talk exchange, remember this marker exactly: {self.markers['ptt']}. "
+            "Reply briefly acknowledging it."
+        )
+        trace_start = trace_line_count()
+        ptt = bridge_action(
+            self.port,
+            "ptt_test_turn",
+            {
+                "pcm": str(self.pcm_path),
+                "timeout": str(max(30, self.args.turn_timeout_ms // 1000)),
+                "force_transcript": ptt_user,
+            },
+        )
+        ptt_detail = ptt.get("result", {}).get("detail", {})
+        if ptt.get("ok") is False or ptt_detail.get("error"):
+            self.fail(f"PTT turn failed: {ptt_detail.get('error', ptt.get('error', ptt))}")
+        else:
+            saved_user = ptt_detail.get("saved_user_text") or ptt_detail.get("provider_transcript") or ""
+            if self.markers["ptt"] not in saved_user:
+                self.fail(f"PTT turn did not persist marker in saved_user_text ({saved_user!r})")
+
+        # Allow async chat persistence from recordVoiceTurn to settle.
+        time.sleep(2.0)
+        wait = bridge_action(self.port, "wait_main_chat_idle", {"timeoutMs": str(self.args.turn_timeout_ms)})
+        snapshot = bridge_action(self.port, "main_chat_snapshot", {"limit": "80"})
+        snapshot_detail = snapshot.get("result", {}).get("detail", wait.get("result", {}).get("detail", {}))
+        traces = read_new_traces(trace_start)
+        self.record_step(
+            "02-ptt-turn",
+            "PTT turn",
+            user_text=ptt_user,
+            action_response=ptt,
+            snapshot_detail=snapshot_detail,
+            traces=traces,
+            extra={"ptt_diagnostics": ptt_detail},
+        )
+        messages_blob = snapshot_detail.get("messages_json", "")
+        if self.markers["ptt"] not in messages_blob:
+            self.fail("PTT turn marker not visible in main chat transcript after voice turn")
+
+        # Step 3 — typed follow-up referencing PTT turn
+        followup_query = (
+            f"In our earlier voice turn I gave you marker {self.markers['ptt']}. "
+            f"What was that exact marker string? Reply with only the marker."
+        )
+        send, snapshot, traces = self.send_and_wait(followup_query, self.args.turn_timeout_ms)
+        assistant = latest_assistant_text(snapshot)
+        self.record_step(
+            "03-typed-followup",
+            "typed follow-up after PTT",
+            user_text=followup_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+        )
+        if self.markers["ptt"] not in assistant and self.markers["ptt"] not in flatten_trace_text(traces[-1] if traces else {}):
+            self.fail("typed follow-up cannot see PTT turn (assistant + trace missing PTT marker)")
+        self.assert_trace_contains(traces, self.markers["ptt"], "typed follow-up")
+
+        # Step 4 — background agent spawn
+        spawn_query = (
+            f"Use spawn_agent now to start a visible background agent. "
+            f"Objective: track marker {self.markers['spawn']} and wait silently. "
+            "Do not ask follow-up questions."
+        )
+        send, snapshot, traces = self.send_and_wait(spawn_query, self.args.turn_timeout_ms)
+        spawn_tools = [
+            tool
+            for trace in traces
+            for tool in (trace.get("tool_executions") or [])
+            if isinstance(tool, dict) and tool.get("name") in {"spawn_agent", "manage_agent_pills"}
+        ]
+        coordinator = bridge_action(self.port, "coordinator_awareness_snapshot")
+        self.record_step(
+            "04-spawn-agent",
+            "background agent spawn",
+            user_text=spawn_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={
+                "spawn_tool_calls": spawn_tools,
+                "coordinator_snapshot": coordinator.get("result", {}).get("detail", {}),
+            },
+        )
+        coordinator_blob = json.dumps(coordinator)
+        if self.markers["spawn"] not in coordinator_blob and not spawn_tools:
+            self.fail("background agent spawn did not produce spawn_agent tool activity or coordinator awareness")
+
+        # Step 5 — status query about spawned agent
+        status_query = (
+            f"What is the status of the background agent you started for marker {self.markers['spawn']}? "
+            "Use list_agent_sessions if needed and answer in one sentence."
+        )
+        send, snapshot, traces = self.send_and_wait(status_query, self.args.turn_timeout_ms)
+        assistant = latest_assistant_text(snapshot)
+        list_tools = [
+            tool
+            for trace in traces
+            for tool in (trace.get("tool_executions") or [])
+            if isinstance(tool, dict) and tool.get("name") == "list_agent_sessions"
+        ]
+        self.record_step(
+            "05-status-query",
+            "status query about spawned agent",
+            user_text=status_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={"list_agent_sessions_calls": list_tools},
+        )
+        status_blob = assistant + "\n" + "\n".join(flatten_trace_text(trace) for trace in traces)
+        if not list_tools and not re.search(r"running|started|agent|spawn|queued|status", status_blob, re.I):
+            self.fail("status query cannot see spawned agent (no list_agent_sessions and no status language)")
+        if self.markers["spawn"] not in status_blob and not list_tools:
+            self.fail(f"status query missing spawn marker {self.markers['spawn']}")
+
+        manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
+        manifest["steps"] = self.steps
+        manifest["failures"] = self.failures
+        manifest["passed"] = not self.failures
+        write_json(self.run_dir / "manifest.json", manifest)
+
+        if self.failures:
+            for failure in self.failures:
+                print(f"GAUNTLET FAIL: {failure}", file=sys.stderr)
+            print(f"evidence: {self.run_dir}", file=sys.stderr)
+            return 1
+
+        print(f"Gauntlet passed. evidence: {self.run_dir}")
+        return 0
+
+
+def self_check() -> int:
+    script = SCRIPT_DIR / "agent-continuity-gauntlet.sh"
+    bridge_actions = {
+        "ask_main_chat",
+        "main_chat_snapshot",
+        "wait_main_chat_idle",
+        "agent_runtime_evidence",
+        "coordinator_awareness_snapshot",
+    }
+    hub_actions = {"ptt_test_turn"}
+    bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
+    hub_source = (DESKTOP_DIR / "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift").read_text(
+        encoding="utf-8"
+    )
+    missing = sorted(name for name in bridge_actions if f'name: "{name}"' not in bridge_source)
+    missing.extend(sorted(name for name in hub_actions if f'name: "{name}"' not in hub_source))
+    if missing:
+        print(f"self-check failed: missing automation actions: {missing}", file=sys.stderr)
+        return 1
+    if not script.is_file():
+        print("self-check failed: agent-continuity-gauntlet.sh missing", file=sys.stderr)
+        return 1
+    print("self-check passed")
+    return 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Desktop agent continuity gauntlet (INV-6)")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--bundle-id", default=os.environ.get("OMI_GAUNTLET_BUNDLE_ID", f"com.omi.{DEFAULT_BUNDLE_SUFFIX}"))
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--run-dir", default=None)
+    parser.add_argument("--log-path", default=str(DEFAULT_LOG))
+    parser.add_argument("--turn-timeout-ms", type=int, default=180_000)
+    parser.add_argument("--self-check", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if args.self_check:
+        return self_check()
+    return GauntletRunner(args).run()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
