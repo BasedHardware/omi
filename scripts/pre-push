@@ -440,6 +440,14 @@ check_backend_typecheck_if_needed() {
     'backend/routers/integrations.py' \
     'backend/routers/notifications.py' \
     'backend/routers/oauth.py' \
+    'backend/routers/chat.py' \
+    'backend/routers/conversations.py' \
+    'backend/routers/developer.py' \
+    'backend/routers/mcp.py' \
+    'backend/routers/payment.py' \
+    'backend/routers/pusher.py' \
+    'backend/routers/sync.py' \
+    'backend/routers/users.py' \
     'backend/utils/conversations/memories.py' \
     'backend/utils/llm/__init__.py' \
     'backend/utils/llm/clients.py' \
