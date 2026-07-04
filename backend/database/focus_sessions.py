@@ -6,7 +6,7 @@ Collection: users/{uid}/focus_sessions
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import List
+from typing import List, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -54,6 +54,15 @@ def get_focus_sessions(uid: str, date: str = None, limit: int = 100, offset: int
         data['id'] = doc.id
         items.append(data)
     return items
+
+
+def get_focus_session(uid: str, session_id: str) -> Optional[dict]:
+    doc = _user_col(uid, 'focus_sessions').document(session_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict()
+    data['id'] = doc.id
+    return data
 
 
 def delete_focus_session(uid: str, session_id: str) -> bool:
