@@ -319,6 +319,258 @@ def _collect_deps(schemas: dict[str, Any], targets: tuple[str, ...]) -> list[str
     return sorted(set(order))
 
 
+# --- Client method generation -------------------------------------------------
+
+SKIP_SWIFT_CONTENT_PREFIXES = (
+    'application/octet-stream',
+    'text/event-stream',
+    'text/plain',
+    'text/html',
+    'application/xml',
+    'audio/',
+    'image/',
+    'multipart/form-data',
+)
+
+_SWIFT_BUILTIN_TYPES = {
+    'String',
+    'Int',
+    'Double',
+    'Bool',
+    'OmiAnyCodable',
+}
+
+
+def _swift_func_name(op_id: str) -> str:
+    """Clean an operationId into a valid camelCase Swift function name."""
+    candidate = _swift_prop_name(op_id)
+    if candidate and candidate[0].isdigit():
+        candidate = '_' + candidate
+    return candidate
+
+
+def _swift_string_literal(s: str) -> str:
+    """Render a Swift double-quoted string literal, escaping backslashes and quotes."""
+    return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def _resolve_type(type_expr: str, emitted: set[str]) -> str:
+    """Resolve a Swift type expression against emitted struct/enum names.
+
+    If every referenced identifier is a builtin Swift/OmiAnyCodable type or a
+    schema the Swift generator actually emitted, return it unchanged (strong
+    typing). Otherwise fall back to OmiAnyCodable (preserving array-ness) so the
+    emitted client method still compiles without forcing a change to the DTO
+    generation scope.
+    """
+    refs = set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', type_expr))
+    missing = [r for r in refs if r not in _SWIFT_BUILTIN_TYPES and r not in emitted]
+    if not missing:
+        return type_expr
+    # Preserve array shape: [Message] -> [OmiAnyCodable].
+    if type_expr.startswith('[') and type_expr.endswith(']') and ':' not in type_expr:
+        return '[OmiAnyCodable]'
+    return 'OmiAnyCodable'
+
+
+def _swift_response_type(operation: dict[str, Any]) -> str | None:
+    """Return the Swift type for an operation's success response, or None to skip.
+
+    None => non-JSON success (binary/streaming/xml/multipart): skip the op.
+    'Void' => 204-style no-content (or empty success content).
+    """
+    responses = operation.get('responses', {})
+    if not isinstance(responses, dict):
+        return 'Void'
+    for status in ('200', '201', 'default'):
+        resp = responses.get(status)
+        if not isinstance(resp, dict):
+            continue
+        content = resp.get('content', {})
+        if not isinstance(content, dict) or not content:
+            return 'Void'  # 204-style no content
+        json_content = content.get('application/json')
+        if isinstance(json_content, dict):
+            type_expr, _ = _swift_type(json_content.get('schema', {}), required=True)
+            return type_expr
+        # Non-JSON success response -> skip this operation entirely.
+        for ct in content:
+            if any(ct.startswith(p) or ct == p for p in SKIP_SWIFT_CONTENT_PREFIXES):
+                return None
+    if '204' in responses:
+        return 'Void'
+    return 'Void'
+
+
+def _swift_request_body(operation: dict[str, Any]) -> tuple[str | None, bool]:
+    """Return (body type expr, required) for an operation's JSON requestBody, or (None, False)."""
+    req_body = operation.get('requestBody', {})
+    if not isinstance(req_body, dict):
+        return None, False
+    content = req_body.get('content', {})
+    if not isinstance(content, dict):
+        return None, False
+    json_content = content.get('application/json')
+    if not isinstance(json_content, dict):
+        return None, False
+    type_expr, _ = _swift_type(json_content.get('schema', {}), required=True)
+    return type_expr, bool(req_body.get('required', False))
+
+
+def generate_swift_client_methods(spec: dict[str, Any]) -> str:
+    """Emit typed Swift async client funcs (URLRequest + JSONDecoder) for each JSON op.
+
+    Each emitted func takes a shared `OmiApiClient` (baseURL + optional bearer
+    token), the operation's path/query params, and an optional Codable body,
+    builds a URLRequest, runs it via URLSession, validates the HTTP status, and
+    decodes the JSON success body into a typed value (or Void for 204). Mirrors
+    generate_ts_openapi_types.generate_client_methods.
+    """
+    paths = spec.get('paths', {})
+    if not isinstance(paths, dict):
+        return ''
+
+    schemas = spec.get('components', {}).get('schemas', {})
+    emitted = set(_collect_deps(schemas, tuple(t for t in TARGET_SCHEMAS if t in schemas)))
+
+    lines: list[str] = [
+        '',
+        '// --- Client methods (typed URLRequest + async wrappers). GENERATED - DO NOT EDIT. ---',
+        '',
+        '/// Shared client configuration for the generated async API funcs.',
+        'public struct OmiApiClient {',
+        '  public let baseURL: String',
+        '  public let token: String?',
+        '  public init(baseURL: String, token: String? = nil) {',
+        '    self.baseURL = baseURL',
+        '    self.token = token',
+        '  }',
+        '}',
+        '',
+        '/// Errors thrown by the generated client funcs.',
+        'public enum OmiApiError: Error {',
+        '  case invalidURL',
+        '  case httpError(status: Int, data: Data)',
+        '}',
+        '',
+    ]
+
+    method_count = 0
+    for path in sorted(paths):
+        path_item = paths[path]
+        if not isinstance(path_item, dict):
+            continue
+        for http_method in ('get', 'post', 'put', 'patch', 'delete'):
+            operation = path_item.get(http_method)
+            if not isinstance(operation, dict):
+                continue
+            op_id = operation.get('operationId')
+            if not isinstance(op_id, str):
+                continue
+
+            raw_return = _swift_response_type(operation)
+            if raw_return is None:
+                continue  # non-JSON success response -> skip
+            return_type = 'Void' if raw_return == 'Void' else _resolve_type(raw_return, emitted)
+
+            fn_name = _swift_func_name(op_id)
+
+            # Parse parameters into path (required) and query (required/optional) lists.
+            raw_params = operation.get('parameters', [])
+            path_params: list[tuple[str, str]] = []  # (wire name, swift type)
+            query_params: list[tuple[str, str, bool]] = []  # (wire name, swift type, required)
+            if isinstance(raw_params, list):
+                for p in raw_params:
+                    if not isinstance(p, dict):
+                        continue
+                    location = p.get('in')
+                    pname = p.get('name', '')
+                    required = bool(p.get('required', False))
+                    ptype, _ = _swift_type(p.get('schema', {}), required=True)
+                    ptype = _resolve_type(ptype, emitted)
+                    if location == 'path':
+                        path_params.append((pname, ptype))
+                    elif location == 'query':
+                        query_params.append((pname, ptype, required))
+
+            # Parse JSON requestBody.
+            raw_body, body_required = _swift_request_body(operation)
+            body_type = _resolve_type(raw_body, emitted) if raw_body else None
+
+            # Build the function signature.
+            sig_parts: list[str] = ['client: OmiApiClient']
+            for pname, ptype in path_params:
+                sig_parts.append(f'{_swift_prop_name(pname)}: {ptype}')
+            for pname, qtype, required in query_params:
+                sw = _swift_prop_name(pname)
+                if required:
+                    sig_parts.append(f'{sw}: {qtype}')
+                else:
+                    sig_parts.append(f'{sw}: {qtype}? = nil')
+            if body_type:
+                if body_required:
+                    sig_parts.append(f'body: {body_type}')
+                else:
+                    sig_parts.append(f'body: {body_type}? = nil')
+            sig = ', '.join(sig_parts)
+
+            # Interpolate path params into the URL template via Swift \() interpolation.
+            # Escape literal path characters first, THEN inject interpolation so the
+            # interpolation backslash survives unescaped into the emitted literal.
+            url_path = path.replace('\\', '\\\\').replace('"', '\\"')
+            for pname, _ in path_params:
+                url_path = url_path.replace('{' + pname + '}', '\\(' + _swift_prop_name(pname) + ')')
+            path_literal = '"' + url_path + '"'
+
+            body_lines = [
+                f'public static func {fn_name}({sig}) async throws -> {return_type} {{',
+                f'  let _path = {path_literal}',
+                '  guard var components = URLComponents(string: client.baseURL + _path) else {',
+                '    throw OmiApiError.invalidURL',
+                '  }',
+            ]
+            if query_params:
+                body_lines.append('  var queryItems: [URLQueryItem] = []')
+                for pname, qtype, required in query_params:
+                    sw = _swift_prop_name(pname)
+                    name_lit = _swift_string_literal(pname)
+                    if required:
+                        body_lines.append(f'  queryItems.append(URLQueryItem(name: {name_lit}, value: String({sw})))')
+                    else:
+                        body_lines.append(f'  if let {sw} {{')
+                        body_lines.append(f'    queryItems.append(URLQueryItem(name: {name_lit}, value: String({sw})))')
+                        body_lines.append('  }')
+                body_lines.append('  if !queryItems.isEmpty { components.queryItems = queryItems }')
+            body_lines.append('  guard let url = components.url else { throw OmiApiError.invalidURL }')
+            body_lines.append('  var req = URLRequest(url: url)')
+            body_lines.append(f'  req.httpMethod = {_swift_string_literal(http_method.upper())}')
+            body_lines.append('  if let token = client.token {')
+            body_lines.append('    req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")')
+            body_lines.append('  }')
+            if body_type:
+                body_lines.append('  if let body = body {')
+                body_lines.append('    req.setValue("application/json", forHTTPHeaderField: "Content-Type")')
+                body_lines.append('    req.httpBody = try JSONEncoder().encode(body)')
+                body_lines.append('  }')
+            body_lines.append('  let (data, resp) = try await URLSession.shared.data(for: req)')
+            body_lines.append('  guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }')
+            body_lines.append('  guard (200..<300).contains(http.statusCode) else {')
+            body_lines.append('    throw OmiApiError.httpError(status: http.statusCode, data: data)')
+            body_lines.append('  }')
+            if return_type == 'Void':
+                body_lines.append('  return')
+            else:
+                body_lines.append(f'  return try JSONDecoder().decode({return_type}.self, from: data)')
+            body_lines.append('}')
+            body_lines.append('')
+
+            lines.extend(body_lines)
+            method_count += 1
+
+    lines.append(f'// Total: {method_count} Swift client methods generated.')
+    return '\n'.join(lines)
+
+
 def generate(spec: dict[str, Any], spec_path: str) -> str:
     schemas = spec.get('components', {}).get('schemas', {})
     targets = tuple(t for t in TARGET_SCHEMAS if t in schemas)
@@ -339,6 +591,12 @@ def generate(spec: dict[str, Any], spec_path: str) -> str:
             continue
         # Indent the block by 2 spaces to nest inside `enum OmiAPI`.
         indented = '\n'.join(('  ' + line) if line else line for line in block.split('\n'))
+        out.append(indented + '\n')
+    # Typed async client funcs (URLRequest + JSONDecoder) for each JSON op,
+    # appended inside the OmiAPI namespace so they resolve the DTOs directly.
+    client_block = generate_swift_client_methods(spec)
+    if client_block:
+        indented = '\n'.join(('  ' + line) if line else line for line in client_block.split('\n'))
         out.append(indented + '\n')
     out.append(FOOTER)
     return ''.join(out)
