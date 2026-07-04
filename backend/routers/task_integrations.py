@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+from models.shared import StatusResponse
 import os
 import secrets
 import ast
@@ -247,7 +248,7 @@ def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = De
     return {"status": "ok", "app_key": app_key}
 
 
-@router.delete("/v1/task-integrations/{app_key}", status_code=204, tags=['task-integrations'])
+@router.delete("/v1/task-integrations/{app_key}", response_model=StatusResponse, tags=['task-integrations'])
 def delete_task_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete a task integration connection."""
     success = users_db.delete_task_integration(uid, app_key)

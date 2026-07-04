@@ -15,6 +15,7 @@ from models.other import SaveFcmTokenRequest
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
+from models.shared import StatusResponse
 
 # logger = logging.getLogger('uvicorn.error')
 # logger.setLevel(logging.DEBUG)
@@ -90,7 +91,7 @@ def save_token(
 # ******************************************************
 
 
-@router.post('/v1/notification')
+@router.post('/v1/notification', response_model=StatusResponse)
 def send_notification_to_user(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

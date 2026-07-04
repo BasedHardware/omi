@@ -39,6 +39,7 @@ from models.app import App
 from pydantic import BaseModel
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
+from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
@@ -593,7 +594,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
-@router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
+@router.delete("/v1/conversations/{conversation_id}", response_model=StatusResponse, tags=['conversations'])
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,

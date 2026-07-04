@@ -53,6 +53,7 @@ from models.conversation import Conversation
 from models.geolocation import Geolocation
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
+from models.shared import StatusResponse
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
@@ -514,7 +515,7 @@ def update_person_name(
     return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
+@router.delete('/v1/users/people/{person_id}', tags=['v1'], response_model=StatusResponse)
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
@@ -561,7 +562,13 @@ def delete_person_speech_sample_endpoint(
 # **********************************************************
 
 
-@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
+class FollowupQuestionResponse(BaseModel):
+    """Response for the Joan follow-up question endpoint (a generated prompt)."""
+
+    result: str = Field(description='Generated follow-up question prompt text.')
+
+
+@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], response_model=FollowupQuestionResponse)
 def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
@@ -1436,7 +1443,7 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
 # Daily Summaries API
 
 
-@router.get('/v1/users/daily-summaries', tags=['v1'], responses={200: {'model': DailySummariesResponse}})
+@router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
 def get_daily_summaries(
     limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -1448,7 +1455,7 @@ def get_daily_summaries(
     return {'summaries': summaries}
 
 
-@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], responses={200: {'model': DailySummaryResponse}})
+@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
 def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Get a single daily summary by ID.
@@ -1495,11 +1502,7 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 _REGENERATE_COOLDOWN_SECONDS = 30
 
 
-@router.post(
-    '/v1/users/daily-summaries/{summary_id}/regenerate',
-    tags=['v1'],
-    responses={200: {'model': DailySummaryResponse}},
-)
+@router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'], response_model=DailySummaryResponse)
 def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Re-run summary generation for the date of an existing daily summary and
@@ -1573,7 +1576,7 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
     return refreshed or {**summary_data, 'id': summary_id}
 
 
-@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
+@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'], response_model=DailySummaryResponse)
 def get_shared_daily_summary(summary_id: str):
     """
     Public endpoint to retrieve a daily summary for sharing. No auth required.
@@ -1711,6 +1714,8 @@ def get_llm_top_features(
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
+# response_model omitted: this streams a chunked JSON document via StreamingResponse (not a single JSON object);
+# the responses= override documents the streamed shape in OpenAPI without enforcing response_model validation.
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""

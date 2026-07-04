@@ -17,6 +17,15 @@ from pydantic import BaseModel, Field
 import database.chat as chat_db
 import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
+from models.chat import Message
+from models.chat_session import (
+    ChatSessionResponse,
+    DeleteMessagesResponse,
+    GenerateTitleResponse,
+    InitialMessageResponse,
+    SaveMessageResponse,
+)
+from models.shared import StatusResponse
 from utils.chat import initial_message_util
 from utils.llm.clients import get_llm
 from utils.other import endpoints as auth
@@ -80,7 +89,7 @@ class ChatMessageCountResponse(BaseModel):
 # ============================================================================
 
 
-@router.post('/v2/chat-sessions', tags=['chat-sessions'])
+@router.post('/v2/chat-sessions', tags=['chat-sessions'], response_model=ChatSessionResponse)
 def create_chat_session(
     request: CreateChatSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -88,7 +97,7 @@ def create_chat_session(
     return chat_db.create_chat_session(uid, title=request.title, app_id=request.app_id)
 
 
-@router.get('/v2/chat-sessions', tags=['chat-sessions'])
+@router.get('/v2/chat-sessions', tags=['chat-sessions'], response_model=list[ChatSessionResponse])
 def get_chat_sessions(
     app_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
@@ -99,7 +108,7 @@ def get_chat_sessions(
     return chat_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
 
 
-@router.get('/v2/chat-sessions/{session_id}', tags=['chat-sessions'])
+@router.get('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=ChatSessionResponse)
 def get_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -110,7 +119,7 @@ def get_chat_session(
     return result
 
 
-@router.patch('/v2/chat-sessions/{session_id}', tags=['chat-sessions'])
+@router.patch('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=ChatSessionResponse)
 def update_chat_session(
     session_id: str,
     request: UpdateChatSessionRequest,
@@ -122,7 +131,7 @@ def update_chat_session(
     return result
 
 
-@router.delete('/v2/chat-sessions/{session_id}', tags=['chat-sessions'])
+@router.delete('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=StatusResponse)
 def delete_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -138,7 +147,7 @@ def delete_chat_session(
 # ============================================================================
 
 
-@router.post('/v2/desktop/messages', tags=['chat-sessions'])
+@router.post('/v2/desktop/messages', tags=['chat-sessions'], response_model=SaveMessageResponse)
 def save_message(
     request: SaveMessageRequest,
     x_app_platform: str | None = Header(None),
@@ -169,7 +178,7 @@ def save_message(
     return saved
 
 
-@router.get('/v2/desktop/messages', tags=['chat-sessions'])
+@router.get('/v2/desktop/messages', tags=['chat-sessions'], response_model=list[Message])
 def get_messages(
     app_id: str | None = Query(None),
     session_id: str | None = Query(None),
@@ -180,7 +189,7 @@ def get_messages(
     return chat_db.get_messages(uid, app_id=app_id, chat_session_id=session_id, limit=limit, offset=offset)
 
 
-@router.delete('/v2/desktop/messages', tags=['chat-sessions'])
+@router.delete('/v2/desktop/messages', tags=['chat-sessions'], response_model=DeleteMessagesResponse)
 def delete_messages(
     app_id: str | None = Query(None),
     session_id: str | None = Query(None),
@@ -190,7 +199,7 @@ def delete_messages(
     return {'status': 'ok', 'deleted_count': count}
 
 
-@router.patch('/v2/desktop/messages/{message_id}/rating', tags=['chat-sessions'])
+@router.patch('/v2/desktop/messages/{message_id}/rating', tags=['chat-sessions'], response_model=StatusResponse)
 def rate_message(
     message_id: str,
     request: RateMessageRequest,
@@ -212,7 +221,7 @@ def rate_message(
 # ============================================================================
 
 
-@router.post('/v2/chat/initial-message', tags=['chat-sessions'])
+@router.post('/v2/chat/initial-message', tags=['chat-sessions'], response_model=InitialMessageResponse)
 def create_initial_message(
     request: InitialMessageRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
@@ -226,7 +235,7 @@ def create_initial_message(
     return {'message': ai_message.text, 'message_id': ai_message.id}
 
 
-@router.post('/v2/chat/generate-title', tags=['chat-sessions'])
+@router.post('/v2/chat/generate-title', tags=['chat-sessions'], response_model=GenerateTitleResponse)
 def generate_session_title(
     request: GenerateTitleRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),

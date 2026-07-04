@@ -31,6 +31,7 @@ from utils.notifications import (
 )
 from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field, ValidationError
+from models.shared import StatusResponse
 
 router = APIRouter()
 
@@ -565,7 +566,7 @@ def toggle_action_item_completion(
     return ActionItemResponse(**updated_item)
 
 
-@router.delete("/v1/action-items/{action_item_id}", status_code=204, tags=['action-items'])
+@router.delete("/v1/action-items/{action_item_id}", response_model=StatusResponse, tags=['action-items'])
 def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete an action item."""
     _get_valid_action_item(uid, action_item_id)
@@ -625,7 +626,16 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     return {"action_items": response_items, "conversation_id": conversation_id}
 
 
-@router.delete("/v1/conversations/{conversation_id}/action-items", status_code=204, tags=['action-items'])
+class ConversationActionItemsDeleteResponse(BaseModel):
+    status: str
+    deleted_count: int
+
+
+@router.delete(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationActionItemsDeleteResponse,
+    tags=['action-items'],
+)
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
     existing = action_items_db.get_action_items_by_conversation(uid, conversation_id)
