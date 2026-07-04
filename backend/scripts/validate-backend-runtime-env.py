@@ -312,6 +312,8 @@ def _validate_env_entries(
     for name, expected_entry in expected.items():
         actual_entry = actual.get(name)
         if actual_entry is None:
+            if _is_provisional(expected_entry) and not strict_provisional:
+                continue
             errors.append(ValidationError(scope, f'missing env {name}'))
             continue
         if 'value' in expected_entry:

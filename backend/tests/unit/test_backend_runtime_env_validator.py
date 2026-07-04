@@ -502,6 +502,24 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     assert errors == []
 
 
+def test_provisional_cloud_run_env_missing_is_allowed():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={
+            'OMI_LLM_GATEWAY_URL': {
+                'env_var': 'OMI_LLM_GATEWAY_URL',
+                'provisional': True,
+            },
+            'MEMORY_MODE': {'value': 'canonical'},
+        },
+        actual={'MEMORY_MODE': {'name': 'MEMORY_MODE', 'value': 'canonical'}},
+        strict_provisional=False,
+    )
+
+    assert errors == []
+
+
 def test_backend_listen_chart_only_workflow_preserves_runtime_project():
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend_listen_helm.yml'
     workflow_text = workflow_path.read_text(encoding='utf-8')

@@ -213,6 +213,7 @@ pytest tests/unit/test_llm_gateway_dependencies.py -v
 pytest tests/unit/test_llm_gateway_chat_extraction_pilot.py -v
 pytest tests/unit/test_llm_gateway_coverage_guardrails.py -v
 pytest tests/unit/test_backend_runtime_env_validator.py -v
+pytest tests/unit/test_render_backend_runtime_env.py -v
 pytest tests/unit/test_google_credentials.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
