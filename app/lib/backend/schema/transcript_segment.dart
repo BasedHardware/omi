@@ -1,29 +1,11 @@
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
-class Translation {
-  String lang;
-  String text;
-
-  Translation({required this.lang, required this.text});
-
-  factory Translation.fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedTranslation.fromJson(json);
-    return Translation(lang: generated.lang, text: generated.text);
-  }
-
-  wire.GeneratedTranslation toGenerated() {
-    return wire.GeneratedTranslation(lang: lang, text: text);
-  }
-
-  Map<String, dynamic> toJson() {
-    return toGenerated().toJson();
-  }
-
-  static List<Translation> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => Translation.fromJson(e)).toList();
-  }
-}
+// Phase 4.1 — pure 1:1 thin wrapper: both fields (String lang, String text) match
+// GeneratedTranslation exactly with no behavior, so it is a typedef.
+// GeneratedTranslation provides fromJson/toJson; the deleted hand-written
+// fromJsonList/toGenerated had no callers.
+typedef Translation = wire.GeneratedTranslation;
 
 class TranscriptSegment {
   String id;
@@ -82,9 +64,7 @@ class TranscriptSegment {
       personId: generated.personId,
       start: generated.start,
       end: generated.end,
-      translations: (generated.translations ?? const []).map((translation) {
-        return Translation(lang: translation.lang, text: translation.text);
-      }).toList(),
+      translations: generated.translations ?? const [],
       speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
     );
@@ -100,7 +80,7 @@ class TranscriptSegment {
       personId: personId,
       start: start,
       end: end,
-      translations: translations.map((translation) => translation.toGenerated()).toList(),
+      translations: translations,
       speechProfileProcessed: speechProfileProcessed,
       sttProvider: sttProvider,
     );
@@ -109,16 +89,6 @@ class TranscriptSegment {
   // Method to convert a Message instance into a map
   Map<String, dynamic> toJson() {
     return toGenerated().toJson();
-  }
-
-  static List<TranscriptSegment> fromJsonList(List<dynamic> jsonList) {
-    final List<TranscriptSegment> segments = [];
-    for (int i = 0; i < jsonList.length; i++) {
-      final segment = TranscriptSegment.fromJson(jsonList[i]);
-      segment.idx = i;
-      segments.add(segment);
-    }
-    return segments;
   }
 
   static List<TranscriptSegment> updateSegments(
