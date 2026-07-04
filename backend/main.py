@@ -80,6 +80,7 @@ from routers import (
     desktop_screen_crisp,
     desktop_tts_updates,
     scores,
+    stt,
     tts,
     memory_admin,
     memory_product,
@@ -210,6 +211,7 @@ app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(chat_generation.router)
 app.include_router(scores.router)
+app.include_router(stt.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
