@@ -240,7 +240,7 @@ struct DashboardPage: View {
     @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
         forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
     @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
-    @State private var lastMemoryExportStatusRefreshAt: Date?
+    @State private var lastHomeStatusRefreshAt = Date.distantPast
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -271,7 +271,6 @@ struct DashboardPage: View {
     }
 
     private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
-    private static let memoryExportStatusActiveRefreshThrottle: TimeInterval = 30
     private static let homeStageMaxWidth: CGFloat = 1120
     private static let homeStageHorizontalPadding: CGFloat = 34
     private static let appsPopupMaxWidth: CGFloat = 1040
@@ -409,19 +408,13 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
-            Task { await importConnectorStatusStore.refresh() }
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses(force: true) }
+            Task { await refreshHomeStatusData(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
-            Task { await importConnectorStatusStore.refresh() }
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses(force: true) }
+            Task { await refreshHomeStatusData(force: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -1126,23 +1119,36 @@ struct DashboardPage: View {
         }
     }
 
-    private func loadMemoryExportStatuses(force: Bool) async {
+    /// Refreshes Home-only status tiles and connector rows. Forced loads run
+    /// when the Home view is recreated; activation-triggered loads share the
+    /// app-wide cooldown so Cmd-Tab bursts do not rescan configs or hit count
+    /// endpoints repeatedly while Home is still mounted.
+    private func refreshHomeStatusData(force: Bool) async {
         let shouldRefresh = await MainActor.run {
             let now = Date()
             if !force,
-               let lastMemoryExportStatusRefreshAt,
-               now.timeIntervalSince(lastMemoryExportStatusRefreshAt)
-                   < Self.memoryExportStatusActiveRefreshThrottle {
+               !PollingConfig.shouldAllowActivationRefresh(
+                   now: now,
+                   lastRefresh: lastHomeStatusRefreshAt
+               ) {
                 return false
             }
+            lastHomeStatusRefreshAt = now
             return true
         }
         guard shouldRefresh else { return }
 
+        async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()
+        async let screenshots: Void = loadScreenshotCount()
+        async let knowledgeCounts: Void = loadKnowledgeCounts()
+        async let exportStatuses: Void = loadMemoryExportStatuses()
+        _ = await (importConnectorStatuses, screenshots, knowledgeCounts, exportStatuses)
+    }
+
+    private func loadMemoryExportStatuses() async {
         let statuses = await MemoryExportService.shared.allStatuses()
         await MainActor.run {
             memoryExportStatuses = statuses
-            lastMemoryExportStatusRefreshAt = Date()
         }
     }
 
@@ -1155,7 +1161,8 @@ struct DashboardPage: View {
         // Open tasks only (matches the "Tasks" label and the old tile's intent —
         // the old value just under-counted, capping each bucket at a 7-day window).
         async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        async let deviceHistory = try? APIClient.shared.hasOmiDeviceConversations()
+        let shouldLoadDeviceHistory = await MainActor.run { !accountHasOmiDeviceConversations }
+        async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil
         let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
         await MainActor.run {
             if let c { conversationCount = c }
@@ -1168,6 +1175,10 @@ struct DashboardPage: View {
                 UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
             }
         }
+    }
+
+    private func loadOmiDeviceHistory() async -> Bool? {
+        try? await APIClient.shared.hasOmiDeviceConversations()
     }
 
     private func formattedCount(_ count: Int) -> String {
