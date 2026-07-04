@@ -91,6 +91,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
 class FloatingControlBarState: NSObject, ObservableObject {
     static let visibleConversationReuseInterval: TimeInterval = 10 * 60
     static var voiceResponseWatchdogDelay: TimeInterval = 30
+    /// Safety cap: the "thinking" indicator self-clears after this long even if
+    /// no explicit response-start/teardown signal arrives, so it can never stick.
+    static var thinkingWatchdogDelay: TimeInterval = 25
 
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
@@ -166,10 +169,18 @@ class FloatingControlBarState: NSObject, ObservableObject {
                 isVoiceResponseWaiting = false
             }
             updateVoiceResponseWatchdog()
+            // A live voice response supersedes the "thinking" indicator.
+            if isVoiceResponseActive { isThinking = false }
         }
     }
     @Published var isVoiceResponseWaiting: Bool = false {
         didSet { updateVoiceResponseWatchdog() }
+    }
+    /// True while a committed Push-to-Talk query is being processed and no
+    /// response output (voice glow or conversation surface) has surfaced yet.
+    /// Drives the notch/pill "thinking" animation. Auto-clears via a watchdog.
+    @Published var isThinking: Bool = false {
+        didSet { updateThinkingWatchdog() }
     }
     var isVoiceResponseGlowActive: Bool {
         isVoiceResponseActive || isVoiceResponseWaiting
@@ -188,6 +199,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var currentQueryFromVoice: Bool = false
 
     private var voiceResponseWatchdogWorkItem: DispatchWorkItem?
+    private var thinkingWatchdogWorkItem: DispatchWorkItem?
 
     // Model selection
     @Published var selectedModel: String = ModelQoS.Claude.defaultSelection
@@ -222,6 +234,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = surface.isOpen
         showingAIResponse = surface.isResponseLike
         markConversationActivity()
+        // The conversation surface owns its own loading header once it opens, so
+        // hand the "thinking" indicator off to it (avoids showing both).
+        if surface.isOpen { isThinking = false }
     }
 
     func leaveAgentSurface() {
@@ -247,6 +262,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
+        isThinking = false
         isVoiceFollowUp = false
         voiceFollowUpTranscript = ""
         markConversationActivity()
@@ -305,6 +321,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
+        isThinking = false
         isVoiceFollowUp = false
         voiceFollowUpTranscript = ""
         currentQueryFromVoice = false
@@ -334,6 +351,22 @@ class FloatingControlBarState: NSObject, ObservableObject {
         voiceResponseWatchdogWorkItem = workItem
         DispatchQueue.main.asyncAfter(
             deadline: .now() + Self.voiceResponseWatchdogDelay,
+            execute: workItem
+        )
+    }
+
+    private func updateThinkingWatchdog() {
+        thinkingWatchdogWorkItem?.cancel()
+        thinkingWatchdogWorkItem = nil
+        guard isThinking else { return }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isThinking else { return }
+            self.isThinking = false
+        }
+        thinkingWatchdogWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.thinkingWatchdogDelay,
             execute: workItem
         )
     }

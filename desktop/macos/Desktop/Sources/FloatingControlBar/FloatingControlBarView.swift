@@ -50,6 +50,9 @@ struct FloatingControlBarView: View {
                 ? FloatingControlBarWindow.notchCompactSideWidth
                 : FloatingControlBarWindow.notchActiveSideWidth
         }
+        if showingNotchThinking {
+            return FloatingControlBarWindow.notchThinkingSideWidth
+        }
         if agentPills.pills.isEmpty && !state.isVoiceListening {
             return FloatingControlBarWindow.notchCompactSideWidth
         }
@@ -129,6 +132,13 @@ struct FloatingControlBarView: View {
 
     private var showingNotchWaveform: Bool {
         state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
+    }
+
+    /// The notch "thinking" state: a PTT query is committed and being processed,
+    /// with no live listening or open conversation surface. Shows the spinning
+    /// Omi mark + "Thinking" in the notch lobes.
+    private var showingNotchThinking: Bool {
+        state.isThinking && !state.showingAIConversation && !state.isVoiceListening
     }
 
     private var shouldUseOmiChatOverlayHitTarget: Bool {
@@ -302,6 +312,10 @@ struct FloatingControlBarView: View {
                 (window as? FloatingControlBarWindow)?.setPillAgentListVisible(false)
             }
         }
+        .onChange(of: state.isThinking) { _, thinking in
+            guard state.usesNotchIsland else { return }
+            (window as? FloatingControlBarWindow)?.resizeForThinking(active: thinking)
+        }
         .onDisappear { state.setNotchHoverMenuOpen(false) }
     }
 
@@ -331,6 +345,11 @@ struct FloatingControlBarView: View {
                     .scaleEffect(0.72)
                     .frame(width: 28, height: 15)
                     .frame(width: 38, height: 27)
+            } else if showingNotchThinking {
+                NotchThinkingMark()
+                    .frame(width: 24, height: 24)
+                    .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
+                    .padding(.trailing, 2)
             } else {
                 ZStack(alignment: .trailing) {
                     NotchAgentPillsRowView(manager: agentPills, barWindow: window)
@@ -387,14 +406,22 @@ struct FloatingControlBarView: View {
             }
             .buttonStyle(.plain)
 
-            if notchSettingsHovering {
+            if showingNotchThinking {
+                Text("Thinking")
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            } else if notchSettingsHovering {
                 notchSettingsButton
                     .zIndex(1)
                     .transition(.scale.combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.leading, 5)
+        .padding(.leading, 6)
         .accessibilityElement(children: .contain)
     }
 
@@ -1454,6 +1481,29 @@ private struct NotchOmiMark: View {
         }
         .drawingGroup(opaque: false, colorMode: .linear)
         .accessibilityHidden(true)
+    }
+}
+
+/// The Omi mark rendered as a spinning "thinking" indicator. The ring's dots
+/// carry a brightness trail (bright head → faint tail) so the continuous
+/// rotation reads as a sweeping comet rather than a static ring of dots.
+private struct NotchThinkingMark: View {
+    @State private var angle: Double = 0
+
+    private static let trail: [Color] = (0..<8).map { index in
+        Color.white.opacity(1.0 - Double(index) * 0.1)
+    }
+
+    var body: some View {
+        NotchOmiMark(dotColors: Self.trail)
+            .rotationEffect(.degrees(angle))
+            .onAppear {
+                angle = 0
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                    angle = 360
+                }
+            }
+            .accessibilityLabel("Thinking")
     }
 }
 

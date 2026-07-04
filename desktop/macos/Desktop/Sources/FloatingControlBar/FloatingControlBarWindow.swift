@@ -69,6 +69,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     static let notchCompactSideWidth: CGFloat = 30
     static let notchActiveSideWidth: CGFloat = 42
+    /// Wider lobes while "thinking" so the right lobe fits the word alongside the
+    /// spinning Omi mark on the left.
+    static let notchThinkingSideWidth: CGFloat = 62
     static let defaultNotchChromeHeight: CGFloat = 34
     static var notchChromeHeight: CGFloat { defaultNotchChromeHeight }
     static let notchActivationHeight: CGFloat = 17
@@ -356,6 +359,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // hardware so the fallback surface can be exercised locally. getenv so
         // values loaded from the bundle .env (BundleEnvironment) are seen too.
         if let forced = getenv("OMI_FORCE_NO_NOTCH"), String(cString: forced) == "1" { return false }
+        // Testing hook: force the notch-island presentation on non-notch hardware
+        // (external display / dev machine) so notch-only UI can be exercised
+        // locally. Mirror of OMI_FORCE_NO_NOTCH; NO_NOTCH wins if both are set.
+        if let forced = getenv("OMI_FORCE_NOTCH"), String(cString: forced) == "1" { return true }
         guard let screen else { return false }
         if #available(macOS 12.0, *) {
             if let leftArea = screen.auxiliaryTopLeftArea,
@@ -1645,6 +1652,40 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.18)
     }
 
+    /// Size the notch to fit the "thinking" indicator (active width) while a PTT
+    /// query is being processed, then collapse it back once the response takes
+    /// over. Voice listening and the open conversation surface own sizing while
+    /// they are active, so this defers to them.
+    func resizeForThinking(active: Bool) {
+        guard notchModeEnabled, !state.showingAIConversation, state.currentNotification == nil else { return }
+        if active {
+            // No isVoiceListening guard here: entering "thinking" always follows a
+            // just-committed turn where listening is ending in the same tick.
+            resizeAnchored(
+                to: notchSize(sideWidth: Self.notchThinkingSideWidth),
+                makeResizable: false,
+                animated: true,
+                animationDuration: Self.askOmiAnimationDuration,
+                anchorTop: true
+            )
+        } else {
+            // A new listening turn (which clears isThinking) owns sizing — don't
+            // collapse out from under it.
+            guard !state.isVoiceListening else { return }
+            resizeForPTTState(expanded: false)
+        }
+    }
+
+    /// Pop the notch in from a near-zero scale the first time it is revealed via
+    /// Push-to-Talk (it stays hidden at launch on notched displays).
+    func playNotchRevealAnimation() {
+        guard notchModeEnabled else { return }
+        state.notchRevealProgress = 0.01
+        withAnimation(.easeOut(duration: 0.24)) {
+            state.notchRevealProgress = 1
+        }
+    }
+
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
         guard !state.showingAIConversation else { return }
         state.currentNotification = notification
@@ -1981,6 +2022,10 @@ class FloatingControlBarManager {
     }
 
     private var window: FloatingControlBarWindow?
+    /// On notched displays the notch is not shown at launch — it reveals only
+    /// after the user's first Push-to-Talk press. Tracks whether that reveal has
+    /// happened this session so `showInitial()` can gate the launch presentation.
+    private var hasRevealedNotchThisSession = false
     private var snoozeTimer: Timer?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
@@ -2421,6 +2466,18 @@ class FloatingControlBarManager {
         }
     }
 
+    /// Launch-time presentation. On notched displays the notch stays hidden until
+    /// the user's first Push-to-Talk press (which calls `show()`); on other
+    /// displays it behaves exactly like `show()`.
+    func showInitial() {
+        if window?.usesNotchIslandForCurrentScreen == true, !hasRevealedNotchThisSession {
+            isEnabled = true
+            log("FloatingControlBarManager: showInitial() — notch hidden until first Push-to-Talk")
+            return
+        }
+        show()
+    }
+
     /// Show the floating bar and persist the preference.
     func show() {
         log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
@@ -2429,8 +2486,13 @@ class FloatingControlBarManager {
             log("FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")")
             return
         }
+        let isFirstNotchReveal = window?.usesNotchIslandForCurrentScreen == true && !hasRevealedNotchThisSession
+        hasRevealedNotchThisSession = true
         window?.normalizeForTemporaryShow()
         window?.makeKeyAndOrderFront(nil)
+        if isFirstNotchReveal {
+            window?.playNotchRevealAnimation()
+        }
         log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
 
         // Auto-focus input if AI conversation is open

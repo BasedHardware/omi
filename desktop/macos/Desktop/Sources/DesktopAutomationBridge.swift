@@ -435,6 +435,22 @@ final class DesktopAutomationActionRegistry {
       return ["sent": query]
     }
 
+    // Force the notch "thinking" indicator on/off so the spinning-Omi animation
+    // can be exercised without a mic. Same state a committed PTT turn sets in
+    // PushToTalkManager.finalize(); non-prod bridge only.
+    register(
+      name: "debug_thinking",
+      summary: "Force the floating-bar 'thinking' indicator on/off (visual verification)",
+      params: ["on"]
+    ) { params in
+      let on = boolParam(params["on"], default: true)
+      if on, !FloatingControlBarManager.shared.isVisible {
+        FloatingControlBarManager.shared.show()
+      }
+      FloatingControlBarManager.shared.barState?.isThinking = on
+      return ["isThinking": on ? "true" : "false"]
+    }
+
     // Send a message through the real main-window chat pipeline (ChatPage),
     // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
     // or keyboard input, so it never touches the user's actual cursor.
