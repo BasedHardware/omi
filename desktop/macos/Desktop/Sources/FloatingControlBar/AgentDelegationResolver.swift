@@ -58,10 +58,30 @@ final class AgentDelegationResolver {
     private init() {}
 
     func resolve(_ request: Request) async -> Decision {
+        if let deterministic = Self.deterministicExplicitDecision(for: request) {
+            return deterministic
+        }
         guard let decision = await runResolverCall(for: request) else {
             return fallbackDecision(for: request)
         }
         return decision
+    }
+
+    private nonisolated static func deterministicExplicitDecision(for request: Request) -> Decision? {
+        guard request.explicitDelegationRequested else { return nil }
+        guard let brief = clean(request.proposedBrief),
+              DelegationBriefValidator.isStructurallyAcceptable(brief: brief, rawIntent: request.userText)
+        else {
+            return nil
+        }
+        return Decision(
+            action: .spawn,
+            brief: brief,
+            title: clean(request.proposedTitle).map { String($0.prefix(48)) },
+            ack: clean(request.proposedAck).map { String($0.prefix(220)) },
+            directedProvider: request.directedProvider,
+            reason: "explicit self-contained delegation"
+        )
     }
 
     private func runResolverCall(for request: Request) async -> Decision? {
@@ -217,7 +237,7 @@ final class AgentDelegationResolver {
         )
     }
 
-    private static func clean(_ value: String?) -> String? {
+    private nonisolated static func clean(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty, trimmed.lowercased() != "null" else { return nil }
         return trimmed

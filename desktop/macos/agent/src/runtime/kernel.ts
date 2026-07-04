@@ -44,6 +44,7 @@ import type {
 import { buildDesktopActionQueue, type DesktopActionQueueItem, type QueueArtifactDeliveryInput, type QueueCandidateInput, type QueueDispatchInput, type QueueOverrideInput, type QueueRunInput } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type DesktopContextPacketBuildInput, type BuiltDesktopContextPacket, type DesktopContextSnippetInput } from "./desktop-context-packet.js";
 import { routeDesktopIntent, type DesktopIntentRoute, type DesktopIntentRouteInput, type DesktopIntentSessionCandidate } from "./desktop-intent-router.js";
+import { OmiArtifactStorage } from "./artifact-storage.js";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -186,6 +187,7 @@ export interface KernelRunResult {
   session: AgentSession;
   run: AgentRun;
   attempt: RunAttempt;
+  artifacts: AgentArtifact[];
   adapterSessionId: string | null;
   terminalStatus: "succeeded" | "failed" | "cancelled";
   text: string;
@@ -444,6 +446,7 @@ export interface AgentRuntimeKernelOptions {
   store: AgentStore;
   registry: AdapterRegistry;
   runtimeNodeId?: string;
+  artifactStorage?: OmiArtifactStorage;
 }
 
 interface ActiveExecution {
@@ -458,6 +461,7 @@ export class AgentRuntimeKernel {
   private readonly store: AgentStore;
   private readonly registry: AdapterRegistry;
   private readonly runtimeNodeId: string;
+  private readonly artifactStorage?: OmiArtifactStorage;
   private readonly subscribers = new Set<KernelEventSubscriber>();
   private readonly activeExecutions = new Map<string, ActiveExecution>();
   private readonly bindingResolutionLocks = new Map<string, Promise<void>>();
@@ -468,6 +472,7 @@ export class AgentRuntimeKernel {
     this.store = options.store;
     this.registry = options.registry;
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
+    this.artifactStorage = options.artifactStorage;
   }
 
   subscribe(subscriber: KernelEventSubscriber): () => void {
@@ -631,6 +636,12 @@ export class AgentRuntimeKernel {
         resumeFromAttemptId,
       });
       lastAttempt = attempt;
+      const attemptInput = this.inputWithManagedArtifactCwd(input, accepted.session, accepted.run.runId, attempt.attemptId);
+      if (attemptInput.cwd && attemptInput.cwd !== (input.cwd ?? accepted.session.defaultCwd ?? undefined)) {
+        this.withTransaction(() => {
+          this.updateRun(accepted.run.runId, { cwd: attemptInput.cwd, updatedAtMs: Date.now() });
+        });
+      }
 
       if (!this.registry.has(adapterId)) {
         const failure: RuntimeFailure = {
@@ -664,7 +675,7 @@ export class AgentRuntimeKernel {
             `${attempt.attemptId}:binding`,
             async (worker) => {
               const resolved = await this.resolveBindingForAttempt({
-                input,
+                input: attemptInput,
                 session: accepted.session,
                 adapter: worker.adapter,
                 attempt,
@@ -822,6 +833,7 @@ export class AgentRuntimeKernel {
       session: accepted.session,
       run: finalRun,
       attempt,
+      artifacts: this.readArtifacts({ runId: accepted.run.runId, limit: 50 }),
       adapterSessionId: null,
       terminalStatus: finalRun.status === "cancelled" ? "cancelled" : "failed",
       text: finalRun.finalText ?? "",
@@ -1874,7 +1886,24 @@ export class AgentRuntimeKernel {
         lastUsedAtMs: Date.now(),
         updatedAtMs: Date.now(),
       });
-      for (const artifact of result.artifacts ?? []) {
+      const emittedArtifacts = result.artifacts ?? [];
+      const existingArtifacts = this.readArtifacts({ sessionId: session.sessionId, limit: 500 });
+      const artifacts = [
+        ...emittedArtifacts,
+        ...(this.artifactStorage?.discoverRunArtifacts({
+          ownerId: session.ownerId,
+          sessionId: session.sessionId,
+          runId,
+          attemptId: attempt.attemptId,
+        }, [...emittedArtifacts, ...existingArtifacts]) ?? []),
+      ];
+      for (const rawArtifact of artifacts) {
+        const artifact = this.artifactStorage?.normalizeArtifact(rawArtifact, {
+          ownerId: session.ownerId,
+          sessionId: session.sessionId,
+          runId,
+          attemptId: attempt.attemptId,
+        }) ?? rawArtifact;
         this.persistArtifactInTransaction({
           sessionId: session.sessionId,
           runId,
@@ -1905,10 +1934,33 @@ export class AgentRuntimeKernel {
       session,
       run: this.readRun(runId),
       attempt: this.readAttempt(attempt.attemptId),
+      artifacts: this.readArtifacts({ runId, limit: 50 }),
       adapterSessionId: result.adapterSessionId,
       terminalStatus: status,
       text: result.text,
     };
+  }
+
+  private inputWithManagedArtifactCwd(
+    input: ExecuteAgentRunInput,
+    session: AgentSession,
+    runId: string,
+    attemptId: string
+  ): ExecuteAgentRunInput {
+    if (!this.artifactStorage) {
+      return input;
+    }
+    const requestedCwd = input.cwd ?? session.defaultCwd;
+    if (requestedCwd && !this.artifactStorage.isRootDirectory(requestedCwd)) {
+      return input;
+    }
+    const cwd = this.artifactStorage.prepareRunDirectory({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId,
+      attemptId,
+    });
+    return { ...input, cwd };
   }
 
   private finishAttemptAndRun(input: {

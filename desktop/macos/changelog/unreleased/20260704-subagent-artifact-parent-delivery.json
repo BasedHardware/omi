@@ -1,0 +1,3 @@
+{
+  "change": "Files created by a background agent now show up as cards in the main chat and the notch chat; when you ask about a finished agent, its generated file rides along in the reply, always below the message text, with multiple files stacked cleanly instead of squeezed side-by-side, no stray loading dots left under a delivered file, and a clearer open affordance"
+}

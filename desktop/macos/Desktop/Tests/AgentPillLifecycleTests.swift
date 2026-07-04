@@ -13,6 +13,21 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains("Self.backgroundAgentSystemPromptSuffix"))
   }
 
+  func testFinishedAgentArtifactsAreDeliveredToParentChatSurfaces() throws {
+    let agentPillSource = try agentPillSource()
+    let windowSource = try floatingControlBarWindowSource()
+    let chatProviderSource = try chatProviderSource()
+
+    XCTAssertTrue(agentPillSource.contains("FloatingControlBarManager.shared.recordAgentArtifactCompletion("))
+    XCTAssertTrue(agentPillSource.contains("resources: resources"))
+    XCTAssertTrue(windowSource.contains("func recordAgentArtifactCompletion("))
+    XCTAssertTrue(windowSource.contains("historyChatProvider?.appendAssistantMessage("))
+    XCTAssertTrue(windowSource.contains("deliverAgentArtifactCompletionToFloatingSurface"))
+    XCTAssertTrue(chatProviderSource.contains("resources: [ChatResource] = []"))
+    XCTAssertTrue(chatProviderSource.contains("sender: .ai,"))
+    XCTAssertTrue(chatProviderSource.contains("resources: resources"))
+  }
+
   func testVoiceAgentKickoffUsesCachedPhrasePack() throws {
     let agentPillSource = try agentPillSource()
     let voiceServiceSource = try floatingBarVoicePlaybackServiceSource()
@@ -82,7 +97,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarViewSource()
     let agentPillSource = try agentPillSource()
 
-    XCTAssertTrue(source.contains("if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
+    XCTAssertTrue(source.contains("if staged.isEmpty, let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
     XCTAssertTrue(source.contains("harnessOverride: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
     XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
@@ -442,7 +457,10 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(agentSource.contains("@Published var conversationMessages: [ChatMessage] = []"))
     XCTAssertTrue(agentSource.contains("pill.conversationMessages = displayMessages"))
-    XCTAssertTrue(agentSource.contains("message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty"))
+    XCTAssertTrue(agentSource.contains("return message.sender == .user"))
+    XCTAssertTrue(agentSource.contains("|| !trimmed.isEmpty"))
+    XCTAssertTrue(agentSource.contains("|| message.isStreaming"))
+    XCTAssertTrue(agentSource.contains("|| !message.contentBlocks.isEmpty"))
     XCTAssertTrue(viewSource.contains("private var displayedMessages: [ChatMessage]"))
     XCTAssertTrue(viewSource.contains("ChatMessage(id: \"\\(pill.id.uuidString)-query\", text: pill.query, sender: .user)"))
     XCTAssertTrue(viewSource.contains("Text(trimmed)"))
@@ -938,12 +956,14 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testCanonicalPillLifecycleQueuesFollowUpsAndCancelsActiveDismissals() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("private var pendingFollowUpsByPill: [UUID: [String]] = [:]"))
-    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pill.id, default: []].append(text)"))
+    XCTAssertTrue(source.contains("private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]"))
+    XCTAssertTrue(source.contains("private struct PendingAgentFollowUp"))
+    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))"))
     XCTAssertTrue(source.contains("Queued follow-up until the agent starts"))
     XCTAssertTrue(source.contains("Queued follow-up until the current run stops"))
     XCTAssertTrue(source.contains("let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []"))
-    XCTAssertTrue(source.contains("self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: \"\\n\\n\"))"))
+    XCTAssertTrue(source.contains("text: queuedFollowUps.map(\\.text).joined(separator: \"\\n\\n\")"))
+    XCTAssertTrue(source.contains("attachments: queuedFollowUps.flatMap(\\.attachments)"))
     XCTAssertTrue(source.contains("switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill)"))
     XCTAssertTrue(source.contains("case .cancelled:\n                        return"))
     XCTAssertTrue(source.contains("private enum ActiveRunCancellationResult"))
