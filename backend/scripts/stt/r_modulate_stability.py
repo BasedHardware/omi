@@ -1,9 +1,9 @@
 """
-Modulate WER stability test: same audio, same config, multiple runs.
+Test: Modulate STT WER stability across repeated runs.
 
-Sends identical audio with identical silence to Modulate N times.
-If WER varies significantly between runs, the issue is Modulate's
-non-determinism, not our test methodology.
+Sends the same LibriSpeech playlist to Modulate's streaming STT several times
+per silence-padding config and reports WER min/max/spread to check that
+transcription is deterministic (or how much it drifts).
 
 Usage:
     cd backend && python3 scripts/stt/r_modulate_stability.py
@@ -15,9 +15,9 @@ import os
 import re
 import subprocess
 import sys
-import time
 import urllib.parse
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import websockets
 
@@ -36,12 +36,12 @@ CONFIGS = [
 ]
 
 
-def normalize(text):
+def normalize(text: str) -> str:
     text = PUNCT_RE.sub(' ', text).upper()
     return ' '.join(text.split())
 
 
-def compute_wer(ref, hyp):
+def compute_wer(ref: str, hyp: str) -> float:
     ref_words = ref.split()
     hyp_words = hyp.split()
     if not ref_words:
@@ -60,9 +60,9 @@ def compute_wer(ref, hyp):
     return d[len(ref_words)][len(hyp_words)] / len(ref_words)
 
 
-def build_playlist(target_s):
-    playlist = []
-    total_s = 0
+def build_playlist(target_s: float) -> Tuple[List[Dict[str, Any]], float]:
+    playlist: List[Dict[str, Any]] = []
+    total_s = 0.0
     for reader_dir in sorted(LIBRISPEECH_DIR.iterdir()):
         if not reader_dir.is_dir():
             continue
@@ -72,7 +72,7 @@ def build_playlist(target_s):
             trans_file = list(chapter_dir.glob('*.trans.txt'))
             if not trans_file:
                 continue
-            transcripts = {}
+            transcripts: Dict[str, str] = {}
             for line in trans_file[0].read_text().strip().split('\n'):
                 parts = line.strip().split(' ', 1)
                 if len(parts) == 2:
@@ -102,7 +102,7 @@ def build_playlist(target_s):
     return playlist, total_s
 
 
-def convert_to_pcm16(flac_path):
+def convert_to_pcm16(flac_path: str) -> Optional[bytes]:
     result = subprocess.run(
         ['ffmpeg', '-y', '-i', flac_path, '-f', 's16le', '-ar', str(SAMPLE_RATE), '-ac', '1', 'pipe:1'],
         capture_output=True,
@@ -110,16 +110,16 @@ def convert_to_pcm16(flac_path):
     return result.stdout if result.returncode == 0 else None
 
 
-_pcm_cache = {}
+_pcm_cache: Dict[str, Optional[bytes]] = {}
 
 
-def get_pcm(flac_path):
+def get_pcm(flac_path: str) -> Optional[bytes]:
     if flac_path not in _pcm_cache:
         _pcm_cache[flac_path] = convert_to_pcm16(flac_path)
     return _pcm_cache[flac_path]
 
 
-async def run_single(playlist, silence_s):
+async def run_single(playlist: List[Dict[str, Any]], silence_s: float) -> Dict[str, Any]:
     """Single run: send audio to Modulate, collect results."""
     params = {
         'api_key': MODULATE_API_KEY,
@@ -134,25 +134,25 @@ async def run_single(playlist, silence_s):
 
     ws = await websockets.connect(uri, ping_timeout=30, ping_interval=10, max_size=None)
 
-    utterances = []
+    utterances: List[Dict[str, Any]] = []
     last_partial_text = ''
     done_event = asyncio.Event()
-    utt_order = []
+    utt_order: List[str] = []
 
-    async def recv():
+    async def recv() -> None:
         nonlocal last_partial_text
         try:
             async for raw in ws:
-                msg = json.loads(raw)
+                msg: Dict[str, Any] = json.loads(raw)
                 mt = msg.get('type', '')
                 if mt == 'utterance':
-                    utt = msg.get('utterance', msg)
+                    utt = cast(Dict[str, Any], msg.get('utterance', msg))
                     utterances.append(utt)
-                    utt_order.append(utt.get('text', '')[:40])
+                    utt_order.append(str(utt.get('text', ''))[:40])
                     last_partial_text = ''
                 elif mt == 'partial_utterance':
-                    pu = msg.get('partial_utterance', msg)
-                    last_partial_text = pu.get('text', '').strip()
+                    pu = cast(Dict[str, Any], msg.get('partial_utterance', msg))
+                    last_partial_text = str(pu.get('text', '')).strip()
                 elif mt in ('done', 'error'):
                     done_event.set()
                     break
@@ -167,7 +167,7 @@ async def run_single(playlist, silence_s):
     total_bytes = 0
 
     for i, sample in enumerate(playlist):
-        pcm = get_pcm(sample['flac'])
+        pcm = get_pcm(str(sample['flac']))
         if not pcm:
             continue
         offset = 0
@@ -200,7 +200,7 @@ async def run_single(playlist, silence_s):
     except Exception:
         pass
 
-    utt_text = ' '.join(u.get('text', '') for u in utterances).strip()
+    utt_text = ' '.join(str(u.get('text', '')) for u in utterances).strip()
     full_text = utt_text
     if last_partial_text and not utt_text.endswith(last_partial_text):
         full_text = (utt_text + ' ' + last_partial_text).strip() if utt_text else last_partial_text
@@ -212,46 +212,46 @@ async def run_single(playlist, silence_s):
     }
 
 
-async def main():
+async def main() -> None:
     print('Building playlist (target: 30s of speech)...')
     playlist, total_s = build_playlist(30)
     if not playlist:
         print('ERROR: No LibriSpeech data.')
         sys.exit(1)
 
-    ref_text = ' '.join(s['ref'] for s in playlist)
+    ref_text = ' '.join(str(s['ref']) for s in playlist)
     ref_norm = normalize(ref_text)
     ref_words = ref_norm.split()
     print(f'  {len(playlist)} utterances, {total_s:.1f}s speech, {len(ref_words)} ref words')
     print(f'  Ref: {ref_text[:120]}...\n')
 
     for s in playlist:
-        get_pcm(s['flac'])
+        get_pcm(str(s['flac']))
 
-    all_results = {}
+    all_results: Dict[str, Dict[str, Any]] = {}
 
     for config in CONFIGS:
-        silence_s = config['silence_s']
-        label = config['label']
+        silence_s = float(config['silence_s'])
+        label = str(config['label'])
         print(f'{"=" * 70}')
         print(f'{label} — {RUNS_PER_CONFIG} runs')
         print(f'{"=" * 70}')
 
-        runs = []
+        runs: List[Dict[str, Any]] = []
         for r in range(RUNS_PER_CONFIG):
             print(f'  Run {r + 1}/{RUNS_PER_CONFIG}...', end=' ', flush=True)
             result = await run_single(playlist, silence_s)
-            hyp_norm = normalize(result['full_text'])
+            hyp_norm = normalize(cast(str, result['full_text']))
             wer = compute_wer(ref_norm, hyp_norm)
             words = len(hyp_norm.split()) if hyp_norm else 0
 
-            run_data = {
+            run_data: Dict[str, Any] = {
                 'run': r + 1,
                 'wer': wer,
                 'words': words,
                 'utts': result['utterance_count'],
                 'utt_order': result['utt_order'],
-                'text_sample': result['full_text'][:100],
+                'text_sample': cast(str, result['full_text'])[:100],
             }
             runs.append(run_data)
             print(f'WER={wer * 100:.1f}% words={words}/{len(ref_words)} utts={result["utterance_count"]}')
@@ -259,8 +259,8 @@ async def main():
             # Brief pause between runs
             await asyncio.sleep(2)
 
-        wers = [r['wer'] for r in runs]
-        words_list = [r['words'] for r in runs]
+        wers = [cast(float, run['wer']) for run in runs]
+        words_list = [cast(int, run['words']) for run in runs]
         avg_wer = sum(wers) / len(wers)
         min_wer = min(wers)
         max_wer = max(wers)
@@ -275,9 +275,9 @@ async def main():
 
         # Show utterance order per run
         print(f'  Utterance arrival order:')
-        for r in runs:
-            order_str = ' → '.join(r['utt_order'][:4])
-            print(f'    Run {r["run"]}: [{r["utts"]} utts] {order_str}')
+        for run in runs:
+            order_str = ' → '.join(cast(List[str], run['utt_order'])[:4])
+            print(f'    Run {run["run"]}: [{run["utts"]} utts] {order_str}')
 
         all_results[label] = {
             'runs': runs,
@@ -294,10 +294,11 @@ async def main():
     print('VERDICT: Modulate WER Stability')
     print(f'{"=" * 70}')
     for label, data in all_results.items():
-        stable = data['spread'] < 0.05
-        status = 'STABLE (spread < 5%)' if stable else f'UNSTABLE (spread = {data["spread"] * 100:.1f}%)'
+        stable = cast(float, data['spread']) < 0.05
+        status = 'STABLE (spread < 5%)' if stable else f'UNSTABLE (spread = {cast(float, data["spread"]) * 100:.1f}%)'
         print(
-            f'  {label}: avg WER = {data["avg_wer"] * 100:.1f}%, range = [{data["min_wer"] * 100:.1f}% - {data["max_wer"] * 100:.1f}%] → {status}'
+            f'  {label}: avg WER = {cast(float, data["avg_wer"]) * 100:.1f}%, '
+            f'range = [{cast(float, data["min_wer"]) * 100:.1f}% - {cast(float, data["max_wer"]) * 100:.1f}%] → {status}'
         )
 
     with open('/tmp/modulate_stability.json', 'w') as f:

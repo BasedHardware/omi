@@ -1,18 +1,13 @@
 """
-Benchmark Suite 02: Deepgram vs Modulate — Pre-recorded transcription.
+STT Benchmark Suite 02 — Pre-recorded (real human speech)
 
-Uses real human speech from LibriSpeech test-clean dataset (12 samples,
-12 speakers, 2-27s duration, 4-62 words). Ground truth transcripts for
-accurate WER measurement.
-
-Setup:
-    1. Download LibriSpeech test-clean:
-       curl -L -o /tmp/test-clean.tar.gz https://www.openslr.org/resources/12/test-clean.tar.gz
-    2. Extract and prepare samples:
-       python scripts/stt/n_benchmark_02_prerecorded.py --prepare
+Compares Deepgram and Modulate pre-recorded STT on LibriSpeech test-clean
+samples, reporting WER (after punctuation stripping), latency, and
+punctuation retention.
 
 Usage:
-    cd backend && python scripts/stt/n_benchmark_02_prerecorded.py
+    cd backend && python3 scripts/stt/n_benchmark_02_prerecorded.py --prepare   # one-time sample prep
+    cd backend && python3 scripts/stt/n_benchmark_02_prerecorded.py             # run benchmark
 """
 
 import json
@@ -22,7 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 from dotenv import load_dotenv
 
@@ -42,7 +37,7 @@ def normalize_for_wer(text: str) -> str:
     return PUNCT_RE.sub('', text).lower().strip()
 
 
-def count_punctuation(text: str) -> dict:
+def count_punctuation(text: str) -> Dict[str, Any]:
     marks = re.findall(r'[^\w\s]', text)
     return {'total': len(marks), 'detail': dict(sorted(((m, marks.count(m)) for m in set(marks)), key=lambda x: -x[1]))}
 
@@ -68,7 +63,7 @@ SAMPLE_PICKS = [
 ]
 
 
-def prepare_samples():
+def prepare_samples() -> List[Dict[str, Any]]:
     if not LIBRISPEECH_TAR.exists():
         print(f'ERROR: Download LibriSpeech test-clean first:')
         print(f'  curl -L -o {LIBRISPEECH_TAR} https://www.openslr.org/resources/12/test-clean.tar.gz')
@@ -80,7 +75,7 @@ def prepare_samples():
         subprocess.run(['tar', 'xzf', str(LIBRISPEECH_TAR), '-C', str(LIBRISPEECH_DIR.parent.parent)], check=True)
 
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    manifest = []
+    manifest: List[Dict[str, Any]] = []
 
     for i, pick in enumerate(SAMPLE_PICKS):
         uid = pick['uid']
@@ -134,32 +129,32 @@ def prepare_samples():
     return manifest
 
 
-def load_manifest() -> List[dict]:
+def load_manifest() -> List[Dict[str, Any]]:
     manifest_path = AUDIO_DIR / 'manifest.json'
     if not manifest_path.exists():
         print('Samples not prepared yet. Running preparation...')
         return prepare_samples()
     with open(manifest_path) as f:
-        return json.load(f)
+        return cast(List[Dict[str, Any]], json.load(f))
 
 
 def run_deepgram(audio_bytes: bytes) -> Tuple[str, float, int]:
     t0 = time.monotonic()
-    result = deepgram_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True)
+    result = cast(List[Dict[str, Any]], deepgram_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True))
     elapsed = time.monotonic() - t0
-    text = ' '.join(w.get('text', '') or w.get('word', '') for w in result).strip()
+    text = ' '.join(str(w.get('text', '') or w.get('word', '')) for w in result).strip()
     return text, elapsed, len(result)
 
 
 def run_modulate(audio_bytes: bytes) -> Tuple[str, float, int]:
     t0 = time.monotonic()
-    result = modulate_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True)
+    result = cast(List[Dict[str, Any]], modulate_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True))
     elapsed = time.monotonic() - t0
-    text = ' '.join(w.get('text', '') for w in result).strip()
+    text = ' '.join(str(w.get('text', '')) for w in result).strip()
     return text, elapsed, len(result)
 
 
-def main():
+def main() -> None:
     if '--prepare' in sys.argv:
         prepare_samples()
         return
@@ -179,13 +174,13 @@ def main():
     print(f'\nBenchmark Suite 02 — Pre-recorded ({len(manifest)} samples, real human speech)')
     print(f'Source: LibriSpeech test-clean (CC BY 4.0)\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for case in manifest:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         audio_bytes = wav_path.read_bytes()
-        ref_norm = normalize_for_wer(case['text'])
+        ref_norm = normalize_for_wer(cast(str, case['text']))
 
-        row = {
+        row: Dict[str, Any] = {
             'id': case['id'],
             'uid': case['uid'],
             'description': case['description'],
@@ -201,7 +196,7 @@ def main():
         try:
             dg_text, dg_time, dg_segments = run_deepgram(audio_bytes)
             dg_wer = compute_wer(ref_norm, normalize_for_wer(dg_text)) if dg_text else 1.0
-            dg_punct = count_punctuation(dg_text) if dg_text else {'total': 0, 'detail': {}}
+            dg_punct: Dict[str, Any] = count_punctuation(dg_text) if dg_text else {'total': 0, 'detail': {}}
             row.update(
                 {
                     'dg_time': dg_time,
@@ -233,7 +228,7 @@ def main():
         try:
             mod_text, mod_time, mod_segments = run_modulate(audio_bytes)
             mod_wer = compute_wer(ref_norm, normalize_for_wer(mod_text)) if mod_text else 1.0
-            mod_punct = count_punctuation(mod_text) if mod_text else {'total': 0, 'detail': {}}
+            mod_punct: Dict[str, Any] = count_punctuation(mod_text) if mod_text else {'total': 0, 'detail': {}}
             row.update(
                 {
                     'mod_time': mod_time,
@@ -268,7 +263,7 @@ def main():
     print('SUITE 02 — PRE-RECORDED BENCHMARK RESULTS (Real Human Speech — LibriSpeech test-clean)')
     print('=' * 110)
 
-    table_data = []
+    table_data: List[List[Any]] = []
     for r in results:
         table_data.append(
             [
@@ -331,13 +326,13 @@ def main():
     for r in results:
         print(f"\n  [{r['id']}] {r['description']}")
         print(f"    REF:      {r['ref_text']}")
-        if r.get('dg_text', '').startswith('ERROR'):
+        if str(r.get('dg_text', '')).startswith('ERROR'):
             print(f"    DEEPGRAM: {r.get('dg_text', 'N/A')}")
         else:
             print(
                 f"    DEEPGRAM: {r.get('dg_text', 'N/A')}  (WER={r.get('dg_wer', 1):.1%}, punct={r.get('dg_punct', 0)})"
             )
-        if r.get('mod_text', '').startswith('ERROR'):
+        if str(r.get('mod_text', '')).startswith('ERROR'):
             print(f"    MODULATE: {r.get('mod_text', 'N/A')}")
         else:
             print(

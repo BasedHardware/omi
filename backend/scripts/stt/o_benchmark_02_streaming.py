@@ -209,7 +209,9 @@ async def run_benchmark() -> None:
                 if 'error' in result:
                     raise RuntimeError(result['error'])
                 wer_val: float = compute_wer(ref_norm, normalize_for_wer(result['text'])) if result['text'] else 1.0
-                punct = count_punctuation(result['text']) if result['text'] else {'total': 0, 'detail': {}}
+                punct: Dict[str, Any] = (
+                    count_punctuation(result['text']) if result['text'] else {'total': 0, 'detail': {}}
+                )
                 row.update(
                     {
                         f'{prefix}_connect': result['connect_time'],
