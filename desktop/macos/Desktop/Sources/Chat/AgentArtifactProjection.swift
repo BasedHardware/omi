@@ -27,6 +27,18 @@ struct AgentArtifactProjection: Codable, Equatable, Identifiable {
     return uri
   }
 
+  /// True for artifacts worth surfacing to the user as a result card (a produced
+  /// file/output), excluding inputs, intermediate context, and dismissed items.
+  var isUserFacingResult: Bool {
+    if lifecycleState == "dismissed" { return false }
+    switch role {
+    case "input", "context", "reference":
+      return false
+    default:
+      return true
+    }
+  }
+
   static func parseList(fromToolResult result: String) throws -> [AgentArtifactProjection] {
     guard let data = result.data(using: .utf8),
       let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]

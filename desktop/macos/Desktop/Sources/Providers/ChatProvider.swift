@@ -2549,6 +2549,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
+    /// Peeks the completed-agent delta for the coordinator surface consuming this
+    /// turn, returning both the delta and the surface it was peeked from so the
+    /// caller can acknowledge against the exact same surface. Runs for the main
+    /// chat and the notch/floating "Omi Chat" (independent consumers), so a
+    /// finished sub-agent's artifacts surface on whichever the user next uses.
     private func buildMainChatCoordinatorCompletionDeltaIfNeeded(
         systemPromptStyle: ChatSystemPromptStyle,
         surfaceRef: AgentSurfaceReference?,
@@ -2557,18 +2562,30 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         legacyClientScope: String?,
         imageData: Data?,
         attachmentMetadataJSON: String?
-    ) async -> DesktopCoordinatorCompletionDelta? {
-        guard systemPromptStyle == .main,
-              !isOnboarding,
+    ) async -> (delta: DesktopCoordinatorCompletionDelta, surface: AgentSurfaceReference)? {
+        guard !isOnboarding,
               surfaceRef == nil,
-              sessionKey == nil,
               legacyClientScope == nil,
               imageData == nil,
               attachmentMetadataJSON == nil
         else { return nil }
 
-        let consumerSurface = AgentSurfaceReference.mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
-        return await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)
+        let consumerSurface: AgentSurfaceReference
+        switch systemPromptStyle {
+        case .main:
+            // Only the plain main chat (no explicit session key) consumes the delta.
+            guard sessionKey == nil else { return nil }
+            consumerSurface = AgentSurfaceReference.mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+        case .floating:
+            consumerSurface = AgentSurfaceReference.floatingChat()
+        default:
+            return nil
+        }
+
+        guard let delta = await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface) else {
+            return nil
+        }
+        return (delta, consumerSurface)
     }
 
     private func routeIntentJSONWithFailOpenTimeout(intent: String, surfaceKind: String) async throws -> String? {
@@ -4083,7 +4100,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 bridgePromptContexts.append("[Desktop Coordinator Route Context]\n\(coordinatorRouteContext)")
             }
             if let coordinatorCompletionDeltaContext {
-                bridgePromptContexts.append("[Desktop Completed Agent Delta]\n\(coordinatorCompletionDeltaContext.prompt)")
+                bridgePromptContexts.append("[Desktop Completed Agent Delta]\n\(coordinatorCompletionDeltaContext.delta.prompt)")
             }
             if let attachmentContext = Self.attachmentContextPrompt(for: attachmentsForMessage) {
                 bridgePromptContexts.append(attachmentContext)
@@ -4126,11 +4143,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             )
             if let coordinatorCompletionDeltaContext {
-                let consumerSurface = resolvedSurface ?? AgentSurfaceReference.mainChat(chatId: resolvedMainChatRuntimeChatId)
+                // Acknowledge against the exact surface the delta was peeked from,
+                // so main chat and notch stay independent consumers.
                 DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
-                    surface: consumerSurface,
-                    ids: coordinatorCompletionDeltaContext.ids,
-                    completedAtHighWaterMs: coordinatorCompletionDeltaContext.completedAtHighWaterMs
+                    surface: coordinatorCompletionDeltaContext.surface,
+                    ids: coordinatorCompletionDeltaContext.delta.ids,
+                    completedAtHighWaterMs: coordinatorCompletionDeltaContext.delta.completedAtHighWaterMs
                 )
             }
 
@@ -4147,9 +4165,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let metricsSnapshot = responseMetrics.snapshot()
                 messages[index].text = messageText
                 messages[index].isStreaming = false
+                // Merge the parent agent's own artifacts with any produced by
+                // sub-agents that completed since the last coordinator check, so
+                // a finished sub-agent's file surfaces as a card on this response.
+                let deltaResources = coordinatorCompletionDeltaContext?.delta.artifacts.map(ChatResource.artifact) ?? []
                 messages[index].resources = mergedResources(
                     existing: messages[index].resources,
-                    adding: queryResult.artifacts.map(ChatResource.artifact)
+                    adding: queryResult.artifacts.map(ChatResource.artifact) + deltaResources
                 )
                 messages[index].metadata = MessageMetadata(
                     model: effectiveRequestModel,

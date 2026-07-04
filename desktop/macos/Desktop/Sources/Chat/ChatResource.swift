@@ -237,12 +237,24 @@ private struct ChatResourceCard: View {
   private var iconBadge: some View {
     ZStack {
       RoundedRectangle(cornerRadius: isCompact ? 8 : 9, style: .continuous)
-        .fill(Color.white.opacity(isHovering ? 0.12 : 0.08))
+        .fill(iconBadgeFill)
       Image(systemName: iconName)
         .scaledFont(size: isCompact ? 14 : 16, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(iconTint)
     }
     .frame(width: isCompact ? 30 : 36, height: isCompact ? 30 : 36)
+  }
+
+  /// Generated artifacts get a slightly brighter, warmer badge so "the agent
+  /// made this" reads differently from a file the user attached, without any
+  /// off-brand accent color.
+  private var iconBadgeFill: Color {
+    let boost: Double = resource.origin == .generatedArtifact ? 0.05 : 0
+    return Color.white.opacity((isHovering ? 0.14 : 0.08) + boost)
+  }
+
+  private var iconTint: Color {
+    resource.origin == .generatedArtifact ? OmiColors.textPrimary : OmiColors.textSecondary
   }
 
   @ViewBuilder
@@ -256,9 +268,23 @@ private struct ChatResourceCard: View {
         .foregroundColor(OmiColors.warning)
     default:
       if resource.canOpen {
-        copyPathButton
+        HStack(spacing: 2) {
+          copyPathButton
+          openIndicator
+        }
       }
     }
+  }
+
+  /// Always-visible, low-key affordance signalling the whole card opens the
+  /// file on click; brightens on hover. Keeps click-to-open discoverable
+  /// beyond the cursor change.
+  private var openIndicator: some View {
+    Image(systemName: "arrow.up.right")
+      .scaledFont(size: isCompact ? 10 : 11, weight: .semibold)
+      .foregroundColor(isHovering ? OmiColors.textSecondary : OmiColors.textQuaternary)
+      .frame(width: 18, height: 26)
+      .animation(.easeInOut(duration: 0.12), value: isHovering)
   }
 
   private var copyPathButton: some View {
@@ -311,6 +337,11 @@ private struct ChatResourceCard: View {
           .lineLimit(1)
           .truncationMode(.middle)
         Spacer(minLength: 0)
+        if resource.canOpen {
+          Image(systemName: "arrow.up.right")
+            .scaledFont(size: 10, weight: .semibold)
+            .foregroundColor(.white.opacity(isHovering ? 0.95 : 0.7))
+        }
       }
       .foregroundColor(.white)
       .padding(.horizontal, 10)

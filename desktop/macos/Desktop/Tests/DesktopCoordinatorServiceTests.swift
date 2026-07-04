@@ -279,7 +279,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("acknowledgeCompletedAgentDelta(surface: AgentSurfaceReference"))
     XCTAssertTrue(source.contains("desktopCoordinator.completedAgentDelta.seenRunIds"))
     XCTAssertTrue(source.contains("desktopCoordinator.completedAgentDelta.highWaterMs"))
-    XCTAssertTrue(source.contains("checkpointDefaults.set(nowMs, forKey: highWaterKey)"))
+    XCTAssertTrue(source.contains("checkpointDefaults.set(minCompletedAtMs, forKey: highWaterKey)"))
     XCTAssertTrue(source.contains("completedAtMs > highWaterMs"))
     XCTAssertTrue(source.contains(".sorted { ($0.completedAtMs ?? 0) < ($1.completedAtMs ?? 0) }"))
     XCTAssertTrue(source.contains("completedAtHighWaterMs: items.compactMap(\\.completedAtMs).max()"))
@@ -297,7 +297,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let pillSource = try sourceFile("FloatingControlBar/AgentPill.swift")
 
     XCTAssertTrue(chatSource.contains("func recordVoiceTurn(userText: String, assistantText: String)"))
-    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)"))
+    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn(userText: userText, assistantText: reply)"))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
     XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
@@ -381,6 +381,201 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("\"[::1]:\\(LocalAgentAPISettings.port)\""))
   }
 
+  @MainActor
+  func testCompletedAgentDeltaCarriesSubAgentArtifacts() async throws {
+    let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
+    let completedAtMs = nowMs - 5_000
+    let listResponse = """
+    {
+      "ok": true,
+      "sessions": [
+        {
+          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Dog File"},
+          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+        }
+      ]
+    }
+    """
+    let runResponse = """
+    {
+      "ok": true,
+      "session": {"omiSessionId": "ses_child"},
+      "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
+      "artifacts": [
+        {
+          "artifactId": "art_dog",
+          "omiSessionId": "ses_child",
+          "runId": "run_child",
+          "kind": "html",
+          "role": "result",
+          "uri": "file:///tmp/dogs.html",
+          "displayName": "dogs.html",
+          "mimeType": "text/html",
+          "lifecycleState": "retained"
+        }
+      ]
+    }
+    """
+    let runtime = ScriptedCoordinatorRuntime(responses: [
+      "list_agent_sessions": listResponse,
+      "get_agent_run": runResponse,
+    ])
+    let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts")!
+    defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts")
+    // Prime the high-water below the completion time so the item is in range.
+    defaults.set(nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: defaults
+    )
+
+    let peeked = await service.peekCompletedAgentDelta(surface: AgentSurfaceReference.floatingChat())
+    let delta = try XCTUnwrap(peeked)
+
+    XCTAssertEqual(delta.ids, ["run_child"])
+    XCTAssertEqual(delta.artifacts.count, 1)
+    let artifact = try XCTUnwrap(delta.artifacts.first)
+    XCTAssertEqual(artifact.artifactId, "art_dog")
+    XCTAssertEqual(artifact.uri, "file:///tmp/dogs.html")
+    XCTAssertTrue(artifact.isUserFacingResult)
+    XCTAssertTrue(runtime.calledTools.contains("get_agent_run"))
+  }
+
+  @MainActor
+  func testCompletedAgentDeltaDeliversRecentArtifactsOnFirstSurfaceCheck() async throws {
+    let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
+    let completedAtMs = nowMs - 5_000
+    let listResponse = """
+    {
+      "ok": true,
+      "sessions": [
+        {
+          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Penguin File"},
+          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+        }
+      ]
+    }
+    """
+    let runResponse = """
+    {
+      "ok": true,
+      "session": {"omiSessionId": "ses_child"},
+      "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
+      "artifacts": [
+        {
+          "artifactId": "art_penguin",
+          "omiSessionId": "ses_child",
+          "runId": "run_child",
+          "kind": "html",
+          "role": "result",
+          "uri": "file:///tmp/penguins.html",
+          "displayName": "penguins.html",
+          "mimeType": "text/html",
+          "lifecycleState": "retained"
+        }
+      ]
+    }
+    """
+    let runtime = ScriptedCoordinatorRuntime(responses: [
+      "list_agent_sessions": listResponse,
+      "get_agent_run": runResponse,
+    ])
+    let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts.firstUse")!
+    defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts.firstUse")
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: defaults
+    )
+
+    let peeked = await service.peekCompletedAgentDelta(surface: AgentSurfaceReference.mainChat(chatId: "default"))
+    let delta = try XCTUnwrap(peeked)
+
+    XCTAssertEqual(delta.ids, ["run_child"])
+    XCTAssertEqual(delta.artifacts.map(\.artifactId), ["art_penguin"])
+  }
+
+  @MainActor
+  func testCompletedAgentDeltaFallsBackToArtifactInspectionWhenRunInspectionFails() async throws {
+    let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
+    let completedAtMs = nowMs - 5_000
+    let listResponse = """
+    {
+      "ok": true,
+      "sessions": [
+        {
+          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML File"},
+          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+        }
+      ]
+    }
+    """
+    let runResponse = """
+    {"ok": false, "error": {"code": "control_tool_failed", "message": "Run was compacted"}}
+    """
+    let artifactResponse = """
+    {
+      "ok": true,
+      "artifacts": [
+        {
+          "artifactId": "art_fallback",
+          "omiSessionId": "ses_child",
+          "runId": "run_child",
+          "kind": "html",
+          "role": "result",
+          "uri": "file:///tmp/fallback.html",
+          "displayName": "fallback.html",
+          "mimeType": "text/html",
+          "lifecycleState": "retained"
+        }
+      ]
+    }
+    """
+    let runtime = ScriptedCoordinatorRuntime(responses: [
+      "list_agent_sessions": listResponse,
+      "get_agent_run": runResponse,
+      "inspect_agent_artifacts": artifactResponse,
+    ])
+    let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts.fallback")!
+    defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts.fallback")
+    defaults.set(nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: defaults
+    )
+
+    let peeked = await service.peekCompletedAgentDelta(surface: AgentSurfaceReference.floatingChat())
+    let delta = try XCTUnwrap(peeked)
+
+    XCTAssertEqual(delta.artifacts.map(\.artifactId), ["art_fallback"])
+    XCTAssertEqual(runtime.calledTools, ["list_agent_sessions", "get_agent_run", "inspect_agent_artifacts"])
+  }
+
+  @MainActor
+  func testInspectAgentRunSurfacesRuntimeControlErrors() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: """
+      {"ok": false, "error": {"code": "control_tool_failed", "message": "Run run_missing was not found"}}
+      """
+    )
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.inspect.error")!
+    )
+
+    let inspection = try await service.inspectAgentRun(runId: "run_missing")
+
+    XCTAssertEqual(inspection.status, "failed")
+    XCTAssertEqual(inspection.errorMessage, "control_tool_failed: Run run_missing was not found")
+  }
+
   private func sourceFile(_ relativePath: String) throws -> String {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -395,6 +590,25 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       .deletingLastPathComponent()
     let url = root.appendingPathComponent(relativePath).standardizedFileURL
     return try String(contentsOf: url, encoding: .utf8)
+  }
+}
+
+private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControlling {
+  private let responses: [String: String]
+  private(set) var calledTools: [String] = []
+
+  init(responses: [String: String]) {
+    self.responses = responses
+  }
+
+  func directControlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    calledTools.append(name)
+    return responses[name] ?? "{\"ok\": true}"
   }
 }
 
