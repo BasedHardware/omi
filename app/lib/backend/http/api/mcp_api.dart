@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as wire;
 import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/env/env.dart';
 
@@ -13,10 +12,7 @@ class McpApi {
 
     if (response != null && response.statusCode == 200) {
       final List<dynamic> body = jsonDecode(response.body);
-      return body
-          .map((dynamic item) => wire.GeneratedMcpApiKey.fromJson(item as Map<String, dynamic>))
-          .map(McpApiKey.fromGenerated)
-          .toList();
+      return body.map((dynamic item) => McpApiKey.fromJson(item as Map<String, dynamic>)).toList();
     } else {
       throw Exception('Failed to load API keys: ${response?.body}');
     }
@@ -31,8 +27,7 @@ class McpApi {
     );
 
     if (response != null && response.statusCode == 200) {
-      final generated = wire.GeneratedMcpApiKeyCreated.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-      return McpApiKeyCreated.fromGenerated(generated);
+      return McpApiKeyCreated.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     } else {
       throw Exception('Failed to create API key: ${response?.body}');
     }
