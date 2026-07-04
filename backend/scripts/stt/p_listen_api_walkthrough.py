@@ -247,21 +247,22 @@ async def run_listen_test(
                     for seg in cast(List[Any], segs):
                         if not isinstance(seg, dict):
                             continue
-                        text = seg.get('text', '').strip()
+                        typed_seg: Dict[str, Any] = cast(Dict[str, Any], seg)
+                        text = str(typed_seg.get('text', '') or '').strip()
                         if text:
                             if first_segment_time[0] is None:
                                 first_segment_time[0] = ts
                             entry: Dict[str, Any] = {
-                                'id': seg.get('id', ''),
+                                'id': str(typed_seg.get('id', '') or ''),
                                 'text': text,
-                                'speaker': seg.get('speaker', ''),
-                                'start': seg.get('start', 0),
-                                'end': seg.get('end', 0),
+                                'speaker': str(typed_seg.get('speaker', '') or ''),
+                                'start': typed_seg.get('start', 0),
+                                'end': typed_seg.get('end', 0),
                                 'recv_ts': round(ts, 3),
-                                'is_user': seg.get('is_user', False),
+                                'is_user': typed_seg.get('is_user', False),
                             }
                             segments_received.append(entry)
-                            seg_id = seg.get('id', '')
+                            seg_id = str(typed_seg.get('id', '') or '')
                             if seg_id:
                                 segments_by_id[seg_id] = entry
                             seg_texts.append(text[:60])

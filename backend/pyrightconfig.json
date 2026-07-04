@@ -71,6 +71,7 @@
         "scripts/stt/modulate_repro/repro_utterance_order.py",
         "scripts/stt/n_benchmark_02_prerecorded.py",
         "scripts/stt/o_benchmark_02_streaming.py",
+        "scripts/stt/p_listen_api_walkthrough.py",
         "scripts/stt/q_modulate_debug.py",
         "scripts/stt/r_ab_modulate_compare.py",
         "scripts/stt/r_modulate_stability.py",
