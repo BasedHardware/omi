@@ -309,6 +309,7 @@
         "utils/memory_ingestion/export_runner.py",
         "utils/memory_ingestion/ids.py",
         "utils/memory_ingestion/models.py",
+        "utils/memory_ingestion/pipeline.py",
         "utils/memory_ingestion/redaction.py",
         "utils/memory_ingestion/rollout.py",
         "utils/memory_ingestion/rollout_cli.py",
