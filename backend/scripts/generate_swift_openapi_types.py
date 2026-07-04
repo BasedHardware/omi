@@ -488,6 +488,8 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
                     required = bool(p.get('required', False))
                     ptype, _ = _swift_type(p.get('schema', {}), required=True)
                     ptype = _resolve_type(ptype, emitted)
+                    if ptype == 'OmiAnyCodable':
+                        ptype = 'String'
                     if location == 'path':
                         path_params.append((pname, ptype))
                     elif location == 'query':
@@ -548,10 +550,8 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
             body_lines.append('    req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")')
             body_lines.append('  }')
             if body_type:
-                body_lines.append('  if let body = body {')
-                body_lines.append('    req.setValue("application/json", forHTTPHeaderField: "Content-Type")')
-                body_lines.append('    req.httpBody = try JSONEncoder().encode(body)')
-                body_lines.append('  }')
+                body_lines.append('  req.setValue("application/json", forHTTPHeaderField: "Content-Type")')
+                body_lines.append('  req.httpBody = try JSONEncoder().encode(body)')
             body_lines.append('  let (data, resp) = try await URLSession.shared.data(for: req)')
             body_lines.append('  guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }')
             body_lines.append('  guard (200..<300).contains(http.statusCode) else {')
