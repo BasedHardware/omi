@@ -238,6 +238,8 @@ struct DashboardPage: View {
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
+    @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
+        AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
     @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
     private var selectedApp: OmiApp? {
@@ -259,6 +261,21 @@ struct DashboardPage: View {
 
     private var isCaptureLive: Bool {
         isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
+    }
+
+    private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+        AssistantSettings.SystemAudioCaptureMode(rawValue: systemAudioCaptureModeRaw) ?? .onlyDuringMeetings
+    }
+
+    private var listeningModeTitle: String {
+        switch listeningCaptureMode {
+        case .always:
+            return "Always"
+        case .onlyDuringMeetings:
+            return appState.isAwaitingMeeting ? "Meetings only" : "In meeting"
+        case .never:
+            return "Mic only"
+        }
     }
 
     private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
@@ -461,12 +478,15 @@ struct DashboardPage: View {
                     action: toggleCapture
                 )
 
-                HomeStatusButton(
+                HomeListeningStatusButton(
                     title: "Listening",
                     systemImage: appState.isTranscribing ? "waveform.circle.fill" : "mic.circle",
                     status: appState.isTranscribing ? .active : .inactive,
+                    modeTitle: listeningModeTitle,
+                    isMeetingsOnly: listeningCaptureMode == .onlyDuringMeetings,
                     isToggling: isTogglingListening,
-                    action: toggleListening
+                    action: toggleListening,
+                    modeAction: toggleListeningMode
                 )
 
                 HomeSettingsMenuButton(
@@ -740,6 +760,17 @@ struct DashboardPage: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             isTogglingListening = false
         }
+    }
+
+    private func toggleListeningMode() {
+        let nextMode: AssistantSettings.SystemAudioCaptureMode =
+            listeningCaptureMode == .onlyDuringMeetings ? .always : .onlyDuringMeetings
+        systemAudioCaptureModeRaw = nextMode.rawValue
+        AssistantSettings.shared.systemAudioCaptureMode = nextMode
+        AnalyticsManager.shared.settingToggled(
+            setting: "meetings_only_listening",
+            enabled: nextMode == .onlyDuringMeetings
+        )
     }
 
     private func toggleCapture() {
@@ -2770,6 +2801,110 @@ private struct HomeStatusButton: View {
             return status.indicator.opacity(isHovering ? 0.54 : 0.38)
         }
         return HomePalette.hairline.opacity(isHovering ? 0.8 : 0.58)
+    }
+}
+
+private struct HomeListeningStatusButton: View {
+    let title: String
+    let systemImage: String
+    let status: HomeStatusState
+    let modeTitle: String
+    let isMeetingsOnly: Bool
+    let isToggling: Bool
+    let action: () -> Void
+    let modeAction: () -> Void
+
+    @State private var isHoveringMain = false
+    @State private var isHoveringMode = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        if isToggling {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.55)
+                        } else {
+                            Image(systemName: systemImage)
+                                .scaledFont(size: 13, weight: .semibold)
+                        }
+                    }
+                    .frame(width: 18, height: 18)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .scaledFont(size: 12, weight: .semibold)
+                            .lineLimit(1)
+
+                        Text(modeTitle)
+                            .scaledFont(size: 9, weight: .medium)
+                            .foregroundStyle(status.isActive ? HomePalette.secondary : HomePalette.muted)
+                            .lineLimit(1)
+                    }
+
+                    Circle()
+                        .fill(status.indicator)
+                        .frame(width: 6, height: 6)
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 9)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isToggling)
+            .onHover { isHoveringMain = $0 }
+            .help("Listening: \(status.text), \(modeTitle)")
+            .accessibilityLabel("Listening \(status.text), \(modeTitle)")
+
+            Rectangle()
+                .fill(HomePalette.hairline.opacity(0.65))
+                .frame(width: 1, height: 22)
+
+            Button(action: modeAction) {
+                Image(systemName: isMeetingsOnly ? "person.2.fill" : "infinity")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundStyle(isMeetingsOnly ? HomePalette.green : HomePalette.ink)
+                    .frame(width: 30, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { isHoveringMode = $0 }
+            .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
+            .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
+        }
+        .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
+        .background(
+            Capsule(style: .continuous)
+                .fill(statusFill)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(statusStroke, lineWidth: 1)
+        )
+        .contentShape(Capsule())
+    }
+
+    private var statusFill: Color {
+        if status.isActive {
+            return HomePalette.green.opacity(isHoveringMain || isHoveringMode ? 0.20 : 0.12)
+        }
+        if status.isBlocked {
+            return status.indicator.opacity(isHoveringMain || isHoveringMode ? 0.16 : 0.10)
+        }
+        return isHoveringMain || isHoveringMode ? HomePalette.tileHover : HomePalette.panel
+    }
+
+    private var statusStroke: Color {
+        if status.isActive {
+            return HomePalette.green.opacity(0.38)
+        }
+        if status.isBlocked {
+            return status.indicator.opacity(isHoveringMain || isHoveringMode ? 0.54 : 0.38)
+        }
+        return HomePalette.hairline.opacity(isHoveringMain || isHoveringMode ? 0.8 : 0.58)
     }
 }
 

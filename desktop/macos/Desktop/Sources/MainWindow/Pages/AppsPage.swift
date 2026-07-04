@@ -329,6 +329,12 @@ struct AppsPage: View {
             await connectorStatusStore.refresh()
             exportStatuses = await MemoryExportService.shared.allStatuses()
         }
+        .onChange(of: selectedExportDestination) { _, newValue in
+            guard newValue == nil else { return }
+            Task {
+                exportStatuses = await MemoryExportService.shared.allStatuses()
+            }
+        }
     }
 
     private var searchBar: some View {

@@ -31,6 +31,18 @@ final class DashboardCaptureStateTests: XCTestCase {
         )
     }
 
+    func testListeningPillShowsAndTogglesCaptureMode() throws {
+        let source = try dashboardSource()
+
+        XCTAssertTrue(source.contains("@AppStorage(\"systemAudioCaptureMode\")"))
+        XCTAssertTrue(source.contains("private var listeningModeTitle: String"))
+        XCTAssertTrue(source.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
+        XCTAssertTrue(source.contains("HomeListeningStatusButton("))
+        XCTAssertTrue(source.contains("modeAction: toggleListeningMode"))
+        XCTAssertTrue(source.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
+        XCTAssertFalse(source.contains("OmiColors.purplePrimary"))
+    }
+
     private func dashboardSource() throws -> String {
         let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let dashboardURL = testsURL

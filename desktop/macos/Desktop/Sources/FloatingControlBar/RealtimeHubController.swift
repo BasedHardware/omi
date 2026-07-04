@@ -141,7 +141,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var sessionAuth: HubAuth?
   private var pcmPlayer: StreamingPCMPlayer?
   private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active in
-    self?.barState?.isVoiceResponseActive = active
+    if active {
+      self?.barState?.isVoiceResponseActive = true
+    } else {
+      self?.barState?.clearVoiceResponseState()
+    }
   }
   private let agentControlService = AgentControlService()
 
@@ -885,17 +889,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     }
     guard let s = session else {
-      if pendingBargeInReplacement != nil {
-        log("RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — falling back to buffered transcription")
-        clearBargeInReplacementState()
-        responding = false
+      if var pending = pendingBargeInReplacement {
+        pending.pendingCommit = true
+        pendingBargeInReplacement = pending
+        log(
+          "RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — "
+            + "deferring commit (bufferedChunks=\(pending.audioBuffer.count))"
+        )
         ensureWarm()
-        return .rejectedNoSession
-      } else {
-        responding = false
-        exitVoiceUI(clearResponseGlow: true)
-        return .rejectedNoSession
+        return .deferredForReplacement
       }
+      responding = false
+      exitVoiceUI(clearResponseGlow: true)
+      return .rejectedNoSession
     }
     // Hint the provider's transcription with the identified language, entirely
     // synchronously: one configured language → hint it directly; several → whatever the
@@ -1527,6 +1533,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let candidates = AssistantSettings.shared.voiceBaseLanguages
       let fullTask = fullLIDTask
       let provider = providerTag
+      let provisionalHeard = heard
+      let provisionalReply = reply
+      rememberVoiceContinuityTurn(
+        userText: provisionalHeard,
+        assistantText: provisionalReply,
+        interrupted: false)
       Task { @MainActor [weak self] in
         var userText = heard
         var providerLang: String?
@@ -1565,7 +1577,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         // Continuity memory + persistence use the CORRECTED text, so a swapped
         // bubble and the model's follow-up context stay consistent.
-        self?.rememberVoiceContinuityTurn(userText: userText, assistantText: reply, interrupted: false)
+        if usedLocal {
+          self?.replaceVoiceContinuityTurn(
+            originalUserText: provisionalHeard,
+            originalAssistantText: provisionalReply,
+            correctedUserText: userText,
+            correctedAssistantText: reply,
+            interrupted: false)
+        }
         FloatingControlBarManager.shared.recordVoiceTurn(userText: userText, assistantText: reply)
         self?.lastTurnDiagnostics = [
           "provider": provider,
@@ -1590,6 +1609,39 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
     exitVoiceUI()
+  }
+
+  private func replaceVoiceContinuityTurn(
+    originalUserText: String,
+    originalAssistantText: String,
+    correctedUserText: String,
+    correctedAssistantText: String,
+    interrupted: Bool
+  ) {
+    let originalUser = originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let originalAssistant = originalAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let correctedUser = correctedUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let correctedAssistant = correctedAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !correctedUser.isEmpty || !correctedAssistant.isEmpty else { return }
+
+    if let index = voiceContinuityTurns.lastIndex(where: {
+      $0.userText == originalUser
+        && $0.assistantText == originalAssistant
+        && $0.interrupted == interrupted
+    }) {
+      voiceContinuityTurns[index] = RealtimeVoiceContinuityTurn(
+        userText: correctedUser,
+        assistantText: correctedAssistant,
+        interrupted: interrupted,
+        recordedAt: voiceContinuityTurns[index].recordedAt
+      )
+      return
+    }
+
+    rememberVoiceContinuityTurn(
+      userText: correctedUser,
+      assistantText: correctedAssistant,
+      interrupted: interrupted)
   }
 
   private func rememberVoiceContinuityTurn(userText: String, assistantText: String, interrupted: Bool) {

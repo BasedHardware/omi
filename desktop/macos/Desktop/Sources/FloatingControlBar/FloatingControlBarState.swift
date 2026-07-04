@@ -161,7 +161,18 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
     @Published var isVoiceResponseActive: Bool = false {
+        didSet {
+            if isVoiceResponseActive {
+                isVoiceResponseWaiting = false
+            }
+            updateVoiceResponseWatchdog()
+        }
+    }
+    @Published var isVoiceResponseWaiting: Bool = false {
         didSet { updateVoiceResponseWatchdog() }
+    }
+    var isVoiceResponseGlowActive: Bool {
+        isVoiceResponseActive || isVoiceResponseWaiting
     }
     /// True only when the notch-mode setting is enabled and the current display
     /// exposes a real camera housing safe area. External displays keep old pill UI.
@@ -298,16 +309,27 @@ class FloatingControlBarState: NSObject, ObservableObject {
         voiceFollowUpTranscript = ""
         currentQueryFromVoice = false
         lastConversationActivityAt = nil
+        clearVoiceResponseState()
+    }
+
+    func beginVoiceResponseWaiting() {
+        guard !isVoiceResponseActive else { return }
+        isVoiceResponseWaiting = true
+    }
+
+    func clearVoiceResponseState() {
+        isVoiceResponseWaiting = false
+        isVoiceResponseActive = false
     }
 
     private func updateVoiceResponseWatchdog() {
         voiceResponseWatchdogWorkItem?.cancel()
         voiceResponseWatchdogWorkItem = nil
-        guard isVoiceResponseActive else { return }
+        guard isVoiceResponseGlowActive else { return }
 
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self, self.isVoiceResponseActive else { return }
-            self.isVoiceResponseActive = false
+            guard let self, self.isVoiceResponseGlowActive else { return }
+            self.clearVoiceResponseState()
         }
         voiceResponseWatchdogWorkItem = workItem
         DispatchQueue.main.asyncAfter(

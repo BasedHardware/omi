@@ -210,7 +210,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 height: size.height + Self.notchGlowOutsetBottom
             )
         }
-        guard state.isVoiceResponseActive || collapsedPillAgentGlowActive else { return size }
+        guard state.isVoiceResponseGlowActive || collapsedPillAgentGlowActive else { return size }
         guard size.width <= Self.minBarSize.width + 0.5,
               size.height <= Self.minBarSize.height + 0.5
         else { return size }
@@ -805,7 +805,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private func observeVoiceResponseGlow() {
-        voiceResponseGlowCancellable = state.$isVoiceResponseActive
+        voiceResponseGlowCancellable = Publishers.CombineLatest(state.$isVoiceResponseActive, state.$isVoiceResponseWaiting)
+            .map { $0 || $1 }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isActive in
@@ -952,7 +953,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // streaming subscription must still be cancelled so late-arriving
         // chunks cannot re-present .mainResponse and pop the panel back open.
         // (Codex P2 — streaming reopens surface during playback.)
-        let keepVoiceResponseAlive = state.isVoiceResponseActive
+        let keepVoiceResponseAlive = state.isVoiceResponseGlowActive
         FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)
 
         // Cancel dynamic response-height observer and reset its state
@@ -1445,7 +1446,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// force-grows the window with the origin pinned (a rightward drift).
     @discardableResult
     func resizeForHover(expanded: Bool) -> Bool {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return false }
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseGlowActive, !state.isShowingNotification, !suppressHoverResize else { return false }
         // The pill agent list owns the window size while open; hover
         // exits must not collapse it out from under the list.
         guard notchModeEnabled || !state.isNotchHoverMenuVisible else { return false }
@@ -1471,7 +1472,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             guard let self = self else { return }
             guard !self.state.showingAIConversation,
                   !self.state.isVoiceListening,
-                  !self.state.isVoiceResponseActive,
+                  !self.state.isVoiceResponseGlowActive,
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
@@ -1629,7 +1630,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // (e.g. realtime audio received this turn), collapse to the glow-adjusted
         // compact size so the white glow/stroke is not clipped until the idle
         // timer clears it.
-        let compactSize: NSSize = state.isVoiceResponseActive
+        let compactSize: NSSize = state.isVoiceResponseGlowActive
             ? responseGlowWindowSizeForCurrentScreen(forSurfaceSize: Self.minBarSize)
             : Self.minBarSize
         let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
@@ -2252,7 +2253,7 @@ class FloatingControlBarManager {
             isAskOmiFocused: focused,
             frame: NSStringFromRect(window.frame),
             isVoiceListening: window.state.isVoiceListening,
-            isVoiceResponseActive: window.state.isVoiceResponseActive,
+            isVoiceResponseActive: window.state.isVoiceResponseGlowActive,
             usesNotchIsland: window.state.usesNotchIsland
         )
     }
@@ -2872,7 +2873,7 @@ class FloatingControlBarManager {
                 )
             case .voiceOnly:
                 barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
+                barWindow.state.clearVoiceResponseState()
                 FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
             }
             return
@@ -2897,7 +2898,7 @@ class FloatingControlBarManager {
                     )
                 case .voiceOnly:
                     barWindow.state.currentQueryFromVoice = false
-                    barWindow.state.isVoiceResponseActive = false
+                    barWindow.state.clearVoiceResponseState()
                     FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)
                 }
                 return
@@ -2930,7 +2931,7 @@ class FloatingControlBarManager {
                 )
             case .voiceOnly:
                 barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
+                barWindow.state.clearVoiceResponseState()
                 FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
             }
             return
@@ -2958,7 +2959,7 @@ class FloatingControlBarManager {
             )
         case .voiceOnly:
             barWindow.state.currentQueryFromVoice = false
-            barWindow.state.isVoiceResponseActive = false
+            barWindow.state.clearVoiceResponseState()
         }
     }
 
@@ -3007,7 +3008,7 @@ class FloatingControlBarManager {
             barWindow.state.currentAIMessage = message
             barWindow.state.isAILoading = false
             barWindow.state.currentQueryFromVoice = false
-            barWindow.state.isVoiceResponseActive = false
+            barWindow.state.clearVoiceResponseState()
             barWindow.state.present(.mainResponse)
             barWindow.state.markConversationActivity()
             barWindow.resizeToResponseHeightPublic(animated: true)
@@ -3088,7 +3089,7 @@ class FloatingControlBarManager {
         barWindow.state.isAILoading = false
         barWindow.state.present(.mainResponse)
         barWindow.state.currentQueryFromVoice = false
-        barWindow.state.isVoiceResponseActive = false
+        barWindow.state.clearVoiceResponseState()
         barWindow.state.markConversationActivity()
         barWindow.resizeToResponseHeightPublic(animated: true)
     }
@@ -3700,7 +3701,7 @@ class FloatingControlBarManager {
             if limiter.isLimitReached {
                 currentTracer?.end("pre_llm", metadata: ["error": "usage_limit"])
                 barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
+                barWindow.state.clearVoiceResponseState()
                 FloatingBarVoicePlaybackService.shared.speakOneShot(
                     "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions."
                 )

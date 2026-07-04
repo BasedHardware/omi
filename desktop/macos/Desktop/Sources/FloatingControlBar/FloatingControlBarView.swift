@@ -238,7 +238,7 @@ struct FloatingControlBarView: View {
                     .fill(Color.black)
                     .frame(width: surfaceWidth, height: surfaceHeight)
 
-                    if state.isVoiceResponseActive {
+                    if state.isVoiceResponseGlowActive {
                         NotchResponseGlowView(
                             bottomRadius: bottomRadius,
                             topRadius: state.usesNotchIsland ? 0 : 14,
@@ -930,7 +930,7 @@ struct FloatingControlBarView: View {
     }
 
     private var controlBarView: some View {
-        let allowsHoverExpansion = isHovering && !state.isVoiceResponseActive
+        let allowsHoverExpansion = isHovering && !state.isVoiceResponseGlowActive
         return Group {
             if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
@@ -954,7 +954,7 @@ struct FloatingControlBarView: View {
                 .transition(.opacity)
             } else {
                 PillStatusObservingView(manager: agentPills) { pills in
-                    let agentGroup = state.isVoiceResponseActive
+                    let agentGroup = state.isVoiceResponseGlowActive
                         ? nil
                         : NotchAgentStatusGroup.aggregate(for: pills)
                     compactCircleView(agentGroup: agentGroup)
@@ -1031,19 +1031,19 @@ struct FloatingControlBarView: View {
             .fill(compactPillFill(agentGroup: agentGroup))
             .frame(width: 28, height: 6)
             .shadow(
-                color: state.isVoiceResponseActive ? Color.white.opacity(0.85) : .clear,
-                radius: state.isVoiceResponseActive ? 16 : 0,
+                color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.85) : .clear,
+                radius: state.isVoiceResponseGlowActive ? 16 : 0,
                 x: 0,
                 y: 0
             )
             .shadow(
-                color: state.isVoiceResponseActive ? Color.white.opacity(0.45) : .clear,
-                radius: state.isVoiceResponseActive ? 28 : 0,
+                color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.45) : .clear,
+                radius: state.isVoiceResponseGlowActive ? 28 : 0,
                 x: 0,
                 y: 0
             )
             .overlay {
-                if state.isVoiceResponseActive {
+                if state.isVoiceResponseGlowActive {
                     RoundedRectangle(cornerRadius: 3)
                         .stroke(
                             LinearGradient(
@@ -1061,11 +1061,11 @@ struct FloatingControlBarView: View {
                         .blur(radius: 0.25)
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseActive)
+            .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseGlowActive)
     }
 
     private func compactPillFill(agentGroup: NotchAgentStatusGroup?) -> LinearGradient {
-        if state.isVoiceResponseActive {
+        if state.isVoiceResponseGlowActive {
             return LinearGradient(
                 colors: [
                     Color.white.opacity(0.9),

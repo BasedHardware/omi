@@ -107,17 +107,15 @@ private struct ConnectOptionCard: View {
   }
 
   private var primaryLabel: String {
+    let presentation = MemoryExportConnectionPresentation.make(
+      destination: destination,
+      status: statuses[destination],
+      isRunning: isRunning,
+      accessibilityPreflightMissing: MemoryExportExecutor.accessibilityPreflightMissing(
+        for: destination)
+    )
     _ = permissionRefreshID
-    switch destination.mcpExecuteKind {
-    case .localAutonomous:
-      return "Do it for me"
-    case .browserAutonomous:
-      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
-        ? "Grant Accessibility"
-        : "Do it for me"
-    case .assisted:
-      return destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
-    }
+    return presentation.primaryActionTitle ?? ""
   }
 
   var body: some View {
@@ -137,11 +135,22 @@ private struct ConnectOptionCard: View {
       }
 
       VStack(alignment: .leading, spacing: 8) {
-        // Primary action — the shared app pill (compact, white). Same style the
-        // single-destination sheet uses, so the connect flow is consistent.
-        Button(isRunning ? "Connecting…" : primaryLabel, action: run)
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-          .disabled(isRunning)
+        let presentation = MemoryExportConnectionPresentation.make(
+          destination: destination,
+          status: statuses[destination],
+          isRunning: isRunning,
+          accessibilityPreflightMissing: MemoryExportExecutor.accessibilityPreflightMissing(
+            for: destination)
+        )
+        if let completion = presentation.completion {
+          setupCompleteBlock(completion)
+        } else {
+          // Primary action — the shared app pill (compact, white). Same style the
+          // single-destination sheet uses, so the connect flow is consistent.
+          Button(presentation.primaryActionTitle ?? primaryLabel, action: run)
+            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+            .disabled(isRunning)
+        }
 
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
@@ -166,7 +175,7 @@ private struct ConnectOptionCard: View {
         }
       }
 
-      if let resultMessage {
+      if statuses[destination]?.hasConnection != true, let resultMessage {
         Text(resultMessage)
           .scaledFont(size: 11, weight: .medium)
           .foregroundColor(OmiColors.success)
@@ -189,16 +198,25 @@ private struct ConnectOptionCard: View {
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
+      refreshConnectionStatusIfNeeded()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
       refreshPermissionStateIfNeeded()
+      refreshConnectionStatusIfNeeded()
     }
   }
 
   private func refreshPermissionStateIfNeeded() {
     guard MemoryExportExecutor.requiresAccessibilityPreflight(destination) else { return }
     permissionRefreshID += 1
+  }
+
+  private func refreshConnectionStatusIfNeeded() {
+    guard destination.supportsMCP || destination.supportsAgentSetup else { return }
+    Task {
+      statuses[destination] = await MemoryExportService.shared.status(for: destination)
+    }
   }
 
   private func run() {
@@ -225,6 +243,33 @@ private struct ConnectOptionCard: View {
       }
       isRunning = false
     }
+  }
+
+  private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "checkmark.seal.fill")
+        .scaledFont(size: 15, weight: .semibold)
+        .foregroundColor(OmiColors.success)
+        .padding(.top, 1)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(completion.title)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(completion.subtitle)
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(OmiColors.backgroundTertiary)
+        .overlay(
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
+    )
   }
 
   private func manualText(for setup: MCPSetup) -> String {
