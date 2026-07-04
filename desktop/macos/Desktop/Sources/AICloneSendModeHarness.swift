@@ -125,7 +125,7 @@ enum AICloneSendModeHarness {
 
     registry.register(
       name: "ai_clone_send_routed",
-      summary: "Send text through the real routed send (platform dispatch + log)",
+      summary: "Send text through the real routed send (platform dispatch + log); newlines split into separate burst messages",
       params: ["contact_id", "text"]
     ) { params in
       guard let contactId = params["contact_id"], !contactId.isEmpty else {
@@ -135,8 +135,12 @@ enum AICloneSendModeHarness {
       let name =
         await AIClonePersonaService.shared.allPersonas()[contactId]?.contactHandle ?? contactId
       do {
-        try await service.send(contactId: contactId, displayName: name, text: text, mode: .manual)
-        return ["sent": "true", "contact_id": contactId]
+        try await service.sendBubbles(
+          contactId: contactId, displayName: name, text: text, mode: .manual)
+        return [
+          "sent": "true", "contact_id": contactId,
+          "bubbles": String(AICloneReplyPresentation.bubbles(from: text).count),
+        ]
       } catch {
         return ["error": error.localizedDescription]
       }

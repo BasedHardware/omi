@@ -1,0 +1,3 @@
+{
+  "change": "AI Clone multi-message replies now send as separate texts one at a time, like a real burst, instead of one message with line breaks"
+}

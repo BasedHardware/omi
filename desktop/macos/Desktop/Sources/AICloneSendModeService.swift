@@ -464,7 +464,8 @@ final class AICloneSendModeService: ObservableObject {
           generateDraft(for: contact, persona: persona, incoming: incoming)
           return
         }
-        try await send(contactId: contact.id, displayName: contact.displayName, text: text, mode: .autonomous)
+        try await sendBubbles(
+          contactId: contact.id, displayName: contact.displayName, text: text, mode: .autonomous)
       } catch {
         log("AICloneSendModeService: autonomous send failed for \(contact.id): \(error)")
       }
@@ -480,7 +481,7 @@ final class AICloneSendModeService: ObservableObject {
     removeDraft(draft.id)
     Task {
       do {
-        try await send(
+        try await sendBubbles(
           contactId: draft.contactId, displayName: draft.contactDisplayName, text: text,
           mode: .draftReview)
       } catch {
@@ -501,6 +502,23 @@ final class AICloneSendModeService: ObservableObject {
   }
 
   // MARK: - Sending (unified)
+
+  /// Send a (possibly multi-bubble) clone reply as separate messages, one per bubble, the
+  /// way a real person sends a burst — `respond()` joins bubbles with newlines, and sending
+  /// that as one message would land as a single wall of text. A short human-ish pause
+  /// separates bubbles. Throws on the first failed bubble (earlier bubbles stay sent).
+  func sendBubbles(contactId: String, displayName: String, text: String, mode: SendMode)
+    async throws
+  {
+    let bubbles = AICloneReplyPresentation.bubbles(from: text)
+    guard !bubbles.isEmpty else { throw IMessageSendError.emptyText }
+    for (index, bubble) in bubbles.enumerated() {
+      if index > 0 {
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 600_000_000...1_400_000_000))
+      }
+      try await send(contactId: contactId, displayName: displayName, text: bubble, mode: mode)
+    }
+  }
 
   /// Route a send to the correct platform backend and, on success, log it. Throws on failure
   /// so callers (manual UI) can surface it; autonomous/draft callers log and swallow.
