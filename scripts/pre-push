@@ -589,6 +589,7 @@ check_backend_typecheck_if_needed() {
     'backend/models/tts.py' \
     'backend/models/user_usage.py' \
     'backend/models/users.py' \
+    'backend/main.py' \
     'backend/pyrightconfig.json' \
     'backend/scripts/typecheck.sh' \
     'backend/requirements.txt' \
