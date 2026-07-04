@@ -21,6 +21,7 @@ import sys
 import time
 import urllib.parse
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import websockets
 
@@ -36,12 +37,12 @@ SAMPLE_RATE = 16000
 PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
 
 
-def normalize(text):
+def normalize(text: str) -> str:
     text = PUNCT_RE.sub(' ', text).upper()
     return ' '.join(text.split())
 
 
-def compute_wer(ref, hyp):
+def compute_wer(ref: str, hyp: str) -> float:
     ref_words = ref.split()
     hyp_words = hyp.split()
     if not ref_words:
@@ -60,9 +61,9 @@ def compute_wer(ref, hyp):
     return d[len(ref_words)][len(hyp_words)] / len(ref_words)
 
 
-def build_playlist(target_s):
-    playlist = []
-    total_s = 0
+def build_playlist(target_s: int) -> Tuple[List[Dict[str, Any]], float]:
+    playlist: List[Dict[str, Any]] = []
+    total_s = 0.0
     for reader_dir in sorted(LIBRISPEECH_DIR.iterdir()):
         if not reader_dir.is_dir():
             continue
@@ -72,7 +73,7 @@ def build_playlist(target_s):
             trans_file = list(chapter_dir.glob('*.trans.txt'))
             if not trans_file:
                 continue
-            transcripts = {}
+            transcripts: Dict[str, str] = {}
             for line in trans_file[0].read_text().strip().split('\n'):
                 parts = line.strip().split(' ', 1)
                 if len(parts) == 2:
@@ -102,7 +103,7 @@ def build_playlist(target_s):
     return playlist, total_s
 
 
-def convert_to_pcm16(flac_path):
+def convert_to_pcm16(flac_path: str) -> Optional[bytes]:
     result = subprocess.run(
         ['ffmpeg', '-y', '-i', flac_path, '-f', 's16le', '-ar', str(SAMPLE_RATE), '-ac', '1', 'pipe:1'],
         capture_output=True,
@@ -110,7 +111,7 @@ def convert_to_pcm16(flac_path):
     return result.stdout if result.returncode == 0 else None
 
 
-async def send_audio(ws, playlist, label, send_eos=True):
+async def send_audio(ws: Any, playlist: List[Dict[str, Any]], label: str, send_eos: bool = True) -> Tuple[int, int]:
     """Send audio chunks with identical pacing. Returns (total_bytes, samples_sent)."""
     total_bytes = 0
     samples_sent = 0
@@ -160,7 +161,7 @@ async def send_audio(ws, playlist, label, send_eos=True):
     return total_bytes, samples_sent
 
 
-async def test_direct_modulate(playlist):
+async def test_direct_modulate(playlist: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Test 1: Direct Modulate API — collect utterances and partials."""
     print('\n' + '=' * 70)
     print('TEST A: Direct Modulate API')
@@ -180,17 +181,17 @@ async def test_direct_modulate(playlist):
     ws = await websockets.connect(uri, ping_timeout=30, ping_interval=10, max_size=None)
     print('  Connected to Modulate API')
 
-    utterances = []
-    partials = []
+    utterances: List[Dict[str, Any]] = []
+    partials: List[Dict[str, Any]] = []
     last_partial_text = ''
     done_event = asyncio.Event()
     t0 = time.monotonic()
 
-    async def recv():
+    async def recv() -> None:
         nonlocal last_partial_text
         try:
             async for raw in ws:
-                msg = json.loads(raw)
+                msg: Any = json.loads(raw)
                 mt = msg.get('type', '')
                 elapsed = time.monotonic() - t0
                 if mt == 'utterance':
@@ -249,7 +250,7 @@ async def test_direct_modulate(playlist):
     }
 
 
-async def test_backend_listen(playlist, port=BACKEND_PORT):
+async def test_backend_listen(playlist: List[Dict[str, Any]], port: int = BACKEND_PORT) -> Optional[Dict[str, Any]]:
     """Test 2: Backend /v4/listen with Modulate STT — collect segments."""
     print('\n' + '=' * 70)
     print('TEST B: Backend /v4/listen (Modulate STT)')
@@ -283,45 +284,40 @@ async def test_backend_listen(playlist, port=BACKEND_PORT):
 
     print(f'  [BACKEND] Connected')
 
-    segments = []
-    segments_by_id = {}
+    segments: List[Dict[str, Any]] = []
+    segments_by_id: Dict[str, Dict[str, Any]] = {}
     ready = asyncio.Event()
     recv_done = asyncio.Event()
     t0 = time.monotonic()
 
-    async def recv():
+    async def recv() -> None:
         try:
             async for raw in ws:
                 if isinstance(raw, bytes) or raw == 'ping':
                     continue
                 elapsed = time.monotonic() - t0
                 try:
-                    msg = json.loads(raw)
+                    msg = cast(Union[List[Dict[str, Any]], Dict[str, Any]], json.loads(raw))
                 except json.JSONDecodeError:
                     continue
 
+                segs: List[Dict[str, Any]]
                 if isinstance(msg, list):
                     segs = msg
-                elif isinstance(msg, dict):
+                else:
                     if msg.get('status') == 'ready':
                         ready.set()
                         print(f'  [BACKEND] [{elapsed:.1f}s] Ready')
                         continue
                     if 'segments' in msg:
-                        segs = msg['segments']
+                        segs = cast(List[Dict[str, Any]], msg['segments'])
                     else:
                         continue
-                else:
-                    continue
 
-                if not isinstance(segs, list):
-                    continue
                 for seg in segs:
-                    if not isinstance(seg, dict):
-                        continue
-                    text = seg.get('text', '').strip()
+                    text = str(seg.get('text', '')).strip()
                     if text:
-                        entry = {
+                        entry: Dict[str, Any] = {
                             'id': seg.get('id', ''),
                             'text': text,
                             'speaker': seg.get('speaker', ''),
@@ -362,7 +358,7 @@ async def test_backend_listen(playlist, port=BACKEND_PORT):
     await asyncio.sleep(2)
     recv_task.cancel()
 
-    final = list(segments_by_id.values()) if segments_by_id else segments
+    final: List[Dict[str, Any]] = list(segments_by_id.values()) if segments_by_id else segments
     full_text = ' '.join(s['text'] for s in final).strip()
 
     return {
@@ -373,7 +369,7 @@ async def test_backend_listen(playlist, port=BACKEND_PORT):
     }
 
 
-def analyze_and_compare(ref_text, direct_result, backend_result):
+def analyze_and_compare(ref_text: str, direct_result: Dict[str, Any], backend_result: Dict[str, Any]) -> None:
     """Compare WER and identify word-level differences."""
     ref_norm = normalize(ref_text)
     ref_words = ref_norm.split()
@@ -397,11 +393,6 @@ def analyze_and_compare(ref_text, direct_result, backend_result):
     print(f'  Words (utt + partial):    {len(d_utt_plus_words)} / {len(ref_words)}')
     print(f'  WER (utterances only):    {d_utt_wer * 100:.1f}%')
     print(f'  WER (utt + last partial): {d_plus_wer * 100:.1f}%')
-
-    # Backend
-    if backend_result is None:
-        print(f'\n--- TEST B: Backend --- FAILED (no connection)')
-        return
 
     b_text = normalize(backend_result['full_text'])
     b_words = b_text.split()
@@ -438,7 +429,7 @@ def analyze_and_compare(ref_text, direct_result, backend_result):
     print(f'  BACKEND (first 200 chars): {backend_result["full_text"][:200]}')
 
     # Save full results
-    out = {
+    out: Dict[str, Any] = {
         'ref_words': len(ref_words),
         'direct': {
             'utterance_count': direct_result['utterance_count'],
@@ -466,15 +457,14 @@ def analyze_and_compare(ref_text, direct_result, backend_result):
     print(f'\nFull results saved to {out_path}')
 
 
-def _show_transcript_diff(direct_text, backend_text, ref_text):
+def _show_transcript_diff(direct_text: str, backend_text: str, ref_text: str) -> None:
     """Show where backend transcript diverges from direct."""
     d_words = direct_text.split()
     b_words = backend_text.split()
-    r_words = ref_text.split()
 
     # Find words in direct but not in backend (potential word loss)
-    d_set = set(w.lower() for w in d_words)
-    b_set = set(w.lower() for w in b_words)
+    d_set = {w.lower() for w in d_words}
+    b_set = {w.lower() for w in b_words}
     lost = d_set - b_set
     gained = b_set - d_set
     if lost:
@@ -483,7 +473,7 @@ def _show_transcript_diff(direct_text, backend_text, ref_text):
         print(f'  Words in BACKEND but not in DIRECT (sample): {list(gained)[:20]}')
 
 
-async def main():
+async def main() -> None:
     parser = argparse.ArgumentParser(description='A/B: Direct Modulate vs Backend Listen')
     parser.add_argument('--duration', type=int, default=300, help='Target audio duration (seconds)')
     parser.add_argument('--port', type=int, default=BACKEND_PORT, help='Backend port')
@@ -505,8 +495,8 @@ async def main():
     ref_words = ref_text.split()
     print(f'  {len(playlist)} utterances, {total_s:.1f}s, {len(ref_words)} ref words')
 
-    direct_result = None
-    backend_result = None
+    direct_result: Optional[Dict[str, Any]] = None
+    backend_result: Optional[Dict[str, Any]] = None
 
     if not args.backend_only:
         direct_result = await test_direct_modulate(playlist)

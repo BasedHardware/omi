@@ -22,7 +22,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 from dotenv import load_dotenv
 
@@ -45,24 +45,24 @@ def normalize_for_wer(text: str) -> str:
     return PUNCT_RE.sub('', text).lower().strip()
 
 
-def count_punctuation(text: str) -> dict:
+def count_punctuation(text: str) -> Dict[str, Any]:
     marks = re.findall(r'[^\w\s]', text)
     return {'total': len(marks), 'detail': dict(sorted(((m, marks.count(m)) for m in set(marks)), key=lambda x: -x[1]))}
 
 
-def load_manifest() -> List[dict]:
+def load_manifest() -> List[Dict[str, Any]]:
     manifest_path = AUDIO_DIR / 'manifest.json'
     if not manifest_path.exists():
         print('ERROR: Samples not prepared. Run first:')
         print('  python scripts/stt/n_benchmark_02_prerecorded.py --prepare')
         sys.exit(1)
     with open(manifest_path) as f:
-        return json.load(f)
+        return cast(List[Dict[str, Any]], json.load(f))
 
 
 def run_deepgram(audio_bytes: bytes) -> Tuple[str, float, int]:
     t0 = time.monotonic()
-    result = deepgram_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True)
+    result = cast(List[Dict[str, Any]], deepgram_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True))
     elapsed = time.monotonic() - t0
     text = ' '.join(w.get('text', '') or w.get('word', '') for w in result).strip()
     return text, elapsed, len(result)
@@ -70,13 +70,13 @@ def run_deepgram(audio_bytes: bytes) -> Tuple[str, float, int]:
 
 def run_parakeet(audio_bytes: bytes) -> Tuple[str, float, int]:
     t0 = time.monotonic()
-    result = parakeet_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=False)
+    result = cast(List[Dict[str, Any]], parakeet_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=False))
     elapsed = time.monotonic() - t0
     text = ' '.join(w.get('text', '') for w in result).strip()
     return text, elapsed, len(result)
 
 
-def main():
+def main() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     dg_key = os.getenv('DEEPGRAM_API_KEY')
@@ -93,13 +93,13 @@ def main():
     print(f'Parakeet endpoint: {parakeet_url}')
     print(f'Source: LibriSpeech test-clean (CC BY 4.0)\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for case in manifest:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         audio_bytes = wav_path.read_bytes()
         ref_norm = normalize_for_wer(case['text'])
 
-        row = {
+        row: Dict[str, Any] = {
             'id': case['id'],
             'uid': case['uid'],
             'description': case['description'],
@@ -158,9 +158,11 @@ def main():
     print('RESULTS SUMMARY')
     print('=' * 80)
 
-    table = []
-    dg_wers, pk_wers = [], []
-    dg_lats, pk_lats = [], []
+    table: List[List[Any]] = []
+    dg_wers: List[Any] = []
+    pk_wers: List[Any] = []
+    dg_lats: List[Any] = []
+    pk_lats: List[Any] = []
     for r in results:
         dg_w = r.get('dg_wer')
         pk_w = r.get('pk_wer')

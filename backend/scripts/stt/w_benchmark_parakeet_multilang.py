@@ -19,7 +19,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import List
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 from dotenv import load_dotenv
 
@@ -41,7 +41,7 @@ def normalize_for_wer(text: str) -> str:
     return PUNCT_RE.sub('', text).lower().strip()
 
 
-def load_manifest() -> List[dict]:
+def load_manifest() -> List[Dict[str, Any]]:
     manifest_path = AUDIO_DIR / 'manifest.json'
     if not manifest_path.exists():
         print('ERROR: Multi-lang samples not found. Download:')
@@ -56,7 +56,11 @@ def load_manifest() -> List[dict]:
         return json.load(f)
 
 
-def run_provider(fn, wav_bytes, provider_name):
+def run_provider(
+    fn: Callable[..., Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]],
+    wav_bytes: bytes,
+    provider_name: str,
+) -> Tuple[str, str, float]:
     try:
         start = time.monotonic()
         result = fn(wav_bytes, sample_rate=16000, diarize=False, return_language=True)
@@ -65,13 +69,13 @@ def run_provider(fn, wav_bytes, provider_name):
             words, detected_lang = result
         else:
             words, detected_lang = result, 'unknown'
-        text = ' '.join(w['text'] for w in words)
+        text = ' '.join(str(w['text']) for w in words)
         return text, detected_lang, elapsed
     except Exception as e:
         return f'ERROR: {e}', 'error', 0.0
 
 
-def main():
+def main() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     dg_key = os.getenv('DEEPGRAM_API_KEY')
@@ -92,7 +96,7 @@ def main():
     print(f'Multi-language Benchmark: Deepgram nova-3 vs Parakeet')
     print(f'  Single-language: {len(single_lang)} samples')
     print(f'  Code-switching: {len(code_switch)} samples')
-    print(f'  Parakeet: {parakeet_url}')
+    results: List[Dict[str, Any]] = []
     print(f'{"=" * 100}\n')
 
     results = []
@@ -161,7 +165,7 @@ def main():
         results.append(row)
 
     print(f'\n{"=" * 100}')
-    print('RESULTS SUMMARY')
+    table: List[List[Any]] = []
     print(f'{"=" * 100}\n')
 
     table = []

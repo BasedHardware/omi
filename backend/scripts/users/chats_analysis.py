@@ -1,15 +1,18 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict
 from datetime import datetime, timezone, timedelta
-from collections import Counter, defaultdict
+from typing import Any, Dict, List, cast
+from collections import Counter
 import matplotlib.pyplot as plt
 from tabulate import tabulate
 
 from database._client import get_users_uid
 from database.chat import get_messages
 
+# matplotlib ships incomplete stubs; alias as Any to avoid cascading unknown-member warnings.
+_plt: Any = cast(Any, plt)
 
-def process_user(uid: str) -> Dict:
+
+def process_user(uid: str) -> Dict[str, Any]:
     messages = get_messages(uid, limit=50)
     # Filter out day_summary messages
     messages = [m for m in messages if m["type"] != "day_summary" and m["sender"] != "ai"]
@@ -34,7 +37,7 @@ def process_user(uid: str) -> Dict:
         days_active = (last_message - first_message).days + 1
 
     # Get weekly activity
-    weekly_activity = []
+    weekly_activity: List[bool] = []
     if first_message:
         for week in range(4):
             week_start = first_message + timedelta(weeks=week)
@@ -43,7 +46,7 @@ def process_user(uid: str) -> Dict:
             weekly_activity.append(had_activity)
 
     # Get message sequence for retention
-    message_sequence = []
+    message_sequence: List[str] = []
     if messages:
         sorted_msgs = sorted(messages, key=lambda m: m["created_at"])
         message_sequence = [m["text"] for m in sorted_msgs]
@@ -64,16 +67,16 @@ def process_user(uid: str) -> Dict:
     }
 
 
-def print_and_plot_message_distribution(results):
-    message_counts = [r["human_message_count"] for r in results]
-    count_distribution = Counter(message_counts)
+def print_and_plot_message_distribution(results: List[Dict[str, Any]]) -> None:
+    message_counts: List[int] = [int(r["human_message_count"]) for r in results]
+    count_distribution: Counter[int] = Counter(message_counts)
 
     # Group counts over 100 together
     total_over_100 = sum(count for msgs, count in count_distribution.items() if msgs > 100)
 
     # Prepare data for plotting and printing
-    x_values = []
-    y_values = []
+    x_values: List[int] = []
+    y_values: List[int] = []
 
     for msgs in range(0, 101):
         if msgs in count_distribution:
@@ -86,48 +89,50 @@ def print_and_plot_message_distribution(results):
         y_values.append(total_over_100)
 
     # Create the plot
-    plt.figure(figsize=(15, 8))
-    plt.bar(x_values, y_values, color="skyblue", edgecolor="black")
-    plt.title("Distribution of Messages per User", fontsize=14, pad=20)
-    plt.xlabel("Number of Messages", fontsize=12)
-    plt.ylabel("Number of Users", fontsize=12)
+    _plt.figure(figsize=(15, 8))
+    _plt.bar(x_values, y_values, color="skyblue", edgecolor="black")
+    _plt.title("Distribution of Messages per User", fontsize=14, pad=20)
+    _plt.xlabel("Number of Messages", fontsize=12)
+    _plt.ylabel("Number of Users", fontsize=12)
 
-    plt.grid(axis="y", linestyle="--", alpha=0.7)
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.savefig("scripts/users/message_distribution.png")
-    plt.close()
+    _plt.grid(axis="y", linestyle="--", alpha=0.7)
+    _plt.xticks(rotation=45)
+    _plt.tight_layout()
+    _plt.savefig("scripts/users/message_distribution.png")
+    _plt.close()
 
 
-def plot_retention_cohorts(results):
+def plot_retention_cohorts(results: List[Dict[str, Any]]) -> None:
     # Filter users with first message
-    users_with_activity = [r for r in results if r["first_message_date"]]
+    users_with_activity: List[Dict[str, Any]] = [r for r in results if r["first_message_date"]]
 
     if not users_with_activity:
         print("No users with activity found")
         return
 
     total_users = len(users_with_activity)
-    weekly_retention = []
+    weekly_retention: List[float] = []
 
     # Calculate retention for each week
     for week in range(4):
         active_users = sum(
-            1 for r in users_with_activity if len(r["weekly_activity"]) > week and r["weekly_activity"][week]
+            1
+            for r in users_with_activity
+            if len(list(r["weekly_activity"])) > week and list(r["weekly_activity"])[week]
         )
         retention_rate = (active_users / total_users) * 100
         weekly_retention.append(retention_rate)
 
     # Create retention plot
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(1, 5), weekly_retention, marker="o", linewidth=2, markersize=8)
-    plt.title("Weekly Retention Cohorts", fontsize=14, pad=20)
-    plt.xlabel("Week", fontsize=12)
-    plt.ylabel("Retention Rate (%)", fontsize=12)
+    _plt.figure(figsize=(10, 6))
+    _plt.plot(range(1, 5), weekly_retention, marker="o", linewidth=2, markersize=8)
+    _plt.title("Weekly Retention Cohorts", fontsize=14, pad=20)
+    _plt.xlabel("Week", fontsize=12)
+    _plt.ylabel("Retention Rate (%)", fontsize=12)
 
     # Add percentage labels on points
     for i, rate in enumerate(weekly_retention):
-        plt.annotate(
+        _plt.annotate(
             f"{rate:.1f}%",
             (i + 1, rate),
             textcoords="offset points",
@@ -135,17 +140,19 @@ def plot_retention_cohorts(results):
             ha="center",
         )
 
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.xticks(range(1, 5))
-    plt.ylim(0, 100)
-    plt.tight_layout()
-    plt.savefig("scripts/users/retention_cohorts.png")
-    plt.close()
+    _plt.grid(True, linestyle="--", alpha=0.7)
+    _plt.xticks(range(1, 5))
+    _plt.ylim(0, 100)
+    _plt.tight_layout()
+    _plt.savefig("scripts/users/retention_cohorts.png")
+    _plt.close()
 
 
-def plot_message_retention(results):
+def plot_message_retention(results: List[Dict[str, Any]]) -> None:
     # Get all message sequences
-    sequences = [r["message_sequence"] for r in results if r["message_sequence"]]
+    sequences: List[List[str]] = [
+        list(cast(List[str], r["message_sequence"])) for r in results if r["message_sequence"]
+    ]
 
     if not sequences:
         print("No message sequences found")
@@ -153,7 +160,7 @@ def plot_message_retention(results):
 
     # Calculate retention for each message number
     max_messages = 10  # Track retention up to 10th message
-    message_retention = []
+    message_retention: List[float] = []
     initial_users = len(sequences)
 
     for msg_num in range(max_messages):
@@ -162,20 +169,20 @@ def plot_message_retention(results):
         message_retention.append(retention_rate)
 
     # Create retention plot
-    plt.figure(figsize=(10, 6))
-    plt.plot(
+    _plt.figure(figsize=(10, 6))
+    _plt.plot(
         range(1, max_messages + 1),
         message_retention,
         marker="o",
         linewidth=2,
         markersize=8,
     )
-    plt.title("Message Number Retention", fontsize=14, pad=20)
-    plt.xlabel("Message Number", fontsize=12)
-    plt.ylabel("Retention Rate (%)", fontsize=12)
+    _plt.title("Message Number Retention", fontsize=14, pad=20)
+    _plt.xlabel("Message Number", fontsize=12)
+    _plt.ylabel("Retention Rate (%)", fontsize=12)
 
     for i, rate in enumerate(message_retention):
-        plt.annotate(
+        _plt.annotate(
             f"{rate:.1f}%",
             (i + 1, rate),
             textcoords="offset points",
@@ -183,24 +190,24 @@ def plot_message_retention(results):
             ha="center",
         )
 
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.xticks(range(1, max_messages + 1))
-    plt.ylim(0, 100)
-    plt.tight_layout()
-    plt.savefig("scripts/users/message_retention.png")
-    plt.close()
+    _plt.grid(True, linestyle="--", alpha=0.7)
+    _plt.xticks(range(1, max_messages + 1))
+    _plt.ylim(0, 100)
+    _plt.tight_layout()
+    _plt.savefig("scripts/users/message_retention.png")
+    _plt.close()
 
 
-def execute():
+def execute() -> None:
     uids = get_users_uid()
-    results = []
+    results: List[Dict[str, Any]] = []
 
     # Process users in parallel using thread pool
     with ThreadPoolExecutor(max_workers=20) as executor:
         results = list(executor.map(process_user, uids))
 
     # Calculate statistics
-    users_with_messages = [r for r in results if r["human_message_count"] > 0]
+    users_with_messages = [r for r in results if int(r["human_message_count"]) > 0]
     message_percentage = (len(users_with_messages) / len(results)) * 100
 
     print(f"\nAnalyzed {len(uids)} users")
@@ -211,43 +218,43 @@ def execute():
 
     # Analyze message types
     greetings = ["hi", "hello", "hey", "hola", "bonjour", "ciao", "hallo", "oi", "olá"]
-    message_categories = {
-        "greetings": 0,
-        "long_messages": 0,
-        "short_messages": 0,
-        "other_messages": [],
-    }
+    greetings_count = 0
+    long_messages_count = 0
+    short_messages_count = 0
+    other_messages: List[Dict[str, Any]] = []
 
     for r in results:
-        if r["first_message"]:
-            first_word = r["first_message"].lower().split()[0]
-            word_count = len(r["first_message"].split())
+        first_message = r["first_message"]
+        if first_message:
+            first_msg_str = str(first_message)
+            first_word = first_msg_str.lower().split()[0]
+            word_count = len(first_msg_str.split())
 
             if first_word in greetings:
-                message_categories["greetings"] += 1
+                greetings_count += 1
             elif word_count >= 10:
-                message_categories["long_messages"] += 1
+                long_messages_count += 1
             elif word_count < 10:
-                message_categories["short_messages"] += 1
+                short_messages_count += 1
 
             # Store messages that don't fit other categories
             if first_word not in greetings:
-                message_categories["other_messages"].append({"message": r["first_message"], "words": word_count})
+                other_messages.append({"message": first_msg_str, "words": word_count})
 
     print("\nFirst Message Categories:")
     print("-" * 40)
-    print(f"Greeting messages: {message_categories['greetings']}")
-    print(f"Long messages (10+ words): {message_categories['long_messages']}")
-    print(f"Short messages (<10 words): {message_categories['short_messages']}")
+    print(f"Greeting messages: {greetings_count}")
+    print(f"Long messages (10+ words): {long_messages_count}")
+    print(f"Short messages (<10 words): {short_messages_count}")
 
     # Print table of other messages
-    other_messages_table = [
+    other_messages_table: List[List[Any]] = [
         [
             i + 1,
-            msg["message"][:50] + "..." if len(msg["message"]) > 50 else msg["message"],
+            str(msg["message"])[:50] + "..." if len(str(msg["message"])) > 50 else str(msg["message"]),
             msg["words"],
         ]
-        for i, msg in enumerate(message_categories["other_messages"])
+        for i, msg in enumerate(other_messages)
     ]
     print("\nOther First Messages:")
     print(
