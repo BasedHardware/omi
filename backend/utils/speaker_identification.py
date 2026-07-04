@@ -7,6 +7,7 @@ import av
 import numpy as np
 
 from database import conversations as conversations_db
+from utils.speaker_identification_names import COMMON_FIRST_NAMES
 from database import users as users_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import (
@@ -119,6 +120,16 @@ SPEAKER_SAMPLE_WINDOW_HALF = SPEAKER_SAMPLE_MIN_SEGMENT_DURATION / 2
 # Language-specific patterns for speaker identification from text
 # Each pattern should have a capture group for the name.
 # The name is expected to be the last capture group.
+
+# Optional honorific/title prefix (NOT captured) so "I'm Dr. Smith" -> "Smith".
+_EN_TITLE = (
+    r"(?:(?:[Mm]r|[Mm]rs|[Mm]s|[Mm]x|[Dd]r|[Pp]rof|[Mm]ister|[Dd]octor|[Pp]rofessor"
+    r"|[Ss]ir|[Mm]adam|[Cc]oach|[Cc]aptain|[Oo]fficer|[Aa]unt|[Uu]ncle)\.?\s+)?"
+)
+# A capitalized name word, plus an optional second word of >=2 chars. Requiring
+# >=2 stops a trailing pronoun "I" being swallowed ("I'm Anna I will..." -> "Anna").
+_EN_NAME = r"([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]+)?)"
+
 SPEAKER_IDENTIFICATION_PATTERNS = {
     'bg': [  # Bulgarian
         r"\b(Аз съм|аз съм|Казвам се|казвам се|Името ми е|името ми е)\s+([А-Я][а-я]*)\b",
@@ -142,8 +153,13 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Είμαι|είμαι|Με λένε|με λένε|Το όνομά μου είναι|το όνομά μου είναι)\s+([\u0370-\u03ff\u1f00-\u1fff]+)\b",
     ],
     'en': [  # English
-        r"\b(I am|I'm|i am|i'm|My name is|my name is)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+is my name\b",
+        r"\b(?:I am|I'm|i am|i'm|My name is|my name is)\s+" + _EN_TITLE + _EN_NAME + r"\b",
+        r"\b" + _EN_NAME + r"\s+is my name\b",
+        r"\b(?:[Tt]his is|[Ii]t's|[Ii]t is)\s+" + _EN_TITLE + _EN_NAME + r"\b",
+        r"\b(?:[Hh]ey,?\s*it's|[Hh]i,?\s*it's)\s+" + _EN_TITLE + _EN_NAME + r"\b",
+        r"\b(?:[Cc]all me|[Yy]ou can call me)\s+" + _EN_TITLE + _EN_NAME + r"\b",
+        r"\b(?:[Yy]ou're speaking with|[Yy]ou're talking to|[Yy]ou've reached)\s+" + _EN_TITLE + _EN_NAME + r"\b",
+        r"\b(?:[Tt]he name's|[Nn]ame's)\s+" + _EN_TITLE + _EN_NAME + r"\b",
     ],
     'es': [  # Spanish
         r"\b(soy|Soy|me llamo|Me llamo|mi nombre es|Mi nombre es)\s+([A-Z][a-zA-Z]*)\b",
@@ -310,14 +326,105 @@ SPEAKER_NAME_STOPWORDS = frozenset(
     }
 )
 
+# Pre-compiled context patterns for gazetteer-based detection (handles lowercased ASR).
+# Used in Phase 2 to verify that a name candidate appears in an introduction context.
+_INTRO_PREFIX_PATTERNS = [
+    re.compile(r"(?:this is|it's|it is)\s*$", re.IGNORECASE),
+    re.compile(r"(?:call me|you can call me)\s*$", re.IGNORECASE),
+    re.compile(r"(?:the name's|name's)\s*$", re.IGNORECASE),
+    re.compile(r"(?:hey,?\s*it's|hi,?\s*it's)\s*$", re.IGNORECASE),
+    re.compile(r"(?:you're speaking with|you're talking to|you've reached)\s*$", re.IGNORECASE),
+    re.compile(r"(?:i'm|i am|my name is)\s*$", re.IGNORECASE),
+]
+
+_INTRO_SUFFIX_PATTERNS = [
+    re.compile(r"^\s*here\b", re.IGNORECASE),
+    re.compile(r"^\s*speaking\b", re.IGNORECASE),
+    re.compile(r"^\s*calling\b", re.IGNORECASE),
+]
+
+# Context that disqualifies a trailing "<name> here/speaking/calling" cue from being
+# an introduction: questions ("is bob here?"), negations ("no bob here"), and fixed
+# idioms ("Bob, here you go", "where is bob calling from").
+_SUFFIX_BLOCK_LEADERS = frozenset(
+    {'is', 'are', 'was', 'were', 'where', 'who', 'when', 'why', 'how', 'do', 'does', 'did'}
+)
+_SUFFIX_NEGATIONS = frozenset({'no', 'not', 'never'})
+_SUFFIX_IDIOM_RE = re.compile(
+    r"^(?:here we go|here you go|here's|here it is|speaking of)\b",
+    re.IGNORECASE,
+)
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize a detected name to title case, preserving intentional interior
+    capitals (DeShawn, McKenzie) and short acronyms (DJ) so the result matches how
+    the Person is stored."""
+    parts = []
+    for word in name.split():
+        if not word:
+            continue
+        if word.isupper():
+            parts.append(word if len(word) <= 2 else word.capitalize())
+        elif any(char.isupper() for char in word[1:]):
+            parts.append(word[0].upper() + word[1:])
+        else:
+            parts.append(word.capitalize())
+    return ' '.join(parts)
+
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
+    # Phase 1: Regex (fast, multilingual, handles capitalized input)
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
-        if match:
-            name = match.groups()[-1]
-            if name and len(name) >= 2 and name.lower() not in SPEAKER_NAME_STOPWORDS:
-                return name.capitalize()
+        if not match:
+            continue
+        name = match.groups()[-1]
+        if not name or len(name) < 2:
+            continue
+        # Reject when the leading token (the given name) is a pronoun/filler, or
+        # when every token is. Catches "It", "It Works", "Not Sure" while keeping
+        # real surnames that coincide with a stopword ("DeShawn Good").
+        name_tokens = name.lower().split()
+        if name_tokens and (
+            name_tokens[0] in SPEAKER_NAME_STOPWORDS or all(t in SPEAKER_NAME_STOPWORDS for t in name_tokens)
+        ):
+            continue
+        # Reject possessives ("This is John's car" must not make "John" a speaker).
+        if text[match.end() : match.end() + 2] in ("'s", "’s"):
+            continue
+        return _normalize_name(name)
+
+    # Phase 2: Name gazetteer + context patterns (handles lowercased ASR, ambiguous patterns)
+    words = text.split()
+    for i, word in enumerate(words):
+        cleaned = word.strip('.,!?:;()[]"\'').lower()
+        if len(cleaned) < 2 or cleaned not in COMMON_FIRST_NAMES:
+            continue
+        # Pronouns/fillers that happen to be in the gazetteer (e.g. "my") are not names.
+        if cleaned in SPEAKER_NAME_STOPWORDS:
+            continue
+
+        before = ' '.join(words[:i]).lower().rstrip()
+        after = ' '.join(words[i + 1 :]).lower().lstrip()
+
+        for pattern in _INTRO_PREFIX_PATTERNS:
+            if pattern.search(before):
+                return _normalize_name(cleaned)
+
+        # Suffix cues only count as an introduction when the surrounding context is
+        # not a question, negation, or fixed idiom.
+        before_tokens = before.split()
+        # Judge "question" from the clause right before the name (not the whole
+        # utterance) so a run-on like "is this thing on? sarah speaking" still detects.
+        last_clause_tokens = re.split(r"[?!.]+", before)[-1].split()
+        is_question = bool(last_clause_tokens) and last_clause_tokens[0] in _SUFFIX_BLOCK_LEADERS
+        is_negated = bool(before_tokens) and before_tokens[-1] in _SUFFIX_NEGATIONS
+        if not is_question and not is_negated and not _SUFFIX_IDIOM_RE.search(after):
+            for pattern in _INTRO_SUFFIX_PATTERNS:
+                if pattern.search(after):
+                    return _normalize_name(cleaned)
+
     return None
 
 
