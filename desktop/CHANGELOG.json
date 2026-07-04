@@ -1,6 +1,6 @@
 {
   "unreleased": [
-    "Fixed the macOS app popping up the Screen Recording permission dialog on every launch when permission hadn't been granted"
+    "Fixed the macOS app repeatedly requesting Screen Recording permission on launch when it has not been granted"
   ],
   "releases": [
     {
