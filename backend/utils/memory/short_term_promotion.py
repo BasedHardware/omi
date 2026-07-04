@@ -57,7 +57,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROMOTION_STATUS_PROMOTED,
     REQUIRED_PROMOTION_STATUSES,
 )
-from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
+from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult, extract_kg_for_promoted_memory
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_lifecycle import ShortTermDisposition, evaluate_short_term_lifecycle
@@ -163,22 +163,70 @@ def _merge_required_promotion_duplicate(
     item: MemoryItem,
     existing: MemoryItem,
     *,
+    control: MemoryControlState,
+    run_id: str,
     trigger_reason: str,
     now: datetime,
     db_client,
-) -> MemoryItem:
-    collections = MemoryCollections(uid=uid)
+) -> tuple[MemoryItem, bool]:
     evidence_by_id = {evidence.evidence_id: evidence for evidence in existing.evidence}
     for evidence in item.evidence:
         evidence_by_id.setdefault(evidence.evidence_id, evidence)
-    merged_existing = existing.model_copy(
-        update={
-            "evidence": list(evidence_by_id.values()),
-            "corroboration_count": existing.corroboration_count + 1,
-            "last_corroborated_at": now,
-            "updated_at": now,
-        }
+    merged_evidence_ids = [evidence.evidence_id for evidence in evidence_by_id.values()]
+    merge_idempotency_key = deterministic_contract_id(
+        "canonical-required-promotion-duplicate-merge",
+        {"uid": uid, "source_memory_id": item.memory_id, "target_memory_id": existing.memory_id},
     )
+    merge_operation = _ensure_required_promotion_update_operation(
+        uid=uid,
+        target_memory_id=existing.memory_id,
+        evidence_ids=merged_evidence_ids,
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "target_memory_id": existing.memory_id,
+            "memory_text": existing.content,
+            "result_status": LifecycleState.active.value,
+        },
+        control=control,
+        source_packet_id=f"promotion_merge_{merge_idempotency_key}",
+        db_client=db_client,
+    )
+    merge_result = apply_long_term_patch_firestore(
+        uid=uid,
+        operation_id=merge_operation.operation_id,
+        patch_payload={
+            "patch_id": f"patch_req_merge_{merge_idempotency_key[:24]}",
+            "packet_id": f"promotion_{run_id}",
+            "run_id": run_id,
+            "observed_head_commit_id": control.head_commit_id,
+            "idempotency_key": merge_idempotency_key,
+            "decision": DurablePatchDecision.update.value,
+            "result_status": LifecycleState.active.value,
+            "target_memory_id": existing.memory_id,
+            "memory_text": existing.content,
+            "evidence_ids": merged_evidence_ids,
+            "corroboration_count": existing.corroboration_count + 1,
+            "last_corroborated_at": now.isoformat(),
+        },
+        db_client=db_client,
+    )
+    if merge_result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
+        raise RuntimeError(
+            f"required-promotion duplicate merge failed for {item.memory_id}: "
+            f"{merge_result.status} ({merge_result.reason})"
+        )
+    merged_existing = (
+        merge_result.memory_items[0]
+        if merge_result.memory_items
+        else _read_memory_item(
+            uid,
+            existing.memory_id,
+            db_client=db_client,
+        )
+    )
+    if merged_existing is None:
+        raise RuntimeError(f"required-promotion duplicate merge lost target {existing.memory_id}")
+
     source_promotion = dict(item.promotion or {})
     source_promotion.update(
         {
@@ -188,18 +236,85 @@ def _merge_required_promotion_duplicate(
             "trigger_reason": trigger_reason,
         }
     )
-    superseded_source = item.model_copy(
-        update={
-            "status": MemoryItemStatus.superseded,
-            "promotion": source_promotion,
-            "superseded_by": existing.memory_id,
-            "updated_at": now,
-        }
+    supersede_control = _read_control_state(uid, db_client=db_client)
+    supersede_idempotency_key = deterministic_contract_id(
+        "canonical-required-promotion-duplicate-supersede",
+        {"uid": uid, "source_memory_id": item.memory_id, "target_memory_id": existing.memory_id},
     )
-    db_client.document(f"{collections.memory_items}/{existing.memory_id}").set(merged_existing.model_dump(mode="json"))
-    db_client.document(f"{collections.memory_items}/{item.memory_id}").set(superseded_source.model_dump(mode="json"))
-    sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
-    return merged_existing
+    supersede_operation = _ensure_required_promotion_update_operation(
+        uid=uid,
+        target_memory_id=item.memory_id,
+        evidence_ids=[],
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "target_memory_id": item.memory_id,
+            "result_status": LifecycleState.superseded.value,
+        },
+        control=supersede_control,
+        source_packet_id=f"promotion_merge_supersede_{supersede_idempotency_key}",
+        db_client=db_client,
+    )
+    supersede_result = apply_long_term_patch_firestore(
+        uid=uid,
+        operation_id=supersede_operation.operation_id,
+        patch_payload={
+            "patch_id": f"patch_req_sup_{supersede_idempotency_key[:24]}",
+            "packet_id": f"promotion_{run_id}",
+            "run_id": run_id,
+            "observed_head_commit_id": supersede_control.head_commit_id,
+            "idempotency_key": supersede_idempotency_key,
+            "decision": DurablePatchDecision.update.value,
+            "result_status": LifecycleState.superseded.value,
+            "target_memory_id": item.memory_id,
+            "memory_text": None,
+            "evidence_ids": [],
+            "promotion_audit": source_promotion,
+            "superseded_by": existing.memory_id,
+        },
+        db_client=db_client,
+    )
+    if supersede_result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
+        raise RuntimeError(
+            f"required-promotion duplicate supersede failed for {item.memory_id}: "
+            f"{supersede_result.status} ({supersede_result.reason})"
+        )
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
+    return merged_existing, keyword_sync_succeeded
+
+
+def _ensure_required_promotion_update_operation(
+    *,
+    uid: str,
+    target_memory_id: str,
+    evidence_ids: List[str],
+    logical_payload: Dict,
+    control: MemoryControlState,
+    source_packet_id: str,
+    db_client,
+) -> MemoryOperation:
+    operation = MemoryOperation.new(
+        uid=uid,
+        operation_type=MemoryOperationType.long_term_apply,
+        source_packet_id=source_packet_id,
+        target_memory_id=target_memory_id,
+        evidence_ids=evidence_ids,
+        logical_payload=logical_payload,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        observed_head_commit_id=control.head_commit_id,
+    )
+    op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
+    op_ref = db_client.document(op_path)
+    if not op_ref.get().exists:
+        op_ref.set(operation.model_dump(mode="json"))
+    return operation
+
+
+def _read_memory_item(uid: str, memory_id: str, *, db_client) -> Optional[MemoryItem]:
+    snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    return MemoryItem(**(snapshot.to_dict() or {}))
 
 
 def list_fast_track_promotable_items(
@@ -303,14 +418,15 @@ def promote_short_term_item_via_apply(
     trigger_reason: str,
     now: datetime,
     db_client=None,
-) -> tuple[MemoryItem, bool]:
+) -> tuple[MemoryItem, bool, CanonicalKgPromotionResult, bool]:
     """Promote one short_term item to long_term through the authoritative apply path.
 
-    Returns ``(promoted_item, vector_sync_failed)``. Firestore promotion commits even when
-    vector sync fails; the bool is True when Pinecone upsert hard-failed.
+    Firestore promotion commits even when external side effects fail. The returned
+    vector bool is True when Pinecone upsert hard-failed, and the KG result exposes
+    extraction failures or empty-but-successful extractions for rollout auditing.
     """
     if item.tier == MemoryLayer.long_term:
-        return item, False
+        return item, False, CanonicalKgPromotionResult(skipped_reason="already_long_term"), True
     if not is_promotable_short_term_item(item, now=now):
         raise ValueError(f"memory item {item.memory_id} is not promotable")
 
@@ -321,16 +437,21 @@ def promote_short_term_item_via_apply(
     if is_required_promotion_item(item):
         existing_duplicate = _exact_long_term_duplicate(uid, item, db_client=client)
         if existing_duplicate is not None:
+            merged_item, keyword_sync_succeeded = _merge_required_promotion_duplicate(
+                uid,
+                item,
+                existing_duplicate,
+                control=control,
+                run_id=run_id,
+                trigger_reason=trigger_reason,
+                now=current_time,
+                db_client=client,
+            )
             return (
-                _merge_required_promotion_duplicate(
-                    uid,
-                    item,
-                    existing_duplicate,
-                    trigger_reason=trigger_reason,
-                    now=current_time,
-                    db_client=client,
-                ),
+                merged_item,
                 False,
+                CanonicalKgPromotionResult(skipped_reason="merged_into_existing"),
+                keyword_sync_succeeded,
             )
     operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=client)
     idempotency_key = deterministic_contract_id(
@@ -387,7 +508,7 @@ def promote_short_term_item_via_apply(
     )
     if promoted.tier != MemoryLayer.long_term:
         raise RuntimeError(f"promotion did not land long_term for {item.memory_id}")
-    sync_atom_keyword_index_for_item(promoted, db_client=client)
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(promoted, db_client=client)
     vector_sync_failed = False
 
     def _record_vector_sync_failure() -> None:
@@ -395,8 +516,8 @@ def promote_short_term_item_via_apply(
         vector_sync_failed = True
 
     sync_canonical_memory_vector(promoted, on_hard_failure=_record_vector_sync_failure)
-    extract_kg_for_promoted_memory(uid, promoted, db_client=client)
-    return promoted, vector_sync_failed
+    kg_result = extract_kg_for_promoted_memory(uid, promoted, db_client=client)
+    return promoted, vector_sync_failed, kg_result, keyword_sync_succeeded
 
 
 def _audit_promotion_transition(
@@ -425,6 +546,11 @@ class ShortTermPromotionReport:
     promoted_memory_ids: List[str] = field(default_factory=list)
     transition_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=list)
     vector_sync_failures: int = 0
+    keyword_sync_failures: int = 0
+    kg_extraction_failures: int = 0
+    kg_extraction_empty: int = 0
+    kg_nodes_created: int = 0
+    kg_edges_created: int = 0
     last_promotion_run_at: Optional[datetime] = None
 
     @property
@@ -519,7 +645,7 @@ def run_canonical_short_term_promotion(
 
     for item in promotable:
         control = _read_control_state(uid, db_client=client)
-        promoted, vector_sync_failed = promote_short_term_item_via_apply(
+        promoted, vector_sync_failed, kg_result, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             item,
             control=control,
@@ -530,6 +656,14 @@ def run_canonical_short_term_promotion(
         )
         if vector_sync_failed:
             report.vector_sync_failures += 1
+        if not keyword_sync_succeeded:
+            report.keyword_sync_failures += 1
+        if kg_result.attempted and not kg_result.success:
+            report.kg_extraction_failures += 1
+        if kg_result.empty:
+            report.kg_extraction_empty += 1
+        report.kg_nodes_created += kg_result.node_count
+        report.kg_edges_created += kg_result.edge_count
         report.promoted_memory_ids.append(promoted.memory_id)
         report.transition_records.append(
             _audit_promotion_transition(item, store=transition_store, run_id=run_id, now=current_time)

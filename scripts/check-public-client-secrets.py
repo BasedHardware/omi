@@ -167,9 +167,13 @@ def check_policy_shape(policy: dict) -> list[str]:
         else:
             for domain, count in allowed_occurrences.items():
                 if domain not in policy.get("direct_provider_domains_denied_in_app", []):
-                    errors.append(f"{POLICY_PATH}: legacy direct-provider exception {path} pins unknown domain {domain}")
+                    errors.append(
+                        f"{POLICY_PATH}: legacy direct-provider exception {path} pins unknown domain {domain}"
+                    )
                 if not isinstance(count, int) or count < 0:
-                    errors.append(f"{POLICY_PATH}: legacy direct-provider exception {path} has invalid count for {domain}")
+                    errors.append(
+                        f"{POLICY_PATH}: legacy direct-provider exception {path} has invalid count for {domain}"
+                    )
             if exception_path.exists():
                 text = read_text(exception_path)
                 for domain in policy.get("direct_provider_domains_denied_in_app", []):
@@ -182,7 +186,9 @@ def check_policy_shape(policy: dict) -> list[str]:
                 for lineno, line in enumerate(text.splitlines(), start=1):
                     for domain in policy.get("direct_provider_domains_denied_in_app", []):
                         if domain in line and LEGACY_DIRECT_PROVIDER_ALLOW_COMMENT not in line:
-                            errors.append(f"{path}:{lineno}: legacy direct-provider domain {domain} needs inline allow comment")
+                            errors.append(
+                                f"{path}:{lineno}: legacy direct-provider domain {domain} needs inline allow comment"
+                            )
 
     for name in sorted(allowed_build_secret_source_refs):
         if not name_is_denied(name, exact, patterns):
@@ -259,7 +265,8 @@ def check_app_source(policy: dict) -> list[str]:
         path
         for path in git_files()
         if path.exists()
-        if path in source_roots or any(path.is_relative_to(root) for root in source_roots if root.is_dir())
+        if path in source_roots
+        or any(path.is_relative_to(root) for root in source_roots if root.is_dir())
         and path.suffix in suffixes
         and not path.name.endswith(".g.dart")
         and not path.name.endswith(".gen.dart")
@@ -310,6 +317,18 @@ PUBLIC_ASSIGNMENT_ANYWHERE_RE = re.compile(r"(?:^|\s)(PUBLIC_[A-Z0-9_]*)=(\"[^\"
 ENV_REF_RE = re.compile(r"\$(?:\{?([A-Z][A-Z0-9_]*)\}?|{{\s*secrets\.([A-Z][A-Z0-9_]*)\s*}})")
 PRINTENV_REF_RE = re.compile(r"printenv\s+([A-Z][A-Z0-9_]*)")
 GITHUB_SECRET_RE = re.compile(r"secrets(?:\.|\[['\"])([A-Z][A-Z0-9_]*)")
+SHELL_ASSIGNMENT_RE = re.compile(r"(?:^|\s)([A-Z][A-Z0-9_]*)=(\"[^\"]*\"|'[^']*'|[^\s\\]+)")
+PUBLIC_ENV_TARGET_RE = re.compile(
+    r"(?:^|[\s/\"'])(?:\.client(?:\.dev)?\.env|\.env|\.env\.production|\.env\.local)(?:[\"']|\s|$)"
+)
+SENSITIVE_ECHO_RE = re.compile(r"\b(?:echo|printf)\b")
+SHELL_TRACE_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+(?:-[A-Za-z]*x[A-Za-z]*|-o\s+xtrace)(\s|$|[;&|])")
+SHELL_TRACE_OFF_RE = re.compile(r"(^|\s|[;&|]\s*)set\s+\+x(\s|$)")
+STDOUT_REDIRECT_RE = re.compile(r"(^|\s|[;&|]\s*)(?:1?>|1?>>|&>|&>>)\s*\S")
+SAFE_STDIN_SECRET_SINK_RE = re.compile(
+    r"\|\s*(?:\"[^\"]*sign_update\"|\S*sign_update)\b[^|]*--ed-key-file\s+-"
+    r"|\|\s*docker\s+login\b[^|]*--password-stdin"
+)
 
 
 def check_codemagic(policy: dict) -> list[str]:
@@ -342,7 +361,9 @@ def check_codemagic(policy: dict) -> list[str]:
                         f"{path.relative_to(ROOT)}:{assignment_lineno}: {public_name} is not allowlisted public config"
                     )
                 if "$(" in rhs or "`" in rhs:
-                    errors.append(f"{path.relative_to(ROOT)}:{assignment_lineno}: {public_name} uses command substitution")
+                    errors.append(
+                        f"{path.relative_to(ROOT)}:{assignment_lineno}: {public_name} uses command substitution"
+                    )
                 for printenv_match in PRINTENV_REF_RE.finditer(rhs):
                     ref_name = printenv_match.group(1)
                     if ref_name != public_name and ref_name not in allowed_public_sources:
@@ -357,10 +378,14 @@ def check_codemagic(policy: dict) -> list[str]:
                         errors.append(
                             f"{path.relative_to(ROOT)}:{assignment_lineno}: maps non-approved source {ref_name} into {public_name}"
                         )
-                    if ref_name not in allowed_public and ref_name not in allowed_public_sources and name_is_denied(
-                        ref_name, exact, patterns
+                    if (
+                        ref_name not in allowed_public
+                        and ref_name not in allowed_public_sources
+                        and name_is_denied(ref_name, exact, patterns)
                     ):
-                        errors.append(f"{path.relative_to(ROOT)}:{assignment_lineno}: maps server-only {ref_name} into {public_name}")
+                        errors.append(
+                            f"{path.relative_to(ROOT)}:{assignment_lineno}: maps server-only {ref_name} into {public_name}"
+                        )
             pending_public_assignments.clear()
         elif line.strip() and not line.rstrip().endswith("\\") and not assignment_match:
             pending_public_assignments.clear()
@@ -385,9 +410,120 @@ def check_codemagic(policy: dict) -> list[str]:
     return errors
 
 
-LEGACY_SETUP_ENV_RE = re.compile(r"(?:^|[\s/\"'>=:\\(])(?:\.env|\.dev\.env|\.prod\.env|\.env\.local|\.env\.production)(?=[\"'\s),;]|$)")
+def line_env_refs(line: str) -> set[str]:
+    refs: set[str] = set()
+    for ref_match in ENV_REF_RE.finditer(line):
+        ref_name = ref_match.group(1) or ref_match.group(2)
+        if ref_name:
+            refs.add(ref_name)
+    for secret_match in GITHUB_SECRET_RE.finditer(line):
+        refs.add(secret_match.group(1))
+    return refs
+
+
+def denied_refs_in_line(
+    line: str,
+    exact: set[str],
+    patterns: list[re.Pattern[str]],
+    allowed_public: set[str],
+    allowed_secret_sources: set[str],
+) -> set[str]:
+    refs = set(line_env_refs(line))
+    for assignment_match in SHELL_ASSIGNMENT_RE.finditer(line):
+        refs.add(assignment_match.group(1))
+    return {
+        ref
+        for ref in refs
+        if ref not in allowed_public
+        and ref not in allowed_secret_sources
+        and not ref.endswith(("_NAME", "_PATH", "_FILE"))
+        and name_is_denied(ref, exact, patterns)
+    }
+
+
+def release_hygiene_files() -> list[Path]:
+    files: list[Path] = []
+    for path in git_files():
+        if not path.exists():
+            continue
+        rel = path.relative_to(ROOT)
+        if rel == Path("codemagic.yaml"):
+            files.append(path)
+        elif path.match(".github/workflows/*.y*ml"):
+            files.append(path)
+        elif path.name == "release.sh" and (
+            path.is_relative_to(ROOT / "app")
+            or path.is_relative_to(ROOT / "mcp")
+            or path.is_relative_to(ROOT / "plugins")
+            or path.is_relative_to(ROOT / "sdks")
+            or path.is_relative_to(ROOT / "web")
+        ):
+            files.append(path)
+    return files
+
+
+def logical_shell_line(lines: list[str], line_index: int) -> str:
+    command_parts = [lines[line_index]]
+    for next_line in lines[line_index + 1 : line_index + 8]:
+        if not command_parts[-1].rstrip().endswith("\\"):
+            break
+        command_parts[-1] = command_parts[-1].rstrip()[:-1]
+        command_parts.append(next_line)
+    return " ".join(part.strip() for part in command_parts)
+
+
+def redirects_stdout(line: str) -> bool:
+    return bool(STDOUT_REDIRECT_RE.search(line))
+
+
+def check_release_log_secret_hygiene(policy: dict) -> list[str]:
+    errors: list[str] = []
+    exact = denied_names(policy)
+    patterns = compile_patterns(policy)
+    allowed_public = allowed_public_names(policy)
+    allowed_secret_sources = set(policy.get("allowed_build_secret_source_references", []))
+
+    for path in release_hygiene_files():
+        rel = path.relative_to(ROOT)
+        lines = read_text(path).splitlines()
+        for line_index, line in enumerate(lines):
+            lineno = line_index + 1
+            denied_refs = denied_refs_in_line(line, exact, patterns, allowed_public, allowed_secret_sources)
+            if PUBLIC_ENV_TARGET_RE.search(line) and denied_refs:
+                errors.append(
+                    f"{rel}:{lineno}: public env file write references server-only {', '.join(sorted(denied_refs))}"
+                )
+            logical_line = logical_shell_line(lines, line_index)
+            writes_to_stdout = not redirects_stdout(logical_line) and not SAFE_STDIN_SECRET_SINK_RE.search(logical_line)
+            if SENSITIVE_ECHO_RE.search(line) and denied_refs and writes_to_stdout and "::add-mask::" not in line:
+                errors.append(
+                    f"{rel}:{lineno}: shell output command references server-only {', '.join(sorted(denied_refs))}"
+                )
+            if not SHELL_TRACE_RE.search(line):
+                continue
+
+            trace_refs: set[str] = set()
+            for offset, traced_line in enumerate(lines[lineno:], start=lineno + 1):
+                if SHELL_TRACE_OFF_RE.search(traced_line):
+                    break
+                if offset - lineno > 80:
+                    break
+                trace_refs.update(
+                    denied_refs_in_line(traced_line, exact, patterns, allowed_public, allowed_secret_sources)
+                )
+            if trace_refs:
+                errors.append(f"{rel}:{lineno}: set -x traces nearby server-only refs {', '.join(sorted(trace_refs))}")
+
+    return errors
+
+
+LEGACY_SETUP_ENV_RE = re.compile(
+    r"(?:^|[\s/\"'>=:\\(])(?:\.env|\.dev\.env|\.prod\.env|\.env\.local|\.env\.production)(?=[\"'\s),;]|$)"
+)
 APPROVED_SETUP_ENV_RE = re.compile(r"(?:^|[\s/\"'>=:\\(])\.client(?:\.dev)?\.env(?=[\"'\s),;]|$)")
-ENV_WRITE_COMMAND_RE = re.compile(r"\b(?:echo|printf|cat|cp|copy|copy-item|set-content|out-file|tee|writealltext)\b", re.IGNORECASE)
+ENV_WRITE_COMMAND_RE = re.compile(
+    r"\b(?:echo|printf|cat|cp|copy|copy-item|set-content|out-file|tee|writealltext)\b", re.IGNORECASE
+)
 
 
 def check_setup_env_writes() -> list[str]:
@@ -443,9 +579,10 @@ def check_docker_secret_baking(policy: dict) -> list[str]:
         if path.exists()
         and (path.name == "Dockerfile" or path.name.startswith("Dockerfile."))
         and (
-            path.is_relative_to(ROOT / "web" / "frontend")
-            or path.is_relative_to(ROOT / "web" / "personas-open-source")
-            or path.is_relative_to(ROOT / "plugins" / "apps-js")
+            path.is_relative_to(ROOT / "web")
+            or path.is_relative_to(ROOT / "plugins")
+            or path.is_relative_to(ROOT / "mcp")
+            or path.is_relative_to(ROOT / "desktop")
         )
     ]
     for path in dockerfiles:
@@ -461,8 +598,14 @@ def check_docker_secret_baking(policy: dict) -> list[str]:
                     continue
                 if name_is_denied(token, exact, patterns):
                     errors.append(f"{rel}:{lineno}: Dockerfile references server-only env-like token {token}")
-            if re.search(r"--(?:secret|ssh|build-context)(?:\s|=|$)", stripped) or "type=secret" in stripped or "type=ssh" in stripped:
-                errors.append(f"{rel}:{lineno}: Docker build-time secret/context mount is not allowed in public client images")
+            if (
+                re.search(r"--(?:secret|ssh|build-context)(?:\s|=|$)", stripped)
+                or "type=secret" in stripped
+                or "type=ssh" in stripped
+            ):
+                errors.append(
+                    f"{rel}:{lineno}: Docker build-time secret/context mount is not allowed in public client images"
+                )
             arg_match = re.match(r"(?i)^ARG\s+([A-Z0-9_]+)(?:=.*)?$", stripped)
             if arg_match:
                 name = arg_match.group(1)
@@ -486,7 +629,9 @@ def check_docker_secret_baking(policy: dict) -> list[str]:
             if "docker build" in line or "docker/build-push-action" in line:
                 in_docker_build = True
             if in_docker_build and re.search(r"--(?:secret|ssh|build-context)(?:\s|=|$)", line):
-                errors.append(f"{rel}:{lineno}: docker build secret/context flags are not allowed for public client builds")
+                errors.append(
+                    f"{rel}:{lineno}: docker build secret/context flags are not allowed for public client builds"
+                )
             if "--build-arg" not in line:
                 if in_docker_build and not line.rstrip().endswith("\\"):
                     in_docker_build = False
@@ -518,11 +663,15 @@ def check_docker_secret_baking(policy: dict) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", action="append", default=[], help="public client env file to validate")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="run the full legacy-baseline scan; default hook mode checks only clean policy/env-file contracts",
+    )
     args = parser.parse_args()
 
     policy = load_policy()
     errors: list[str] = []
-    errors.extend(check_policy_shape(policy))
 
     env_files = [Path(raw).resolve() for raw in args.env_file]
     env_files.extend(
@@ -531,11 +680,14 @@ def main() -> int:
     for path in env_files:
         errors.extend(check_env_file(path, policy))
 
-    errors.extend(check_app_source(policy))
-    errors.extend(check_codemagic(policy))
-    errors.extend(check_setup_env_writes())
-    errors.extend(check_public_templates(policy))
-    errors.extend(check_docker_secret_baking(policy))
+    if args.strict:
+        errors.extend(check_policy_shape(policy))
+        errors.extend(check_app_source(policy))
+        errors.extend(check_codemagic(policy))
+        errors.extend(check_setup_env_writes())
+        errors.extend(check_public_templates(policy))
+        errors.extend(check_release_log_secret_hygiene(policy))
+        errors.extend(check_docker_secret_baking(policy))
 
     if errors:
         print("Public client secret boundary check failed:", file=sys.stderr)

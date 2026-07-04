@@ -70,4 +70,65 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertTrue(snapshots.allSatisfy { $0["watchdog_eligible"] as? Bool == false })
     XCTAssertTrue(snapshots.allSatisfy { $0["consecutive_silent_turns"] as? Int == 0 })
   }
+
+  func testExpectedIdleTeardownUsesSeparateHealthEvent() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: "gemini",
+      category: RealtimeHubCloseCategory.expectedIdleTeardown.rawValue,
+      aliveFor: 180,
+      activeTurn: false,
+      authMode: .managed,
+      failureClass: nil)
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_provider_expected_idle_teardown")
+    XCTAssertEqual(snapshot["provider"] as? String, "gemini")
+    XCTAssertEqual(snapshot["category"] as? String, "expected_idle_teardown")
+    XCTAssertEqual(snapshot["auth_mode"] as? String, "managed")
+    XCTAssertEqual(snapshot["active_turn"] as? Bool, false)
+  }
+
+  func testProviderCloseFallsBackToFailureClassInsteadOfUnclassified() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: "openai",
+      category: nil,
+      aliveFor: 7,
+      activeTurn: true,
+      authMode: .byok,
+      failureClass: .providerTransient(provider: .openai))
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_provider_session_error")
+    XCTAssertEqual(snapshot["category"] as? String, "provider_transient")
+    XCTAssertEqual(snapshot["failure_class"] as? String, "provider_transient")
+    XCTAssertEqual(snapshot["auth_mode"] as? String, "byok")
+  }
+
+  func testTokenMintFailureIncludesHttpStatusWhenKnown() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+      provider: "gemini",
+      reason: "backend_transient",
+      phase: "warm",
+      httpStatusCode: 503)
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_token_mint_failed")
+    XCTAssertEqual(snapshot["provider"] as? String, "gemini")
+    XCTAssertEqual(snapshot["reason"] as? String, "backend_transient")
+    XCTAssertEqual(snapshot["phase"] as? String, "warm")
+    XCTAssertEqual(snapshot["http_status_code"] as? Int, 503)
+  }
+
+  private func latestSnapshot() throws -> [String: Any] {
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    return try XCTUnwrap(snapshots.last)
+  }
 }

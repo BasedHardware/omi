@@ -63,7 +63,9 @@ final class HubSystemInstructionTests: XCTestCase {
         let manageTool = tools.first { ($0["name"] as? String) == HubTool.manageAgentPills.rawValue }
         XCTAssertNotNil(manageTool)
         XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("dismiss"))
-        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear completed"))
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear pills"))
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("explicitly asks"))
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("Never dismiss completed agents"))
     }
 
     func testRealtimeCreateCalendarEventToolIsExposedWithRequiredArguments() {
@@ -102,7 +104,7 @@ final class HubSystemInstructionTests: XCTestCase {
         let listParameters = listTool?["parameters"] as? [String: Any]
         let listProperties = listParameters?["properties"] as? [String: Any]
         let surfaceKind = listProperties?["surfaceKind"] as? [String: Any]
-        XCTAssertEqual(surfaceKind?["enum"] as? [String], ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"])
+        XCTAssertEqual(surfaceKind?["enum"] as? [String], ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"])
 
         let inspectTool = tools.first { ($0["name"] as? String) == HubTool.inspectAgentArtifacts.rawValue }
         let inspectParameters = (inspectTool?["parameters"] as? [String: Any])

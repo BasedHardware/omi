@@ -50,6 +50,7 @@ from utils.memory.memory_service import (
     raise_if_legacy_write_blocked,
     resolve_external_memory_write_context,
 )
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
@@ -900,7 +901,12 @@ def execute_tool(
         except HTTPException as exc:
             _raise_tool_error_from_http(exc)
 
-        return {"success": True, "memory": memory_db.model_dump()}
+        exposure = (
+            MemoryApiExposure.CANONICAL
+            if write_context.memory_system == MemorySystem.CANONICAL
+            else MemoryApiExposure.LEGACY
+        )
+        return {"success": True, "memory": memory_api_payload(memory_db, exposure)}
 
     elif tool_name == "delete_memory":
         memory_id = arguments.get("memory_id")

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.executor import ProviderRegistry
-from llm_gateway.gateway.providers import FakeChatCompletionProvider
+from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
+from llm_gateway.gateway.schemas import FailureClass
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
@@ -161,6 +163,41 @@ def test_chat_completions_fails_closed_when_openai_key_is_not_configured(monkeyp
 
     assert response.status_code == 503
     assert response.json()['error']['code'] == 'invalid_route_config'
+
+
+def test_streaming_provider_setup_failure_returns_json_error_before_streaming(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openai': FailingStreamProvider()}
+    )
+    try:
+        response = TestClient(app).post('/v1/chat/completions', json=valid_request(stream=True), headers=auth_headers())
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.json()['error']['code'] == 'invalid_route_config'
+
+
+class FailingStreamProvider(FakeChatCompletionProvider):
+    async def stream_chat_completion(self, *_args, **_kwargs):
+        raise ProviderFailure(FailureClass.INVALID_CONFIG)
+        yield b''
+
+
+def _streaming_enabled_gateway_config():
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[LANE_ID]
+    capabilities = lane.capabilities.model_copy(update={'streaming': True})
+    lane = lane.model_copy(update={'capabilities': capabilities})
+    route_artifacts = dict(config.route_artifacts)
+    for route_id in (lane.active_route, lane.last_known_good):
+        route_artifacts[route_id] = route_artifacts[route_id].model_copy(update={'capabilities': capabilities})
+    lanes = dict(config.lanes)
+    lanes[LANE_ID] = lane
+    return config.model_copy(update={'lanes': lanes, 'route_artifacts': route_artifacts})
 
 
 def auth_headers() -> dict[str, str]:

@@ -47,6 +47,18 @@ class DeviceUtils {
     }
   }
 
+  /// Whether an Omi-type device is a DevKit board rather than the consumer
+  /// pendant. Match on `DEVKIT`, not a loose `DEV` — the consumer's default
+  /// model fallback is `'Omi Device'`.
+  static bool isOmiDevKit({String? modelNumber, String? deviceName}) {
+    bool matches(String? value) {
+      if (value == null || value.isEmpty) return false;
+      return value.toUpperCase().contains('DEVKIT');
+    }
+
+    return matches(modelNumber) || matches(deviceName);
+  }
+
   /// Whether a [DeviceType.omi] device is the consumer CV1 pendant rather than
   /// another omi-enumerated variant (DevKit 1/2, Glass, Neo, Friend), which all
   /// report the same DeviceType. Used to scope CV1-only UI like the "How to use

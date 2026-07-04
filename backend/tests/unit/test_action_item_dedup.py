@@ -7,30 +7,25 @@ configured, (b) filter matches below the threshold, (c) swallow Pinecone
 exceptions and return [] (so a Pinecone outage degrades to "no dedup
 context" rather than failing the whole conversation pipeline), and
 (d) preserve match order from Pinecone (most-similar first).
+
+database.vector_db binds ``embeddings`` at import (``from utils.llm.clients
+import embeddings``) and ``from pinecone import Pinecone``, and its
+transitive imports pull in database._client -> google.cloud.firestore and
+firebase_admin.auth. Those heavy deps must be faked *before* the module is
+exec'd. This is the sanctioned Tier-2 "fake must precede import" case: see
+backend/docs/test_isolation.md and testing/import_isolation.load_module_fresh.
 """
 
-import importlib.util
 import os
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
-_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, _BACKEND_DIR)
+import pytest
 
-# Stub heavy deps before importing vector_db. Same pattern as test_memories_batch.
-for mod_name in [
-    'pinecone',
-    'firebase_admin',
-    'firebase_admin.auth',
-    'google',
-    'google.cloud',
-    'google.cloud.firestore',
-]:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = types.ModuleType(mod_name)
+from testing.import_isolation import load_module_fresh, stub_modules
 
-sys.modules['pinecone'].Pinecone = MagicMock
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
 class _FakeFirestoreClient:
@@ -41,43 +36,67 @@ class _FakeFirestoreClient:
         return MagicMock()
 
 
-sys.modules['google.cloud.firestore'].Client = _FakeFirestoreClient
-sys.modules['google.cloud.firestore'].ArrayUnion = MagicMock
-sys.modules['google.cloud.firestore'].ArrayRemove = MagicMock
-sys.modules['google.cloud.firestore'].Increment = MagicMock
-sys.modules['google.cloud.firestore'].SERVER_TIMESTAMP = object()
-sys.modules['google.cloud.firestore'].DELETE_FIELD = object()
-sys.modules['google.cloud.firestore'].FieldFilter = MagicMock
-sys.modules['google.cloud.firestore'].Query = MagicMock
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+@pytest.fixture(scope="module")
+def vector_db():
+    """Load a fresh database.vector_db against stubbed heavy deps.
 
-database_pkg = sys.modules.get('database')
-if not isinstance(database_pkg, types.ModuleType):
-    database_pkg = types.ModuleType('database')
-    sys.modules['database'] = database_pkg
-database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
-sys.modules.pop('database.vector_db', None)
+    Stubs pinecone / firebase_admin / google.cloud.firestore (transitively
+    pulled by database._client) and utils.llm.clients (binds ``embeddings``
+    eagerly). The module is exec'd fresh inside the stub block so the fakes
+    are active at import time. Everything is restored on teardown.
+    """
+    pinecone_stub = ModuleType("pinecone")
+    pinecone_stub.Pinecone = MagicMock
 
-previous_clients_stub = sys.modules.get('utils.llm.clients')
-clients_stub = types.ModuleType('utils.llm.clients')
-clients_stub.embeddings = MagicMock()
-sys.modules['utils.llm.clients'] = clients_stub
+    firebase_auth_stub = ModuleType("firebase_admin.auth")
+    firebase_auth_stub.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+    firebase_stub = ModuleType("firebase_admin")
+    firebase_stub.auth = firebase_auth_stub
 
-_vector_db_path = os.path.join(_BACKEND_DIR, 'database', 'vector_db.py')
-_vector_db_spec = importlib.util.spec_from_file_location('action_item_dedup_vector_db', _vector_db_path)
-if _vector_db_spec is None or _vector_db_spec.loader is None:
-    raise ImportError(f'Unable to load vector_db from {_vector_db_path}')
-vector_db = importlib.util.module_from_spec(_vector_db_spec)
-sys.modules[_vector_db_spec.name] = vector_db
-_vector_db_spec.loader.exec_module(vector_db)
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.Client = _FakeFirestoreClient
+    firestore_stub.ArrayUnion = MagicMock()
+    firestore_stub.ArrayRemove = MagicMock()
+    firestore_stub.Increment = MagicMock()
+    firestore_stub.SERVER_TIMESTAMP = object()
+    firestore_stub.DELETE_FIELD = object()
+    firestore_stub.FieldFilter = MagicMock()
+    firestore_stub.Query = MagicMock()
+    google_cloud_pkg.firestore = firestore_stub
 
-if previous_clients_stub is None:
-    sys.modules.pop('utils.llm.clients', None)
-else:
-    sys.modules['utils.llm.clients'] = previous_clients_stub
+    clients_stub = ModuleType("utils.llm.clients")
+    clients_stub.embeddings = MagicMock()
+
+    fakes = {
+        "pinecone": pinecone_stub,
+        "firebase_admin": firebase_stub,
+        "firebase_admin.auth": firebase_auth_stub,
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore": firestore_stub,
+        "utils.llm.clients": clients_stub,
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "action_item_dedup_vector_db",
+            os.path.join(str(_BACKEND), "database", "vector_db.py"),
+        )
+        yield module
 
 
-def _setup_mocks(monkeypatch, *, index_none=False, query_response=None, embed_raises=None, query_raises=None):
+def _setup_mocks(
+    monkeypatch,
+    vector_db,
+    *,
+    index_none=False,
+    query_response=None,
+    embed_raises=None,
+    query_raises=None,
+):
     fake_index = MagicMock()
     if query_raises is not None:
         fake_index.query = MagicMock(side_effect=query_raises)
@@ -95,9 +114,9 @@ def _setup_mocks(monkeypatch, *, index_none=False, query_response=None, embed_ra
 
 
 class TestFindSimilarActionItems:
-    def test_returns_empty_when_pinecone_not_configured(self, monkeypatch):
+    def test_returns_empty_when_pinecone_not_configured(self, monkeypatch, vector_db):
         """No-op cleanly when Pinecone isn't initialized (tests, local dev, env-var-missing)."""
-        _, fake_embeddings = _setup_mocks(monkeypatch, index_none=True)
+        _, fake_embeddings = _setup_mocks(monkeypatch, vector_db, index_none=True)
 
         result = vector_db.find_similar_action_items('uid-abc', 'buy milk')
 
@@ -105,7 +124,7 @@ class TestFindSimilarActionItems:
         # Embedding call must not happen — no point spending OpenAI tokens if Pinecone is down.
         fake_embeddings.embed_query.assert_not_called()
 
-    def test_filters_below_threshold(self, monkeypatch):
+    def test_filters_below_threshold(self, monkeypatch, vector_db):
         """Threshold defines what counts as a candidate; everything below is dropped."""
         response = {
             'matches': [
@@ -115,14 +134,14 @@ class TestFindSimilarActionItems:
                 {'metadata': {'action_item_id': 'a4'}, 'score': 0.10},  # below default 0.6
             ]
         }
-        _setup_mocks(monkeypatch, query_response=response)
+        _setup_mocks(monkeypatch, vector_db, query_response=response)
 
         result = vector_db.find_similar_action_items('uid-abc', 'buy milk')
 
         assert [r['action_item_id'] for r in result] == ['a1', 'a2']
         assert [r['score'] for r in result] == [0.92, 0.71]
 
-    def test_threshold_param_is_respected(self, monkeypatch):
+    def test_threshold_param_is_respected(self, monkeypatch, vector_db):
         """Caller can tighten or loosen by passing threshold."""
         response = {
             'matches': [
@@ -131,15 +150,15 @@ class TestFindSimilarActionItems:
                 {'metadata': {'action_item_id': 'a3'}, 'score': 0.45},
             ]
         }
-        _setup_mocks(monkeypatch, query_response=response)
+        _setup_mocks(monkeypatch, vector_db, query_response=response)
 
         result = vector_db.find_similar_action_items('uid-abc', 'buy milk', threshold=0.85)
 
         assert [r['action_item_id'] for r in result] == ['a1']
 
-    def test_limit_param_passed_to_pinecone(self, monkeypatch):
+    def test_limit_param_passed_to_pinecone(self, monkeypatch, vector_db):
         """limit drives top_k on the Pinecone query."""
-        fake_index, _ = _setup_mocks(monkeypatch, query_response={'matches': []})
+        fake_index, _ = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
 
         vector_db.find_similar_action_items('uid-abc', 'buy milk', limit=25)
 
@@ -148,32 +167,32 @@ class TestFindSimilarActionItems:
         assert kwargs['namespace'] == vector_db.ACTION_ITEMS_NAMESPACE
         assert kwargs['filter'] == {'uid': 'uid-abc'}
 
-    def test_pinecone_exception_returns_empty(self, monkeypatch):
+    def test_pinecone_exception_returns_empty(self, monkeypatch, vector_db):
         """A Pinecone outage must not fail the conversation pipeline."""
-        _setup_mocks(monkeypatch, query_raises=RuntimeError('pinecone is down'))
+        _setup_mocks(monkeypatch, vector_db, query_raises=RuntimeError('pinecone is down'))
 
         result = vector_db.find_similar_action_items('uid-abc', 'buy milk')
 
         assert result == []
 
-    def test_embedding_exception_returns_empty(self, monkeypatch):
+    def test_embedding_exception_returns_empty(self, monkeypatch, vector_db):
         """An OpenAI embeddings outage must not fail the conversation pipeline."""
-        _setup_mocks(monkeypatch, embed_raises=RuntimeError('openai is down'))
+        _setup_mocks(monkeypatch, vector_db, embed_raises=RuntimeError('openai is down'))
 
         result = vector_db.find_similar_action_items('uid-abc', 'buy milk')
 
         assert result == []
 
-    def test_empty_query_still_calls_pinecone(self, monkeypatch):
+    def test_empty_query_still_calls_pinecone(self, monkeypatch, vector_db):
         """The helper itself doesn't gate on empty query — that's the caller's concern.
         Embedding an empty string is harmless; Pinecone returns no matches; helper returns []."""
-        _setup_mocks(monkeypatch, query_response={'matches': []})
+        _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
 
         result = vector_db.find_similar_action_items('uid-abc', '')
 
         assert result == []
 
-    def test_preserves_pinecone_match_order(self, monkeypatch):
+    def test_preserves_pinecone_match_order(self, monkeypatch, vector_db):
         """Pinecone returns matches sorted by relevance; we must not re-order."""
         response = {
             'matches': [
@@ -182,13 +201,13 @@ class TestFindSimilarActionItems:
                 {'metadata': {'action_item_id': 'third'}, 'score': 0.70},
             ]
         }
-        _setup_mocks(monkeypatch, query_response=response)
+        _setup_mocks(monkeypatch, vector_db, query_response=response)
 
         result = vector_db.find_similar_action_items('uid-abc', 'something')
 
         assert [r['action_item_id'] for r in result] == ['first', 'second', 'third']
 
-    def test_drops_matches_with_missing_action_item_id(self, monkeypatch):
+    def test_drops_matches_with_missing_action_item_id(self, monkeypatch, vector_db):
         """A malformed Pinecone match (missing/empty action_item_id metadata) must be
         dropped per-match, not poison the whole dedup context. Returning None as an id
         would crash get_action_items_by_ids downstream."""
@@ -201,7 +220,7 @@ class TestFindSimilarActionItems:
                 {'metadata': {'action_item_id': 'good-2'}, 'score': 0.70},
             ]
         }
-        _setup_mocks(monkeypatch, query_response=response)
+        _setup_mocks(monkeypatch, vector_db, query_response=response)
 
         result = vector_db.find_similar_action_items('uid-abc', 'q')
 
@@ -210,9 +229,10 @@ class TestFindSimilarActionItems:
 
 
 class TestQueryConversationVectors:
-    def test_start_date_only_builds_one_sided_filter(self, monkeypatch):
+    def test_start_date_only_builds_one_sided_filter(self, monkeypatch, vector_db):
         fake_index, fake_embeddings = _setup_mocks(
             monkeypatch,
+            vector_db,
             query_response={'matches': [{'id': 'uid-abc-conv-1'}]},
         )
 
@@ -224,16 +244,16 @@ class TestQueryConversationVectors:
         assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$gte': 100}}
         assert kwargs['top_k'] == 3
 
-    def test_end_date_only_builds_one_sided_filter(self, monkeypatch):
-        fake_index, _ = _setup_mocks(monkeypatch, query_response={'matches': []})
+    def test_end_date_only_builds_one_sided_filter(self, monkeypatch, vector_db):
+        fake_index, _ = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
 
         assert vector_db.query_vectors('coffee', 'uid-abc', starts_at=None, ends_at=200) == []
 
         kwargs = fake_index.query.call_args.kwargs
         assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$lte': 200}}
 
-    def test_invalid_date_filter_returns_empty_without_embedding(self, monkeypatch):
-        fake_index, fake_embeddings = _setup_mocks(monkeypatch, query_response={'matches': []})
+    def test_invalid_date_filter_returns_empty_without_embedding(self, monkeypatch, vector_db):
+        fake_index, fake_embeddings = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
 
         assert vector_db.query_vectors('coffee', 'uid-abc', starts_at=300, ends_at=200) == []
 

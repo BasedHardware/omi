@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -17696,6 +17696,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Latest'**
   String get latest;
+
+  /// Button on the manual firmware flash page (developer settings)
+  ///
+  /// In en, this message translates to:
+  /// **'Flash Firmware'**
+  String get flashFirmware;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -17756,7 +17762,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'uk',
         'ur',
         'vi',
-        'zh',
+        'zh'
       ].contains(locale.languageCode);
 
   @override
@@ -17866,10 +17872,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

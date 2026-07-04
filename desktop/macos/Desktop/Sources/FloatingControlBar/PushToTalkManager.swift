@@ -489,13 +489,13 @@ class PushToTalkManager: ObservableObject {
   /// RMS threshold (int16 samples) above which a 20ms frame counts as voiced.
   /// ~-41 dBFS: comfortably above quiet-room mic noise, far below soft speech.
   nonisolated private static let voicedRMSThreshold: Double = 300
-  // Hub silence gate is gentler than the omni gate: the realtime model tolerates a
-  // little noise, and a too-strict gate that drops real speech ("not even listening")
-  // is far worse than occasionally letting a marginal turn through. Lower RMS so a
-  // quieter / further mic still registers, and require only a sliver of voice.
-  nonisolated private static let hubVoicedRMSThreshold: Double = 170
-  nonisolated private static let hubMinTurnAudioSeconds: Double = 0.2
-  nonisolated private static let hubMinVoicedSeconds: Double = 0.08
+  // Hub admission is stricter than raw energy: realtime models will answer noise
+  // if we commit a no-speech turn. Strong speech-like frames pass immediately,
+  // while Silero remains available as a quiet-speech fallback.
+  nonisolated private static let hubSpeechLikeRMSThreshold: Double = 260
+  nonisolated private static let hubMaxSpeechZeroCrossingRate: Double = 0.24
+  nonisolated private static let hubMinTurnAudioSeconds: Double = 0.35
+  nonisolated private static let hubMinSpeechLikeSeconds: Double = 0.16
 
   /// Returns (totalSeconds, voicedSeconds) for raw PCM16 mono 16kHz audio,
   /// where voiced = 20ms frames whose RMS exceeds `rmsThreshold`.
@@ -523,6 +523,45 @@ class PushToTalkManager: ObservableObject {
       }
     }
     return (Double(sampleCount) / 16000.0, Double(voicedFrames) * 0.02)
+  }
+
+  /// Returns (totalSeconds, speechLikeSeconds) for PCM16 mono 16kHz audio.
+  /// A frame must have enough RMS and a plausible voiced-speech zero-crossing
+  /// rate. This rejects broadband white noise that clears a simple energy gate.
+  static func speechLikeAudioSeconds(
+    pcm16k data: Data,
+    rmsThreshold: Double = hubSpeechLikeRMSThreshold,
+    maxZeroCrossingRate: Double = hubMaxSpeechZeroCrossingRate
+  ) -> (total: Double, speechLike: Double) {
+    let sampleCount = data.count / 2
+    guard sampleCount > 0 else { return (0, 0) }
+    let frameSamples = 320  // 20ms at 16kHz
+    var speechLikeFrames = 0
+    data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+      let samples = raw.bindMemory(to: Int16.self)
+      var i = 0
+      while i + frameSamples <= sampleCount {
+        var sumSquares: Double = 0
+        var zeroCrossings = 0
+        var previous = Int(samples[i])
+        for j in i..<(i + frameSamples) {
+          let current = Int(samples[j])
+          let s = Double(current)
+          sumSquares += s * s
+          if j > i, (previous < 0 && current >= 0) || (previous >= 0 && current < 0) {
+            zeroCrossings += 1
+          }
+          previous = current
+        }
+        let rms = (sumSquares / Double(frameSamples)).squareRoot()
+        let zcr = Double(zeroCrossings) / Double(frameSamples - 1)
+        if rms > rmsThreshold && zcr <= maxZeroCrossingRate {
+          speechLikeFrames += 1
+        }
+        i += frameSamples
+      }
+    }
+    return (Double(sampleCount) / 16000.0, Double(speechLikeFrames) * 0.02)
   }
 
   // Real speech detector for the hub gate (Silero VAD, on-device). Energy ≠ speech:
@@ -557,11 +596,10 @@ class PushToTalkManager: ObservableObject {
   static func hubTurnHasSpeech(pcm16k data: Data) -> Bool {
     let count = data.count / 2
     guard Double(count) / 16000.0 >= hubMinTurnAudioSeconds else { return false }  // too short
-    // Energy gate FIRST: clear/audible speech (the common case) must always pass. The Silero
-    // classifier was intermittently misclassifying real speech as "no speech" and discarding
-    // whole turns — RMS energy is reliable for audible speech, so accept it outright.
-    let (total, voiced) = voicedAudioSeconds(pcm16k: data, rmsThreshold: hubVoicedRMSThreshold)
-    if total >= hubMinTurnAudioSeconds && voiced >= hubMinVoicedSeconds { return true }
+    // Speech-like energy gate FIRST: clear/audible speech must pass without
+    // waiting on model inference, but broadband noise/clicks should not.
+    let (total, speechLike) = speechLikeAudioSeconds(pcm16k: data)
+    if total >= hubMinTurnAudioSeconds && speechLike >= hubMinSpeechLikeSeconds { return true }
     // Softer speech that didn't clear the energy bar: a lenient Silero pass as a fallback
     // (only to catch quiet speech — it must never be the sole gate that drops loud speech).
     guard let vad = hubVAD, count >= 512 else { return false }
@@ -655,7 +693,15 @@ class PushToTalkManager: ObservableObject {
       }
       // Real speech — commit. The hub speaks the reply and dispatches tools
       // itself; no transcript/router/LLM hop here.
-      RealtimeHubController.shared.commitTurn()
+      let commitResult = RealtimeHubController.shared.commitTurn()
+      if commitResult == .rejectedNoSession {
+        log("PushToTalkManager: realtime hub rejected commit — falling back to buffered transcription")
+        batchAudioLock.lock()
+        batchAudioBuffer = turnAudio
+        batchAudioLock.unlock()
+        transcribeBufferedWarmWaitAudio()
+        return
+      }
       silentMicRecoveryPolicy.recordSuccessfulHubTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       // Collapse the bar on release — the hub speaks its reply as audio (no inline
@@ -663,7 +709,7 @@ class PushToTalkManager: ObservableObject {
       updateBarState()
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-      log("PushToTalkManager: hub turn committed (instant ack)")
+      log("PushToTalkManager: hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed")")
       return
     }
 
@@ -1075,13 +1121,21 @@ class PushToTalkManager: ObservableObject {
       updateBarState()
       return
     }
-    RealtimeHubController.shared.commitTurn()
+    let commitResult = RealtimeHubController.shared.commitTurn()
+    if commitResult == .rejectedNoSession {
+      log("PushToTalkManager: buffered hub commit rejected — falling back to buffered transcription")
+      batchAudioLock.lock()
+      batchAudioBuffer = turnAudio
+      batchAudioLock.unlock()
+      transcribeBufferedWarmWaitAudio()
+      return
+    }
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-    log("PushToTalkManager: buffered hub turn committed after warm wait")
+    log("PushToTalkManager: buffered hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed") after warm wait")
   }
 
   private func transcribeBufferedWarmWaitAudio() {

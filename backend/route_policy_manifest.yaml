@@ -1,0 +1,8 @@
+# Backend route policy manifest for the primary FastAPI app in backend/main.py.
+#
+# PR 1 starts report-only: keep semantic claims out of this file until route
+# owners review them. Add entries with review_status: reviewed or
+# legacy_unreviewed as the route inventory workstream is baselined.
+schema_version: 1
+service: backend-main
+routes: []

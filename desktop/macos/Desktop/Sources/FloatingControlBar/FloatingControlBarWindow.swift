@@ -104,15 +104,26 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             + notchHoverMenuBottomMargin
     }
     static let expandedBarSize = NSSize(width: 210, height: 50)
+    /// Center gap between the two chrome lobes on displays without a notch —
+    /// there is no camera housing to straddle, so keep a small deliberate gap
+    /// instead of the phantom notch dead zone.
+    static let pillSurfaceCenterGapWidth: CGFloat = 56
+    /// Slim top inset that replaces the notch chrome band on the pill's
+    /// expanded surfaces (agent list, chat).
+    static let pillSurfaceTopPadding: CGFloat = 10
+    /// Pill-mode Ask Omi input panel height (top inset + editor + padding).
+    static var pillInputPanelHeight: CGFloat {
+        pillSurfaceTopPadding + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
+    }
     private static let voiceBarSize = NSSize(width: 224, height: 42)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
-    private static let expandedWidth: CGFloat = 430
     static let notchExpandedWidth: CGFloat = 382
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
-    private static let askOmiAnimationDuration: TimeInterval = 0.055
-    private static let askOmiSettleDelay: TimeInterval = 0.065
+    private static let askOmiAnimationDuration: TimeInterval = 0.14
+    private static let askOmiSettleDelay: TimeInterval = 0.16
+    private static let frameNoopEpsilon: CGFloat = 0.5
     private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
@@ -149,6 +160,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
     private var frameAnimationToken: Int = 0
+    private var pendingFrameAnimationTarget: NSRect?
     private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
 
     private var notchModeEnabled: Bool {
@@ -198,7 +210,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 height: size.height + Self.notchGlowOutsetBottom
             )
         }
-        guard state.isVoiceResponseActive else { return size }
+        guard state.isVoiceResponseActive || collapsedPillAgentGlowActive else { return size }
         guard size.width <= Self.minBarSize.width + 0.5,
               size.height <= Self.minBarSize.height + 0.5
         else { return size }
@@ -206,6 +218,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             width: size.width + Self.legacyPillGlowOutsetX * 2,
             height: size.height + Self.legacyPillGlowOutsetY * 2
         )
+    }
+
+    /// Whether the collapsed pill is showing the ambient subagent status
+    /// tint/glow (mirrors `NotchAgentStatusGroup.aggregate`: finished agents
+    /// the user has viewed go quiet).
+    private var collapsedPillAgentGlowActive: Bool {
+        !notchModeEnabled
+            && AgentPillsManager.shared.pills.contains {
+                !($0.status.isFinished && $0.viewedAt != nil)
+            }
     }
     private func responseGlowWindowSizeForCurrentScreen(forSurfaceSize size: NSSize) -> NSSize {
         responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: notchModeEnabled)
@@ -237,14 +259,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         notchSize(sideWidth: notchSideWidth, for: screen)
     }
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
-    private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
-    private var inputChromeHeight: CGFloat { notchModeEnabled ? notchChromeHeightForCurrentScreen : 50 }
+    private var expandedContentWidth: CGFloat { Self.notchExpandedWidth }
     private var inputPanelHeight: CGFloat {
-        let base = notchModeEnabled ? notchInputPanelHeightForCurrentScreen : 120
+        let base = notchModeEnabled ? notchInputPanelHeightForCurrentScreen : Self.pillInputPanelHeight
         // When notch mode renders the "Back / Omi Chat" header (agent pills
         // present), the input panel needs additional vertical room so the
         // header + editor + padding all fit. (Codex P2 — input/send clipping.)
-        if notchModeEnabled, !AgentPillsManager.shared.pills.isEmpty {
+        if !AgentPillsManager.shared.pills.isEmpty {
             return base + Self.notchChatHeaderVerticalBudget
         }
         return base
@@ -331,6 +352,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     static func screenHasCameraHousing(_ screen: NSScreen?) -> Bool {
+        // Testing hook: force the non-notch (pill) presentation on notched
+        // hardware so the fallback surface can be exercised locally. getenv so
+        // values loaded from the bundle .env (BundleEnvironment) are seen too.
+        if let forced = getenv("OMI_FORCE_NO_NOTCH"), String(cString: forced) == "1" { return false }
         guard let screen else { return false }
         if #available(macOS 12.0, *) {
             if let leftArea = screen.auxiliaryTopLeftArea,
@@ -415,6 +440,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func handleEscapeKey() {
         if FloatingBarVoicePlaybackService.shared.isSpeaking {
             FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+            return
+        }
+
+        if !state.showingAIConversation, !notchModeEnabled, state.isNotchHoverMenuVisible {
+            setPillAgentListVisible(false)
             return
         }
 
@@ -550,9 +580,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         frameIncludesVoiceGlow: Bool? = nil
     ) -> NSSize {
         if state.showingAIConversation {
-            let defaultWidth = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
+            let defaultWidth = Self.notchExpandedWidth
             let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
-            let panelHeight = usesNotchIsland ? notchInputPanelHeightForCurrentScreen : 120
+            let panelHeight = usesNotchIsland ? notchInputPanelHeightForCurrentScreen : Self.pillInputPanelHeight
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
             let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
             return NSSize(width: width, height: contentHeight)
@@ -579,9 +609,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func frameForCurrentState(on screen: NSScreen, usesNotchIsland: Bool) -> NSRect {
         let size: NSSize
         if state.showingAIConversation {
-            let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
-            let chromeHeight = usesNotchIsland ? Self.notchChromeHeight(for: screen) : 50
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight(for: screen) : 120
+            let width = Self.notchExpandedWidth
+            let chromeHeight = Self.notchChromeHeight(for: screen)
+            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight(for: screen) : Self.pillInputPanelHeight
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
             size = usesNotchIsland ? notchSize(sideWidth: Self.notchActiveSideWidth, for: screen) : Self.voiceBarSize
@@ -729,9 +759,31 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self,
-                      self.notchModeEnabled,
                       self.state.currentNotification == nil
                 else { return }
+
+                guard self.notchModeEnabled else {
+                    // Keep the pill agent list sized to its rows; close it
+                    // when the last agent disappears.
+                    if self.state.isNotchHoverMenuVisible {
+                        if AgentPillsManager.shared.pills.isEmpty {
+                            self.setPillAgentListVisible(false)
+                        } else if !self.state.showingAIConversation {
+                            self.resizeForAgentSwitcher(visible: true)
+                        }
+                        return
+                    }
+                    // Collapsed idle pill: apply/remove the status-glow window
+                    // outset promptly when agents appear or all disappear
+                    // (same reasoning as the voice-response glow observer).
+                    guard !self.state.showingAIConversation,
+                          !self.state.isVoiceListening,
+                          !self.state.isHoveringBar,
+                          self.state.currentNotification == nil
+                    else { return }
+                    self.resizeToFrame(self.canonicalCollapsedPillFrame(), makeResizable: false, animated: false)
+                    return
+                }
 
                 let targetSize: NSSize
                 if self.state.showingAIConversation {
@@ -769,9 +821,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 guard !self.notchModeEnabled else { return }
                 guard !self.state.showingAIConversation,
                       !self.state.isVoiceListening,
+                      !self.state.isHoveringBar,
+                      !self.state.isNotchHoverMenuVisible,
                       self.state.currentNotification == nil
                 else { return }
-                self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)
+                self.resizeToFrame(self.canonicalCollapsedPillFrame(), makeResizable: false, animated: false)
             }
     }
 
@@ -1031,18 +1085,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
             if notchModeEnabled {
                 state.notchRevealProgress = 1
-                resizeAnchored(
-                    to: inputSize,
-                    makeResizable: false,
-                    animated: true,
-                    animationDuration: 0.14,
-                    anchorTop: true
-                )
-            } else {
-                resizeAnchored(
-                    to: inputSize, makeResizable: false, animated: true,
-                    animationDuration: Self.askOmiAnimationDuration, anchorTop: true)
             }
+            resizeAnchored(
+                to: inputSize,
+                makeResizable: false,
+                animated: true,
+                animationDuration: Self.askOmiAnimationDuration,
+                anchorTop: true
+            )
 
             withAnimation(.easeOut(duration: Self.askOmiAnimationDuration)) {
                 state.present(.mainInput)
@@ -1065,7 +1115,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     func leaveAgentConversation() {
-        if state.usesNotchIsland, !AgentPillsManager.shared.pills.isEmpty {
+        if !AgentPillsManager.shared.pills.isEmpty {
             showAgentRowsFromConversation()
         } else {
             showMainConversationFromAgent()
@@ -1082,7 +1132,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
             state.hideConversationSurface()
         }
-        openNotchHoverMenuUntilExit()
+        if notchModeEnabled {
+            openNotchHoverMenuUntilExit()
+        } else {
+            setPillAgentListVisible(true)
+        }
     }
 
     private func showMainConversationFromAgent() {
@@ -1236,8 +1290,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             ? originForTopCenterAnchor(newSize: constrainedSize)
             : originForCenterAnchor(newSize: constrainedSize)
 
-        log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
-
         let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
         if animated, anchorTop, notchModeEnabled {
             let currentTopCenteredFrame = NSRect(
@@ -1264,11 +1316,29 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         animated: Bool = false,
         animationDuration: TimeInterval = 0.18
     ) {
+        let wasResizable = styleMask.contains(.resizable)
         if makeResizable {
             styleMask.insert(.resizable)
         } else {
             styleMask.remove(.resizable)
         }
+
+        let alreadyAtTarget = Self.framesEquivalent(frame, targetFrame)
+        let alreadyAnimatingToTarget = pendingFrameAnimationTarget.map {
+            Self.framesEquivalent($0, targetFrame)
+        } ?? false
+
+        if alreadyAtTarget, wasResizable == makeResizable {
+            frameAnimationToken += 1
+            pendingFrameAnimationTarget = nil
+            isResizingProgrammatically = false
+            return
+        }
+        if alreadyAnimatingToTarget, wasResizable == makeResizable {
+            return
+        }
+
+        log("FloatingControlBar: resizeToFrame to \(targetFrame.size) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
         isResizingProgrammatically = true
 
@@ -1284,9 +1354,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
+    private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool {
+        abs(lhs.origin.x - rhs.origin.x) <= frameNoopEpsilon
+            && abs(lhs.origin.y - rhs.origin.y) <= frameNoopEpsilon
+            && abs(lhs.size.width - rhs.size.width) <= frameNoopEpsilon
+            && abs(lhs.size.height - rhs.size.height) <= frameNoopEpsilon
+    }
+
     private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
         frameAnimationToken += 1
         let token = frameAnimationToken
+        pendingFrameAnimationTarget = frame
         let startFrame = self.frame
         let steps = max(1, Int((duration * 120).rounded()))
         for step in 1...steps {
@@ -1304,6 +1382,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 self.setFrame(interpolated, display: true, animate: false)
                 if step == steps {
                     self.setFrame(frame, display: true, animate: false)
+                    if self.frameAnimationToken == token {
+                        self.pendingFrameAnimationTarget = nil
+                    }
                     completion?()
                 }
             }
@@ -1359,8 +1440,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
-    func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return }
+    /// Returns false when a guard skipped the resize; the view must not render
+    /// expanded hover content in that case, or the oversized SwiftUI content
+    /// force-grows the window with the origin pinned (a rightward drift).
+    @discardableResult
+    func resizeForHover(expanded: Bool) -> Bool {
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return false }
+        // The pill agent list owns the window size while open; hover
+        // exits must not collapse it out from under the list.
+        guard notchModeEnabled || !state.isNotchHoverMenuVisible else { return false }
         guard !notchModeEnabled else {
             let targetSize = expanded
                 ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
@@ -1372,7 +1460,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 animationDuration: Self.askOmiAnimationDuration,
                 anchorTop: true
             )
-            return
+            return true
         }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
@@ -1387,10 +1475,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
-            let targetFrame = FloatingControlBarGeometry.centerAnchoredFrame(
-                currentFrame: self.frame,
-                targetSize: targetSize
-            )
+            // Expand grows outward from the current center; collapse snaps
+            // back to the canonical pill position so transient layout forces
+            // can never permanently drift the pill sideways.
+            let targetFrame = expanded
+                ? FloatingControlBarGeometry.centerAnchoredFrame(
+                    currentFrame: self.frame,
+                    targetSize: targetSize
+                )
+                : self.canonicalCollapsedPillFrame()
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
             self.setFrame(targetFrame, display: true, animate: false)
@@ -1411,22 +1504,109 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             resizeWorkItem = DispatchWorkItem(block: doResize)
             DispatchQueue.main.async(execute: resizeWorkItem!)
         }
+        return true
     }
 
-    /// Gives the notch-mode subagent switcher enough room to unfurl into a
-    /// centered stacked list without opening the full chat surface.
+    /// Canonical collapsed-pill frame on displays without a notch: the user's
+    /// saved (dragged) position when draggable, otherwise the default
+    /// top-center. Collapse-to-idle transitions snap here so transient layout
+    /// forces (e.g. oversized content briefly growing the window with the
+    /// origin pinned) can never permanently drift the pill sideways.
+    private func canonicalCollapsedPillFrame() -> NSRect {
+        let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: collapsedBarSize)
+        if ShortcutSettings.shared.draggableBarEnabled,
+           let saved = UserDefaults.standard.string(forKey: Self.positionKey) {
+            let origin = NSPointFromString(saved)
+            if origin != .zero {
+                // Saved origins are recorded for the bare pill; keep the pill's
+                // top-center fixed when the glow outset inflates the window.
+                let bare = Self.minBarSize
+                let topCenter = NSPoint(x: origin.x + bare.width / 2, y: origin.y + bare.height)
+                return NSRect(
+                    x: topCenter.x - windowSize.width / 2,
+                    y: topCenter.y - windowSize.height,
+                    width: windowSize.width,
+                    height: windowSize.height
+                )
+            }
+        }
+        return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
+    }
+
+    /// Gives the subagent switcher enough room to unfurl into a centered
+    /// stacked list without opening the full chat surface. Works in both
+    /// display modes; the non-notch (pill) window skips glow outsets.
     func resizeForAgentSwitcher(visible: Bool) {
-        guard notchModeEnabled,
-              !state.showingAIConversation,
+        guard !state.showingAIConversation,
               !state.isVoiceListening,
               !state.isShowingNotification,
               !suppressHoverResize
         else { return }
 
-        let targetSize = visible
-            ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
-            : collapsedBarSize
-        resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
+        if visible {
+            let expandedSize = notchModeEnabled
+                ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+                : pillAgentListWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+            resizeAnchored(to: expandedSize, makeResizable: false, animated: true, anchorTop: true)
+        } else if notchModeEnabled {
+            resizeAnchored(to: collapsedBarSize, makeResizable: false, animated: true, anchorTop: true)
+        } else {
+            // Collapse to the canonical pill position, not the current midX —
+            // see canonicalCollapsedPillFrame.
+            resizeToFrame(canonicalCollapsedPillFrame(), makeResizable: false, animated: true)
+        }
+    }
+
+    /// Window size for the pill-mode agent list. No chrome band and no glow
+    /// outsets — the surface starts at a slim top inset and fills the window.
+    private func pillAgentListWindowSize(agentCount: Int) -> NSSize {
+        NSSize(
+            width: Self.notchExpandedWidth,
+            height: Self.pillSurfaceTopPadding + Self.notchHoverMenuHeight(agentCount: agentCount)
+        )
+    }
+
+    private var pillListCollapseWorkItem: DispatchWorkItem?
+
+    /// Hover-driven agent list open/close for displays without a notch —
+    /// the pill-mode analog of the notch hover menu. Opens when the pointer
+    /// enters the pill, collapses when it leaves (see
+    /// `schedulePillAgentListCollapse`), and also closes on esc, click-away,
+    /// selecting an agent, or the last agent ending.
+    func setPillAgentListVisible(_ visible: Bool) {
+        guard !notchModeEnabled else { return }
+        pillListCollapseWorkItem?.cancel()
+        pillListCollapseWorkItem = nil
+        let allowed = visible
+            && state.canShowNotchHoverMenu
+            && !AgentPillsManager.shared.pills.isEmpty
+        guard state.notchHoverMenuOpen != allowed else { return }
+
+        if allowed {
+            // Resize before flipping state so the expanded list never renders
+            // in a too-small window (same ordering as the hover-expand path).
+            resizeForAgentSwitcher(visible: true)
+            state.setNotchHoverMenuOpen(true)
+        } else {
+            state.setNotchHoverMenuOpen(false)
+            resizeForAgentSwitcher(visible: false)
+        }
+    }
+
+    /// Collapse the pill agent list shortly after the pointer leaves it.
+    /// Delayed with a global-mouse recheck because SwiftUI hover events
+    /// flicker while the window resizes underneath the cursor.
+    func schedulePillAgentListCollapse() {
+        guard !notchModeEnabled, state.isNotchHoverMenuVisible else { return }
+        pillListCollapseWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.state.isNotchHoverMenuVisible else { return }
+            let mouse = NSEvent.mouseLocation
+            guard !self.frame.insetBy(dx: -8, dy: -8).contains(mouse) else { return }
+            self.setPillAgentListVisible(false)
+        }
+        pillListCollapseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: workItem)
     }
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
@@ -1672,8 +1852,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowDidResignKey(_ notification: Notification) {
-        guard state.showingAIConversation else { return }
-
         // Only dismiss when the user physically clicks away.
         // Programmatic focus changes — e.g. the AI agent activating a browser
         // window for automation — do NOT produce a mouse-down event, so we
@@ -1682,6 +1860,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let isMouseClick = eventType == .leftMouseDown
             || eventType == .rightMouseDown
             || eventType == .otherMouseDown
+
+        guard state.showingAIConversation else {
+            // The pinned pill agent list (non-notch) has no pointer-exit
+            // tracking, so click-away is one of its close affordances.
+            if isMouseClick, !notchModeEnabled, state.isNotchHoverMenuVisible {
+                setPillAgentListVisible(false)
+            }
+            return
+        }
         guard isMouseClick else { return }
 
         // Close in-place so the bar collapses smoothly instead of blinking out and back in.
@@ -1782,6 +1969,8 @@ class FloatingControlBarManager {
     private struct StoredNotificationMessage {
         let notification: FloatingBarNotification
         let context: FloatingBarNotificationContext?
+        let messageClientTurnId: String
+        let message: ChatMessage
         let createdAt: Date
     }
 
@@ -1792,16 +1981,14 @@ class FloatingControlBarManager {
 
     private var window: FloatingControlBarWindow?
     private var snoozeTimer: Timer?
-    private var pillsWindow: AgentPillsWindow?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     private var historyChatProvider: ChatProvider?
-    private var floatingChatProvider: ChatProvider?
 
     /// Public read-only access to the floating bar's chat provider so the
     /// agent pills manager can inherit the working directory / model.
-    var sharedFloatingProvider: ChatProvider? { floatingChatProvider }
+    var sharedFloatingProvider: ChatProvider? { historyChatProvider }
 
     /// Public read-only access to the currently-active agent chat pill in the
     /// floating bar, so viewed-pill expiration can skip the one the user is
@@ -1942,16 +2129,13 @@ class FloatingControlBarManager {
             self?.isEnabled = false
         }
 
-        // Keep the shared provider for syncing persisted messages into the main
-        // chat history, but use an isolated provider for floating-bar sends.
+        // Default floating/notch chat is a second view over the main chat provider.
+        // That keeps streamed deltas, unsynced local IDs, and prompt history in one
+        // canonical transcript instead of waiting for backend polling to reconcile.
         historyChatProvider = chatProvider
-        let floatingProvider = floatingChatProvider ?? ChatProvider()
-        floatingProvider.modelOverride = chatProvider.modelOverride
-        floatingProvider.workingDirectory = chatProvider.workingDirectory
-        floatingChatProvider = floatingProvider
 
-        barWindow.onSendQuery = { [weak self, weak barWindow, weak floatingProvider] message in
-            guard let self = self, let barWindow = barWindow, let provider = floatingProvider else { return }
+        barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message in
+            guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
             Task { @MainActor in
                 await self.withQueryTracer(query: message, fromVoice: false) {
                     await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
@@ -1959,8 +2143,8 @@ class FloatingControlBarManager {
             }
         }
 
-        barWindow.onRate = { [weak floatingProvider] messageId, rating in
-            guard let provider = floatingProvider else { return }
+        barWindow.onRate = { [weak chatProvider] messageId, rating in
+            guard let provider = chatProvider else { return }
             Task { @MainActor in
                 await provider.rateMessage(messageId, rating: rating)
             }
@@ -2032,32 +2216,6 @@ class FloatingControlBarManager {
             snoozedUntil = nil
         }
 
-        // Create the agent pills overlay window and anchor it under the bar.
-        let pills = AgentPillsWindow()
-        pills.attach(to: barWindow)
-        self.pillsWindow = pills
-
-        // Listen for "open in chat" requests from a pill so the user can
-        // continue an agent's task inline if they want.
-        NotificationCenter.default.addObserver(
-            forName: .agentPillRequestedChat, object: nil, queue: .main
-        ) { [weak barWindow] note in
-            guard let barWindow = barWindow else { return }
-            Task { @MainActor in
-                let pillIDString = note.userInfo?["pillID"] as? String
-                let pillID = pillIDString.flatMap(UUID.init(uuidString:))
-                barWindow.showAIConversation()
-                if let pillID,
-                   AgentPillsManager.shared.pills.contains(where: { $0.id == pillID }) {
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
-                        barWindow.state.present(.agent(pillID))
-                        barWindow.state.isAILoading = false
-                        barWindow.state.aiInputText = ""
-                    }
-                    barWindow.resizeForActiveAgentChatPublic(pillID: pillID, animated: false)
-                }
-            }
-        }
     }
 
     /// Whether the floating bar window is currently visible.
@@ -2219,7 +2377,7 @@ class FloatingControlBarManager {
             return ["error": "floating_bar_window_unavailable"]
         }
         let start = ContinuousClock.now
-        let expectsRows = window.state.usesNotchIsland && !AgentPillsManager.shared.pills.isEmpty
+        let expectsRows = !AgentPillsManager.shared.pills.isEmpty
         window.leaveAgentConversation()
         guard wait else {
             return [
@@ -2365,22 +2523,19 @@ class FloatingControlBarManager {
         presentNotification(nextNotification, in: window)
     }
 
-    /// Cancel any in-flight chat streaming.
-    func cancelChat(keepVoiceAlive: Bool = false) {
+    /// Detach the floating UI from any in-flight chat streaming.
+    func cancelChat(keepVoiceAlive: Bool = false, stopProvider: Bool = false) {
         activeQueryGeneration += 1
         pendingFollowUpQuery = nil
         chatCancellable?.cancel()
         chatCancellable = nil
-        // When voice playback is active, keep the provider session and audio
-        // alive so the spoken response survives the surface transition. The UI
-        // streaming subscription (chatCancellable) is still cancelled above so
-        // late-arriving chunks cannot re-present the surface after the user
-        // closed it. (Codex P2 — streaming reopens surface during playback.)
-        // Only interrupt the provider when we are NOT preserving voice; stopping
-        // mid-stream would truncate the spoken answer before remaining chunks
-        // reach TTS. (Codex P2 — do not stop streaming when preserving voice.)
-        if !keepVoiceAlive {
-            activeFloatingProvider()?.stopAgent()
+        // Floating close/hide is presentation-only now that default floating
+        // chat shares the main provider. Only explicit floating barge-ins should
+        // interrupt, and those go through owner-aware routeQuery checks.
+        if stopProvider, !keepVoiceAlive {
+            let provider = activeFloatingProvider()
+            _ = provider?.stopAgent(owner: .floatingDefault)
+            _ = provider?.stopAgent(owner: .floatingVoice)
         }
         if !keepVoiceAlive {
             FloatingBarVoicePlaybackService.shared.stop()
@@ -2559,17 +2714,22 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         presentation: QueryPresentation
     ) async {
+        let turnOwner = chatTurnOwner(for: presentation)
         let directive = AgentPillsManager.providerDirective(
             from: message,
             contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)
         )
         let handoff = AgentPillsManager.floatingAgentHandoff(for: message)
         if provider.isSending, directive == nil, handoff == nil {
+            guard provider.canInterruptActiveTurn(owner: turnOwner) else {
+                showSharedProviderBusy(in: barWindow, presentation: presentation)
+                return
+            }
             pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
             if case .visible(let fromVoice) = presentation {
                 prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
             }
-            provider.stopAgent()
+            provider.stopAgent(owner: turnOwner)
             return
         }
 
@@ -2583,90 +2743,51 @@ class FloatingControlBarManager {
         let routerTracer = QueryTracerContext.current
         if let directive {
             if provider.isSending {
+                guard provider.canInterruptActiveTurn(owner: turnOwner) else {
+                    showSharedProviderBusy(in: barWindow, presentation: presentation)
+                    return
+                }
                 pendingFollowUpQuery = nil
-                provider.stopAgent()
+                provider.stopAgent(owner: turnOwner)
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
-            let availability = LocalAgentProviderDetector.availability(for: directive.provider)
-            guard availability.isAvailable else {
-                let assistantText = availability.setupPrompt
-                let recordedTurn = provider.recordCompletedTurn(
-                    userText: message,
-                    assistantText: assistantText,
-                    logLabel: "floating-agent-provider-unavailable"
-                )
-                switch presentation {
-                case .visible:
-                    completeVisibleAgentResponse(
-                        userText: message,
-                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
-                        barWindow: barWindow
-                    )
-                case .voiceOnly:
-                    barWindow.state.currentQueryFromVoice = false
-                    barWindow.state.isVoiceResponseActive = false
-                    FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)
-                }
-                return
-            }
-            let pill = AgentPillsManager.shared.spawnFromUserQuery(
-                directive.rewrittenQuery,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice,
-                preFetchedTitle: directive.title,
-                preFetchedAck: directive.ack,
-                bridgeHarnessOverride: directive.provider.harnessMode
-            )
-            let assistantText = "I started \(directive.provider.displayName) in a background agent titled \"\(pill.title)\"."
-            let recordedTurn = provider.recordCompletedTurn(
-                userText: message,
-                assistantText: assistantText,
+            await resolveDelegationAndDispatch(
+                originalRequest: message,
+                proposedBrief: directive.rewrittenQuery,
+                proposedTitle: directive.title,
+                proposedAck: directive.ack,
+                directedProvider: directive.provider,
+                explicitDelegationRequested: true,
+                barWindow: barWindow,
+                provider: provider,
+                presentation: presentation,
                 logLabel: "floating-agent-provider"
             )
-            switch presentation {
-            case .visible:
-                completeVisibleAgentHandoff(
-                    .init(originalRequest: message, agentTask: directive.rewrittenQuery),
-                    assistantMessage: recordedTurn.assistant,
-                    assistantText: assistantText,
-                    barWindow: barWindow
-                )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
-            }
             return
         }
 
         if let handoff {
             if provider.isSending {
+                guard provider.canInterruptActiveTurn(owner: turnOwner) else {
+                    showSharedProviderBusy(in: barWindow, presentation: presentation)
+                    return
+                }
                 pendingFollowUpQuery = nil
-                provider.stopAgent()
+                provider.stopAgent(owner: turnOwner)
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "source": "explicit"])
-            let pill = AgentPillsManager.shared.spawnFromHandoff(
-                handoff,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice
-            )
-            let assistantText = "I started a background agent titled \"\(pill.title)\" for that."
-            let recordedTurn = provider.recordCompletedTurn(
-                userText: handoff.originalRequest,
-                assistantText: assistantText,
+            await resolveDelegationAndDispatch(
+                originalRequest: handoff.originalRequest,
+                proposedBrief: handoff.agentTask,
+                proposedTitle: nil,
+                proposedAck: nil,
+                directedProvider: nil,
+                explicitDelegationRequested: true,
+                barWindow: barWindow,
+                provider: provider,
+                presentation: presentation,
                 logLabel: "floating-agent-explicit"
             )
-            switch presentation {
-            case .visible:
-                completeVisibleAgentHandoff(
-                    handoff,
-                    assistantMessage: recordedTurn.assistant,
-                    assistantText: assistantText,
-                    barWindow: barWindow
-                )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
-            }
             return
         }
 
@@ -2688,38 +2809,157 @@ class FloatingControlBarManager {
         let decision = await AgentPillsManager.classify(message)
         routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
-            _ = AgentPillsManager.shared.spawnFromUserQuery(
-                message,
-                model: selectedFloatingModel,
-                fromVoice: presentation.fromVoice,
-                preFetchedTitle: decision.title,
-                preFetchedAck: decision.ack
-            )
-            let title = decision.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
-            let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let assistantText = ack?.isEmpty == false
-                ? "\(ack!) I started a background agent\(titleSuffix) for that."
-                : "I started a background agent\(titleSuffix) for that."
-            provider.recordCompletedTurn(
-                userText: message,
-                assistantText: assistantText,
+            await resolveDelegationAndDispatch(
+                originalRequest: message,
+                proposedBrief: message,
+                proposedTitle: decision.title,
+                proposedAck: decision.ack,
+                directedProvider: nil,
+                explicitDelegationRequested: false,
+                barWindow: barWindow,
+                provider: provider,
+                presentation: presentation,
                 logLabel: "floating-agent"
             )
-            switch presentation {
-            case .visible:
-                // Tear down the inline state we set up for the thinking spinner.
-                barWindow.state.aiInputText = ""
-                barWindow.closeAIConversation()
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.isVoiceResponseActive = false
-            }
             return
         }
 
         // Chat route: continue with the requested delivery surface.
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func resolveDelegationAndDispatch(
+        originalRequest: String,
+        proposedBrief: String,
+        proposedTitle: String?,
+        proposedAck: String?,
+        directedProvider: AgentPillsManager.DirectedProvider?,
+        explicitDelegationRequested: Bool,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        presentation: QueryPresentation,
+        logLabel: String
+    ) async {
+        let decision = await AgentDelegationResolver.shared.resolve(
+            .init(
+                surface: .floatingText,
+                userText: originalRequest,
+                proposedBrief: proposedBrief,
+                proposedTitle: proposedTitle,
+                proposedAck: proposedAck,
+                directedProvider: directedProvider,
+                topLevelContext: topLevelVoiceContinuityContext(),
+                agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
+                explicitDelegationRequested: explicitDelegationRequested
+            )
+        )
+
+        guard decision.action == .spawn, let brief = decision.brief?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !brief.isEmpty
+        else {
+            let assistantText = decision.userFacingText
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: originalRequest,
+                assistantText: assistantText,
+                logLabel: "\(logLabel)-resolver-\(decision.action.rawValue)"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentResponse(
+                    userText: originalRequest,
+                    assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+                FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
+            }
+            return
+        }
+
+        let resolvedProvider = decision.directedProvider ?? directedProvider
+        if let resolvedProvider {
+            let availability = LocalAgentProviderDetector.availability(for: resolvedProvider)
+            guard availability.isAvailable else {
+                let assistantText = availability.setupPrompt
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: originalRequest,
+                    assistantText: assistantText,
+                    logLabel: "\(logLabel)-provider-unavailable"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentResponse(
+                        userText: originalRequest,
+                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)
+                }
+                return
+            }
+        }
+
+        guard let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+            .init(
+                originalUserText: originalRequest,
+                brief: brief,
+                title: decision.title ?? proposedTitle,
+                spokenAck: decision.ack ?? proposedAck,
+                directedProvider: resolvedProvider
+            ),
+            model: selectedFloatingModel,
+            fromVoice: presentation.fromVoice
+        ) else {
+            let assistantText = "What should the background agent do?"
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: originalRequest,
+                assistantText: assistantText,
+                logLabel: "\(logLabel)-invalid-brief"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentResponse(
+                    userText: originalRequest,
+                    assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+                FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
+            }
+            return
+        }
+        let title = (decision.title ?? proposedTitle)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
+        let providerPrefix = resolvedProvider.map { "\($0.displayName) in " } ?? ""
+        let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistantText = ack?.isEmpty == false
+            ? "\(ack!) I started \(providerPrefix)a background agent\(titleSuffix) for that."
+            : "I started \(providerPrefix)a background agent\(titleSuffix) for that."
+        let recordedTurn = provider.recordCompletedTurn(
+            userText: originalRequest,
+            assistantText: assistantText,
+            logLabel: logLabel
+        )
+        switch presentation {
+        case .visible:
+            completeVisibleAgentHandoff(
+                .init(originalRequest: originalRequest, agentTask: brief),
+                pill: pill,
+                assistantMessage: recordedTurn.assistant,
+                assistantText: assistantText,
+                barWindow: barWindow
+            )
+        case .voiceOnly:
+            barWindow.state.currentQueryFromVoice = false
+            barWindow.state.isVoiceResponseActive = false
+        }
     }
 
     private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
@@ -2746,17 +2986,93 @@ class FloatingControlBarManager {
         }
     }
 
+    private func chatTurnOwner(for presentation: QueryPresentation) -> ChatTurnOwner {
+        switch presentation {
+        case .visible(let fromVoice):
+            return fromVoice ? .floatingVoice : .floatingDefault
+        case .voiceOnly:
+            return .floatingVoice
+        }
+    }
+
+    private func showSharedProviderBusy(in barWindow: FloatingControlBarWindow, presentation: QueryPresentation) {
+        let message = ChatMessage(text: "Omi is already responding in the app.", sender: .ai)
+        switch presentation {
+        case .visible:
+            chatCancellable?.cancel()
+            chatCancellable = nil
+            barWindow.state.aiInputText = ""
+            barWindow.state.displayedQuery = ""
+            barWindow.state.currentQuestionMessageId = nil
+            barWindow.state.currentAIMessage = message
+            barWindow.state.isAILoading = false
+            barWindow.state.currentQueryFromVoice = false
+            barWindow.state.isVoiceResponseActive = false
+            barWindow.state.present(.mainResponse)
+            barWindow.state.markConversationActivity()
+            barWindow.resizeToResponseHeightPublic(animated: true)
+        case .voiceOnly:
+            FloatingBarVoicePlaybackService.shared.speakOneShot(message.text)
+        }
+    }
+
     private func completeVisibleAgentHandoff(
         _ handoff: AgentPillsManager.FloatingAgentHandoff,
+        pill: AgentPill,
         assistantMessage: ChatMessage?,
         assistantText: String,
         barWindow: FloatingControlBarWindow
     ) {
+        var message = assistantMessage ?? ChatMessage(text: assistantText, sender: .ai)
+        message.isStreaming = false
+        let toolUseId = "floating-agent-\(pill.id.uuidString)"
+        if !message.contentBlocks.contains(where: { block in
+            if case .toolCall(_, let name, _, let existingToolUseId, _, _) = block {
+                return name == "spawn_agent" && existingToolUseId == toolUseId
+            }
+            return false
+        }) {
+            let details = Self.agentHandoffToolDetails(task: handoff.agentTask, title: pill.title)
+            let input = ToolCallInput(
+                summary: pill.title,
+                details: details
+            )
+            let output = """
+            Agent started as a floating agent pill.
+            id: \(pill.id.uuidString)
+            title: \(pill.title)
+            status: \(pill.status.displayLabel)
+            """
+            message.contentBlocks.append(
+                .toolCall(
+                    id: UUID().uuidString,
+                    name: "spawn_agent",
+                    status: .completed,
+                    toolUseId: toolUseId,
+                    input: input,
+                    output: output
+                )
+            )
+        }
         completeVisibleAgentResponse(
             userText: handoff.originalRequest,
-            assistantMessage: assistantMessage ?? ChatMessage(text: assistantText, sender: .ai),
+            assistantMessage: message,
             barWindow: barWindow
         )
+    }
+
+    private static func agentHandoffToolDetails(task: String, title: String) -> String {
+        let payload: [String: String] = [
+            "brief": task,
+            "title": title,
+        ]
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+            let json = String(data: data, encoding: .utf8)
+        else {
+            return "brief: \(task)\ntitle: \(title)"
+        }
+        return json
     }
 
     private func completeVisibleAgentResponse(
@@ -2811,9 +3127,14 @@ class FloatingControlBarManager {
         }
 
         if provider.isSending {
+            let turnOwner = chatTurnOwner(for: .visible(fromVoice: fromVoice))
+            guard provider.canInterruptActiveTurn(owner: turnOwner) else {
+                showSharedProviderBusy(in: window, presentation: .visible(fromVoice: fromVoice))
+                return
+            }
             pendingFollowUpQuery = PendingFollowUpQuery(text: query, presentation: .visible(fromVoice: fromVoice))
             prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
-            provider.stopAgent()
+            provider.stopAgent(owner: turnOwner)
             return
         }
 
@@ -2904,20 +3225,23 @@ class FloatingControlBarManager {
     private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
         guard storedNotificationMessages[notification.id] == nil else { return }
 
-        // Also append the notification as an assistant message in the main chat
-        // history provider so it is visible on the home-page chat and synced to
-        // the backend. The floating bar still uses its own provider for follow-up
-        // questions (see openNotificationConversation), so this append does not
-        // affect the floating-bar session in any way.
-        if let historyProvider = historyChatProvider {
-            let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
-            let messageText = bodyText.isEmpty ? notification.title : bodyText
-            _ = historyProvider.appendAssistantMessage(messageText)
-        }
+        // Also append the notification as an assistant message in the shared
+        // main chat provider so it is visible on both the home-page chat and the
+        // floating/notch chat without waiting for backend polling.
+        let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageText = bodyText.isEmpty ? notification.title : bodyText
+        let messageClientTurnId = "notification:\(notification.id.uuidString)"
+        let storedMessage = historyChatProvider?.appendAssistantMessage(
+            messageText,
+            clientTurnId: messageClientTurnId
+        )
+            ?? ChatMessage(text: messageText, sender: .ai)
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
             notification: notification,
             context: notification.context,
+            messageClientTurnId: messageClientTurnId,
+            message: storedMessage,
             createdAt: Date()
         )
         mostRecentNotificationID = notification.id
@@ -2929,6 +3253,36 @@ class FloatingControlBarManager {
     /// only way voice turns reach chat history. No-op if the bar isn't set up yet.
     func recordVoiceTurn(userText: String, assistantText: String) {
         historyChatProvider?.recordVoiceTurn(userText: userText, assistantText: assistantText)
+    }
+
+    func recordVoiceAgentHandoff(userText: String, agentTitle: String, agentBrief: String) {
+        let title = agentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let brief = agentBrief.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistantText = "Started background agent\(title.isEmpty ? "" : " \"\(title)\"")\(brief.isEmpty ? "." : " for: \(brief)")"
+        historyChatProvider?.recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: "voice_agent_handoff",
+            messageSource: "realtime_voice"
+        )
+    }
+
+    func topLevelVoiceContinuityContext() -> String {
+        var sections: [String] = []
+        if let history = historyChatProvider?.buildTopLevelVoiceContinuityContext(),
+           !history.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sections.append(history)
+        }
+        // Use a stable signal (pills.isEmpty) rather than parsing a
+        // human-readable English substring from statusSummary().
+        if !AgentPillsManager.shared.pills.isEmpty {
+            let floatingStatus = AgentPillsManager.shared.statusSummary()
+            sections.append("""
+            Recent floating background agents:
+            \(floatingStatus)
+            """)
+        }
+        return sections.joined(separator: "\n\n")
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
@@ -2944,8 +3298,9 @@ class FloatingControlBarManager {
               Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval else {
             return false
         }
-        guard let provider = activeFloatingProvider() else { return false }
-
+        let notificationMessage = historyChatProvider?.messages.last(where: {
+            $0.clientTurnId == stored.messageClientTurnId
+        }) ?? stored.message
         notificationDismissWorkItem?.cancel()
         notificationDismissWorkItem = nil
         pendingNotifications.removeAll { $0.id == notificationID }
@@ -2962,10 +3317,6 @@ class FloatingControlBarManager {
         } else if window.state.hasVisibleConversation {
             window.state.clearVisibleConversation()
         }
-
-        let bodyText = stored.notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        let messageText = bodyText.isEmpty ? stored.notification.title : bodyText
-        let notificationMessage = provider.appendAssistantMessage(messageText) ?? ChatMessage(text: messageText, sender: .ai)
 
         window.state.present(.mainResponse)
         window.state.isAILoading = false
@@ -2987,7 +3338,7 @@ class FloatingControlBarManager {
         )
         floatingSessionKey = "floating"
         Task {
-            await provider.invalidateAgentSession(sessionKey: "floating")
+            await activeFloatingProvider()?.invalidateAgentSession(sessionKey: "floating")
         }
         storedNotificationMessages.removeValue(forKey: notificationID)
         if mostRecentNotificationID == notificationID {
@@ -3024,12 +3375,7 @@ class FloatingControlBarManager {
     }
 
     private func activeFloatingProvider() -> ChatProvider? {
-        guard let floatingProvider = floatingChatProvider else { return nil }
-        if let sharedProvider = historyChatProvider {
-            floatingProvider.modelOverride = sharedProvider.modelOverride
-            floatingProvider.workingDirectory = sharedProvider.workingDirectory
-        }
-        return floatingProvider
+        historyChatProvider
     }
 
     /// Access the bar state for PTT updates.
@@ -3229,9 +3575,7 @@ class FloatingControlBarManager {
 
         // Provider is already initialized by ViewModelContainer at app launch
 
-        // Record message count before sending so we can detect the new AI response
-        // in a shared provider that may already have many messages
-        let messageCountBefore = provider.messages.count
+        let clientTurnId = UUID().uuidString
 
         // Observe messages for streaming response
         chatCancellable?.cancel()
@@ -3243,10 +3587,9 @@ class FloatingControlBarManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak barWindow] messages in
                 guard let self, self.isActiveQueryGeneration(generation) else { return }
-                // Find the AI response message added after our query
-                guard messages.count > messageCountBefore,
-                      let aiMessage = messages.last,
-                      aiMessage.sender == .ai else { return }
+                guard let aiMessage = messages.last(where: {
+                    $0.clientTurnId == clientTurnId && $0.sender == .ai
+                }) else { return }
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
@@ -3281,7 +3624,9 @@ class FloatingControlBarManager {
             systemPromptSuffix: notificationContextSuffix,
             systemPromptStyle: .floating,
             sessionKey: floatingSessionKey,
-            imageData: screenshotData
+            imageData: screenshotData,
+            turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
+            clientTurnId: clientTurnId
         )
 
         if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
@@ -3289,11 +3634,14 @@ class FloatingControlBarManager {
         }
 
         guard isActiveQueryGeneration(generation) else { return }
-        let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
-        if let syncedUserMessage = newMessages.last(where: { $0.sender == .user && $0.text == message && $0.isSynced }) {
+        if let syncedUserMessage = provider.messages.last(where: {
+            $0.clientTurnId == clientTurnId && $0.sender == .user && $0.isSynced
+        }) {
             barWindow.state.currentQuestionMessageId = syncedUserMessage.id
         }
-        if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
+        if let finalAIMessage = provider.messages.last(where: {
+            $0.clientTurnId == clientTurnId && $0.sender == .ai
+        }) {
             barWindow.state.currentAIMessage = finalAIMessage
         }
         // Cancel the messages subscription now that streaming is done.
@@ -3380,16 +3728,15 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
-        let messageCountBefore = provider.messages.count
+        let clientTurnId = UUID().uuidString
         chatCancellable?.cancel()
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
             .sink { [weak self] messages in
                 guard let self, self.isActiveQueryGeneration(generation) else { return }
-                guard messages.count > messageCountBefore,
-                      let aiMessage = messages.last,
-                      aiMessage.sender == .ai
-                else { return }
+                guard let aiMessage = messages.last(where: {
+                    $0.clientTurnId == clientTurnId && $0.sender == .ai
+                }) else { return }
                 FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
                     aiMessage,
                     isFinal: !aiMessage.isStreaming
@@ -3402,7 +3749,9 @@ class FloatingControlBarManager {
             model: selectedFloatingModel,
             systemPromptStyle: .floating,
             sessionKey: floatingSessionKey,
-            imageData: screenshotData
+            imageData: screenshotData,
+            turnOwner: .floatingVoice,
+            clientTurnId: clientTurnId
         )
 
         if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
@@ -3410,8 +3759,9 @@ class FloatingControlBarManager {
         }
 
         guard isActiveQueryGeneration(generation) else { return }
-        let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
-        if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
+        if let finalAIMessage = provider.messages.last(where: {
+            $0.clientTurnId == clientTurnId && $0.sender == .ai
+        }) {
             FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
         } else if let errorText = provider.errorMessage, !errorText.isEmpty {
             FloatingBarVoicePlaybackService.shared.speakOneShot(errorText)
@@ -3529,7 +3879,7 @@ extension FloatingControlBarWindow {
     /// Resize the window to the normal Ask Omi input height after exiting an
     /// agent surface to `.mainInput`. Cancels the response-height observer and
     /// installs the input-height observer so non-Notch displays preserve the
-    /// legacy "back to Omi chat" behavior instead of using Notch row navigation.
+    /// pill-mode "back to Omi chat" behavior instead of using Notch row navigation.
     func resizeForMainInputAfterAgentExit() {
         responseHeightCancellable?.cancel()
         responseHeightCancellable = nil
@@ -3566,6 +3916,14 @@ extension FloatingControlBarWindow {
             setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: false)
             isResizingProgrammatically = false
             pendingRestoreOrigin = nil
+        }
+        if !notchModeEnabled, state.isNotchHoverMenuVisible {
+            // Chat is opening from the taller pill agent list. The pill's true
+            // center is the list's top-center minus half a pill — recording the
+            // list frame's midpoint would drop the restored pill lower every
+            // open/close cycle.
+            preChatCenter = NSPoint(x: frame.midX, y: frame.maxY - size.height / 2)
+            return
         }
         preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
     }

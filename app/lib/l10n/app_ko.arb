@@ -3103,5 +3103,6 @@
     "deviceOnboardingIntroSubtitle": "Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.",
     "deviceOnboardingIntroDuration": "약 1분",
     "jumpToLatestMessage": "최신 메시지로 이동",
-    "latest": "최신"
+    "latest": "최신",
+    "flashFirmware": "펌웨어 플래시"
 }

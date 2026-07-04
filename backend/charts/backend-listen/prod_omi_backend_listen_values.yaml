@@ -103,6 +103,8 @@ env:
         key: OPENAI_API_KEY
   - name: OMI_LLM_GATEWAY_URL
     value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
+  - name: OMI_ENV_STAGE
+    value: "prod"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -260,6 +262,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
+  - name: MEMORY_TYPESENSE_COLLECTION
+    value: "canonical_memory_atoms"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: DEEPGRAM_SELF_HOSTED_URL

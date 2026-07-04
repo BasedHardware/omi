@@ -10681,5 +10681,6 @@
     "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
     "deviceOnboardingIntroDuration": "Mga 1 minuto",
     "jumpToLatestMessage": "Tumalon sa pinakabagong mensahe",
-    "latest": "Pinakabago"
+    "latest": "Pinakabago",
+    "flashFirmware": "I-flash ang Firmware"
 }

@@ -161,6 +161,7 @@ struct TaskRowView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     TasksWidget(
         overdueTasks: [],
@@ -172,3 +173,4 @@ struct TaskRowView: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
+#endif

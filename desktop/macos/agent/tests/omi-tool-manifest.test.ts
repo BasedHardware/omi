@@ -22,10 +22,18 @@ describe("omi tool manifest", () => {
       "get_task_agent_status",
       "list_agent_sessions",
       "get_agent_run",
+      "build_desktop_awareness_snapshot",
+      "list_desktop_action_queue",
+      "get_desktop_open_loops",
+      "build_desktop_context_packet",
+      "route_desktop_intent",
+      "evaluate_desktop_tool_policy",
+      "create_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
+      "spawn_background_agent",
       "delegate_agent",
       "fill_cloud_connector_form",
       "spawn_agent",
@@ -44,6 +52,7 @@ describe("omi tool manifest", () => {
       "update_action_item",
       "capture_screen",
     ]);
+    expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
 
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {

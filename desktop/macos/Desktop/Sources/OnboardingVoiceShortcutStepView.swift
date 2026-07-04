@@ -85,6 +85,7 @@ struct OnboardingVoiceShortcutStepView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }

@@ -48,9 +48,9 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
-/// Keep non-streaming upstream calls comfortably below Cloud Run's 300s request
-/// deadline so the proxy owns timeout mapping and logging.
-const GEMINI_UPSTREAM_TIMEOUT: Duration = Duration::from_secs(120);
+/// Keep non-streaming upstream calls below observed Cloud Run request boundaries
+/// so the proxy owns timeout mapping and desktop clients get a retryable error.
+const GEMINI_UPSTREAM_TIMEOUT: Duration = Duration::from_secs(90);
 
 /// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
 /// use a total response timeout because long SSE replies are expected.
@@ -129,12 +129,70 @@ fn duration_bucket(elapsed: Duration) -> &'static str {
     }
 }
 
+fn log_upstream_result(
+    provider: &str,
+    model: &str,
+    action: &str,
+    payload_bucket: &str,
+    started: Instant,
+    phase: &str,
+    status: &str,
+) {
+    tracing::info!(
+        "gemini_proxy: upstream_result provider={} model={} action={} payload_bucket={} duration_bucket={} phase={} status={}",
+        provider,
+        model,
+        action,
+        payload_bucket,
+        duration_bucket(started.elapsed()),
+        phase,
+        status
+    );
+}
+
 fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
     let error = error.without_url();
     if error.is_timeout() {
         tracing::warn!("gemini_proxy: {} timed out: {}", operation, error);
         ProxyError::UpstreamTimeout
     } else {
+        tracing::error!("gemini_proxy: {} failed: {}", operation, error);
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
+    }
+}
+
+fn map_upstream_error_with_context(
+    error: reqwest::Error,
+    operation: &str,
+    provider: &str,
+    model: &str,
+    action: &str,
+    payload_bucket: &str,
+    started: Instant,
+) -> ProxyError {
+    let error = error.without_url();
+    if error.is_timeout() {
+        log_upstream_result(
+            provider,
+            model,
+            action,
+            payload_bucket,
+            started,
+            operation,
+            "timeout",
+        );
+        tracing::warn!("gemini_proxy: {} timed out: {}", operation, error);
+        ProxyError::UpstreamTimeout
+    } else {
+        log_upstream_result(
+            provider,
+            model,
+            action,
+            payload_bucket,
+            started,
+            operation,
+            "transport_error",
+        );
         tracing::error!("gemini_proxy: {} failed: {}", operation, error);
         ProxyError::Status(StatusCode::BAD_GATEWAY)
     }
@@ -212,15 +270,9 @@ async fn gemini_proxy(
         }
 
         // Non-BYOK path: use server key with Vertex AI / AI Studio routing
-        let response = gemini_proxy_server_key(
-            &state,
-            &user,
-            &effective_path,
-            action,
-            model,
-            &sanitized_body,
-        )
-        .await?;
+        let response =
+            gemini_proxy_server_key(&state, &effective_path, action, model, &sanitized_body)
+                .await?;
         if response.status().is_success() {
             tracing::info!(
                 "gemini_proxy: forwarded uid={} path={}",
@@ -248,22 +300,39 @@ async fn gemini_proxy(
         .body(sanitized_body)
         .send()
         .await
-        .map_err(|e| map_upstream_error(e, "BYOK upstream request"))?;
+        .map_err(|e| {
+            map_upstream_error_with_context(
+                e,
+                "request",
+                "ai_studio_byok",
+                model,
+                action,
+                request_payload_bucket,
+                started,
+            )
+        })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream
-        .bytes()
-        .await
-        .map_err(|e| map_upstream_error(e, "BYOK upstream body read"))?;
-    tracing::info!(
-        "gemini_proxy: upstream_result uid={} provider=ai_studio_byok model={} action={} payload_bucket={} duration_bucket={} status={}",
-        user.uid,
+    let bytes = upstream.bytes().await.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "body_read",
+            "ai_studio_byok",
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
+    log_upstream_result(
+        "ai_studio_byok",
         model,
         action,
         request_payload_bucket,
-        duration_bucket(started.elapsed()),
-        status.as_u16()
+        started,
+        "complete",
+        &status.as_u16().to_string(),
     );
 
     Ok((status, bytes).into_response())
@@ -273,7 +342,6 @@ async fn gemini_proxy(
 /// rate limiting, model degradation, and body transforms.
 async fn gemini_proxy_server_key(
     state: &AppState,
-    user: &AuthUser,
     effective_path: &str,
     action: &str,
     model: &str,
@@ -390,23 +458,39 @@ async fn gemini_proxy_server_key(
             .await
     };
 
-    let upstream = upstream.map_err(|e| map_upstream_error(e, "upstream request"))?;
+    let upstream = upstream.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "request",
+            upstream_provider,
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream
-        .bytes()
-        .await
-        .map_err(|e| map_upstream_error(e, "upstream body read"))?;
-    tracing::info!(
-        "gemini_proxy: upstream_result uid={} provider={} model={} action={} payload_bucket={} duration_bucket={} status={}",
-        user.uid,
+    let bytes = upstream.bytes().await.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "body_read",
+            upstream_provider,
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
+    log_upstream_result(
         upstream_provider,
         model,
         action,
         request_payload_bucket,
-        duration_bucket(started.elapsed()),
-        status.as_u16()
+        started,
+        "complete",
+        &status.as_u16().to_string(),
     );
 
     // Apply response transform if needed (e.g., Vertex predict → AI Studio embed format)
@@ -959,7 +1043,8 @@ mod tests {
     #[test]
     fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
         assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_UPSTREAM_TIMEOUT);
-        assert!(GEMINI_UPSTREAM_TIMEOUT < Duration::from_secs(300));
+        assert!(GEMINI_UPSTREAM_TIMEOUT <= Duration::from_secs(90));
+        assert!(GEMINI_UPSTREAM_TIMEOUT < Duration::from_secs(120));
     }
 
     #[test]

@@ -145,6 +145,8 @@ extension TaskPromptEditorWindow: NSWindowDelegate {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     TaskPromptEditorView()
 }
+#endif
