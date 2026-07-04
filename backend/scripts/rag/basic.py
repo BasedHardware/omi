@@ -23,13 +23,13 @@ def visualize() -> None:
     target = 5
 
     data = get_data(query, top_k=top_k)
-    embeddings = cast('np.ndarray', np.array([item[1] for item in data]))
+    embeddings = cast(Any, np.array([item[1] for item in data]))
 
     query_embedding = openai_embeddings.embed_query(query)
-    all_embeddings = cast('np.ndarray', np.vstack([embeddings, query_embedding]))
+    all_embeddings = cast(Any, np.vstack([embeddings, query_embedding]))
 
-    umap_transform = umap.UMAP(n_components=2, random_state=0, transform_seed=0)
-    umap_embeddings = cast(Any, umap_transform.fit_transform(all_embeddings))
+    umap_transform = cast(Any, umap.UMAP(n_components=2, random_state=0, transform_seed=0))
+    umap_embeddings = umap_transform.fit_transform(all_embeddings)
 
     # Separate the query point from the rest
     query_point = umap_embeddings[-1]

@@ -2,6 +2,7 @@ import base64
 import json
 import mimetypes
 import os
+from typing import Any, Dict, List, cast
 
 import fal_client
 from groq import Groq
@@ -22,7 +23,7 @@ filename = 'data/more/18-42-24-841626.wav'
 # filename = 'data/more/18-45-32-069108.wav'
 
 
-def execute():
+def execute() -> None:
     client = OpenAI()
     with open(filename, "rb") as file:
         transcription = client.audio.transcriptions.create(
@@ -33,9 +34,9 @@ def execute():
             language="en",
             temperature=0.0,
         )
-        segments = transcription.json()
+        segments = transcription.model_dump_json()
         print(segments)
-        data = json.loads(segments).get('segments', [])
+        data: List[Dict[str, Any]] = json.loads(segments).get('segments', [])
         for segment in data:
             print(segment['start'], segment['end'], segment['text'])
 
@@ -82,7 +83,7 @@ def diarization(content: str):
     return response.choices[0].message.content
 
 
-def file_to_base64_url(file_path):
+def file_to_base64_url(file_path: str) -> str:
     # Determine the MIME type of the file
     mime_type, _ = mimetypes.guess_type(file_path)
     if not mime_type:
@@ -107,7 +108,7 @@ def fal():
 
 
 @timeit
-def fal_whisperx():
+def fal_whisperx() -> List[Dict[str, Any]]:
     if not has_audio():
         return []
     handler = fal_client.submit(
@@ -124,7 +125,7 @@ def fal_whisperx():
     )
 
     result = handler.get()
-    chunks = result.get('chunks', [])
+    chunks: List[Dict[str, Any]] = result.get('chunks', [])
     for chunk in chunks:
         chunk['start'] = chunk['timestamp'][0]
         chunk['end'] = chunk['timestamp'][1]
@@ -133,22 +134,25 @@ def fal_whisperx():
     return chunks
 
 
-import torch
+import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 
-torch.set_num_threads(1)
+# torch ships without type stubs; alias as Any to avoid cascading unknown-member warnings.
+_torch: Any = cast(Any, torch)
 
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+_torch.set_num_threads(1)
+
+model, utils = _torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
 get_speech_timestamps, _, read_audio, _, _ = utils
 
 
 @timeit
-def has_audio():
+def has_audio() -> bool:
     wav = read_audio(filename)
     speech_timestamps = get_speech_timestamps(wav, model, sampling_rate=8000)
     return len(speech_timestamps) > 0
 
 
-def retrieve_proper_segment_points(file_path):
+def retrieve_proper_segment_points(file_path: str) -> List[Any]:
     wav = read_audio(file_path)
     speech_timestamps = get_speech_timestamps(wav, model, sampling_rate=8000)
     if not speech_timestamps:
@@ -164,7 +168,7 @@ if __name__ == '__main__':
         filename = f'../audioSamples/{path}'
         transcription = execute_groq()
         # transcription = fal()
-        print(diarization(transcription))
+        print(diarization(cast(str, transcription)))
     # fal_whisperx()
     # has_audio()
     # print(retrieve_proper_segment_points(filename))

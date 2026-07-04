@@ -25,11 +25,12 @@ def _normalized_scopes(scopes: list[str] | None) -> list[str]:
 def _grant_ok(grant: Any) -> bool:
     if not isinstance(grant, dict):
         return False
+    grant_dict = cast(dict[str, Any], grant)
     return (
-        grant.get("enabled") is True
-        and grant.get("write") is True
-        and grant.get("default_read") is True
-        and set(MCP_MEMORY_GRANT_SCOPES).issubset(set(grant.get("scopes") or []))
+        grant_dict.get("enabled") is True
+        and grant_dict.get("write") is True
+        and grant_dict.get("default_read") is True
+        and set(MCP_MEMORY_GRANT_SCOPES).issubset(set(grant_dict.get("scopes") or []))
     )
 
 
@@ -115,7 +116,7 @@ def main() -> None:
         if not isinstance(raw_scopes, list):
             counts["missing_scopes"] += 1
             needs_key_update = True
-        stored_scopes: list[Any] = raw_scopes if isinstance(raw_scopes, list) else []
+        stored_scopes = cast(list[Any], raw_scopes) if isinstance(raw_scopes, list) else []
         if "memories.write" not in set(stored_scopes):
             counts["missing_memories_write"] += 1
             needs_key_update = True
@@ -132,10 +133,8 @@ def main() -> None:
             counts["keys_needing_backfill"] += 1
             if args.apply:
                 _write_full_access(db, uid, doc.reference, key_id, app_id, scopes)
-    counts["dry_run"] = not args.apply
-
     counts["unique_users_checked_for_grants"] = len(grant_cache)
-    counts["dry_run"] = int(not args.apply)
+    counts["dry_run"] = not args.apply
     print(dict(counts))
 
 

@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
@@ -145,7 +145,7 @@ class DevCloudTarget:
 class DevCloudPreflight:
     status: str
     target: DevCloudTarget
-    blockers: tuple[dict, ...]
+    blockers: tuple[dict[str, Any], ...]
 
     @property
     def ready(self) -> bool:
@@ -181,7 +181,7 @@ def target_from_env(env: dict[str, str] | None = None) -> DevCloudTarget:
 def evaluate_target_preflight(env: dict[str, str] | None = None) -> DevCloudPreflight:
     effective_env = env if env is not None else dict(os.environ)
     target = target_from_env(effective_env)
-    blockers = []
+    blockers: list[dict[str, Any]] = []
     for key in _REQUIRED_ENV:
         if not effective_env.get(key):
             blockers.append(_blocker('missing_required_env', f'{key} is required for dev-cloud proof execution.'))
@@ -219,7 +219,7 @@ def evaluate_target_preflight(env: dict[str, str] | None = None) -> DevCloudPref
     return DevCloudPreflight(status=status, target=target, blockers=tuple(blockers))
 
 
-def build_target_preflight_report(env: dict[str, str] | None = None) -> dict:
+def build_target_preflight_report(env: dict[str, str] | None = None) -> dict[str, Any]:
     preflight = evaluate_target_preflight(env)
     target = preflight.target
     return {
@@ -253,7 +253,7 @@ def build_target_preflight_report(env: dict[str, str] | None = None) -> dict:
 
 def build_candidate_manifest(
     *, repo_root: str | Path, env: dict[str, str] | None = None, run_id: str = 'not-run'
-) -> dict:
+) -> dict[str, Any]:
     effective_env = env if env is not None else dict(os.environ)
     repo_path = Path(repo_root)
     index_path = repo_path / 'firestore.indexes.json'
@@ -279,8 +279,8 @@ def build_candidate_manifest(
     }
 
 
-def redacted_env_snapshot(env: dict[str, str]) -> dict:
-    snapshot = {}
+def redacted_env_snapshot(env: dict[str, str]) -> dict[str, str]:
+    snapshot: dict[str, str] = {}
     for key in _REDACTED_ENV_KEYS:
         value = env.get(key, '')
         if key == 'MEMORY_ENABLED_USERS' and value:
@@ -291,12 +291,14 @@ def redacted_env_snapshot(env: dict[str, str]) -> dict:
     return snapshot
 
 
-def build_dev_cloud_fixture_bundle(*, uid_a: str, uid_b: str, run_id: str, account_generation: int = 1) -> dict:
+def build_dev_cloud_fixture_bundle(
+    *, uid_a: str, uid_b: str, run_id: str, account_generation: int = 1
+) -> dict[str, Any]:
     if not uid_a or not uid_b or uid_a == uid_b:
         raise ValueError('two distinct synthetic UIDs are required')
     if account_generation < 0:
         raise ValueError('account_generation must be nonnegative')
-    documents = {}
+    documents: dict[str, Any] = {}
     documents.update(_baseline_docs_for_uid(uid_a, account_generation, memory_id=f'{run_id}-a-memory'))
     documents.update(_baseline_docs_for_uid(uid_b, account_generation, memory_id=f'{run_id}-b-memory'))
     documents[GLOBAL_READ_GATE_PATH] = {
@@ -335,7 +337,7 @@ def build_dev_cloud_fixture_bundle(*, uid_a: str, uid_b: str, run_id: str, accou
     }
 
 
-def build_proof_matrix() -> dict:
+def build_proof_matrix() -> dict[str, Any]:
     return {
         'artifact': 'proof-results.json',
         'status': GATE_STATUS_NOT_RUN,
@@ -345,7 +347,7 @@ def build_proof_matrix() -> dict:
     }
 
 
-def build_review_template(preflight_report: dict) -> str:
+def build_review_template(preflight_report: dict[str, Any]) -> str:
     status = preflight_report['status']
     blockers = preflight_report['blockers']
     lines = [
@@ -389,12 +391,12 @@ def write_prepared_bundle(
     uid_b: str,
     run_id: str,
     env: dict[str, str] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     effective_env = env if env is not None else dict(os.environ)
     preflight = build_target_preflight_report(effective_env)
-    artifacts = {
+    artifacts: dict[str, Any] = {
         'candidate-manifest.json': build_candidate_manifest(repo_root=repo_root, env=effective_env, run_id=run_id),
         'target-preflight.json': preflight,
         'fixtures.redacted.json': build_dev_cloud_fixture_bundle(uid_a=uid_a, uid_b=uid_b, run_id=run_id),
@@ -442,7 +444,7 @@ def write_artifact(path: Path, value: object) -> None:
 
 
 def build_checksums(directory: Path, names: Iterable[str]) -> str:
-    lines = []
+    lines: list[str] = []
     for name in names:
         if name == 'checksums.sha256':
             continue
@@ -460,7 +462,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _baseline_docs_for_uid(uid: str, account_generation: int, memory_id: str) -> dict:
+def _baseline_docs_for_uid(uid: str, account_generation: int, memory_id: str) -> dict[str, Any]:
     paths = MemoryCollections(uid=uid)
     return {
         paths.memory_control_state: _control_state(uid, account_generation),
@@ -470,7 +472,7 @@ def _baseline_docs_for_uid(uid: str, account_generation: int, memory_id: str) ->
     }
 
 
-def _control_state(uid: str, account_generation: int) -> dict:
+def _control_state(uid: str, account_generation: int) -> dict[str, Any]:
     return {
         'uid': uid,
         'schema_version': DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
@@ -488,7 +490,7 @@ def _control_state(uid: str, account_generation: int) -> dict:
     }
 
 
-def _state_head(uid: str, account_generation: int) -> dict:
+def _state_head(uid: str, account_generation: int) -> dict[str, Any]:
     return {
         'uid': uid,
         'schema_version': 1,
@@ -500,7 +502,7 @@ def _state_head(uid: str, account_generation: int) -> dict:
     }
 
 
-def _projection_state(uid: str, account_generation: int) -> dict:
+def _projection_state(uid: str, account_generation: int) -> dict[str, Any]:
     return {
         'uid': uid,
         'schema_version': 1,
@@ -525,7 +527,7 @@ def _projection_state(uid: str, account_generation: int) -> dict:
     }
 
 
-def _projection_item(uid: str, account_generation: int, memory_id: str) -> dict:
+def _projection_item(uid: str, account_generation: int, memory_id: str) -> dict[str, Any]:
     timestamp = '2026-06-21T00:00:00Z'
     return {
         'uid': uid,
@@ -563,8 +565,8 @@ def _projection_item(uid: str, account_generation: int, memory_id: str) -> dict:
     }
 
 
-def _production_target_blockers(target: DevCloudTarget) -> tuple[dict, ...]:
-    blockers = []
+def _production_target_blockers(target: DevCloudTarget) -> tuple[dict[str, Any], ...]:
+    blockers: list[dict[str, Any]] = []
     if target.expected_project_id and target.expected_project_id in target.production_project_ids:
         blockers.append(
             _blocker('expected_project_id_is_production', 'Expected dev project ID is configured as production.')
@@ -586,7 +588,7 @@ def _production_target_blockers(target: DevCloudTarget) -> tuple[dict, ...]:
     return tuple(blockers)
 
 
-def _blocker(blocker_id: str, message: str) -> dict:
+def _blocker(blocker_id: str, message: str) -> dict[str, Any]:
     return {'blocker_id': blocker_id, 'message': message, 'required_before_gate2_go': True}
 
 

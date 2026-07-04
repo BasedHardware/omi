@@ -14,7 +14,6 @@ import json
 import os
 from pathlib import Path
 import sys
-from typing import Any, Dict, cast
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -23,11 +22,11 @@ for path in (BACKEND_DIR, SCRIPTS_DIR):
         sys.path.insert(0, str(path))
 
 from v3_dev_cloud_proof import (
-    build_candidate_manifest,  # type: ignore[reportUnknownVariableType]  # upstream returns dict[Unknown, Unknown]
-    build_dev_cloud_fixture_bundle,  # type: ignore[reportUnknownVariableType]
-    build_proof_matrix,  # type: ignore[reportUnknownVariableType]
-    build_target_preflight_report,  # type: ignore[reportUnknownVariableType]
-    write_prepared_bundle,  # type: ignore[reportUnknownVariableType]
+    build_candidate_manifest,
+    build_dev_cloud_fixture_bundle,
+    build_proof_matrix,
+    build_target_preflight_report,
+    write_prepared_bundle,
 )
 
 
@@ -48,27 +47,22 @@ def main() -> int:
     args = parse_args()
     env = dict(os.environ)
     if args.fixture_only:
-        result = cast(
-            Dict[str, Any], build_dev_cloud_fixture_bundle(uid_a=args.uid_a, uid_b=args.uid_b, run_id=args.run_id)
-        )
+        result = build_dev_cloud_fixture_bundle(uid_a=args.uid_a, uid_b=args.uid_b, run_id=args.run_id)
     elif args.proof_matrix_only:
-        result = cast(Dict[str, Any], build_proof_matrix())
+        result = build_proof_matrix()
     elif args.candidate_manifest_only:
-        result = cast(Dict[str, Any], build_candidate_manifest(repo_root=args.repo_root, env=env, run_id=args.run_id))
+        result = build_candidate_manifest(repo_root=args.repo_root, env=env, run_id=args.run_id)
     elif args.write_bundle_dir:
-        result = cast(
-            Dict[str, Any],
-            write_prepared_bundle(
-                repo_root=args.repo_root,
-                output_dir=args.write_bundle_dir,
-                uid_a=args.uid_a,
-                uid_b=args.uid_b,
-                run_id=args.run_id,
-                env=env,
-            ),
+        result = write_prepared_bundle(
+            repo_root=args.repo_root,
+            output_dir=args.write_bundle_dir,
+            uid_a=args.uid_a,
+            uid_b=args.uid_b,
+            run_id=args.run_id,
+            env=env,
         )
     else:
-        result = cast(Dict[str, Any], build_target_preflight_report(env))
+        result = build_target_preflight_report(env)
     print(json.dumps(result, indent=2, sort_keys=True, default=str))
     return 0
 

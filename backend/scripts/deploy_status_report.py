@@ -9,7 +9,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 DEFAULT_REGION = 'us-central1'
 DEFAULT_GKE_SERVICES = (
@@ -68,7 +68,7 @@ def main() -> int:
 
     if include_gke:
         k8s_state = load_json(args.k8s_state) if args.k8s_state else fetch_k8s_state(namespace)
-        gke_services = args.gke_services or list(DEFAULT_GKE_SERVICES)
+        gke_services = cast(list[str], args.gke_services or list(DEFAULT_GKE_SERVICES))
         section, gke_findings = render_gke_report(
             k8s_state,
             namespace=namespace,
@@ -91,7 +91,7 @@ def main() -> int:
                 region=args.region,
                 services=args.cloud_run_services or list(DEFAULT_CLOUD_RUN_SERVICES),
             )
-        cloud_run_services = args.cloud_run_services or list(DEFAULT_CLOUD_RUN_SERVICES)
+        cloud_run_services = cast(list[str], args.cloud_run_services or list(DEFAULT_CLOUD_RUN_SERVICES))
         expected_traffic = parse_expected_traffic(args.expect_cloud_run_traffic)
         section, cloud_findings = render_cloud_run_report(
             cloud_run_state,
@@ -233,7 +233,7 @@ def render_cloud_run_report(
         status = service.get('status', {})
         latest_created = str(status.get('latestCreatedRevisionName') or '')
         latest_ready = str(status.get('latestReadyRevisionName') or '')
-        traffic = status.get('traffic') or []
+        traffic = cast(list[Any], status.get('traffic') or [])
         traffic_text = format_cloud_run_traffic(traffic)
         image = cloud_run_image(service)
         ready_status = 'ok' if latest_ready and latest_ready == latest_created else 'not-ready'
@@ -277,13 +277,17 @@ def find_bad_pods(deployment_name: str, pods: Any) -> list[Finding]:
     findings: list[Finding] = []
     if not isinstance(pods, list):
         return findings
-    for pod in pods:
-        if not isinstance(pod, dict) or owner_name(pod) != deployment_name and deployment_name not in pod_name(pod):
+    for raw_pod in cast(list[Any], pods):
+        if not isinstance(raw_pod, dict):
             continue
-        statuses = pod.get('status', {}).get('containerStatuses') or []
+        pod = cast(dict[str, Any], raw_pod)
+        if owner_name(pod) != deployment_name and deployment_name not in pod_name(pod):
+            continue
+        statuses = cast(list[Any], pod.get('status', {}).get('containerStatuses') or [])
         for status in statuses:
-            state = status.get('state') or {}
-            waiting = state.get('waiting') or {}
+            status = cast(dict[str, Any], status)
+            state = cast(dict[str, Any], status.get('state') or {})
+            waiting = cast(dict[str, Any], state.get('waiting') or {})
             reason = waiting.get('reason')
             if reason in BAD_WAITING_REASONS:
                 findings.append(Finding('FAIL', pod_name(pod), f'container waiting reason {reason}'))
@@ -302,21 +306,24 @@ def find_stale_replica_sets(
         return findings
     deployment_name = object_name(deployment)
     current_revision = deployment.get('metadata', {}).get('annotations', {}).get('deployment.kubernetes.io/revision')
-    for rs in replica_sets:
-        if not isinstance(rs, dict) or owner_name(rs) != deployment_name:
+    for rs in cast(list[Any], replica_sets):
+        if not isinstance(rs, dict):
             continue
-        replicas = int(rs.get('status', {}).get('replicas') or 0)
+        rs_dict = cast(dict[str, Any], rs)
+        if owner_name(rs_dict) != deployment_name:
+            continue
+        replicas = int(rs_dict.get('status', {}).get('replicas') or 0)
         if replicas <= 0:
             continue
-        rs_revision = rs.get('metadata', {}).get('annotations', {}).get('deployment.kubernetes.io/revision')
+        rs_revision = rs_dict.get('metadata', {}).get('annotations', {}).get('deployment.kubernetes.io/revision')
         if current_revision and rs_revision == current_revision:
             continue
-        age_minutes = age_in_minutes(rs.get('metadata', {}).get('creationTimestamp'), now)
+        age_minutes = age_in_minutes(rs_dict.get('metadata', {}).get('creationTimestamp'), now)
         if age_minutes is not None and age_minutes >= threshold_minutes:
             findings.append(
                 Finding(
                     'WARN',
-                    object_name(rs),
+                    object_name(rs_dict),
                     f'old ReplicaSet still has {replicas} replica(s) after {age_minutes}m',
                 )
             )
@@ -327,9 +334,10 @@ def summarize_events(events: Any) -> list[str]:
     if not isinstance(events, list):
         return []
     counter: Counter[tuple[str, str]] = Counter()
-    for event in events:
-        if not isinstance(event, dict):
+    for raw_event in cast(list[Any], events):
+        if not isinstance(raw_event, dict):
             continue
+        event = cast(dict[str, Any], raw_event)
         event_type = event.get('type') or event.get('regarding', {}).get('type')
         if event_type and event_type != 'Warning':
             continue
@@ -349,8 +357,8 @@ def fetch_k8s_state(namespace: str) -> dict[str, Any]:
 
 
 def fetch_cloud_run_state(*, project: str, region: str, services: list[str]) -> dict[str, Any]:
-    fetched = []
-    errors = []
+    fetched: list[Any] = []
+    errors: list[dict[str, Any]] = []
     for service in services:
         command = [
             'gcloud',
@@ -387,11 +395,11 @@ def load_json(path: Path | None) -> dict[str, Any]:
         loaded = json.load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a JSON object')
-    return loaded
+    return cast(dict[str, Any], loaded)
 
 
 def parse_expected_traffic(entries: list[str]) -> dict[str, str]:
-    result = {}
+    result: dict[str, str] = {}
     for entry in entries:
         if '=' not in entry:
             raise ValueError(f'expected traffic entry must be SERVICE=REVISION: {entry}')
@@ -403,26 +411,34 @@ def parse_expected_traffic(entries: list[str]) -> dict[str, str]:
 def normalize_cloud_run_services(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
     raw_services = state.get('services', [])
     if isinstance(raw_services, dict):
-        return {str(name): service for name, service in raw_services.items() if isinstance(service, dict)}
+        services_map = cast(dict[str, Any], raw_services)
+        return {
+            str(name): cast(dict[str, Any], service)
+            for name, service in services_map.items()
+            if isinstance(service, dict)
+        }
     if not isinstance(raw_services, list):
         return {}
-    result = {}
-    for service in raw_services:
-        if isinstance(service, dict):
-            name = object_name(service)
-            if name:
-                result[name] = service
+    result: dict[str, dict[str, Any]] = {}
+    for raw_service in cast(list[Any], raw_services):
+        if not isinstance(raw_service, dict):
+            continue
+        service = cast(dict[str, Any], raw_service)
+        name = object_name(service)
+        if name:
+            result[name] = service
     return result
 
 
 def cloud_run_fetch_errors_by_service(state: dict[str, Any]) -> dict[str, CloudRunFetchError]:
-    raw_errors = state.get('errors') or state.get('fetchErrors') or []
+    raw_errors = state.get('errors') or state.get('fetchErrors')
     if not isinstance(raw_errors, list):
         return {}
-    result = {}
-    for error in raw_errors:
-        if not isinstance(error, dict):
+    result: dict[str, CloudRunFetchError] = {}
+    for raw_error in cast(list[Any], raw_errors):
+        if not isinstance(raw_error, dict):
             continue
+        error = cast(dict[str, Any], raw_error)
         service = str(error.get('service') or '')
         if not service:
             continue
@@ -433,7 +449,15 @@ def cloud_run_fetch_errors_by_service(state: dict[str, Any]) -> dict[str, CloudR
 def items_by_name(items: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(items, list):
         return {}
-    return {object_name(item): item for item in items if isinstance(item, dict) and object_name(item)}
+    result: dict[str, dict[str, Any]] = {}
+    for raw_item in cast(list[Any], items):
+        if not isinstance(raw_item, dict):
+            continue
+        item = cast(dict[str, Any], raw_item)
+        name = object_name(item)
+        if name:
+            result[name] = item
+    return result
 
 
 def object_name(obj: dict[str, Any]) -> str:
@@ -445,27 +469,28 @@ def pod_name(pod: dict[str, Any]) -> str:
 
 
 def owner_name(obj: dict[str, Any]) -> str:
-    owners = obj.get('metadata', {}).get('ownerReferences') or []
+    owners = obj.get('metadata', {}).get('ownerReferences')
     if isinstance(owners, list) and owners:
-        first = owners[0]
+        first = cast(list[Any], owners)[0]
         if isinstance(first, dict):
-            return str(first.get('name') or '')
+            return str(cast(dict[str, Any], first).get('name') or '')
     return ''
 
 
 def first_container_image(deployment: dict[str, Any]) -> str:
-    containers = deployment.get('spec', {}).get('template', {}).get('spec', {}).get('containers') or []
+    containers = cast(list[Any], deployment.get('spec', {}).get('template', {}).get('spec', {}).get('containers') or [])
     if containers and isinstance(containers[0], dict):
-        return str(containers[0].get('image') or '-')
+        return str(cast(dict[str, Any], containers[0]).get('image') or '-')
     return '-'
 
 
 def cloud_run_image(service: dict[str, Any]) -> str:
-    containers = service.get('spec', {}).get('template', {}).get('spec', {}).get('containers') or []
+    containers = cast(list[Any], service.get('spec', {}).get('template', {}).get('spec', {}).get('containers') or [])
     image = '-'
     if containers and isinstance(containers[0], dict):
-        image = str(containers[0].get('image') or '-')
-        digest = containers[0].get('imageDigest')
+        first = cast(dict[str, Any], containers[0])
+        image = str(first.get('image') or '-')
+        digest = first.get('imageDigest')
         if isinstance(digest, str) and digest:
             return f'{image}@{digest}'
     digest = service.get('status', {}).get('imageDigest')
@@ -477,10 +502,11 @@ def cloud_run_image(service: dict[str, Any]) -> str:
 def format_cloud_run_traffic(traffic: Any) -> str:
     if not isinstance(traffic, list) or not traffic:
         return '-'
-    parts = []
-    for target in traffic:
-        if not isinstance(target, dict):
+    parts: list[str] = []
+    for raw_target in cast(list[Any], traffic):
+        if not isinstance(raw_target, dict):
             continue
+        target = cast(dict[str, Any], raw_target)
         revision = target.get('revisionName') or ('latest' if target.get('latestRevision') else '-')
         parts.append(f'`{revision}`={int(target.get("percent") or 0)}%')
     return ', '.join(parts) or '-'
@@ -490,8 +516,11 @@ def traffic_percent_for_revision(traffic: Any, revision: str) -> int:
     if not isinstance(traffic, list):
         return 0
     total = 0
-    for target in traffic:
-        if isinstance(target, dict) and target.get('revisionName') == revision:
+    for raw_target in cast(list[Any], traffic):
+        if not isinstance(raw_target, dict):
+            continue
+        target = cast(dict[str, Any], raw_target)
+        if target.get('revisionName') == revision:
             total += int(target.get('percent') or 0)
     return total
 
