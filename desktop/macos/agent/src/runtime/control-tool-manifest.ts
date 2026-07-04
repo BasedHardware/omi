@@ -55,6 +55,11 @@ export interface AgentControlManifestTool {
   description: string;
   promptSnippet: string;
   promptGuidelines: string[];
+  capabilityDoc: {
+    title: string;
+    summary: string;
+    bullets: string[];
+  };
   latency: "fast local" | "async background";
   surfaces: AgentControlSurface[];
   riskTier: AgentControlRiskTier;
@@ -84,6 +89,10 @@ const agentControlManagePolicy = {
   bundles: ["desktop.agent_control.manage"],
   allowedSurfaces: ["desktopChat", "realtimeHub"],
 } as const;
+
+function controlDoc(label: string, summary: string, bullets: string[]) {
+  return { title: label, summary, bullets };
+}
 
 const artifactManagePolicy = {
   riskTier: "medium",
@@ -122,6 +131,14 @@ Returns canonical Omi session IDs, latest/active run summaries, and adapter bind
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
       "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata.",
     ],
+    capabilityDoc: controlDoc(
+      "List Agent Sessions",
+      "List Omi-managed agent sessions from the local runtime kernel.",
+      [
+        "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
+        "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -151,6 +168,14 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       "Use a runId from list_agent_sessions or a correlated Omi result.",
       "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
     ],
+    capabilityDoc: controlDoc(
+      "Get Agent Run",
+      "Inspect one canonical Omi agent run.",
+      [
+        "Use a runId from list_agent_sessions or a correlated Omi result.",
+        "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -176,6 +201,14 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       "Use before routing new local work or summarizing open agent loops.",
       "Returns metadata and local state summaries, not raw transcripts or screenshot bytes.",
     ],
+    capabilityDoc: controlDoc(
+      "Build Desktop Awareness Snapshot",
+      "Build a local coordinator snapshot from kernel sessions, runs, dispatches, deliveries, candidates, and runtime health.",
+      [
+        "Use before routing new local work or summarizing open agent loops.",
+        "Returns metadata and local state summaries, not raw transcripts or screenshot bytes.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -196,6 +229,14 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       "Use for approvals, failed runs, artifact review, stale work, and candidate review.",
       "The queue is derived and not persisted as authority.",
     ],
+    capabilityDoc: controlDoc(
+      "List Desktop Action Queue",
+      "Return the derived Desktop action queue from runs, dispatches, deliveries, candidates, legacy projections, and overrides.",
+      [
+        "Use for approvals, failed runs, artifact review, stale work, and candidate review.",
+        "The queue is derived and not persisted as authority.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -214,6 +255,11 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     description: "Summarize unresolved local coordinator loops: blocking dispatches, failed/stale runs, undelivered artifacts, and candidate reviews.",
     promptSnippet: "get_desktop_open_loops - Summarize unresolved local agent work",
     promptGuidelines: ["Use for quick status answers and voice status summaries."],
+    capabilityDoc: controlDoc(
+      "Get Desktop Open Loops",
+      "Summarize unresolved local coordinator loops: blocking dispatches, failed/stale runs, undelivered artifacts, and candidate reviews.",
+      ["Use for quick status answers and voice status summaries."],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -234,6 +280,14 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       "Use selected snippets with provenance, not full transcripts or screenshot image bytes.",
       "Requires a positive TTL and writes context-access audit rows.",
     ],
+    capabilityDoc: controlDoc(
+      "Build Desktop Context Packet",
+      "Persist a minimized DesktopContextPacket plus context-access audit rows from explicit selected snippets.",
+      [
+        "Use selected snippets with provenance, not full transcripts or screenshot image bytes.",
+        "Requires a positive TTL and writes context-access audit rows.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat"],
     ...contextSensitivePolicy,
@@ -258,6 +312,11 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     description: "Run deterministic local intent routing over action queue and reusable session candidates.",
     promptSnippet: "route_desktop_intent - Decide quick answer, resume, fork, delegate, dispatch, or new run",
     promptGuidelines: ["Use before creating a new run when existing local context may be relevant."],
+    capabilityDoc: controlDoc(
+      "Route Desktop Intent",
+      "Run deterministic local intent routing over action queue and reusable session candidates.",
+      ["Use before creating a new run when existing local context may be relevant."],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -277,6 +336,11 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     description: "Evaluate local coordinator policy for a tool/capability request without executing the tool.",
     promptSnippet: "evaluate_desktop_tool_policy - Check local capability policy",
     promptGuidelines: ["Use to explain why a sensitive local action needs dispatch or approval."],
+    capabilityDoc: controlDoc(
+      "Evaluate Desktop Tool Policy",
+      "Evaluate local coordinator policy for a tool/capability request without executing the tool.",
+      ["Use to explain why a sensitive local action needs dispatch or approval."],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -336,6 +400,11 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     description: "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",
     promptSnippet: "create_desktop_dispatch - Create a durable local decision item",
     promptGuidelines: ["Use when user attention or approval is required before crossing a boundary."],
+    capabilityDoc: controlDoc(
+      "Create Desktop Dispatch",
+      "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",
+      ["Use when user attention or approval is required before crossing a boundary."],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlManagePolicy,
@@ -357,6 +426,11 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     description: "Resolve or cancel a pending local DesktopCoordinatorDispatch, optionally creating a scoped allow grant for an explicit approval.",
     promptSnippet: "resolve_desktop_dispatch - Resolve a durable local decision item",
     promptGuidelines: ["Use only for explicit user approval/denial/cancel decisions."],
+    capabilityDoc: controlDoc(
+      "Resolve Desktop Dispatch",
+      "Resolve or cancel a pending local DesktopCoordinatorDispatch, optionally creating a scoped allow grant for an explicit approval.",
+      ["Use only for explicit user approval/denial/cancel decisions."],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlManagePolicy,
@@ -386,6 +460,14 @@ Use when the user asks to stop a running Omi agent/subagent. Returns whether can
       "Use when the user asks to stop a running Omi agent/subagent.",
       "Returns whether cancellation was accepted, dispatched, and acknowledged.",
     ],
+    capabilityDoc: controlDoc(
+      "Cancel Agent Run",
+      "Request cancellation for one canonical Omi agent run through the runtime kernel.",
+      [
+        "Use when the user asks to stop a running Omi agent/subagent.",
+        "Returns whether cancellation was accepted, dispatched, and acknowledged.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlManagePolicy,
@@ -411,6 +493,14 @@ Returns metadata and references only. It does not read arbitrary artifact conten
       "Returns artifact references and metadata only.",
       "Use after get_agent_run when the user asks what files or outputs an agent produced.",
     ],
+    capabilityDoc: controlDoc(
+      "Inspect Agent Artifacts",
+      "Inspect canonical artifact metadata for an Omi agent artifact, session, run, or attempt.",
+      [
+        "Returns artifact references and metadata only.",
+        "Use after get_agent_run when the user asks what files or outputs an agent produced.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlReadPolicy,
@@ -450,6 +540,15 @@ This only records artifact metadata state and ordered kernel events. It does not
       "Pass sessionId, runId, or attemptId when available as a scope guard.",
       "This never reads artifact contents and has no OS side effects.",
     ],
+    capabilityDoc: controlDoc(
+      "Update Agent Artifact Lifecycle",
+      "Update metadata-only lifecycle state for one canonical Omi agent artifact.",
+      [
+        "Use to mark artifact metadata as retained, dismissed, or opened after a user-visible artifact decision.",
+        "Pass sessionId, runId, or attemptId when available as a scope guard.",
+        "This never reads artifact contents and has no OS side effects.",
+      ],
+    ),
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...artifactManagePolicy,
@@ -482,6 +581,14 @@ Creates a new run in that session through the runtime kernel. Use this for multi
       "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
       "Creates a new run in the existing session; do not use it to create a delegated child.",
     ],
+    capabilityDoc: controlDoc(
+      "Send Agent Message",
+      "Send a follow-up message to an existing canonical Omi agent session.",
+      [
+        "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
+        "Creates a new run in the existing session; do not use it to create a delegated child.",
+      ],
+    ),
     latency: "async background",
     surfaces: ["desktopChat"],
     riskTier: "medium",
@@ -520,6 +627,15 @@ Use this for top-level chat or realtime requests that need visible background wo
       "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
       "Do not use this to create UI-owned ChatProvider runtime state.",
     ],
+    capabilityDoc: controlDoc(
+      "Spawn Background Agent",
+      "Create a canonical Omi-managed background agent session/run without requiring a parent run.",
+      [
+        "Use for top-level background work when there is no parent run to pass to delegate_agent.",
+        "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
+        "Do not use this to create UI-owned ChatProvider runtime state.",
+      ],
+    ),
     latency: "async background",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlManagePolicy,
@@ -558,6 +674,15 @@ Supports call, spawn, and continue modes. Child context is intentionally minimal
       "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
       "Pass a concise objective and optional short context; do not pass full transcripts by default.",
     ],
+    capabilityDoc: controlDoc(
+      "Delegate Agent",
+      "Create or continue a distinct delegated child agent session linked to a parent run.",
+      [
+        "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
+        "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
+        "Pass a concise objective and optional short context; do not pass full transcripts by default.",
+      ],
+    ),
     latency: "async background",
     surfaces: ["desktopChat"],
     riskTier: "medium",

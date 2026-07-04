@@ -57,7 +57,7 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
 
 (
   cd "$DESKTOP_DIR/agent"
-  npm run build --silent
+  "$NODE22" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
 )
 
 (
@@ -69,6 +69,7 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
   cd "$DESKTOP_DIR/agent"
   "$NODE22" node_modules/vitest/vitest.mjs run \
     tests/omi-tool-manifest.test.ts \
+    tests/tool-surfaces-exhaustiveness.test.ts \
     tests/control-tools.test.ts \
     tests/node-tools.test.ts \
     tests/codemagic-pi-mono-extension-ci.test.ts

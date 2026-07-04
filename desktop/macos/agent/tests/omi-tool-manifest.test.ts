@@ -157,4 +157,13 @@ describe("omi tool manifest", () => {
     expect(snapshot.aliases["mcp__omi-tools__execute_sql"]).toBe("execute_sql");
     expect(snapshot.disabled.some((tool) => tool.name === "request_permission")).toBe(true);
   });
+
+  it("requires surfaces and capabilityDoc on every manifest entry", () => {
+    for (const tool of omiToolManifest) {
+      expect(tool.surfaces.length, `${tool.name} surfaces`).toBeGreaterThan(0);
+      expect(tool.capabilityDoc.title, `${tool.name} capabilityDoc.title`).toBeTruthy();
+      expect(tool.capabilityDoc.summary, `${tool.name} capabilityDoc.summary`).toBeTruthy();
+      expect(tool.capabilityDoc.bullets.length, `${tool.name} capabilityDoc.bullets`).toBeGreaterThan(0);
+    }
+  });
 });

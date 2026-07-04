@@ -468,6 +468,27 @@ done
 step "Preparing agent runtime..."
 "$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
 
+step "Generating tool surfaces..."
+(
+  cd agent
+  NODE_BIN=""
+  for candidate in \
+    "Desktop/Sources/Resources/node" \
+    "/opt/homebrew/opt/node@22/bin/node" \
+    "/usr/local/opt/node@22/bin/node" \
+    "$(command -v node 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+      NODE_BIN="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$NODE_BIN" ]]; then
+    echo "ERROR: Node.js 22.6+ with --experimental-strip-types required for tool surface generation." >&2
+    exit 1
+  fi
+  "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs
+)
+
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
     bash scripts/check_schema_docs.sh || substep "Schema docs check failed (non-fatal)"

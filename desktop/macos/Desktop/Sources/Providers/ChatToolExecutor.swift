@@ -49,43 +49,40 @@ class ChatToolExecutor {
       return message
     }
 
-    switch toolCall.name {
-    case "get_local_status":
-      return await executeLocalStatus()
-
-    case "get_task_agent_status":
+    switch GeneratedToolExecutors.chatDispatch(for: toolCall.name) {
+    case .getTaskAgentStatus:
       return await executeTaskAgentStatus()
 
-    case "spawn_agent":
+    case .spawnAgent:
       return await executeSpawnAgent(
         toolCall.arguments,
         originatingChatMode: originatingChatMode,
         originatingClientScope: originatingClientScope
       )
 
-    case "manage_agent_pills":
+    case .manageAgentPills:
       return await executeManageAgentPills(toolCall.arguments)
 
-    case "execute_sql":
+    case .executeSql:
       return await executeSQL(toolCall.arguments)
 
-    case "semantic_search", "search_screen_history":
+    case .semanticSearch:
       return await executeSemanticSearch(toolCall.arguments)
 
-    case "get_daily_recap":
+    case .getDailyRecap:
       return await executeDailyRecap(toolCall.arguments)
 
-    case "search_tasks":
+    case .searchTasks:
       return await executeSearchTasks(toolCall.arguments)
 
-    case "complete_task":
+    case .completeTask:
       return await executeCompleteTask(toolCall.arguments)
 
-    case "delete_task":
+    case .deleteTask:
       return await executeDeleteTask(toolCall.arguments)
 
     // Onboarding tools
-    case "request_permission":
+    case .requestPermission:
       let result = await executeRequestPermission(toolCall.arguments)
       let permType = toolCall.arguments["type"] as? String ?? "unknown"
       let granted = result.contains("granted")
@@ -97,19 +94,16 @@ class ChatToolExecutor {
       }
       return result
 
-    case "check_permission_status":
+    case .checkPermissionStatus:
       let result = await executeCheckPermissionStatus(toolCall.arguments)
       AnalyticsManager.shared.onboardingChatToolUsed(tool: "check_permission_status")
       return result
 
-    case "scan_files", "start_file_scan":
+    case .scanFiles:
       AnalyticsManager.shared.onboardingChatToolUsed(tool: "scan_files")
       return await executeScanFiles(toolCall.arguments)
 
-    case "get_file_scan_results":
-      return await executeScanFiles(toolCall.arguments)
-
-    case "set_user_preferences":
+    case .setUserPreferences:
       let result = await executeSetUserPreferences(toolCall.arguments)
       var props: [String: Any] = [:]
       if let name = toolCall.arguments["name"] as? String {
@@ -121,7 +115,7 @@ class ChatToolExecutor {
         tool: "set_user_preferences", properties: props)
       return result
 
-    case "ask_followup":
+    case .askFollowup:
       let result = await executeAskFollowup(toolCall.arguments)
       let question = toolCall.arguments["question"] as? String ?? ""
       let optionCount = (toolCall.arguments["options"] as? [String])?.count ?? 0
@@ -130,7 +124,7 @@ class ChatToolExecutor {
         properties: ["question_length": question.count, "option_count": optionCount])
       return result
 
-    case "complete_onboarding":
+    case .completeOnboarding:
       if !OnboardingChatPersistence.isGoalCompleted {
         return
           "ERROR: Cannot complete onboarding yet. The user has NOT set their monthly goal. You MUST call ask_followup to ask about their top goal this month BEFORE calling complete_onboarding. Call get_email_insights first for context, then ask the goal question."
@@ -139,7 +133,7 @@ class ChatToolExecutor {
       AnalyticsManager.shared.onboardingChatToolUsed(tool: "complete_onboarding")
       return result
 
-    case "save_knowledge_graph":
+    case .saveKnowledgeGraph:
       let result = await executeSaveKnowledgeGraph(toolCall.arguments)
       let nodeCount = (toolCall.arguments["nodes"] as? [[String: Any]])?.count ?? 0
       let edgeCount = (toolCall.arguments["edges"] as? [[String: Any]])?.count ?? 0
@@ -147,7 +141,7 @@ class ChatToolExecutor {
         tool: "save_knowledge_graph", properties: ["nodes": nodeCount, "edges": edgeCount])
       return result
 
-    case "get_email_insights":
+    case .getEmailInsights:
       let result = executeGetEmailInsights()
       AnalyticsManager.shared.onboardingChatToolUsed(
         tool: "get_email_insights",
@@ -156,31 +150,24 @@ class ChatToolExecutor {
         ])
       return result
 
-    case "capture_screen":
+    case .captureScreen:
       return await executeCaptureScreen()
 
-    case "fill_cloud_connector_form":
+    case .fillCloudConnectorForm:
       return await CloudConnectorFormAutomation.fill(toolCall.arguments)
 
     // Backend RAG tools — call Python backend /v1/tools/* endpoints
-    case "get_conversations":
-      return await executeBackendTool(toolCall)
-    case "search_conversations":
-      return await executeBackendTool(toolCall)
-    case "get_memories":
-      return await executeBackendTool(toolCall)
-    case "search_memories":
-      return await executeBackendTool(toolCall)
-    case "get_action_items":
-      return await executeBackendTool(toolCall)
-    case "create_action_item":
-      return await executeBackendTool(toolCall)
-    case "update_action_item":
-      return await executeBackendTool(toolCall)
-    case "create_calendar_event":
+    case .getConversations, .searchConversations, .getMemories, .searchMemories, .getActionItems,
+      .createActionItem, .updateActionItem:
       return await executeBackendTool(toolCall)
 
-    default:
+    case .unhandled:
+      if toolCall.name == "get_local_status" {
+        return await executeLocalStatus()
+      }
+      if toolCall.name == "get_file_scan_results" || toolCall.name == "start_file_scan" {
+        return await executeScanFiles(toolCall.arguments)
+      }
       return "Unknown tool: \(toolCall.name)"
     }
   }
