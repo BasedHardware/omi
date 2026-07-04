@@ -79,7 +79,7 @@ enum MemoryExportExecutor {
   private static func hostedMCPKey(for destination: MemoryExportDestination) async throws -> String {
     guard destination.requiresHostedMCPKeyForSetup else { return "" }
     if MemoryBankConnector.handles(destination) {
-      return try await MemoryExportService.shared.preparedMCPKeyForConnect()
+      return try await MemoryExportService.shared.mcpKeyForLocalConnectorSetup()
     }
     return try await MemoryExportService.shared.ensureMCPKey()
   }

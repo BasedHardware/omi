@@ -111,6 +111,22 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(method.contains("let statuses = await MemoryExportService.shared.allStatuses()"))
         XCTAssertTrue(method.contains("memoryExportStatuses = statuses\n            lastMemoryExportStatusRefreshAt = Date()"))
         XCTAssertFalse(method.contains("lastMemoryExportStatusRefreshAt = now\n            return true"))
+        XCTAssertFalse(source.contains("loadMemoryExportStatuses(force: false)"))
+    }
+
+    func testConnectorRowsUseStatusConnectionForConnectedState() throws {
+        let destinationSheet = try source(named: "MemoryExportDestinationSheet.swift")
+        let groupedSheet = try source(named: "AgentConnectPickerSheet.swift")
+        let rowHelper = try computedPropertyBody(named: "showsConnectedState", in: destinationSheet)
+        let singleSheetHelper = try computedPropertyBody(named: "isConnected", in: destinationSheet)
+        let optionHelper = try computedPropertyBody(named: "isConnected", in: groupedSheet)
+
+        XCTAssertTrue(rowHelper.contains("status.hasConnection"))
+        XCTAssertTrue(rowHelper.contains("destination.supportsMCP || destination.supportsAgentSetup"))
+        XCTAssertTrue(singleSheetHelper.contains("destination.hasLocallyVerifiableLiveSetup"))
+        XCTAssertTrue(singleSheetHelper.contains("statuses[destination]?.hasConnection == true"))
+        XCTAssertTrue(optionHelper.contains("statuses[destination]?.hasConnection == true"))
+        XCTAssertTrue(optionHelper.contains("destination.hasLocallyVerifiableLiveSetup"))
     }
 
     func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
@@ -146,8 +162,18 @@ final class DashboardCaptureStateTests: XCTestCase {
         let memoryExportSheet = try source(named: "MemoryExportDestinationSheet.swift")
         let apps = try appsSource()
 
-        XCTAssertFalse(memoryExportSheet.contains("purplePrimary"))
-        XCTAssertFalse(apps.contains("purplePrimary"))
+        let disallowedColors = [
+            "OmiColors.purplePrimary",
+            "OmiColors.purpleSecondary",
+            "OmiColors.purpleAccent",
+            "OmiColors.purpleLight",
+            "OmiColors.userBubble",
+            "OmiColors.purpleGradient",
+        ]
+        for color in disallowedColors {
+            XCTAssertFalse(memoryExportSheet.contains(color))
+            XCTAssertFalse(apps.contains(color))
+        }
     }
 
     private func dashboardSource() throws -> String {
@@ -172,6 +198,15 @@ final class DashboardCaptureStateTests: XCTestCase {
 
     private func methodBody(named name: String, in source: String) throws -> String {
         let pattern = #"private func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n    \}"#
+        let regex = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(source.startIndex..<source.endIndex, in: source)
+        let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))
+        let bodyRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
+        return String(source[bodyRange])
+    }
+
+    private func computedPropertyBody(named name: String, in source: String) throws -> String {
+        let pattern = #"private var \#(name): [^{]+\{([\s\S]*?)\n\s+\}"#
         let regex = try NSRegularExpression(pattern: pattern)
         let range = NSRange(source.startIndex..<source.endIndex, in: source)
         let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))

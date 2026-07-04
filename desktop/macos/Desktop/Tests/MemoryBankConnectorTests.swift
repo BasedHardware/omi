@@ -95,6 +95,24 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertFalse(MemoryExportConnectionDetector.hasExistingConnection(for: .claudeCode, matchingKey: "old-key"))
   }
 
+  func testClaudeCodeConfigBackupsAreBounded() throws {
+    let config = tempHome.appendingPathComponent(".claude.json")
+    try """
+      {
+        "theme": "dark"
+      }
+      """.write(to: config, atomically: true, encoding: .utf8)
+
+    for index in 0..<7 {
+      _ = try MemoryBankConnector.connect(.claudeCode, key: "key-\(index)")
+    }
+
+    let backups = try FileManager.default.contentsOfDirectory(
+      at: tempHome.appendingPathComponent(".claude/backups", isDirectory: true),
+      includingPropertiesForKeys: nil)
+    XCTAssertEqual(backups.count, 5)
+  }
+
   func testClaudeCodeConnectRequiresInstallEvidence() throws {
     XCTAssertThrowsError(try MemoryBankConnector.connect(.claudeCode, key: "test-key")) { error in
       XCTAssertTrue(error.localizedDescription.contains("Claude Code is not installed"))

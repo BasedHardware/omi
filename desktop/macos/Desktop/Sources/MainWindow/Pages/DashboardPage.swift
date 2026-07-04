@@ -415,7 +415,7 @@ struct DashboardPage: View {
             Task { await importConnectorStatusStore.refresh() }
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses(force: false) }
+            Task { await loadMemoryExportStatuses(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()

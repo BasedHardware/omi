@@ -5,6 +5,7 @@ import Foundation
 /// less reliable than using each tool's native durable surface directly.
 enum MemoryBankConnector {
   static let marker = "omi-memory-bank"
+  private static let claudeCodeBackupRetentionLimit = 5
   private static var mcpURL: String { MemoryExportDestination.mcpServerURL }
 
   enum ConnectError: LocalizedError {
@@ -117,6 +118,34 @@ enum MemoryBankConnector {
     let backup = backupDir.appendingPathComponent(
       ".claude.json.backup.\(Int(Date().timeIntervalSince1970 * 1000))-\(UUID().uuidString)")
     try fm.copyItem(at: config, to: backup)
+    try pruneClaudeCodeBackups(
+      in: backupDir,
+      keepingMostRecent: Self.claudeCodeBackupRetentionLimit)
+  }
+
+  private static func pruneClaudeCodeBackups(
+    in backupDir: URL,
+    keepingMostRecent limit: Int
+  ) throws {
+    guard limit >= 0 else { return }
+    let backups = try FileManager.default
+      .contentsOfDirectory(
+        at: backupDir,
+        includingPropertiesForKeys: nil)
+      .filter { $0.lastPathComponent.hasPrefix(".claude.json.backup.") }
+      .sorted { lhs, rhs in
+        backupTimestamp(lhs) > backupTimestamp(rhs)
+      }
+    for backup in backups.dropFirst(limit) {
+      try FileManager.default.removeItem(at: backup)
+    }
+  }
+
+  private static func backupTimestamp(_ url: URL) -> Int64 {
+    let prefix = ".claude.json.backup."
+    let suffix = url.lastPathComponent.dropFirst(prefix.count)
+    let timestamp = suffix.split(separator: "-", maxSplits: 1).first ?? ""
+    return Int64(timestamp) ?? 0
   }
 
   // MARK: - Codex (~/.codex/config.toml)

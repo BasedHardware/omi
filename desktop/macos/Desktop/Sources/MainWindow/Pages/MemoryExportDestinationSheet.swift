@@ -124,10 +124,10 @@ private struct MemoryExportRow: View {
 
   private var actionTitle: String {
     if destination.supportsAgentSetup {
-      return isLiveSetupConnected ? "Connected" : "Connect"
+      return showsConnectedState ? "Connected" : "Connect"
     }
     if destination.supportsMCP {
-      return isLiveSetupConnected ? "Connected" : "Connect"
+      return showsConnectedState ? "Connected" : "Connect"
     }
     switch destination {
     case .obsidian:
@@ -137,8 +137,9 @@ private struct MemoryExportRow: View {
     }
   }
 
-  private var isLiveSetupConnected: Bool {
-    destination.hasLocallyVerifiableLiveSetup && status.hasConnection
+  private var showsConnectedState: Bool {
+    guard destination.supportsMCP || destination.supportsAgentSetup else { return false }
+    return status.hasConnection
   }
 
   var body: some View {
@@ -162,7 +163,7 @@ private struct MemoryExportRow: View {
         Spacer(minLength: 12)
 
         ImportConnectorActionButton(
-          title: actionTitle, isConnected: isLiveSetupConnected)
+          title: actionTitle, isConnected: showsConnectedState)
       }
       .padding(.horizontal, 14)
       .padding(.vertical, 11)
@@ -736,7 +737,8 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var isConnected: Bool {
-    destination.hasLocallyVerifiableLiveSetup && statuses[destination]?.hasConnection == true
+    guard destination.hasLocallyVerifiableLiveSetup else { return false }
+    return statuses[destination]?.hasConnection == true
   }
 
   /// Labeled header that makes the automatic (MCP) vs manual (pack) choice obvious.

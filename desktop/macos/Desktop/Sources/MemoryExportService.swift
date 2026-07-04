@@ -811,8 +811,10 @@ actor MemoryExportService {
     return try await finishMCPKeyTask(task, id: id, ownerUserId: ownerUserId)
   }
 
-  /// Returns only an already prepared key, or an in-flight warmup result.
-  func preparedMCPKeyForConnect() async throws -> String {
+  /// Returns the key for a user-triggered local connector setup. Uses an
+  /// existing cached key or in-flight warmup first, and mints only when warmup
+  /// did not prepare a key in time.
+  func mcpKeyForLocalConnectorSetup() async throws -> String {
     if let existing = storedMCPKey() {
       return existing
     }

@@ -62,7 +62,7 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertTrue(status.hasConnection)
   }
 
-  func testOnlyLocalAgentSetupDestinationsDisableAfterVerifiedConnection() {
+  func testOnlyLocalAgentSetupDestinationsHaveLocallyVerifiableLiveSetup() {
     XCTAssertFalse(MemoryExportDestination.chatgpt.hasLocallyVerifiableLiveSetup)
     XCTAssertFalse(MemoryExportDestination.claude.hasLocallyVerifiableLiveSetup)
     XCTAssertTrue(MemoryExportDestination.codex.hasLocallyVerifiableLiveSetup)
