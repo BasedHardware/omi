@@ -397,23 +397,15 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
     # language and tone the user uses with this specific contact.
     # Without this, the LLM defaults to the persona's primary language
     # (e.g. Thai) even when the user has been chatting in English.
+    #
+    # TelethonClient.get_chat_history() already returns dicts with
+    # {role: "human"|"ai", text: str, ts: str|None} in oldest-first
+    # order, using m.outgoing to determine role. We consume those
+    # fields directly.
     if len(previous_messages) < 5:
         try:
             tg_msgs = await client.get_chat_history(body.chat_id, limit=20)
-            # Get the user's own ID to determine message direction.
-            me = await client._client.get_me()
-            my_id = str(me.id) if me else None
-            # Telethon returns newest-first; reverse for chronological order.
-            tg_history = []
-            for msg in reversed(tg_msgs):
-                text = msg.get("text", "")
-                if not text or not text.strip():
-                    continue
-                sender_id = str(msg.get("sender_id", ""))
-                # Messages FROM the user = "ai" (we are imitating the user).
-                # Messages FROM the contact = "human" (the person talking to us).
-                role = "ai" if sender_id == my_id else "human"
-                tg_history.append({"role": role, "text": text})
+            tg_history = [{"role": m["role"], "text": m["text"]} for m in tg_msgs if m.get("text", "").strip()]
             if tg_history:
                 previous_messages = tg_history[-20:]
                 logger.info(

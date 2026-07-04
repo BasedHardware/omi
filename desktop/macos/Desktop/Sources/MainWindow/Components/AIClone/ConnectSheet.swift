@@ -1194,9 +1194,9 @@ struct ConnectSheet: View {
         // files into the bundle's Resources/plugins/ directory.
         let candidates: [String] = {
             var paths: [String] = [
+                Bundle.main.bundlePath + "/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
                 "/Applications/omi.app/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
                 "/Applications/omi Dev.app/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
-                Bundle.main.bundlePath + "/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
             ]
             // Scan /Applications for any omi-*.app that has the script.
             let fm = FileManager.default

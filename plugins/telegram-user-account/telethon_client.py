@@ -162,16 +162,22 @@ class TelethonClient:
         # because the session's entity cache is empty on first
         # connect. Fetching dialogs resolves all recent contacts
         # and groups into the cache so subsequent operations work.
+        entity_cache_ready = False
         try:
             await self._client.get_dialogs(limit=100)
+            entity_cache_ready = True
             logger.info("entity cache populated from dialogs")
-        except Exception:
-            logger.warning("could not populate entity cache; some contacts may fail")
+        except Exception as e:
+            logger.warning(
+                "could not populate entity cache: %s; " "send_message/get_chat_history may fail for some contacts",
+                type(e).__name__,
+            )
 
         return {
             "phone": getattr(me, "phone", None),
             "name": full_name or (getattr(me, "username", None) or "Unknown"),
             "device_label": self._device_model,
+            "entity_cache_ready": entity_cache_ready,
         }
 
     async def disconnect(self) -> None:
