@@ -20,6 +20,7 @@ from database.vector_db import upsert_memory_vectors_batch
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse
 from utils.client_device import resolve_client_device_from_request
+from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
     Conversation as OmiConversation,
@@ -2178,12 +2179,7 @@ def get_goal_history(
     - **days**: Number of days of history to return (max 365, default 30)
     """
     history = goals_db.get_goal_history(uid, goal_id, days)
-
-    for entry in history:
-        if 'recorded_at' in entry and hasattr(entry['recorded_at'], 'isoformat'):
-            entry['recorded_at'] = entry['recorded_at'].isoformat()
-
-    return history
+    return [normalize_goal_history_entry(entry) for entry in history]
 
 
 @router.delete(
