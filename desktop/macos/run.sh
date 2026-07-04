@@ -441,13 +441,27 @@ else
     substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_DESKTOP_API_URL from .env"
 fi
 
-# Check if another SwiftPM instance is running (will block our build)
+# Wait only for SwiftPM instances building THIS checkout. Parallel worktrees
+# have their own .build scratch dirs and SwiftPM locks its shared caches, so
+# other worktrees' builds (including SourceKit-LSP indexing builds, which
+# respawn continuously and would starve a global wait forever) don't block us.
 while true; do
-    SWIFTPM_PIDS=$(pgrep -f "swift-build|swift-package" 2>/dev/null || true)
-    if [ -z "$SWIFTPM_PIDS" ]; then
+    SWIFTPM_BLOCKING=""
+    for _pid in $(pgrep -f "swift-build|swift-package" 2>/dev/null); do
+        # SourceKit-LSP indexing builds use their own scratch dir
+        # (.build/index-build) and respawn continuously — never wait on them.
+        if ps -p "$_pid" -o command= 2>/dev/null | grep -q "prepare-for-indexing\|index-build"; then
+            continue
+        fi
+        _pcwd=$(lsof -a -p "$_pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        case "$_pcwd" in
+            "$SCRIPT_DIR"*) SWIFTPM_BLOCKING="$_pid"; break ;;
+        esac
+    done
+    if [ -z "$SWIFTPM_BLOCKING" ]; then
         break
     fi
-    step "Waiting for other SwiftPM instance(s) to finish..."
+    step "Waiting for this checkout's SwiftPM instance (pid $SWIFTPM_BLOCKING) to finish..."
     sleep 2
 done
 
