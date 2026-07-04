@@ -223,7 +223,7 @@ struct DesktopHomeView: View {
               FloatingControlBarManager.shared.setup(
                 appState: appState, chatProvider: viewModelContainer.chatProvider)
               if FloatingControlBarManager.shared.isEnabled {
-                FloatingControlBarManager.shared.show()
+                FloatingControlBarManager.shared.showInitial()
               }
 
               // Set up push-to-talk voice input
