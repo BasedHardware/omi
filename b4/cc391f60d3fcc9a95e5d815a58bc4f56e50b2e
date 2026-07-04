@@ -1,0 +1,23 @@
+backend/tests/unit/test_person_handle_dedup.py
+  s_d1e19ef68d1180::t_7521fb1da1c122 1-119
+backend/database/users.py
+  s_d1e19ef68d1180::t_9b9ebb57ea893d 551-572
+  s_d1e19ef68d1180::t_836c8ceb78a970 4
+  s_d1e19ef68d1180::t_d69dbe040f91c6 705-711,713-714,727,736
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b4cc391f60d3fcc9a95e5d815a58bc4f56e50b2e",
+  "prompts": {},
+  "sessions": {
+    "s_d1e19ef68d1180": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "83923764-66fd-417b-b7ad-d7d8af0abcfe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
