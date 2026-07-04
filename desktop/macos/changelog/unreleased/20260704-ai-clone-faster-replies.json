@@ -1,0 +1,3 @@
+{
+  "change": "Made AI Clone replies noticeably faster by reusing one LLM connection instead of reconnecting on every call, and smarter by giving live replies the recent conversation as context"
+}

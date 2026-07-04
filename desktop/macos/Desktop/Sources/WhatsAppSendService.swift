@@ -214,6 +214,22 @@ actor WhatsAppSendService {
     }
   }
 
+  /// Best-effort read receipt ("blue ticks") for the latest incoming message from this
+  /// peer. Purely cosmetic — never throws and never spawns the sidecar; a miss is a no-op.
+  func markRead(to: String) async {
+    guard process?.isRunning == true, currentState.isLinked else { return }
+    _ = try? await request(path: "/read", method: "POST", body: ["to": to])
+  }
+
+  /// Best-effort "typing…" presence shown to the peer. Same non-goals as `markRead`:
+  /// cosmetic only, never throws, never spawns the sidecar.
+  func setComposing(to: String, _ composing: Bool) async {
+    guard process?.isRunning == true, currentState.isLinked else { return }
+    _ = try? await request(
+      path: "/presence", method: "POST",
+      body: ["to": to, "state": composing ? "composing" : "paused"])
+  }
+
   /// Resolve a contact display name to a phone number using the linked account's synced
   /// contacts. Returns nil when there is no unambiguous match.
   func resolvePhone(forName name: String) async -> String? {

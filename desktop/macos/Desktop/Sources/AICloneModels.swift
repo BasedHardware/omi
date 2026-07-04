@@ -16,3 +16,24 @@ struct ImportedContact: Sendable {
   let messageCount: Int
   let platform: String
 }
+
+/// Loads a contact's message history (newest-first) from whichever reader owns its
+/// platform. Shared by the AI Clone page and the app-level send coordinator, which needs
+/// history for retrieval indexing and rolling reply context without the page open.
+enum AICloneMessageLoader {
+  static func loadMessages(
+    for contact: ImportedContact, limit: Int = 500
+  ) async throws -> [ImportedMessage] {
+    switch contact.platform {
+    case "telegram":
+      return await TelegramImportService.shared.messages(for: contact.id, limit: limit)
+    case "whatsapp":
+      return await WhatsAppImportService.shared.messages(for: contact.id, limit: limit)
+    default:
+      let imContact = IMessageContact(
+        id: contact.id, displayName: contact.displayName, messageCount: contact.messageCount)
+      return try await IMessageReaderService.shared.messages(for: imContact, limit: limit)
+        .map { $0.asImportedMessage() }
+    }
+  }
+}

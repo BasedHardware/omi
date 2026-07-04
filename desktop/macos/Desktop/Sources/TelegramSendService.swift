@@ -216,6 +216,17 @@ actor TelegramSendService {
       topicId: nil)
   }
 
+  /// Best-effort "typing…" chat action, visible to the peer for ~5 seconds or until a
+  /// message arrives. Purely cosmetic — never throws; a miss just skips the indicator.
+  func setTyping(chatId: Int64) async {
+    guard case .ready = currentState, let client else { return }
+    if chatId > 0 {
+      _ = try? await client.createPrivateChat(force: false, userId: chatId)
+    }
+    _ = try? await client.sendChatAction(
+      action: .chatActionTyping, businessConnectionId: nil, chatId: chatId, topicId: nil)
+  }
+
   // MARK: Listening
 
   /// Subscribe to incoming/outgoing messages on 1:1 (private) chats. Mirrors the

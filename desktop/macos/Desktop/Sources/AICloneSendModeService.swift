@@ -119,6 +119,9 @@ final class AICloneSendModeService: ObservableObject {
     // connection (Baileys / Linked Devices) that carries account-flagging risk.
     static let whatsAppAutonomousAcknowledged = "aiCloneWhatsAppAutonomousAcknowledged"
     static let whatsAppPhones = "aiCloneWhatsAppPhoneMap"  // [contactId: phone digits]
+    // JSON [KnownContact] — every contact ever registered, so app launch can rebuild
+    // listener routing without the AI Clone page being opened.
+    static let knownContacts = "aiCloneKnownContacts"
   }
 
   /// How many sent entries we keep. The log is a convenience surface, not an audit store.
@@ -211,6 +214,9 @@ final class AICloneSendModeService: ObservableObject {
     }
     UserDefaults.standard.set(
       modes.mapValues(\.rawValue), forKey: Keys.modes)
+    // A contact that can act on incoming messages needs the listeners running — the
+    // launch bootstrap skips them when every contact was Manual at the time.
+    if mode != .manual { startListening() }
     return true
   }
 
@@ -232,7 +238,11 @@ final class AICloneSendModeService: ObservableObject {
 
   // MARK: - Pause switch
 
-  func setPaused(_ paused: Bool) { isPaused = paused }
+  func setPaused(_ paused: Bool) {
+    isPaused = paused
+    // Unpausing means "go live" — make sure the listeners are actually running.
+    if !paused, !activeContacts.isEmpty { startListening() }
+  }
 
   // MARK: - Active-contact registration (drives listeners)
 
@@ -243,6 +253,72 @@ final class AICloneSendModeService: ObservableObject {
     activeContacts = entries.reduce(into: [:]) { acc, entry in
       acc[entry.contact.id] = entry
     }
+    persistKnownContacts(entries.map(\.contact))
+  }
+
+  // MARK: - App-launch bootstrap
+
+  /// Lightweight persisted registration (contact metadata only — the persona itself lives
+  /// in `AIClonePersonaService`) so launch can rebuild routing without the page.
+  private struct KnownContact: Codable {
+    let id: String
+    let displayName: String
+    let messageCount: Int
+    let platform: String
+  }
+
+  /// Rebuild active-contact routing from persisted personas at app launch and start the
+  /// platform listeners when any contact is in Draft-Review/Autonomous — so the clone
+  /// works from launch, not only while the AI Clone page happens to be open.
+  func bootstrapAtLaunch() {
+    Task { @MainActor in
+      guard activeContacts.isEmpty else { return }
+      let personas = await AIClonePersonaService.shared.allPersonas()
+      guard !personas.isEmpty else {
+        log("AICloneSendModeService: bootstrap — no trained personas, nothing to do")
+        return
+      }
+      let known = Self.loadKnownContacts()
+      let entries = personas.map { id, persona in
+        let saved = known[id]
+        let contact = ImportedContact(
+          id: id,
+          displayName: saved?.displayName ?? persona.contactHandle,
+          messageCount: saved?.messageCount ?? persona.messageCountUsed,
+          platform: saved?.platform ?? AIClonePlatform.of(contactId: id).rawValue)
+        return (contact: contact, persona: persona)
+      }
+      updateActiveContacts(entries)
+      let actionable = entries.filter { mode(for: $0.contact.id) != .manual }.count
+      if actionable > 0 {
+        startListening()
+      }
+      log(
+        "AICloneSendModeService: bootstrapped \(entries.count) trained contacts "
+          + "(\(actionable) in Draft/Auto — listeners \(actionable > 0 ? "started" : "idle"))")
+    }
+  }
+
+  private func persistKnownContacts(_ contacts: [ImportedContact]) {
+    guard !contacts.isEmpty else { return }
+    // Merge, never shrink: a partial registration (e.g. the harness registering one
+    // contact) must not erase names the launch bootstrap depends on.
+    var known = Self.loadKnownContacts()
+    for contact in contacts {
+      known[contact.id] = KnownContact(
+        id: contact.id, displayName: contact.displayName,
+        messageCount: contact.messageCount, platform: contact.platform)
+    }
+    if let data = try? JSONEncoder().encode(Array(known.values)) {
+      UserDefaults.standard.set(data, forKey: Keys.knownContacts)
+    }
+  }
+
+  private static func loadKnownContacts() -> [String: KnownContact] {
+    guard let data = UserDefaults.standard.data(forKey: Keys.knownContacts),
+      let decoded = try? JSONDecoder().decode([KnownContact].self, from: data)
+    else { return [:] }
+    return decoded.reduce(into: [:]) { $0[$1.id] = $1 }
   }
 
   // MARK: - Listening lifecycle
@@ -427,12 +503,40 @@ final class AICloneSendModeService: ObservableObject {
     }
   }
 
+  /// Rolling conversation context for a reply. Loading recent history here also rebuilds
+  /// the contact's retrieval index when it's cold (personas persist across launches but
+  /// indices are in-memory), so app-level replies keep their dynamic few-shot examples.
+  /// Returns the last turns oldest-first, dropping the trailing turn when it *is* the
+  /// incoming message (live listeners see messages after they land in the local store).
+  private func replyContext(for contact: ImportedContact, incoming: String) async
+    -> [ConversationTurn]
+  {
+    guard
+      let messages = try? await AICloneMessageLoader.loadMessages(for: contact, limit: 500),
+      !messages.isEmpty
+    else { return [] }
+    await AICloneRetrievalService.shared.ensureIndex(contactId: contact.id, messages: messages)
+    // Readers return newest-first; take the newest turns and flip to chronological.
+    var turns = messages.prefix(12).reversed().map {
+      ConversationTurn(isFromMe: $0.isFromMe, text: $0.text)
+    }
+    if let last = turns.last, !last.isFromMe,
+      last.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        == incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+    {
+      turns.removeLast()
+    }
+    return turns
+  }
+
   /// Draft-Review: generate a reply and enqueue it for approval. Never sends.
   private func generateDraft(for contact: ImportedContact, persona: ContactPersona, incoming: String)
   {
     Task {
       do {
-        let reply = try await AIClonePersonaService.shared.respond(as: persona, to: incoming)
+        let context = await replyContext(for: contact, incoming: incoming)
+        let reply = try await AIClonePersonaService.shared.respond(
+          as: persona, to: incoming, context: context)
         let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         pendingDrafts.insert(
@@ -448,6 +552,10 @@ final class AICloneSendModeService: ObservableObject {
 
   /// Autonomous: generate and send automatically — HARD-GATED on `!isPaused`. If paused (the
   /// default), this degrades to enqueuing a draft so nothing is ever sent unattended.
+  ///
+  /// The whole flow is human-paced so the reply reads like the user really handled it:
+  /// pause to "read" the message, leave a read receipt where the platform supports one,
+  /// think (generation time), then "type" each bubble under a live typing indicator.
   private func autoRespond(for contact: ImportedContact, persona: ContactPersona, incoming: String) {
     guard !isPaused else {
       log("AICloneSendModeService: autonomous paused — enqueuing draft for \(contact.id)")
@@ -456,7 +564,12 @@ final class AICloneSendModeService: ObservableObject {
     }
     Task {
       do {
-        let reply = try await AIClonePersonaService.shared.respond(as: persona, to: incoming)
+        try? await Task.sleep(
+          nanoseconds: UInt64(AICloneHumanizer.readingDelay(forIncoming: incoming) * 1_000_000_000))
+        await markIncomingRead(contactId: contact.id, displayName: contact.displayName)
+        let context = await replyContext(for: contact, incoming: incoming)
+        let reply = try await AIClonePersonaService.shared.respond(
+          as: persona, to: incoming, context: context)
         let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         // Re-check the switch right before dispatch — the user may have paused mid-generation.
@@ -465,7 +578,8 @@ final class AICloneSendModeService: ObservableObject {
           return
         }
         try await sendBubbles(
-          contactId: contact.id, displayName: contact.displayName, text: text, mode: .autonomous)
+          contactId: contact.id, displayName: contact.displayName, text: text, mode: .autonomous,
+          humanizedTyping: true)
       } catch {
         log("AICloneSendModeService: autonomous send failed for \(contact.id): \(error)")
       }
@@ -507,17 +621,74 @@ final class AICloneSendModeService: ObservableObject {
   /// way a real person sends a burst — `respond()` joins bubbles with newlines, and sending
   /// that as one message would land as a single wall of text. A short human-ish pause
   /// separates bubbles. Throws on the first failed bubble (earlier bubbles stay sent).
-  func sendBubbles(contactId: String, displayName: String, text: String, mode: SendMode)
-    async throws
-  {
+  ///
+  /// `humanizedTyping` (autonomous sends) replaces the fixed pause with a per-bubble
+  /// "typing" delay scaled to the bubble's length, refreshing a live typing indicator on
+  /// platforms that support one (WhatsApp presence, Telegram chat action).
+  func sendBubbles(
+    contactId: String, displayName: String, text: String, mode: SendMode,
+    humanizedTyping: Bool = false
+  ) async throws {
     let bubbles = AICloneReplyPresentation.bubbles(from: text)
     guard !bubbles.isEmpty else { throw IMessageSendError.emptyText }
     for (index, bubble) in bubbles.enumerated() {
-      if index > 0 {
+      if humanizedTyping {
+        await typeLikeAHuman(
+          contactId: contactId, displayName: displayName,
+          seconds: AICloneHumanizer.typingDelay(forBubble: bubble))
+      } else if index > 0 {
         try? await Task.sleep(nanoseconds: UInt64.random(in: 600_000_000...1_400_000_000))
       }
       try await send(contactId: contactId, displayName: displayName, text: bubble, mode: mode)
     }
+    if humanizedTyping { await clearTypingIndicator(contactId: contactId, displayName: displayName) }
+  }
+
+  // MARK: - Human-pacing helpers (autonomous sends only)
+
+  /// Leave a read receipt where the platform exposes one (WhatsApp "blue ticks"). iMessage
+  /// and Telegram have no usable read API here — the pacing alone carries the illusion.
+  private func markIncomingRead(contactId: String, displayName: String) async {
+    guard AIClonePlatform.of(contactId: contactId) == .whatsapp else { return }
+    guard let target = try? await whatsAppSendTarget(contactId: contactId, displayName: displayName)
+    else { return }
+    await WhatsAppSendService.shared.markRead(to: target)
+  }
+
+  /// Hold a "typing…" indicator for `seconds`, re-firing it every few seconds because both
+  /// WhatsApp presence and Telegram chat actions auto-expire. Best-effort and non-throwing.
+  private func typeLikeAHuman(contactId: String, displayName: String, seconds: TimeInterval) async {
+    var remaining = seconds
+    while remaining > 0 {
+      await showTypingIndicator(contactId: contactId, displayName: displayName)
+      let chunk = min(remaining, 4.0)
+      try? await Task.sleep(nanoseconds: UInt64(chunk * 1_000_000_000))
+      remaining -= chunk
+    }
+  }
+
+  private func showTypingIndicator(contactId: String, displayName: String) async {
+    switch AIClonePlatform.of(contactId: contactId) {
+    case .imessage:
+      break  // No public typing-indicator API for iMessage.
+    case .telegram:
+      if let chatId = Int64(String(contactId.dropFirst("telegram:".count))) {
+        await TelegramSendService.shared.setTyping(chatId: chatId)
+      }
+    case .whatsapp:
+      if let target = try? await whatsAppSendTarget(contactId: contactId, displayName: displayName) {
+        await WhatsAppSendService.shared.setComposing(to: target, true)
+      }
+    }
+  }
+
+  /// WhatsApp keeps showing "typing…" briefly after the last send; explicitly pause it.
+  /// Telegram chat actions are cancelled server-side by the send itself.
+  private func clearTypingIndicator(contactId: String, displayName: String) async {
+    guard AIClonePlatform.of(contactId: contactId) == .whatsapp else { return }
+    guard let target = try? await whatsAppSendTarget(contactId: contactId, displayName: displayName)
+    else { return }
+    await WhatsAppSendService.shared.setComposing(to: target, false)
   }
 
   /// Route a send to the correct platform backend and, on success, log it. Throws on failure

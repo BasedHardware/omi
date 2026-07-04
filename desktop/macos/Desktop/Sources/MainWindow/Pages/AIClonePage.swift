@@ -79,7 +79,9 @@ struct AIClonePage: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .background(OmiColors.backgroundPrimary)
     .task(id: reloadToken) { await load() }
-    .onDisappear { sendMode.stopListening() }
+    // Deliberately NO stopListening on disappear: Draft-Review/Autonomous must keep
+    // working after the user navigates away — the listeners are app-level, owned by
+    // AICloneSendModeService (bootstrapped at launch), not by this page's lifecycle.
     .onReceive(NotificationCenter.default.publisher(for: .aiCloneOpenChatRequested)) { note in
       guard let id = note.userInfo?["contactId"] as? String else { return }
       openChatViaAutomation(id)
@@ -678,17 +680,7 @@ struct AIClonePage: View {
   fileprivate static func loadMessages(
     for contact: ImportedContact, limit: Int = 500
   ) async throws -> [ImportedMessage] {
-    switch contact.platform {
-    case "telegram":
-      return await TelegramImportService.shared.messages(for: contact.id, limit: limit)
-    case "whatsapp":
-      return await WhatsAppImportService.shared.messages(for: contact.id, limit: limit)
-    default:
-      let imContact = IMessageContact(
-        id: contact.id, displayName: contact.displayName, messageCount: contact.messageCount)
-      return try await IMessageReaderService.shared.messages(for: imContact, limit: limit)
-        .map { $0.asImportedMessage() }
-    }
+    try await AICloneMessageLoader.loadMessages(for: contact, limit: limit)
   }
 
   /// Run the full backtest + refine loop for one contact, streaming progress into the row.

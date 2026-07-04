@@ -1,0 +1,3 @@
+{
+  "change": "Fixed AI Clone Draft-Review and Autonomous modes not working unless the AI Clone page stayed open — the clone now listens for messages from app launch"
+}

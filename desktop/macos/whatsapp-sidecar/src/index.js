@@ -12,6 +12,8 @@
 //                                waiting_qr | linked | logged_out
 //   POST /link/start          → begin linking (or resume a saved session); returns /link/status
 //   POST /send {to, text}     → send a text message; `to` is digits or a full JID
+//   POST /read {to}           → mark the latest incoming message from `to` as read (blue ticks)
+//   POST /presence {to, state}→ show "typing…" to `to` (state: composing | paused)
 //   GET  /events?since=N      → { events: [{seq, phone, fromMe, text, timestamp, senderName}], latest }
 //   GET  /resolve?name=X      → { phone, jid, name } or 404 — display-name → JID lookup
 //   POST /logout              → unlink + clear the saved session
@@ -56,6 +58,10 @@ let shuttingDown = false
 // Incoming-message ring buffer, consumed by the app via GET /events?since=<seq>.
 let eventSeq = 0
 const events = []
+
+// Latest incoming message key per 1:1 jid, so POST /read can ack ("blue tick") it.
+/** @type {Map<string, object>} */
+const lastIncomingKeyByJid = new Map()
 
 // Display-name → JID map for resolving imported contacts to real numbers. Seeded from the
 // initial history sync, then kept fresh from contact upserts and message push-names.
@@ -247,6 +253,7 @@ function ingestMessage(msg) {
   if (!text) return
   const fromMe = !!msg.key?.fromMe
   if (!fromMe && msg.pushName) rememberContact(jid, msg.pushName)
+  if (!fromMe && msg.key?.id) lastIncomingKeyByJid.set(jid, msg.key)
   eventSeq += 1
   events.push({
     seq: eventSeq,
@@ -364,6 +371,31 @@ const server = createServer(async (req, res) => {
       if (!text) return sendJson(res, 400, { error: 'empty "text"' })
       await sock.sendMessage(jid, { text })
       return sendJson(res, 200, { sent: true, jid, phone: phoneFromJid(jid) })
+    }
+
+    if (req.method === 'POST' && url.pathname === '/read') {
+      if (state !== 'linked' || !sock) {
+        return sendJson(res, 409, { error: 'not linked' })
+      }
+      const body = await readBody(req)
+      const jid = normalizeSendTarget(body.to)
+      if (!jid) return sendJson(res, 400, { error: 'invalid "to"' })
+      const key = lastIncomingKeyByJid.get(jid)
+      if (!key) return sendJson(res, 200, { read: false, reason: 'no tracked incoming message' })
+      await sock.readMessages([key])
+      return sendJson(res, 200, { read: true, jid })
+    }
+
+    if (req.method === 'POST' && url.pathname === '/presence') {
+      if (state !== 'linked' || !sock) {
+        return sendJson(res, 409, { error: 'not linked' })
+      }
+      const body = await readBody(req)
+      const jid = normalizeSendTarget(body.to)
+      if (!jid) return sendJson(res, 400, { error: 'invalid "to"' })
+      const presence = body.state === 'composing' ? 'composing' : 'paused'
+      await sock.sendPresenceUpdate(presence, jid)
+      return sendJson(res, 200, { presence, jid })
     }
 
     if (req.method === 'GET' && url.pathname === '/events') {

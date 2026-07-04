@@ -260,6 +260,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
 
+    // AI Clone: rebuild send-mode routing from persisted personas and start the message
+    // listeners if any contact is in Draft-Review/Autonomous. App-level on purpose — the
+    // clone must keep working when the AI Clone page isn't open.
+    AICloneSendModeService.shared.bootstrapAtLaunch()
+
     // After a Sparkle update, show a small "what's new" card in the corner of the
     // main window once. Delayed so the window/overlay exist to render it.
     if restoreMainWindowAfterUpdateRelaunch != false {

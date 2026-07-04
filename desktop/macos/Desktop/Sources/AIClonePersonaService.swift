@@ -438,19 +438,50 @@ actor AIClonePersonaService {
     )
   }
 
-  // MARK: - LLM plumbing (mirrors AppleNotesReaderService pattern, retry on failure)
+  // MARK: - LLM plumbing (persistent shared bridge, retry on failure)
+
+  /// One long-lived bridge client reused across every clone LLM call. Creating a bridge
+  /// per call (the old pattern) paid client registration plus a force-refreshed auth
+  /// token round-trip on EVERY generate/critic/persona call — the single biggest source
+  /// of reply latency. The persistent client keeps its token fresh on its own timer.
+  private var sharedBridge: AgentBridge?
+  /// The bridge serves one query at a time; actor reentrancy across `await` means two
+  /// concurrent `respond()` calls could otherwise interleave into `requestAlreadyActive`.
+  private var llmBusy = false
+
+  private func acquireBridge() async throws -> AgentBridge {
+    if let bridge = sharedBridge, await bridge.isAlive { return bridge }
+    let bridge = AgentBridge(harnessMode: "piMono")
+    try await bridge.start()
+    sharedBridge = bridge
+    return bridge
+  }
+
+  private static func isQuotaError(_ error: Error) -> Bool {
+    if case BridgeError.quotaExceeded = error { return true }
+    return false
+  }
+
+  /// Drop (and unregister) the shared bridge so the next call builds a fresh one.
+  private func discardBridge() {
+    if let bridge = sharedBridge {
+      Task { await bridge.stop() }
+    }
+    sharedBridge = nil
+  }
 
   private func runLLM(
     prompt: String, system: String, model: String, label: String
   ) async throws -> String {
+    while llmBusy { try? await Task.sleep(nanoseconds: 50_000_000) }
+    llmBusy = true
+    defer { llmBusy = false }
+
     let maxAttempts = 2
     var lastError: Error?
     for attempt in 1...maxAttempts {
       do {
-        let bridge = AgentBridge(harnessMode: "piMono")
-        try await bridge.start()
-        defer { Task { await bridge.stop() } }
-
+        let bridge = try await acquireBridge()
         let result = try await bridge.query(
           prompt: prompt,
           systemPrompt: system,
@@ -462,9 +493,15 @@ actor AIClonePersonaService {
         return result.text
       } catch {
         lastError = error
+        // A failed query may leave the client wedged — rebuild on the next attempt.
+        discardBridge()
         if attempt < maxAttempts {
           log("AIClonePersonaService: \(label) attempt \(attempt) failed, retrying: \(error)")
-          try? await Task.sleep(nanoseconds: 800_000_000)
+          // A cached quota verdict fails instantly and a fresh bridge re-checks against
+          // the server — only real (network/runtime) failures earn a backoff pause.
+          if !Self.isQuotaError(error) {
+            try? await Task.sleep(nanoseconds: 800_000_000)
+          }
           continue
         }
         log("AIClonePersonaService: \(label) failed after \(attempt) attempts: \(error)")
