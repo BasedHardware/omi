@@ -292,6 +292,10 @@ struct DashboardPage: View {
         selectedCatalogApp != nil || selectedImportConnector != nil || selectedExportDestination != nil
     }
 
+    private var isHomeModalPresented: Bool {
+        isShowingAppsPopup || homeConnectSheetIsPresented
+    }
+
     private var legacySelectedCatalogApp: Binding<OmiApp?> {
         Binding(
             get: { useLegacyHomeDesign ? selectedCatalogApp : nil },
@@ -523,10 +527,15 @@ struct DashboardPage: View {
                     .frame(width: proxy.size.width)
                     .frame(height: panelHeight)
                     .position(x: proxy.size.width / 2, y: panelTop + panelHeight / 2)
+                    // The popup/sheet overlays are modal: while one is up, the
+                    // stage underneath must not be reachable by VoiceOver /
+                    // Full Keyboard Access.
+                    .accessibilityHidden(isHomeModalPresented)
 
                 homeHeader
                     .padding(.horizontal, Self.homeStageHorizontalPadding)
                     .padding(.top, 26)
+                    .accessibilityHidden(isHomeModalPresented)
 
                 appsPopupOverlay(
                     contentWidth: proxy.size.width,
@@ -594,10 +603,17 @@ struct DashboardPage: View {
             .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
             .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
             .transition(.scale(scale: 0.95).combined(with: .opacity))
-            .onExitCommand {
-                isShowingAppsPopup = false
-            }
+            .accessibilityAddTraits(.isModal)
             .zIndex(3)
+
+            // Only the topmost modal owns Esc; the connect sheet takes over
+            // while it is presented (including the brief crossfade overlap).
+            if !homeConnectSheetIsPresented {
+                OverlayModalEscapeCatcher {
+                    isShowingAppsPopup = false
+                }
+                .zIndex(3)
+            }
         }
     }
 
@@ -631,7 +647,13 @@ struct DashboardPage: View {
                 .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
                 .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
                 .transition(.scale(scale: 0.96).combined(with: .opacity))
+                .accessibilityAddTraits(.isModal)
                 .zIndex(5)
+
+            OverlayModalEscapeCatcher {
+                dismissHomeConnectSheet()
+            }
+            .zIndex(5)
         }
     }
 

@@ -59,6 +59,7 @@ struct ConnectDestinationSheet: View {
               .background(Circle().fill(OmiColors.backgroundTertiary))
           }
           .buttonStyle(.plain)
+          .accessibilityLabel("Close")
         }
         .padding(24)
 

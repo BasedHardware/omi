@@ -1,0 +1,3 @@
+{
+    "change": "Fixed connector popups and sheets so Escape closes them and they behave as proper modals for VoiceOver and keyboard users"
+}

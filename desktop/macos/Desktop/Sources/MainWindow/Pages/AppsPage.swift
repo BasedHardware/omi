@@ -68,40 +68,42 @@ struct SafeDismissButton: View {
 // MARK: - Dismiss Button (Action-based)
 /// A dismiss button that takes a closure instead of a DismissAction.
 /// Used for overlay-based sheets where the dismiss is controlled externally.
+/// A real Button (not a tap gesture) so accessibility exposes it as a labeled
+/// "Close" control and keyboard users can reach it.
 struct DismissButton: View {
     let action: () -> Void
     var icon: String = "xmark"
     var showBackground: Bool = true
-
-    @State private var isPressed = false
+    var accessibilityLabel: String = "Close"
 
     var body: some View {
-        Image(systemName: icon)
-            .scaledFont(size: 14, weight: .medium)
-            .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
-            .frame(width: 28, height: 28)
-            .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
-            .clipShape(Circle())
-            .contentShape(Circle())
-            .opacity(isPressed ? 0.7 : 1.0)
-            .onTapGesture {
-                guard !isPressed else { return }
-                isPressed = true
+        Button {
+            log("DISMISS_BUTTON: Activated")
 
-                log("DISMISS_BUTTON: Tap gesture fired")
+            // Commit any in-progress field editing before tearing the sheet down.
+            NSApp.keyWindow?.makeFirstResponder(nil)
 
-                // Consume the click by resigning first responder
-                NSApp.keyWindow?.makeFirstResponder(nil)
-
-                // Small delay then dismiss
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
-                    log("DISMISS_BUTTON: Calling action")
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        action()
-                    }
-                }
+            withAnimation(.easeOut(duration: 0.2)) {
+                action()
             }
+        } label: {
+            Image(systemName: icon)
+                .scaledFont(size: 14, weight: .medium)
+                .foregroundColor(OmiColors.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
+                .clipShape(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(DismissButtonPressStyle())
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct DismissButtonPressStyle: ButtonStyle {
+    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
     }
 }
 
@@ -412,6 +414,7 @@ struct AppsPage: View {
             TextField("Search apps...", text: $searchText)
                 .textFieldStyle(.plain)
                 .foregroundColor(OmiColors.textPrimary)
+                .accessibilityLabel("Search apps")
 
             if !searchText.isEmpty {
                 Button(action: { searchText = "" }) {
@@ -2418,7 +2421,9 @@ struct CategoryAppsSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                DismissButton(action: dismissSheet, icon: "chevron.left", showBackground: false)
+                DismissButton(
+                    action: dismissSheet, icon: "chevron.left", showBackground: false,
+                    accessibilityLabel: "Back")
 
                 Text(category.title)
                     .scaledFont(size: 18, weight: .semibold)
@@ -3349,12 +3354,78 @@ struct FlowLayout: Layout {
 /// A sheet that can be dismissed by clicking outside the content area.
 /// This provides macOS-friendly modal behavior where clicking the dimmed background dismisses the sheet.
 
+/// Maps Esc to a dismiss closure for custom overlay modals. These overlays are
+/// ZStack layers, not NSWindow sheets, so AppKit gives them no cancel handling,
+/// `onExitCommand` needs focus they never receive, and hidden SwiftUI buttons
+/// with a cancel key equivalent get culled from key-equivalent dispatch. A
+/// local key-down monitor scoped to the hosting window delivers Esc
+/// deterministically. Render it only while its overlay is the topmost modal.
+struct OverlayModalEscapeCatcher: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> EscapeCatcherView {
+        let view = EscapeCatcherView()
+        view.onEscape = action
+        return view
+    }
+
+    func updateNSView(_ nsView: EscapeCatcherView, context: Context) {
+        nsView.onEscape = action
+    }
+
+    final class EscapeCatcherView: NSView {
+        var onEscape: (() -> Void)?
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil {
+                installMonitor()
+            } else {
+                removeMonitor()
+            }
+        }
+
+        // Never intercept mouse events — this view exists only for the monitor.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        private func installMonitor() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard
+                    let self,
+                    event.keyCode == 53,  // Esc
+                    let window = self.window,
+                    event.window === window
+                else { return event }
+                self.onEscape?()
+                // Consume the event — while the overlay is up it owns Esc.
+                return nil
+            }
+        }
+
+        private func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit {
+            removeMonitor()
+        }
+    }
+}
+
 struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
     @Binding var isPresented: Bool
     let sheetContent: () -> SheetContent
 
     func body(content: Content) -> some View {
         content
+            // The overlay is modal: while it is up, the content underneath must
+            // not be reachable by VoiceOver / Full Keyboard Access.
+            .accessibilityHidden(isPresented)
             .overlay {
                 ZStack {
                     if isPresented {
@@ -3379,7 +3450,16 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
                             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
+                            .accessibilityAddTraits(.isModal)
                             .zIndex(1)
+
+                        OverlayModalEscapeCatcher {
+                            log("DISMISSABLE_SHEET: Escape pressed, dismissing")
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                isPresented = false
+                            }
+                        }
+                        .zIndex(2)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -3413,6 +3493,9 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
 
     func body(content: Content) -> some View {
         content
+            // The overlay is modal: while it is up, the content underneath must
+            // not be reachable by VoiceOver / Full Keyboard Access.
+            .accessibilityHidden(item != nil)
             .overlay {
                 ZStack {
                     if let presentedItem = item {
@@ -3437,7 +3520,16 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
                             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
+                            .accessibilityAddTraits(.isModal)
                             .zIndex(1)
+
+                        OverlayModalEscapeCatcher {
+                            log("DISMISSABLE_SHEET: Escape pressed, dismissing item")
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                item = nil
+                            }
+                        }
+                        .zIndex(2)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

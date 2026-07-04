@@ -512,6 +512,7 @@ private struct CloudConnectorCardHeaderView: View {
       }
       .buttonStyle(.plain)
       .help("Dismiss")
+      .accessibilityLabel("Close")
     }
   }
 }

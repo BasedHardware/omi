@@ -70,7 +70,8 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
         XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
         XCTAssertTrue(source.contains(".onTapGesture {\n                    isShowingAppsPopup = false"))
-        XCTAssertTrue(source.contains(".onExitCommand {\n                isShowingAppsPopup = false"))
+        XCTAssertTrue(
+            source.contains("OverlayModalEscapeCatcher {\n                    isShowingAppsPopup = false"))
         XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .imports)"))
         XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .exports)"))
         XCTAssertFalse(source.contains("@State private var dashboardContentSize"))
@@ -181,6 +182,45 @@ final class DashboardCaptureStateTests: XCTestCase {
             XCTAssertFalse(memoryExportSheet.contains(color))
             XCTAssertFalse(apps.contains(color))
         }
+    }
+
+    func testHomeOverlaysBehaveLikeModals() throws {
+        let dashboard = try dashboardSource()
+        let apps = try appsSource()
+
+        // Esc must dismiss the topmost overlay. Custom ZStack overlays are not
+        // NSWindow sheets, so Esc comes from the shared catcher's window-scoped
+        // key monitor — onExitCommand never fires (the overlays are never
+        // focused) and hidden cancel-shortcut buttons get culled from dispatch.
+        XCTAssertTrue(apps.contains("struct OverlayModalEscapeCatcher: NSViewRepresentable"))
+        XCTAssertTrue(apps.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
+        XCTAssertTrue(apps.contains("event.window === window"))
+        XCTAssertTrue(
+            dashboard.contains(
+                "if !homeConnectSheetIsPresented {\n                OverlayModalEscapeCatcher {\n                    isShowingAppsPopup = false"
+            ),
+            "The apps popup owns Esc only while the connect sheet is not presented"
+        )
+        XCTAssertTrue(
+            dashboard.contains("OverlayModalEscapeCatcher {\n                dismissHomeConnectSheet()"))
+        XCTAssertFalse(
+            dashboard.contains(".onExitCommand"),
+            "Home overlays must not rely on onExitCommand — it requires focus the overlays never receive"
+        )
+        XCTAssertTrue(apps.contains("OverlayModalEscapeCatcher {\n                            log(\"DISMISSABLE_SHEET: Escape pressed"))
+
+        // While an overlay is up, the content underneath must be hidden from
+        // VoiceOver / Full Keyboard Access and the panel marked as modal.
+        XCTAssertTrue(dashboard.contains("private var isHomeModalPresented: Bool"))
+        XCTAssertTrue(dashboard.contains(".accessibilityHidden(isHomeModalPresented)"))
+        XCTAssertTrue(dashboard.contains(".accessibilityAddTraits(.isModal)"))
+        XCTAssertTrue(apps.contains(".accessibilityHidden(isPresented)"))
+        XCTAssertTrue(apps.contains(".accessibilityHidden(item != nil)"))
+        XCTAssertTrue(apps.contains(".accessibilityAddTraits(.isModal)"))
+
+        // The close control must be a real, labeled button — not a tap gesture.
+        XCTAssertTrue(apps.contains("var accessibilityLabel: String = \"Close\""))
+        XCTAssertTrue(apps.contains(".accessibilityLabel(accessibilityLabel)"))
     }
 
     private func dashboardSource() throws -> String {
