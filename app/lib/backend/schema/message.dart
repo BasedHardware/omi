@@ -31,9 +31,11 @@ class MessageConversationStructured {
     return MessageConversationStructured(generated.title, generated.emoji);
   }
 
-  Map<String, dynamic> toJson() {
-    return {'title': title, 'emoji': emoji};
+  wire.GeneratedMessageConversationStructured toGenerated() {
+    return wire.GeneratedMessageConversationStructured(emoji: emoji, title: title);
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class MessageConversation {
@@ -55,9 +57,11 @@ class MessageConversation {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {'id': id, 'created_at': createdAt.toUtc().toIso8601String(), 'structured': structured.toJson()};
+  wire.GeneratedMessageConversation toGenerated() {
+    return wire.GeneratedMessageConversation(createdAt: createdAt, id: id, structured: structured.toGenerated());
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class MessageFile {
@@ -87,21 +91,19 @@ class MessageFile {
     );
   }
 
-  static List<MessageFile> fromJsonList(List<dynamic> json) {
-    return json.map((e) => MessageFile.fromJson(e)).toList();
+  wire.GeneratedFileChat toGenerated() {
+    return wire.GeneratedFileChat(
+      createdAt: createdAt,
+      id: id,
+      mimeType: mimeType,
+      name: name,
+      openaiFileId: openaiFileId,
+      thumbName: thumbnailName,
+      thumbnail: thumbnail,
+    );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'openai_file_id': openaiFileId,
-      'thumbnail': thumbnail,
-      'name': name,
-      'mime_type': mimeType,
-      'id': id,
-      'created_at': createdAt.toUtc().toIso8601String(),
-      'thumb_name': thumbnailName,
-    };
-  }
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 
   String mimeTypeToFileType() {
     if (mimeType.contains('image')) {
@@ -126,9 +128,11 @@ class ChartDataPoint {
     return ChartDataPoint(generated.label, generated.value);
   }
 
-  Map<String, dynamic> toJson() {
-    return {'label': label, 'value': value};
+  wire.GeneratedChartDataPoint toGenerated() {
+    return wire.GeneratedChartDataPoint(label: label, value: value);
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class ChartDataset {
@@ -150,9 +154,15 @@ class ChartDataset {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {'label': label, 'data_points': dataPoints.map((p) => p.toJson()).toList(), 'color': color};
+  wire.GeneratedChartDataset toGenerated() {
+    return wire.GeneratedChartDataset(
+      color: color,
+      dataPoints: dataPoints.map((p) => p.toGenerated()).toList(),
+      label: label,
+    );
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class ChartData {
@@ -197,15 +207,17 @@ class ChartData {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'chart_type': chartType,
-      'title': title,
-      'x_label': xLabel,
-      'y_label': yLabel,
-      'datasets': datasets.map((d) => d.toJson()).toList(),
-    };
+  wire.GeneratedChartData toGenerated() {
+    return wire.GeneratedChartData(
+      chartType: chartType,
+      datasets: datasets.map((d) => d.toGenerated()).toList(),
+      title: title,
+      xLabel: xLabel,
+      yLabel: yLabel,
+    );
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class ServerMessage {
@@ -314,6 +326,10 @@ class ServerMessage {
       rawChartData: rawChartData,
     );
   }
+
+  /// Kept hand-written: emits legacy `from_integration` key (generated uses
+  /// `from_external_integration`) and preserves `rawChartData` fallback for
+  /// `chart_data` when `chartData` parsing failed.
 
   Map<String, dynamic> toJson() {
     final chartJson = rawChartData ?? chartData?.toJson();
