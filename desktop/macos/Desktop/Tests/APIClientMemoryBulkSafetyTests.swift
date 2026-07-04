@@ -434,6 +434,46 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
         XCTAssertEqual(legacyContents, [legacyMemory.content])
     }
 
+    func testOnboardingImportEvidenceFallsBackToLegacyBatchWhenEndpointMissing() async {
+        // Deployments without the canonical import router (prod today) 404
+        // /v3/memory-imports/batch; the scan context must still reach the
+        // legacy batch path instead of being silently dropped.
+        let item = ImportEvidenceBatchItem(
+            title: "Missing Endpoint",
+            snippet: "The user works on a local project named foo.",
+            content: "The user works on a local project named foo.",
+            metadata: ["import_kind": "local_file_profile"]
+        )
+        let legacyMemory = MemoryBatchItem(
+            content: "The user works on a local project named foo.",
+            tags: ["local_files", "onboarding", "project"],
+            headline: "foo",
+            source: "local_files"
+        )
+        let api = FakeImportEvidenceAPI(
+            outcomes: [
+                .failure(APIError.httpError(statusCode: 404, detail: "Not Found")),
+            ])
+        let legacyApi = FakeMemoryBatchAPI()
+
+        let result = await OnboardingImportEvidenceService.save(
+            [item],
+            sourceType: "local_files",
+            logPrefix: "test",
+            importRunId: "test-run-missing-endpoint",
+            sourceAccountHash: nil,
+            legacyMemories: [legacyMemory],
+            apiClient: api,
+            legacyApiClient: legacyApi,
+            sleep: { _ in }
+        )
+
+        XCTAssertEqual(result.saved, 1)
+        XCTAssertEqual(result.failed, 0)
+        let legacyCallCount = await legacyApi.callCount()
+        XCTAssertEqual(legacyCallCount, 1)
+    }
+
     func testOnboardingImportEvidenceDoesNotFallbackWhenCanonicalNotReady() async {
         let item = ImportEvidenceBatchItem(
             title: "Canonical Not Ready",

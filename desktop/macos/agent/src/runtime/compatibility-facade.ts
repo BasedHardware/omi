@@ -14,6 +14,7 @@ import type {
   WarmupSessionConfig,
 } from "../protocol.js";
 import { requestIdFor } from "../protocol.js";
+import { serializeArtifact } from "./artifact-serialization.js";
 import type { RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
@@ -248,6 +249,7 @@ export class JsonlCompatibilityFacade {
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
+        artifacts: result.artifacts.map(serializeArtifact),
       };
       this.send(this.withCorrelation(resultMessage, context));
     } catch (error) {
@@ -698,6 +700,7 @@ export class JsonlCompatibilityFacade {
     };
   }
 }
+
 
 function failureFromResultJson(resultJson: string | null): RuntimeFailure | undefined {
   if (!resultJson) return undefined;

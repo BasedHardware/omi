@@ -2012,6 +2012,7 @@ class FloatingControlBarManager {
     private var pendingNotificationContext: PendingNotificationContext?
     private var floatingSessionKey = "floating"
     private var activeQueryGeneration: Int = 0
+    private var deliveredAgentArtifactKeys: Set<String> = []
 
     private var selectedFloatingModel: String {
         let selected = ShortcutSettings.shared.selectedModel
@@ -3268,6 +3269,44 @@ class FloatingControlBarManager {
         )
     }
 
+    func recordAgentArtifactCompletion(
+        pillID: UUID,
+        runId: String?,
+        title: String,
+        finalText: String?,
+        resources: [ChatResource]
+    ) {
+        guard !resources.isEmpty else { return }
+
+        let deliveryKey = [
+            runId,
+            Optional(pillID.uuidString),
+            Optional(resources.map(\.id).joined(separator: "|")),
+        ]
+        .compactMap { $0 }
+        .joined(separator: "::")
+        guard !deliveredAgentArtifactKeys.contains(deliveryKey) else { return }
+        deliveredAgentArtifactKeys.insert(deliveryKey)
+
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let messageText: String
+        if !trimmedFinalText.isEmpty {
+            messageText = trimmedFinalText
+        } else if !trimmedTitle.isEmpty {
+            messageText = "Done. \(trimmedTitle) produced \(resources.count == 1 ? "an artifact" : "\(resources.count) artifacts")."
+        } else {
+            messageText = "Done. The background agent produced \(resources.count == 1 ? "an artifact" : "\(resources.count) artifacts")."
+        }
+
+        let historyMessage = historyChatProvider?.appendAssistantMessage(
+            messageText,
+            resources: resources
+        )
+        let visibleMessage = historyMessage ?? ChatMessage(text: messageText, sender: .ai, resources: resources)
+        deliverAgentArtifactCompletionToFloatingSurface(visibleMessage)
+    }
+
     func topLevelVoiceContinuityContext() -> String {
         var sections: [String] = []
         if let history = historyChatProvider?.buildTopLevelVoiceContinuityContext(),
@@ -3377,6 +3416,26 @@ class FloatingControlBarManager {
 
     private func activeFloatingProvider() -> ChatProvider? {
         historyChatProvider
+    }
+
+    private func deliverAgentArtifactCompletionToFloatingSurface(_ message: ChatMessage) {
+        guard let window else { return }
+        let exchange = FloatingChatExchange(
+            question: nil,
+            questionMessageId: nil,
+            aiMessage: message
+        )
+        window.state.chatHistory.append(exchange)
+        window.state.currentAIMessage = nil
+        window.state.displayedQuery = ""
+        window.state.currentQuestionMessageId = nil
+        window.state.isAILoading = false
+        if window.state.conversationSurface == .mainInput || window.state.conversationSurface == .mainResponse {
+            window.state.present(.mainResponse)
+            window.resizeToResponseHeightPublic(animated: true)
+        } else {
+            window.state.markConversationActivity()
+        }
     }
 
     /// Access the bar state for PTT updates.

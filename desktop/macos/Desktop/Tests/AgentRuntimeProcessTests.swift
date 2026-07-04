@@ -94,18 +94,29 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 
-    let first = AgentRuntimeProcess.defaultStateDirectory(
+    let firstState = AgentRuntimeProcess.defaultStateDirectory(
       bundleIdentifier: "com.omi.omi-ticket-five-a",
       homeDirectory: home
     )
-    let second = AgentRuntimeProcess.defaultStateDirectory(
+    let secondState = AgentRuntimeProcess.defaultStateDirectory(
+      bundleIdentifier: "com.omi.omi-ticket-five-b",
+      homeDirectory: home
+    )
+    let firstArtifacts = AgentRuntimeProcess.defaultArtifactsDirectory(
+      bundleIdentifier: "com.omi.omi-ticket-five-a",
+      homeDirectory: home
+    )
+    let secondArtifacts = AgentRuntimeProcess.defaultArtifactsDirectory(
       bundleIdentifier: "com.omi.omi-ticket-five-b",
       homeDirectory: home
     )
 
-    XCTAssertNotEqual(first, second)
-    XCTAssertTrue(first.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-a"))
-    XCTAssertTrue(second.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-b"))
+    XCTAssertNotEqual(firstState, secondState)
+    XCTAssertNotEqual(firstArtifacts, secondArtifacts)
+    XCTAssertTrue(firstState.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-a"))
+    XCTAssertTrue(secondState.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-b"))
+    XCTAssertTrue(firstArtifacts.hasSuffix("Artifacts/com.omi.omi-ticket-five-a"))
+    XCTAssertTrue(secondArtifacts.hasSuffix("Artifacts/com.omi.omi-ticket-five-b"))
   }
 
   func testCompatibilitySessionIdPrefersAdapterSession() {

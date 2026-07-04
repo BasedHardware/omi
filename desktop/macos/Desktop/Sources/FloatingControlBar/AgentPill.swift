@@ -121,7 +121,7 @@ final class AgentPillsManager: ObservableObject {
 
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
-    private var pendingFollowUpsByPill: [UUID: [String]] = [:]
+    private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
 
     /// Shared agent-noun pattern used by negation guard, intent detection, and
     /// task extraction. Kept word-boundary-free so callers can embed it inside
@@ -148,6 +148,11 @@ final class AgentPillsManager: ObservableObject {
     struct FloatingAgentHandoff: Equatable {
         let originalRequest: String
         let agentTask: String
+    }
+
+    private struct PendingAgentFollowUp {
+        let text: String
+        let attachments: [ChatAttachment]
     }
 
     /// Combined router result. Title/ack are pre-computed alongside the route
@@ -725,7 +730,11 @@ final class AgentPillsManager: ObservableObject {
                 )
                 let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                 if !queuedFollowUps.isEmpty {
-                    self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                    self.continueAgent(
+                        from: pill,
+                        text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                        attachments: queuedFollowUps.flatMap(\.attachments)
+                    )
                     return
                 }
                 await self.pollCanonicalRun(for: pill)
@@ -762,9 +771,19 @@ final class AgentPillsManager: ObservableObject {
     }
 
     /// Send a follow-up to the same canonical background-agent session.
-    func continueAgent(from pill: AgentPill, text: String) {
+    func continueAgent(from pill: AgentPill, text: String, attachments: [ChatAttachment] = []) {
+        // The floating agent runs locally with disk access, so attachments are
+        // handed off by local_path in the prompt (see attachmentContextPrompt) —
+        // no upload round-trip needed. The visible bubble still renders the files
+        // through the shared ChatResource card UI.
+        let prompt: String
+        if let context = ChatProvider.attachmentContextPrompt(for: attachments) {
+            prompt = text.isEmpty ? context : "\(text)\n\n\(context)"
+        } else {
+            prompt = text
+        }
         guard let sessionId = pill.canonicalSessionId else {
-            pendingFollowUpsByPill[pill.id, default: []].append(text)
+            pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
             pill.latestActivity = "Queued follow-up until the agent starts…"
             pill.markContentChanged()
             return
@@ -773,7 +792,9 @@ final class AgentPillsManager: ObservableObject {
         pill.completedAt = nil
         pill.suggestedFollowUps = []
         pill.latestActivity = "Interrupting current run…"
-        pill.conversationMessages.append(ChatMessage(text: text, sender: .user))
+        pill.conversationMessages.append(
+            ChatMessage(text: text, sender: .user, resources: attachments.map(ChatResource.attachment))
+        )
         Self.ensureStreamingAssistantMessage(for: pill)
         pill.markContentChanged()
         let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
@@ -790,14 +811,18 @@ final class AgentPillsManager: ObservableObject {
                     case .cancelled:
                         return
                     case .failed:
-                        pendingFollowUpsByPill[pill.id, default: []].append(text)
+                        pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
                         pill.latestActivity = "Queued follow-up until the current run stops…"
                         pill.markContentChanged()
                         await self.pollCanonicalRun(for: pill)
                         guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                         let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                         if !queuedFollowUps.isEmpty {
-                            self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                            self.continueAgent(
+                                from: pill,
+                                text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                                attachments: queuedFollowUps.flatMap(\.attachments)
+                            )
                         }
                         return
                     }
@@ -809,7 +834,7 @@ final class AgentPillsManager: ObservableObject {
                 pill.markContentChanged()
                 let result = try await DesktopCoordinatorService.shared.continueAgent(
                     sessionId: sessionId,
-                    prompt: text,
+                    prompt: prompt,
                     model: pill.bridgeHarnessOverride == nil ? pill.model : nil,
                     cwd: workingDirectory
                 )
@@ -1144,7 +1169,11 @@ final class AgentPillsManager: ObservableObject {
             pill.latestActivity = inspection.status == "cancelling" ? "Stopping…" : "Working…"
             Self.ensureStreamingAssistantMessage(for: pill)
         case "succeeded", "completed":
-            finish(pill: pill, finalText: inspection.finalText)
+            finish(
+                pill: pill,
+                finalText: inspection.finalText,
+                resources: inspection.artifacts.map(ChatResource.artifact)
+            )
         case "cancelled":
             pill.status = .stopped
             pill.latestActivity = "Stopped by user"
@@ -1164,11 +1193,13 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    private func finish(pill: AgentPill, finalText: String?) {
+    private func finish(pill: AgentPill, finalText: String?, resources: [ChatResource] = []) {
         let trimmed = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !trimmed.isEmpty {
-            var finalMessage = pill.aiMessage ?? ChatMessage(text: trimmed, sender: .ai)
-            finalMessage.text = trimmed
+        if !trimmed.isEmpty || !resources.isEmpty {
+            let messageText = trimmed.isEmpty ? "Done." : trimmed
+            var finalMessage = pill.aiMessage ?? ChatMessage(text: messageText, sender: .ai)
+            finalMessage.text = messageText
+            finalMessage.resources = resources
             finalMessage.isStreaming = false
             pill.aiMessage = finalMessage
             if pill.conversationMessages.isEmpty {
@@ -1181,7 +1212,14 @@ final class AgentPillsManager: ObservableObject {
             } else if !pill.conversationMessages.contains(where: { $0.id == finalMessage.id }) {
                 pill.conversationMessages.append(finalMessage)
             }
-            pill.latestActivity = String(trimmed.prefix(140))
+            pill.latestActivity = String(messageText.prefix(140))
+            FloatingControlBarManager.shared.recordAgentArtifactCompletion(
+                pillID: pill.id,
+                runId: pill.canonicalRunId,
+                title: pill.title,
+                finalText: trimmed,
+                resources: resources
+            )
         } else {
             Self.clearStreamingAssistantMessage(for: pill)
             pill.latestActivity = "Done"
@@ -1249,7 +1287,11 @@ final class AgentPillsManager: ObservableObject {
         let recent = Array(messages.suffix(from: since))
         let displayMessages = recent.filter { message in
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty
+            return message.sender == .user
+                || !trimmed.isEmpty
+                || message.isStreaming
+                || !message.contentBlocks.isEmpty
+                || !message.displayResources.isEmpty
         }
         if !displayMessages.isEmpty {
             pill.conversationMessages = displayMessages

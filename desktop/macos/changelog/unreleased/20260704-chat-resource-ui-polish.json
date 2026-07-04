@@ -1,0 +1,3 @@
+{
+  "change": "Refined chat file cards — the whole card now opens the file with a one-tap copy-path button, added file attachments to the floating agent chat, and stopped the \"taking longer than usual\" warning from showing during long-by-design work like file writes, commands, and agent runs"
+}

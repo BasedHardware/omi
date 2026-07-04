@@ -14,6 +14,7 @@ struct ChatAttachment: Identifiable, Equatable {
     enum State: Equatable {
         case uploading
         case uploaded
+        case localOnly
         case failed(String)
     }
 
@@ -25,6 +26,8 @@ struct ChatAttachment: Identifiable, Equatable {
     var data: Data?
     /// Server-assigned file id (matches Flutter's MessageFile.id).
     var serverId: String?
+    /// Original local file URL, when the attachment came from disk.
+    var localFileURL: URL?
     /// Public thumbnail URL returned by /v2/files (only set for images).
     var thumbnailURL: String?
     var state: State
@@ -35,6 +38,7 @@ struct ChatAttachment: Identifiable, Equatable {
         mimeType: String,
         data: Data? = nil,
         serverId: String? = nil,
+        localFileURL: URL? = nil,
         thumbnailURL: String? = nil,
         state: State = .uploading
     ) {
@@ -43,6 +47,7 @@ struct ChatAttachment: Identifiable, Equatable {
         self.mimeType = mimeType
         self.data = data
         self.serverId = serverId
+        self.localFileURL = localFileURL
         self.thumbnailURL = thumbnailURL
         self.state = state
     }
@@ -55,6 +60,10 @@ struct ChatAttachment: Identifiable, Equatable {
     var isUploaded: Bool {
         if case .uploaded = state { return true }
         return false
+    }
+
+    var isSendableLocalResource: Bool {
+        localFileURL != nil
     }
 
     /// Build a ChatAttachment from a local file URL, reading bytes if it's a
@@ -73,7 +82,7 @@ struct ChatAttachment: Identifiable, Equatable {
                 bytes = try? Data(contentsOf: url)
             }
         }
-        return ChatAttachment(fileName: name, mimeType: mime, data: bytes)
+        return ChatAttachment(fileName: name, mimeType: mime, data: bytes, localFileURL: url)
     }
 
     /// Build a ChatAttachment from raw in-memory image bytes (e.g. a screenshot).
