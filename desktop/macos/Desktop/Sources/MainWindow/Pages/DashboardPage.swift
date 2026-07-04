@@ -401,7 +401,7 @@ struct DashboardPage: View {
                     Task { await chatProvider.sendFollowUp(text) }
                 },
                 onStop: {
-                    chatProvider.stopAgent()
+                    chatProvider.stopAgent(owner: .mainChat)
                 },
                 isSending: chatProvider.isSending,
                 isStopping: chatProvider.isStopping,
