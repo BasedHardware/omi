@@ -34,6 +34,12 @@ class WhatsAppIngestResponse(BaseModel):
     people_upserted: int = 0
     messages_ingested: int = 0
     skipped_duplicates: int = 0
+    # Durability signal for the desktop cursor: True only when EVERY window persisted
+    # durably. On a partial failure the desktop must NOT advance its Z_PK cursor past
+    # this batch — the failed messages released their ledger claims and would otherwise
+    # never be resent. The desktop retries the whole batch; the ledger dedups the
+    # windows that already landed.
+    all_persisted: bool = True
 
 
 class WhatsAppSettings(BaseModel):

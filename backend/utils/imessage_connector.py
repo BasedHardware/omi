@@ -245,22 +245,33 @@ def _append_to_conversation(
     existing_data: dict,
     messages: List,
     handle_to_person: Dict[str, str],
-) -> None:
+) -> bool:
     """Conservative append: add new segments (offsets relative to the existing
     conversation's started_at, speakers kept consistent) and extend finished_at,
-    persisting via update_conversation_segments. No re-summarization or
-    memory/action-item re-extraction runs here (see _process_windows)."""
+    persisting via append_transcript_segments. No re-summarization or
+    memory/action-item re-extraction runs here (see _process_windows).
+
+    Returns True when the segments were durably stored (or there was nothing to add),
+    False when the target conversation vanished before the write landed — the caller
+    must treat False as a persist failure so the messages are resent, not counted as
+    stored."""
     existing = deserialize_conversation(existing_data)
     base = existing.started_at or existing.created_at
     person_to_speaker, next_idx = _speaker_map_from_segments(existing.transcript_segments)
     new_segments, _ = _build_segments(messages, base, handle_to_person, person_to_speaker, next_idx)
     if not new_segments:
-        return
+        return True
 
-    combined = list(existing.transcript_segments) + new_segments
     prev_finished = existing.finished_at or existing.started_at or existing.created_at
     new_finished = max([_norm_dt(prev_finished)] + [_norm_dt(m.timestamp) for m in messages])
-    conversations_db.update_conversation_segments(uid, conv_id, [s.dict() for s in combined], finished_at=new_finished)
+    # Append transactionally: two concurrent (chat, day) appends must not overwrite
+    # each other's already-persisted segments. update_conversation_segments does a
+    # non-atomic read-modify-write of the single segments blob (last writer wins,
+    # silently dropping the loser's claimed messages); append_transcript_segments
+    # re-reads and concatenates inside a Firestore transaction instead.
+    return conversations_db.append_transcript_segments(
+        uid, conv_id, [s.dict() for s in new_segments], finished_at=new_finished
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -329,8 +340,14 @@ def _persist_window(
         # segments and extend finished_at. Appends deliberately do NOT re-run the
         # pipeline (see _enrich_conversations for the rationale).
         existing = conversations_db.get_conversation(uid, conv_id)
-        if existing:
-            _append_to_conversation(uid, conv_id, existing, won, handle_to_person)
+        appended = existing is not None and _append_to_conversation(uid, conv_id, existing, won, handle_to_person)
+        if not appended:
+            # The target conversation vanished between the create-check and the append
+            # (rare delete race), so nothing was stored. Raise to hit the except-handler
+            # below: it releases these claims so the messages are resent, and the window is
+            # reported failed (all_persisted=False) rather than silently counted as
+            # persisted with the cursor advancing past dropped messages.
+            raise RuntimeError(f'append target conversation missing uid={uid} conv={conv_id}')
         return _WindowResult(created=False, conversation=None, persisted=len(won), race_skipped=race_skipped)
     except Exception:
         # Durable write failed — release claims so these messages retry next sync.

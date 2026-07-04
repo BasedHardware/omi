@@ -235,4 +235,69 @@ def test_ingest_partial_failure_does_not_advance_cursor():
 
     assert resp.all_persisted is False  # explicit partial-failure signal to the desktop
     assert 'last_rowid' not in doc_state  # cursor NOT advanced past the failed batch
+
+
+def test_ingest_append_target_vanished_is_not_counted_as_persisted():
+    """Durability contract on the append path: if the conversation was created on an
+    earlier sync but deleted before this append lands (create_if_absent=False AND
+    get_conversation=None), the messages must NOT be counted as persisted — the claims
+    are released and all_persisted is False so the batch is resent, not silently dropped."""
+    doc_state = {}
+
+    def fake_get_integration(uid, key):
+        return dict(doc_state)
+
+    def fake_set_integration(uid, key, data):
+        doc_state.clear()
+        doc_state.update(data)
+
+    def fake_get_or_create(uid, handle, name):
+        return {'id': f'p_{handle}', 'name': name or handle, 'handles': [handle]}
+
+    def fake_start_bg(coro, name=None):
+        coro.close()
+        return None
+
+    released = []
+
+    def fake_release(uid, key):
+        released.append(key)
+
+    req = IMessageIngestRequest(
+        threads=[
+            IMessageThread(chat_guid='c1', display_name='Alice', messages=[_msg('g_new', 'brand new', False, 2, '+1')])
+        ],
+        language='en',
+        last_rowid=123,
+    )
+
+    with patch.object(ic, 'run_blocking', _fake_run_blocking), patch.object(
+        ic, 'start_background_task', fake_start_bg
+    ), patch.object(ic.users_db, 'get_integration', fake_get_integration), patch.object(
+        ic.users_db, 'set_integration', fake_set_integration
+    ), patch.object(
+        ic.users_db, 'get_or_create_person_by_handle', fake_get_or_create
+    ), patch.object(
+        ic.imessage_db, 'filter_claimed_keys', return_value=set()
+    ), patch.object(
+        ic.imessage_db, 'claim_message', return_value=True
+    ), patch.object(
+        ic.imessage_db, 'release_message', fake_release
+    ), patch.object(
+        # Conversation already exists (created earlier)...
+        ic.conversations_db,
+        'create_conversation_if_absent',
+        return_value=False,
+    ), patch.object(
+        # ...but was deleted before the append could read it.
+        ic.conversations_db,
+        'get_conversation',
+        return_value=None,
+    ):
+        resp = asyncio.run(ic.ingest_threads('uid', req))
+
+    assert resp.all_persisted is False  # vanished append is a persist failure, not a success
+    assert resp.messages_ingested == 0  # nothing was durably stored
+    assert released  # claims released so the messages are resent
+    assert 'last_rowid' not in doc_state  # cursor held
     assert released  # the failed window released its claims so the messages retry

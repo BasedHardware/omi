@@ -34,6 +34,12 @@ class TelegramIngestResponse(BaseModel):
     people_upserted: int = 0
     messages_ingested: int = 0
     skipped_duplicates: int = 0
+    # Durability signal: True only when EVERY window persisted durably. Telegram
+    # events/backfills are the sole source of these normalized payloads, so on a
+    # partial failure (some windows released their ledger claims and were not stored)
+    # the client must retry rather than treat the batch as done. Re-sends are safe —
+    # the durable ledger dedups the windows that already landed.
+    all_persisted: bool = True
 
 
 class TelegramSettings(BaseModel):

@@ -192,3 +192,109 @@ def test_ingest_skips_opted_out_and_ledger_claimed():
     assert resp.messages_ingested == 1
     assert resp.skipped_duplicates == 1  # m_seen (ledger)
     assert resp.people_upserted == 1
+
+
+def test_ingest_all_persisted_true_on_success():
+    """Happy path: every window persists, so all_persisted is True and the desktop is
+    cleared to advance its Z_PK cursor."""
+    doc_state = {}
+
+    def fake_get_integration(uid, key):
+        return dict(doc_state)
+
+    def fake_set_integration(uid, key, data):
+        doc_state.clear()
+        doc_state.update(data)
+
+    def fake_get_or_create(uid, handle, name, source='imessage'):
+        return {'id': f'p_{handle}', 'name': name or handle, 'handles': [handle]}
+
+    def fake_start_bg(coro, name=None):
+        coro.close()
+        return None
+
+    req = WhatsAppIngestRequest(
+        threads=[
+            WhatsAppThread(
+                chat_id='c1', display_name='Alice', messages=[_msg('m_new', 'brand new', False, 2, '15551234567')]
+            )
+        ],
+        language='en',
+    )
+
+    with patch.object(wc, 'run_blocking', _fake_run_blocking), patch.object(
+        wc, 'start_background_task', fake_start_bg
+    ), patch.object(wc.users_db, 'get_integration', fake_get_integration), patch.object(
+        wc.users_db, 'set_integration', fake_set_integration
+    ), patch.object(
+        wc.users_db, 'get_or_create_person_by_handle', fake_get_or_create
+    ), patch.object(
+        wc.whatsapp_db, 'filter_claimed_keys', return_value=set()
+    ), patch.object(
+        wc.whatsapp_db, 'claim_message', return_value=True
+    ), patch.object(
+        wc.conversations_db, 'create_conversation_if_absent', return_value=True
+    ):
+        resp = asyncio.run(wc.ingest_threads('uid', req))
+
+    assert resp.all_persisted is True
+
+
+def test_ingest_partial_failure_reports_not_persisted():
+    """Durability contract: if a window fails to persist, its claims are released AND
+    all_persisted is False, so the desktop keeps its Z_PK cursor and resends the batch
+    instead of skipping the lost messages behind a 200."""
+    doc_state = {}
+
+    def fake_get_integration(uid, key):
+        return dict(doc_state)
+
+    def fake_set_integration(uid, key, data):
+        doc_state.clear()
+        doc_state.update(data)
+
+    def fake_get_or_create(uid, handle, name, source='imessage'):
+        return {'id': f'p_{handle}', 'name': name or handle, 'handles': [handle]}
+
+    def fake_start_bg(coro, name=None):
+        coro.close()
+        return None
+
+    released = []
+
+    def fake_release(uid, key):
+        released.append(key)
+
+    req = WhatsAppIngestRequest(
+        threads=[
+            WhatsAppThread(
+                chat_id='c1', display_name='Alice', messages=[_msg('m_new', 'brand new', False, 2, '15551234567')]
+            )
+        ],
+        language='en',
+    )
+
+    with patch.object(wc, 'run_blocking', _fake_run_blocking), patch.object(
+        wc, 'start_background_task', fake_start_bg
+    ), patch.object(wc.users_db, 'get_integration', fake_get_integration), patch.object(
+        wc.users_db, 'set_integration', fake_set_integration
+    ), patch.object(
+        wc.users_db, 'get_or_create_person_by_handle', fake_get_or_create
+    ), patch.object(
+        wc.whatsapp_db, 'filter_claimed_keys', return_value=set()
+    ), patch.object(
+        wc.whatsapp_db, 'claim_message', return_value=True
+    ), patch.object(
+        wc.whatsapp_db, 'release_message', fake_release
+    ), patch.object(
+        # Force the durable write to fail so the window is not persisted.
+        wc.conversations_db,
+        'create_conversation_if_absent',
+        side_effect=RuntimeError('firestore unavailable'),
+    ):
+        resp = asyncio.run(wc.ingest_threads('uid', req))
+
+    assert resp.all_persisted is False  # explicit partial-failure signal to the desktop
+    assert resp.success is True  # the request itself succeeded; durability is a separate signal
+    assert released  # the failed window released its ledger claims for resend
+    assert 'last_synced_at' in doc_state  # connect/consent state still recorded

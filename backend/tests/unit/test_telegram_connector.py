@@ -192,3 +192,101 @@ def test_ingest_skips_opted_out_and_ledger_claimed():
     assert resp.messages_ingested == 1
     assert resp.skipped_duplicates == 1  # m_seen (ledger)
     assert resp.people_upserted == 1
+
+
+def test_ingest_all_persisted_true_on_success():
+    """Happy path: every window persists, so all_persisted is True and the client has
+    nothing to retry."""
+    doc_state = {}
+
+    def fake_get_integration(uid, key):
+        return dict(doc_state)
+
+    def fake_set_integration(uid, key, data):
+        doc_state.clear()
+        doc_state.update(data)
+
+    def fake_get_or_create(uid, handle, name, source='imessage'):
+        return {'id': f'p_{handle}', 'name': name or handle, 'handles': [handle]}
+
+    def fake_start_bg(coro, name=None):
+        coro.close()
+        return None
+
+    req = TelegramIngestRequest(
+        threads=[
+            TelegramThread(chat_id='c1', display_name='Alice', messages=[_msg('m_new', 'brand new', False, 2, '99')])
+        ],
+        language='en',
+    )
+
+    with patch.object(tc, 'run_blocking', _fake_run_blocking), patch.object(
+        tc, 'start_background_task', fake_start_bg
+    ), patch.object(tc.users_db, 'get_integration', fake_get_integration), patch.object(
+        tc.users_db, 'set_integration', fake_set_integration
+    ), patch.object(
+        tc.users_db, 'get_or_create_person_by_handle', fake_get_or_create
+    ), patch.object(
+        tc.telegram_db, 'filter_claimed_keys', return_value=set()
+    ), patch.object(
+        tc.telegram_db, 'claim_message', return_value=True
+    ), patch.object(
+        tc.conversations_db, 'create_conversation_if_absent', return_value=True
+    ):
+        resp = asyncio.run(tc.ingest_threads('uid', req))
+
+    assert resp.all_persisted is True
+
+
+def test_ingest_partial_failure_reports_not_persisted():
+    """Durability contract: Telegram events/backfills are the only source of these
+    payloads, so a window that fails to persist must release its claims AND report
+    all_persisted=False, signalling the client to retry rather than drop the messages."""
+    doc_state = {}
+
+    def fake_get_integration(uid, key):
+        return dict(doc_state)
+
+    def fake_set_integration(uid, key, data):
+        doc_state.clear()
+        doc_state.update(data)
+
+    def fake_get_or_create(uid, handle, name, source='imessage'):
+        return {'id': f'p_{handle}', 'name': name or handle, 'handles': [handle]}
+
+    def fake_start_bg(coro, name=None):
+        coro.close()
+        return None
+
+    released = []
+
+    def fake_release(uid, key):
+        released.append(key)
+
+    req = TelegramIngestRequest(
+        threads=[
+            TelegramThread(chat_id='c1', display_name='Alice', messages=[_msg('m_new', 'brand new', False, 2, '99')])
+        ],
+        language='en',
+    )
+
+    with patch.object(tc, 'run_blocking', _fake_run_blocking), patch.object(
+        tc, 'start_background_task', fake_start_bg
+    ), patch.object(tc.users_db, 'get_integration', fake_get_integration), patch.object(
+        tc.users_db, 'set_integration', fake_set_integration
+    ), patch.object(
+        tc.users_db, 'get_or_create_person_by_handle', fake_get_or_create
+    ), patch.object(
+        tc.telegram_db, 'filter_claimed_keys', return_value=set()
+    ), patch.object(
+        tc.telegram_db, 'claim_message', return_value=True
+    ), patch.object(
+        tc.telegram_db, 'release_message', fake_release
+    ), patch.object(
+        tc.conversations_db, 'create_conversation_if_absent', side_effect=RuntimeError('firestore unavailable')
+    ):
+        resp = asyncio.run(tc.ingest_threads('uid', req))
+
+    assert resp.all_persisted is False  # explicit partial-failure signal to the client
+    assert resp.success is True  # the request itself succeeded; durability is a separate signal
+    assert released  # the failed window released its ledger claims for resend

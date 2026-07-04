@@ -985,6 +985,67 @@ def update_conversation_segments(
         return
 
 
+def append_transcript_segments(
+    uid: str,
+    conversation_id: str,
+    new_segments: List[dict],
+    finished_at: datetime = None,
+) -> bool:
+    """Atomically append transcript segments to a conversation inside a transaction.
+
+    Transcript segments are persisted as a single compressed/encrypted blob, so an
+    append is inherently a read-modify-write of the whole field. Doing that
+    non-transactionally (as update_conversation_segments does) loses data under
+    concurrency: two ingests appending to the same (chat, day) conversation both
+    read the same base list and the last writer overwrites the other's segments —
+    permanently dropping already-claimed messages. Running the read-append-write
+    inside a Firestore transaction serializes concurrent appends so none are lost.
+
+    Returns False if the conversation no longer exists (deleted mid-ingest)."""
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _append(transaction):
+        snapshot = doc_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        data = snapshot.to_dict() or {}
+        doc_level = data.get('data_protection_level', 'standard')
+        existing = _prepare_conversation_for_read(data, uid) or {}
+        existing_segments = existing.get('transcript_segments') or []
+        # _prepare_conversation_for_read leaves an undecompressible/corrupt blob as raw
+        # bytes rather than a list of dicts. Guard so we neither crash the transaction on
+        # `s.get(...)` nor fold garbage into the write — append the new segments only.
+        # Decrypt (HKDF-derived key, no network) and zlib decompression are deterministic:
+        # a failure here means the stored bytes are genuinely corrupt, never a transient
+        # fault, so dropping the already-unreadable prior blob loses no recoverable data.
+        if not isinstance(existing_segments, list) or any(not isinstance(s, dict) for s in existing_segments):
+            logger.warning(
+                f'append_transcript_segments: unreadable existing segments for {conversation_id}; appending new only'
+            )
+            existing_segments = []
+        combined = list(existing_segments) + list(new_segments)
+        update_payload = {
+            'transcript_segments': combined,
+            'person_ids': sorted({s.get('person_id') for s in combined if s.get('person_id')}),
+        }
+        if finished_at:
+            existing_finished = existing.get('finished_at')
+            # Only ever extend finished_at; never shrink it under a reordered append.
+            try:
+                should_extend = existing_finished is None or finished_at > existing_finished
+            except TypeError:
+                should_extend = True
+            if should_extend:
+                update_payload['finished_at'] = finished_at
+        prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return True
+
+    return _append(transaction)
+
+
 # ***********************************
 # ********** VISIBILITY *************
 # ***********************************

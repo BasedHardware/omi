@@ -223,8 +223,14 @@ def _persist_window(
         # Same chat+day already ingested earlier: append new segments, extend
         # finished_at. Appends deliberately do NOT re-run the pipeline.
         existing = conversations_db.get_conversation(uid, conv_id)
-        if existing:
-            _append_to_conversation(uid, conv_id, existing, won, handle_to_person)
+        appended = existing is not None and _append_to_conversation(uid, conv_id, existing, won, handle_to_person)
+        if not appended:
+            # The target conversation vanished between the create-check and the append
+            # (rare delete race), so nothing was stored. Raise to hit the except-handler
+            # below: it releases these claims so the messages are resent, and the window is
+            # reported failed (all_persisted=False) rather than silently counted as
+            # persisted.
+            raise RuntimeError(f'append target conversation missing uid={uid} conv={conv_id}')
         return _WindowResult(created=False, conversation=None, persisted=len(won), race_skipped=race_skipped)
     except Exception:
         for key in won_keys:
@@ -318,6 +324,7 @@ async def ingest_threads(uid: str, req: WhatsAppIngestRequest) -> WhatsAppIngest
     conversations_created = 0
     messages_ingested = 0
     race_skipped = 0
+    failed_windows = 0
     created_conversations: List = []
     for conv_id, chat_id, msgs, handle_to_person in windows:
         try:
@@ -325,6 +332,11 @@ async def ingest_threads(uid: str, req: WhatsAppIngestRequest) -> WhatsAppIngest
                 db_executor, _persist_window, uid, conv_id, chat_id, msgs, handle_to_person, req.language
             )
         except Exception as e:
+            # Claims were released inside _persist_window, so these messages must be
+            # resent. Record the failure so the response reports all_persisted=False and
+            # the desktop does NOT advance its cursor past this batch — otherwise the
+            # client would skip these messages and they'd be lost.
+            failed_windows += 1
             logger.error(f'whatsapp: window persist failed uid={uid} conv={conv_id}: {sanitize(str(e))}')
             continue
         messages_ingested += result.persisted
@@ -333,6 +345,8 @@ async def ingest_threads(uid: str, req: WhatsAppIngestRequest) -> WhatsAppIngest
             conversations_created += 1
             if result.conversation is not None:
                 created_conversations.append(result.conversation)
+
+    all_persisted = failed_windows == 0
 
     # Persist state: mark connected/consented, bump the durable created counter.
     patch = {
@@ -354,7 +368,8 @@ async def ingest_threads(uid: str, req: WhatsAppIngestRequest) -> WhatsAppIngest
     skipped = ledger_skipped + race_skipped
     logger.info(
         f'whatsapp ingest uid={uid} threads={len(req.threads)} windows={len(windows)} '
-        f'people={len(people_ids)} msgs={messages_ingested} created={conversations_created} skipped={skipped}'
+        f'people={len(people_ids)} msgs={messages_ingested} created={conversations_created} '
+        f'skipped={skipped} failed_windows={failed_windows}'
     )
     return WhatsAppIngestResponse(
         success=True,
@@ -362,4 +377,5 @@ async def ingest_threads(uid: str, req: WhatsAppIngestRequest) -> WhatsAppIngest
         people_upserted=len(people_ids),
         messages_ingested=messages_ingested,
         skipped_duplicates=skipped,
+        all_persisted=all_persisted,
     )
