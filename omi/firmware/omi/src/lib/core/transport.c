@@ -1424,6 +1424,37 @@ struct bt_conn *get_current_connection()
     return current_connection;
 }
 
+void transport_ble_pause(void)
+{
+    if (current_connection != NULL) {
+        return; /* keep the link up while a phone is attached */
+    }
+    int err = bt_le_adv_stop();
+    if (err && err != -EALREADY) {
+        LOG_WRN("BLE pause: adv stop failed (err %d)", err);
+    }
+#ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
+    (void) gpio_pin_set_dt(&rfsw_en, 0);
+#endif
+    LOG_INF("BLE paused (adv off)");
+}
+
+void transport_ble_resume(void)
+{
+    if (current_connection != NULL) {
+        return;
+    }
+#ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
+    (void) gpio_pin_set_dt(&rfsw_en, 1);
+#endif
+    int err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    if (err && err != -EALREADY) {
+        LOG_WRN("BLE resume: adv start failed (err %d)", err);
+    } else {
+        LOG_INF("BLE resumed (adv on)");
+    }
+}
+
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
     if (!write_to_tx_queue(buffer, size)) {

@@ -37,4 +37,18 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size);
  */
 struct bt_conn *get_current_connection();
 
+/**
+ * @brief Pause BLE: stop advertising and drop the RF switch (radio idle).
+ *
+ * Used to save power when the mic is in AAD sleep (offline). No-op if connected.
+ */
+void transport_ble_pause(void);
+
+/**
+ * @brief Resume BLE: raise the RF switch and restart advertising.
+ *
+ * Called when the mic wakes so a phone can connect. No-op if already connected.
+ */
+void transport_ble_resume(void);
+
 #endif // TRANSPORT_H

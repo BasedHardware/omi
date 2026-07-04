@@ -20,6 +20,7 @@
 #include <zephyr/sys/atomic.h>
 
 #include "t5838_aad.h"
+#include "transport.h"
 #endif
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
@@ -342,6 +343,8 @@ static void enter_hw_aad(void)
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
     k_msleep(CONFIG_OMI_AAD_SETTLE_MS); /* settle noise floor; swallow entry transient */
 
+    transport_ble_pause(); /* turn BLE radio off while the mic is asleep (offline) */
+
     atomic_set(&aad_in_sleep, 1);
 
 #if CONFIG_OMI_AAD_TEST_MODE == 1
@@ -370,6 +373,7 @@ static void exit_hw_aad(void)
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
     mic_resume();             /* dmic START reclaims CLK via pinctrl */
+    transport_ble_resume();   /* re-advertise so a phone can connect while recording */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
 
