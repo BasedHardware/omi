@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
@@ -547,6 +548,28 @@ def create_person(uid: str, data: dict):
     return data
 
 
+def create_person_if_absent(uid: str, data: dict) -> dict:
+    """Create the person doc only if its id is free; if a concurrent writer already
+    created it, return the existing doc instead of clobbering it.
+
+    Handle-discovered People use a deterministic, handle-seeded id, so two ingests of
+    the same handle (e.g. the same phone number arriving via iMessage and WhatsApp at
+    once) target the same document. A plain ``.set()`` would let the second writer
+    overwrite the first; ``.create()`` fails with AlreadyExists instead, and we return
+    the already-stored doc — so one handle always maps to exactly one Person."""
+    doc_ref = db.collection('users').document(uid).collection('people').document(data['id'])
+    try:
+        doc_ref.create(data)
+        return data
+    except AlreadyExists:
+        snap = doc_ref.get()
+        if snap.exists:
+            existing = snap.to_dict()
+            existing.setdefault('id', doc_ref.id)
+            return existing
+        return data
+
+
 def get_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()
@@ -679,11 +702,16 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str, sou
     Contacts are identified by a normalized handle (e.g. an iMessage phone/email or
     a Telegram ``tg:<user_id>``, or a WhatsApp phone number). Resolution is by
     handle IDENTITY only: existing handle → return it; otherwise create a new person.
-    The person id is seeded from ``{uid}:{source}:{handle}`` so concurrent ingests
-    converge on the same document.
+    The person id is seeded from ``{uid}:{handle}`` — deliberately NOT the source — so
+    the SAME handle ingested from two platforms at once (e.g. one phone number arriving
+    via iMessage and WhatsApp) converges on a single document instead of racing into two
+    duplicate People. Handles are already source-distinct where they need to be (Telegram
+    uses ``tg:<user_id>``; phone numbers are the same person across apps), so a
+    handle-only seed never wrongly fuses unrelated contacts. ``source`` is still stored
+    on the person (the creator's platform).
 
-    ``source`` (``'imessage'`` / ``'telegram'`` / ``'whatsapp'``) namespaces the id seed and is stored
-    on the person, so the same raw handle under different platforms can't collide.
+    The create is idempotent (``create_person_if_absent``): if a concurrent ingest wins
+    the create for the same handle-seeded id, we return that doc rather than overwrite it.
 
     We deliberately do NOT merge by display name. Distinct people can share a saved
     name, so a name-based merge would silently fold a handle-discovered contact into
@@ -696,7 +724,7 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str, sou
     if existing:
         return existing
 
-    person_id = document_id_from_seed(f'{uid}:{source}:{handle}')
+    person_id = document_id_from_seed(f'{uid}:{handle}')
     person_data = {
         'id': person_id,
         'name': display_name or handle,
@@ -705,7 +733,7 @@ def get_or_create_person_by_handle(uid: str, handle: str, display_name: str, sou
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    return create_person(uid, person_data)
+    return create_person_if_absent(uid, person_data)
 
 
 def import_contacts(uid: str, contacts: list[dict]) -> int:
