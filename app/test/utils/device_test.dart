@@ -70,9 +70,14 @@ void main() {
       expect(DeviceUtils.isOmiCv1(modelNumber: 'omi devkit 2'), isFalse);
     });
 
-    test('null / empty inputs default to CV1 (already gated on DeviceType.omi)', () {
-      expect(DeviceUtils.isOmiCv1(), isTrue);
-      expect(DeviceUtils.isOmiCv1(modelNumber: '', deviceName: ''), isTrue);
+    test('a non-variant name alone is enough to treat as CV1', () {
+      expect(DeviceUtils.isOmiCv1(deviceName: 'Omi'), isTrue);
+    });
+
+    test('no identifier at all is NOT positively CV1', () {
+      expect(DeviceUtils.isOmiCv1(), isFalse);
+      expect(DeviceUtils.isOmiCv1(modelNumber: '', deviceName: ''), isFalse);
+      expect(DeviceUtils.isOmiCv1(modelNumber: '   ', deviceName: '  '), isFalse);
     });
   });
 }
