@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
 """Generate a Telethon StringSession for the user-account Telegram plugin.
 
-This script is a ONE-SHOT helper launched by the desktop as a
-subprocess. It:
+This script is a ONE-SHOT helper launched by the desktop via
+Terminal.app. It guides the user through an interactive sign-in flow:
 
-1. Prompts the user for their Telegram API credentials (api_id, api_hash).
-   These are PUBLIC — Telethon publishes them in its My Telegram page.
-2. Prompts for their phone number (Telegram login flow).
-3. Prompts for the verification code Telegram sends.
-4. Optionally prompts for 2FA password if enabled.
-5. Prints the resulting Telethon StringSession to stdout.
+1. Prompts for api_id + api_hash (from my.telegram.org/apps)
+2. Prompts for phone number
+3. Prompts for the verification code Telegram sends
+4. Optionally prompts for 2FA password
+5. Writes the resulting StringSession to --output-file
 
-The desktop captures stdout and pipes it into the user-account
-plugin's stdin. The session string then lives in:
-  - Desktop Keychain (per session)
-  - Plugin process memory for the duration of the connection
-
-It is NEVER written to disk. It is NEVER included in HTTP
-responses. It is NEVER logged (the script logs to stderr only,
-and only redacted messages go there).
+The desktop opens Terminal.app with this script, the user interacts
+in the Terminal window, and the session is written to a temp file.
+The desktop reads the temp file and saves the session to Keychain.
 
 Usage:
-  python session_string_generator.py [--api-id N --api-hash X]
+  python session_string_generator.py [--api-id N --api-hash X] [--output-file PATH]
 
-If --api-id/--api-hash are not provided, the script prompts
-interactively. It uses Telethon's interactive login flow.
+If --output-file is set: interactive prompts go to stdout/stderr
+(visible in Terminal), session goes to the file.
+If --output-file is NOT set: session goes to stdout (legacy mode).
 """
 
 from __future__ import annotations
@@ -33,7 +28,6 @@ import argparse
 import asyncio
 import getpass
 import sys
-import traceback
 
 
 async def _generate(api_id: int | None, api_hash: str | None) -> str:
@@ -42,8 +36,6 @@ async def _generate(api_id: int | None, api_hash: str | None) -> str:
         from telethon import TelegramClient
         from telethon.sessions import StringSession
     except ImportError:
-        # Print a clean error to stderr (not stdout — the session
-        # string is the ONLY thing on stdout).
         print(
             "ERROR: telethon is not installed. Run: pip install telethon",
             file=sys.stderr,
@@ -51,25 +43,45 @@ async def _generate(api_id: int | None, api_hash: str | None) -> str:
         )
         sys.exit(2)
 
+    print("", file=sys.stderr, flush=True)
+    print("=" * 60, file=sys.stderr, flush=True)
+    print("  Omi AI Clone — Telegram Session Setup", file=sys.stderr, flush=True)
+    print("=" * 60, file=sys.stderr, flush=True)
+    print("", file=sys.stderr, flush=True)
+    print("This will sign you into your personal Telegram account", file=sys.stderr, flush=True)
+    print("so Omi can reply to messages as you.", file=sys.stderr, flush=True)
+    print("", file=sys.stderr, flush=True)
+
     if api_id is None:
+        print("Get your api_id and api_hash from: https://my.telegram.org/apps", file=sys.stderr, flush=True)
+        print("", file=sys.stderr, flush=True)
         try:
             api_id_str = input("api_id (from my.telegram.org): ").strip()
             api_id = int(api_id_str)
         except ValueError:
-            print("ERROR: api_id must be an integer", file=sys.stderr)
+            print("ERROR: api_id must be an integer", file=sys.stderr, flush=True)
             sys.exit(2)
     if not api_hash:
         api_hash = getpass.getpass("api_hash (from my.telegram.org): ").strip()
 
-    phone = input("Phone (international format, e.g. +1...): ").strip()
+    print("", file=sys.stderr, flush=True)
+    phone = input("Phone (international format, e.g. +66...): ").strip()
 
-    # StringSession with empty value starts a fresh one. TelegramClient
-    # is the official entry point. We do NOT save anything to disk;
-    # StringSession holds the auth key in memory only.
+    print("", file=sys.stderr, flush=True)
+    print("Connecting to Telegram...", file=sys.stderr, flush=True)
+
     client = TelegramClient(StringSession(), api_id, api_hash)
     await client.start(phone=phone)
     session_str = client.session.save()
     await client.disconnect()
+
+    me = await client.get_me()
+    name = " ".join(filter(None, [getattr(me, "first_name", None), getattr(me, "last_name", None)]))
+
+    print("", file=sys.stderr, flush=True)
+    print(f"✅ Signed in successfully as {name}!", file=sys.stderr, flush=True)
+    print("Remember to not break the ToS or you will risk an account ban!", file=sys.stderr, flush=True)
+
     return session_str
 
 
@@ -77,6 +89,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-id", type=int, default=None)
     parser.add_argument("--api-hash", default=None)
+    parser.add_argument(
+        "--output-file",
+        default=None,
+        help="Write the session string to this file instead of stdout.",
+    )
     args = parser.parse_args()
 
     try:
@@ -85,16 +102,17 @@ def main() -> int:
         print("\nCancelled.", file=sys.stderr)
         return 130
     except Exception as e:
-        # Print a redacted error to stderr. We DO NOT print traceback
-        # because it can include internal Telegram state in some cases.
-        print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
         return 1
 
-    # The ONLY line written to stdout. The desktop captures this
-    # and pipes it into the plugin's stdin via the stack runner.
-    sys.stdout.write(session)
-    sys.stdout.write("\n")
-    sys.stdout.flush()
+    if args.output_file:
+        with open(args.output_file, "w") as f:
+            f.write(session)
+        print(f"\nSession written to file successfully.", file=sys.stderr, flush=True)
+    else:
+        sys.stdout.write(session)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
     return 0
 
 
