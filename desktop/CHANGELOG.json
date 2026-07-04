@@ -1,7 +1,5 @@
 {
-  "unreleased": [
-    "Fixed the macOS app repeatedly requesting Screen Recording permission on launch when it has not been granted"
-  ],
+  "unreleased": [],
   "releases": [
     {
       "version": "0.11.423",
