@@ -1,0 +1,31 @@
+desktop/macos/Desktop/Sources/TelegramModels.swift
+  s_d1e19ef68d1180::t_c8aae7199415b1 127-130,138-150
+desktop/macos/Desktop/Sources/WhatsAppSyncCoordinator.swift
+  s_d1e19ef68d1180::t_de65a42770ab73 61-70
+desktop/macos/Desktop/Sources/TelegramClientService.swift
+  s_d1e19ef68d1180::t_eb437faedb1b86 228-253
+desktop/macos/Desktop/Sources/TelegramInboxStore.swift
+  s_d1e19ef68d1180::t_45336e38d28721 234-240
+  s_d1e19ef68d1180::t_2f04231ebdd70c 233,241-254,319
+  s_d1e19ef68d1180::t_b77ed6c8b7c1d0 347-351
+  s_d1e19ef68d1180::t_e63671dfe1c103 201-202,210-211,213
+  s_d1e19ef68d1180::t_70fd278e08e40d 310-318
+desktop/macos/Desktop/Sources/WhatsAppModels.swift
+  s_d1e19ef68d1180::t_7d04b43627518d 92-95,103,107-108,116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "58aab92e025f9ba4be39283ac3799ce29556a933",
+  "prompts": {},
+  "sessions": {
+    "s_d1e19ef68d1180": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "83923764-66fd-417b-b7ad-d7d8af0abcfe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
