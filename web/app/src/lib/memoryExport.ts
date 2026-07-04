@@ -9,7 +9,7 @@ export function exportMemoriesToCSV(memories: Memory[]): string {
     m.id,
     `"${m.content.replace(/"/g, '""')}"`, // Escape quotes in CSV
     m.category,
-    `"${(m.tags ?? []).join(', ')}"`,
+    `"${(m.tags ?? []).map((tag) => tag.replace(/"/g, '""')).join(', ')}"`,
     m.created_at || '',
     m.updated_at || '',
   ]);

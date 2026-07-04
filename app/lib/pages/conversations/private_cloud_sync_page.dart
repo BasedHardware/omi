@@ -75,10 +75,10 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     );
   }
 
-  Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+  Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
     return Padding(
       padding: const EdgeInsets.only(left: 2, top: 1),
-      child: Icon(icon, size: size, color: color),
+      child: FaIcon(icon, size: size, color: color),
     );
   }
 
@@ -95,7 +95,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: _buildFaIcon(FontAwesomeIcons.chevronLeft.data, size: 18, color: Colors.white),
+              icon: _buildFaIcon(FontAwesomeIcons.chevronLeft, size: 18, color: Colors.white),
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: Text(
@@ -122,7 +122,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                           children: [
                             Row(
                               children: [
-                                _buildFaIcon(FontAwesomeIcons.cloud.data, size: 20, color: Colors.deepPurpleAccent),
+                                _buildFaIcon(FontAwesomeIcons.cloud, size: 20, color: Colors.deepPurpleAccent),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(

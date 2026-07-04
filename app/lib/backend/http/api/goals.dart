@@ -280,7 +280,9 @@ Future<GoalSuggestion?> suggestGoal() async {
   Logger.debug('suggestGoal response: ${response.body}');
   if (response.statusCode == 200) {
     return GoalSuggestion.fromGenerated(
-      wire.GeneratedGoalSuggestionResponse.fromJson(json.decode(response.body) as Map<String, dynamic>),
+      wire.GeneratedGoalSuggestionResponse.fromJson(
+        _goalSuggestionJsonWithDefaults(json.decode(response.body) as Map<String, dynamic>),
+      ),
     );
   }
   return null;

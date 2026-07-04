@@ -64,17 +64,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
             ),
             leading: IconButton(
-              icon: Icon(FontAwesomeIcons.chevronLeft.data, color: Colors.white, size: 18),
+              icon: FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
               IconButton(
-                icon: Icon(FontAwesomeIcons.circleInfo.data, color: Color(0xFF8E8E93), size: 18),
+                icon: FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
                 onPressed: () => _showInfoSheet(context),
               ),
               if (pendingWals.isNotEmpty || syncedWals.isNotEmpty)
                 IconButton(
-                  icon: Icon(FontAwesomeIcons.ellipsis.data, color: Color(0xFF8E8E93), size: 18),
+                  icon: FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
                   onPressed: () => _showManageStorageSheet(context, syncProvider),
                 ),
             ],
@@ -263,7 +263,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: Center(child: Icon(FontAwesomeIcons.check.data, color: Colors.green, size: 14)),
+              child: Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -272,7 +272,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
-            Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
@@ -293,7 +293,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       ),
       child: Row(
         children: [
-          Icon(FontAwesomeIcons.circleExclamation.data, color: Colors.redAccent, size: 16),
+          FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -344,7 +344,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           child: Column(
             children: [
               _settingRow(
-                icon: FontAwesomeIcons.mobile.data,
+                icon: FontAwesomeIcons.mobile,
                 label: context.l10n.storeAudioOnPhone,
                 isOn: isPhoneOn,
                 onTap: () {
@@ -355,7 +355,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
               _settingRow(
-                icon: FontAwesomeIcons.cloud.data,
+                icon: FontAwesomeIcons.cloud,
                 label: context.l10n.storeAudioOnCloud,
                 isOn: isCloudOn,
                 onTap: () =>
@@ -368,7 +368,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
-  Widget _settingRow({required IconData icon, required String label, required bool isOn, required VoidCallback onTap}) {
+  Widget _settingRow({
+    required FaIconData icon,
+    required String label,
+    required bool isOn,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -376,7 +381,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF8E8E93), size: 18),
+            FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
@@ -389,7 +394,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w400),
             ),
             const SizedBox(width: 10),
-            Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
@@ -636,13 +641,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         ),
       );
     }
-    return Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 12);
+    return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
   }
 
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
   /// neutral/active, amber for auto-retry, red for failed/corrupted. Purple
   /// is reserved for actions and the spinner — not body text.
-  (Color, IconData, String) _rowVisual(WalSyncDisplayState state) {
+  (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state) {
     switch (state) {
       case WalSyncDisplayState.synced:
         return (Colors.grey.shade500, Icons.cloud_done_rounded, context.l10n.syncStatusConversationCreated);
@@ -884,7 +889,7 @@ class _ManageStorageSheet extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _StorageRow(
-                icon: FontAwesomeIcons.circleCheck.data,
+                icon: FontAwesomeIcons.circleCheck,
                 iconColor: Colors.green,
                 title: context.l10n.synced,
                 subtitle: context.l10n.safelyBackedUp,
@@ -894,7 +899,7 @@ class _ManageStorageSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _StorageRow(
-                icon: FontAwesomeIcons.clockRotateLeft.data,
+                icon: FontAwesomeIcons.clockRotateLeft,
                 iconColor: Colors.orange,
                 title: context.l10n.pending,
                 subtitle: context.l10n.notYetSynced,
@@ -932,7 +937,7 @@ class _ManageStorageSheet extends StatelessWidget {
 }
 
 class _StorageRow extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;
@@ -966,7 +971,7 @@ class _StorageRow extends StatelessWidget {
               color: iconColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Center(child: Icon(icon, size: 16, color: iconColor)),
+            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
           ),
           const SizedBox(width: 14),
           Expanded(

@@ -120,7 +120,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildExperimentalItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool value,
     required ValueChanged<bool>? onChanged,
   }) {
@@ -130,7 +130,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-          child: Center(child: Icon(icon, color: Colors.grey.shade400, size: 16)),
+          child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -154,7 +154,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildWebhookItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool isEnabled,
     required ValueChanged<bool> onToggle,
     required TextEditingController controller,
@@ -168,7 +168,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-              child: Center(child: Icon(icon, color: Colors.grey.shade400, size: 16)),
+              child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -250,7 +250,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                       style: const TextStyle(color: Colors.white, fontFamily: 'Ubuntu Mono', fontSize: 13),
                     ),
                   ),
-                  Icon(FontAwesomeIcons.copy.data, color: Colors.grey.shade600, size: 11),
+                  FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade600, size: 11),
                 ],
               ),
             ),
@@ -288,7 +288,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
-                Icon(FontAwesomeIcons.key.data, color: Colors.grey.shade600, size: 28),
+                FaIcon(FontAwesomeIcons.key, color: Colors.grey.shade600, size: 28),
                 const SizedBox(height: 12),
                 Text(context.l10n.noApiKeysYet, style: TextStyle(color: Colors.grey.shade400, fontSize: 15)),
                 const SizedBox(height: 4),
@@ -343,7 +343,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(FontAwesomeIcons.plus.data, color: Colors.white, size: 10),
+            FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
             const SizedBox(width: 6),
             Text(
               context.l10n.createKey,
@@ -415,7 +415,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 SizedBox(
                   width: 24,
                   height: 24,
-                  child: Center(child: Icon(FontAwesomeIcons.microchip.data, color: Colors.white, size: 16)),
+                  child: Center(child: FaIcon(FontAwesomeIcons.microchip, color: Colors.white, size: 16)),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
@@ -442,7 +442,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               backgroundColor: const Color(0xFF0D0D0D),
               elevation: 0,
               leading: IconButton(
-                icon: Icon(FontAwesomeIcons.chevronLeft.data, size: 18),
+                icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               title: Text(
@@ -495,7 +495,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Center(
-                              child: Icon(FontAwesomeIcons.microphone.data, color: Colors.grey.shade400, size: 16),
+                              child: FaIcon(FontAwesomeIcons.microphone, color: Colors.grey.shade400, size: 16),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -521,7 +521,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           ),
                           _buildSttChip(),
                           const SizedBox(width: 8),
-                          Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 14),
+                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
                         ],
                       ),
                     ),
@@ -548,9 +548,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               color: const Color(0xFF2A2A2E),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Center(
-                              child: Icon(FontAwesomeIcons.clock.data, color: Colors.grey.shade400, size: 16),
-                            ),
+                            child: Center(child: FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade400, size: 16)),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -573,7 +571,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               ],
                             ),
                           ),
-                          Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 14),
+                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
                         ],
                       ),
                     ),
@@ -601,7 +599,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Center(
-                              child: Icon(FontAwesomeIcons.fileImport.data, color: Colors.grey.shade400, size: 16),
+                              child: FaIcon(FontAwesomeIcons.fileImport, color: Colors.grey.shade400, size: 16),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -625,7 +623,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               ],
                             ),
                           ),
-                          Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 14),
+                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
                         ],
                       ),
                     ),
@@ -649,9 +647,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 color: const Color(0xFF2A2A2E),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: Center(
-                                child: Icon(FontAwesomeIcons.bug.data, color: Colors.grey.shade400, size: 16),
-                              ),
+                              child: Center(child: FaIcon(FontAwesomeIcons.bug, color: Colors.grey.shade400, size: 16)),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -755,8 +751,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                                     final name = f.uri.pathSegments.last;
                                                     return ListTile(
                                                       title: Text(name, style: const TextStyle(color: Colors.white)),
-                                                      trailing: Icon(
-                                                        FontAwesomeIcons.chevronRight.data,
+                                                      trailing: FaIcon(
+                                                        FontAwesomeIcons.chevronRight,
                                                         color: Color(0xFF3C3C43),
                                                         size: 14,
                                                       ),
@@ -791,7 +787,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Icon(FontAwesomeIcons.fileArrowUp.data, color: Colors.grey.shade300, size: 16),
+                                        FaIcon(FontAwesomeIcons.fileArrowUp, color: Colors.grey.shade300, size: 16),
                                         const SizedBox(width: 8),
                                         Text(
                                           context.l10n.shareLogs,
@@ -822,7 +818,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(FontAwesomeIcons.trash.data, color: Colors.redAccent, size: 14),
+                                      FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
                                       const SizedBox(width: 6),
                                       Text(
                                         context.l10n.clear,
@@ -902,7 +898,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Center(
-                              child: Icon(FontAwesomeIcons.fileExport.data, color: Colors.grey.shade400, size: 16),
+                              child: FaIcon(FontAwesomeIcons.fileExport, color: Colors.grey.shade400, size: 16),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -933,7 +929,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
                           else
-                            Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade400, size: 16),
+                            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 16),
                         ],
                       ),
                     ),
@@ -994,7 +990,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Center(
-                              child: Icon(FontAwesomeIcons.trash.data, color: Colors.redAccent.shade100, size: 16),
+                              child: FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent.shade100, size: 16),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -1018,7 +1014,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               ],
                             ),
                           ),
-                          Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 14),
+                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
                         ],
                       ),
                     ),
@@ -1070,7 +1066,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Center(
-                                child: Icon(FontAwesomeIcons.desktop.data, color: Colors.grey.shade400, size: 16),
+                                child: FaIcon(FontAwesomeIcons.desktop, color: Colors.grey.shade400, size: 16),
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -1258,7 +1254,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(FontAwesomeIcons.copy.data, color: Colors.grey.shade300, size: 14),
+                                FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade300, size: 14),
                                 const SizedBox(width: 8),
                                 Text(
                                   context.l10n.copyConfig,
@@ -1295,7 +1291,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Center(
-                                child: Icon(FontAwesomeIcons.server.data, color: Colors.grey.shade400, size: 16),
+                                child: FaIcon(FontAwesomeIcons.server, color: Colors.grey.shade400, size: 16),
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -1358,7 +1354,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Icon(FontAwesomeIcons.copy.data, color: Colors.grey.shade500, size: 14),
+                                    FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
                                   ],
                                 ),
                               ),
@@ -1462,7 +1458,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildWebhookItem(
                           title: context.l10n.conversationEvents,
                           description: context.l10n.newConversationCreated,
-                          icon: FontAwesomeIcons.message.data,
+                          icon: FontAwesomeIcons.message,
                           isEnabled: provider.conversationEventsToggled,
                           onToggle: provider.onConversationEventsToggled,
                           controller: provider.webhookOnConversationCreated,
@@ -1475,7 +1471,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildWebhookItem(
                           title: context.l10n.realTimeTranscript,
                           description: context.l10n.transcriptReceived,
-                          icon: FontAwesomeIcons.closedCaptioning.data,
+                          icon: FontAwesomeIcons.closedCaptioning,
                           isEnabled: provider.transcriptsToggled,
                           onToggle: provider.onTranscriptsToggled,
                           controller: provider.webhookOnTranscriptReceived,
@@ -1488,7 +1484,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildWebhookItem(
                           title: context.l10n.audioBytes,
                           description: context.l10n.audioDataReceived,
-                          icon: FontAwesomeIcons.waveSquare.data,
+                          icon: FontAwesomeIcons.waveSquare,
                           isEnabled: provider.audioBytesToggled,
                           onToggle: provider.onAudioBytesToggled,
                           controller: provider.webhookAudioBytes,
@@ -1506,7 +1502,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildWebhookItem(
                           title: context.l10n.daySummary,
                           description: context.l10n.summaryGenerated,
-                          icon: FontAwesomeIcons.calendarDay.data,
+                          icon: FontAwesomeIcons.calendarDay,
                           isEnabled: provider.daySummaryToggled,
                           onToggle: provider.onDaySummaryToggled,
                           controller: provider.webhookDaySummary,
@@ -1534,7 +1530,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildExperimentalItem(
                           title: context.l10n.transcriptionDiagnostics,
                           description: context.l10n.detailedDiagnosticMessages,
-                          icon: FontAwesomeIcons.stethoscope.data,
+                          icon: FontAwesomeIcons.stethoscope,
                           value: provider.transcriptionDiagnosticEnabled,
                           onChanged: provider.onTranscriptionDiagnosticChanged,
                         ),
@@ -1546,7 +1542,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildExperimentalItem(
                           title: context.l10n.autoCreateSpeakers,
                           description: context.l10n.autoCreateWhenNameDetected,
-                          icon: FontAwesomeIcons.userPlus.data,
+                          icon: FontAwesomeIcons.userPlus,
                           value: provider.autoCreateSpeakersEnabled,
                           onChanged: provider.onAutoCreateSpeakersChanged,
                         ),
@@ -1558,7 +1554,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildExperimentalItem(
                           title: 'VAD Gate',
                           description: 'Server-side voice gating to reduce STT costs',
-                          icon: FontAwesomeIcons.microphoneSlash.data,
+                          icon: FontAwesomeIcons.microphoneSlash,
                           value: provider.vadGateEnabled,
                           onChanged: provider.onVadGateChanged,
                         ),
@@ -1577,7 +1573,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Center(
-                                child: Icon(FontAwesomeIcons.robot.data, color: Colors.grey.shade400, size: 16),
+                                child: FaIcon(FontAwesomeIcons.robot, color: Colors.grey.shade400, size: 16),
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -1657,7 +1653,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildExperimentalItem(
                           title: context.l10n.goalTracker,
                           description: context.l10n.trackYourGoalsOnHomepage,
-                          icon: FontAwesomeIcons.bullseye.data,
+                          icon: FontAwesomeIcons.bullseye,
                           value: provider.showGoalTrackerEnabled,
                           onChanged: provider.onShowGoalTrackerChanged,
                         ),
@@ -1668,7 +1664,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildExperimentalItem(
                           title: context.l10n.dailyScore,
                           description: context.l10n.showDailyScoreOnHomepage,
-                          icon: FontAwesomeIcons.chartLine.data,
+                          icon: FontAwesomeIcons.chartLine,
                           value: provider.showDailyScoreEnabled,
                           onChanged: provider.onShowDailyScoreChanged,
                         ),
@@ -1679,7 +1675,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildExperimentalItem(
                           title: context.l10n.tasks,
                           description: context.l10n.showTasksOnHomepage,
-                          icon: FontAwesomeIcons.listCheck.data,
+                          icon: FontAwesomeIcons.listCheck,
                           value: provider.showTasksEnabled,
                           onChanged: provider.onShowTasksChanged,
                         ),
@@ -1690,7 +1686,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         _buildExperimentalItem(
                           title: context.l10n.showPhoneCallButtonTitle,
                           description: context.l10n.showPhoneCallButtonDesc,
-                          icon: FontAwesomeIcons.phone.data,
+                          icon: FontAwesomeIcons.phone,
                           value: provider.showPhoneCallButton,
                           onChanged: provider.onShowPhoneCallButtonChanged,
                         ),
@@ -1806,7 +1802,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              Icon(FontAwesomeIcons.circleInfo.data, color: Colors.grey.shade600, size: 12),
+                              FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey.shade600, size: 12),
                               const SizedBox(width: 6),
                               Text(
                                 context.l10n.switchRequiresRestart,
@@ -1940,7 +1936,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
               decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
-                  Icon(FontAwesomeIcons.file.data, color: Colors.deepPurple, size: 20),
+                  FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

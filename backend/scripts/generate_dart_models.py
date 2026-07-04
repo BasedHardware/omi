@@ -212,6 +212,7 @@ SCHEMA_GROUPS = {
             'MemorySummaryRatingResponse',
             'TrainingDataOptInResponse',
             'TranscriptionPreferencesResponse',
+            'TranscriptionPreferencesUpdate',
             'UserWebhookUrlResponse',
             'DailySummarySettingsResponse',
             'DailySummaryTestResponse',

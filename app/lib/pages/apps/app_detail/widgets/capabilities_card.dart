@@ -13,19 +13,19 @@ class CapabilitiesCard extends StatelessWidget {
   IconData _getCapabilityIcon(String id) {
     switch (id) {
       case 'chat':
-        return FontAwesomeIcons.solidComment.data;
+        return FontAwesomeIcons.solidComment;
       case 'memories':
-        return FontAwesomeIcons.solidFileLines.data;
+        return FontAwesomeIcons.solidFileLines;
       case 'external_integration':
-        return FontAwesomeIcons.puzzlePiece.data;
+        return FontAwesomeIcons.puzzlePiece;
       case 'persona':
-        return FontAwesomeIcons.userAstronaut.data;
+        return FontAwesomeIcons.userAstronaut;
       case 'proactive_notification':
-        return FontAwesomeIcons.solidBell.data;
+        return FontAwesomeIcons.solidBell;
       case 'push_to_talk':
-        return FontAwesomeIcons.walkieTalkie.data;
+        return FontAwesomeIcons.walkieTalkie;
       default:
-        return FontAwesomeIcons.cubes.data;
+        return FontAwesomeIcons.cubes;
     }
   }
 

@@ -43,7 +43,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-              child: Center(child: Icon(FontAwesomeIcons.textHeight.data, color: Colors.grey.shade400, size: 16)),
+              child: Center(child: FaIcon(FontAwesomeIcons.textHeight, color: Colors.grey.shade400, size: 16)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -64,7 +64,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 ],
               ),
             ),
-            Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 14),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
           ],
         ),
       ),
@@ -103,7 +103,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: Icon(FontAwesomeIcons.microphone.data, color: Colors.grey.shade400, size: 16)),
+                  child: Center(child: FaIcon(FontAwesomeIcons.microphone, color: Colors.grey.shade400, size: 16)),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -129,7 +129,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                     ),
                   )
                 else
-                  Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade600, size: 14),
+                  FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
               ],
             ),
           ),
@@ -146,7 +146,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                child: Center(child: Icon(FontAwesomeIcons.language.data, color: Colors.grey.shade400, size: 16)),
+                child: Center(child: FaIcon(FontAwesomeIcons.language, color: Colors.grey.shade400, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -356,7 +356,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: IconButton(
-          icon: Icon(FontAwesomeIcons.chevronLeft.data, size: 18),
+          icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(

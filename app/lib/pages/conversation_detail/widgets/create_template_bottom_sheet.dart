@@ -363,7 +363,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                               ),
                               child: Center(
                                 child: Icon(
-                                  _isPublic ? FontAwesomeIcons.globe.data : FontAwesomeIcons.lock.data,
+                                  _isPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
                                   color: Colors.grey.shade400,
                                   size: 16,
                                 ),

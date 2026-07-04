@@ -481,16 +481,16 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   Widget _buildStatsRow(DailySummary summary) {
     return Row(
       children: [
-        _buildStatItem(FontAwesomeIcons.message.data, '${summary.stats.totalConversations}'),
+        _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
         const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.clock.data, summary.stats.formattedDuration),
+        _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
         const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.circleCheck.data, '${summary.stats.actionItemsCount}'),
+        _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
       ],
     );
   }
 
-  Widget _buildStatItem(IconData icon, String value) {
+  Widget _buildStatItem(FaIconData icon, String value) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
@@ -498,7 +498,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.grey.shade400, size: 14),
+            FaIcon(icon, color: Colors.grey.shade400, size: 14),
             const SizedBox(width: 8),
             Text(
               value,
@@ -604,7 +604,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         point: LatLng(loc.latitude, loc.longitude),
         width: 32,
         height: 32,
-        child: Icon(FontAwesomeIcons.locationDot.data, color: Colors.deepPurple, size: 28),
+        child: FaIcon(FontAwesomeIcons.locationDot, color: Colors.deepPurple, size: 28),
       );
     }).toList();
 
@@ -945,7 +945,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(FontAwesomeIcons.clock.data, color: Colors.grey.shade500, size: 12),
+                                FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade500, size: 12),
                                 const SizedBox(width: 4),
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),

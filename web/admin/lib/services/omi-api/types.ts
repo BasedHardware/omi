@@ -24,19 +24,19 @@ export type OmiAppCapability =
   | 'proactive_notification'
   | 'external_integration'
   | 'persona'
-  | string;
+  | (string & {});
 
 /**
  * App status. The backend `App.status` is typed as `string`; this union
  * narrows to the known values the admin UI renders.
  */
-export type OmiAppStatus = 'approved' | 'pending' | 'rejected' | 'under-review' | string;
+export type OmiAppStatus = 'approved' | 'pending' | 'rejected' | 'under-review' | (string & {});
 
 /**
  * App payment plan. The backend `App.payment_plan` is typed as `string`;
  * this union narrows to the known values the admin UI renders.
  */
-export type OmiPaymentPlan = 'free' | 'one-time' | 'monthly' | 'yearly' | string;
+export type OmiPaymentPlan = 'free' | 'one-time' | 'monthly' | 'yearly' | (string & {});
 
 /**
  * Request-body builder for create/update app. Client-side shape derived from

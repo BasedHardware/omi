@@ -429,19 +429,16 @@ Future<Map<String, dynamic>?> getTranscriptionPreferences() async {
 }
 
 Future<bool> setTranscriptionPreferences({bool? singleLanguageMode, List<String>? vocabulary}) async {
-  Map<String, dynamic> body = {};
-  if (singleLanguageMode != null) {
-    body['single_language_mode'] = singleLanguageMode;
-  }
-  if (vocabulary != null) {
-    body['vocabulary'] = vocabulary;
-  }
+  final body = wire.GeneratedTranscriptionPreferencesUpdate(
+    singleLanguageMode: singleLanguageMode,
+    vocabulary: vocabulary,
+  );
 
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/transcription-preferences',
     headers: {},
     method: 'PATCH',
-    body: jsonEncode(body),
+    body: jsonEncode(body.toJson()),
   );
   if (response == null) return false;
   Logger.debug('setTranscriptionPreferences response: ${response.body}');

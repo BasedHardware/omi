@@ -896,7 +896,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = try Structured(from: decoder)
+    structured = Structured(wire.structured ?? OmiAPI.Structured())
     transcriptSegmentsIncluded = wire.transcriptSegments != nil
     transcriptSegments = (wire.transcriptSegments ?? []).map(TranscriptSegment.init)
     geolocation = wire.geolocation.map(Geolocation.init)
@@ -1063,12 +1063,31 @@ struct Structured: Codable, Equatable {
     events = (wire.events ?? []).map(Event.init)
   }
 
+  init(_ wire: OmiAPI.Structured) {
+    title = wire.title ?? ""
+    overview = wire.overview ?? ""
+    emoji = wire.emoji ?? ""
+    if let cat = wire.category, cat != ._unknown {
+      category = cat.rawValue
+    } else {
+      category = "other"
+    }
+    actionItems = (wire.actionItems ?? []).map(ActionItem.init)
+    events = (wire.events ?? []).map(Event.init)
+  }
+
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
       OmiAPI.ActionItem(completed: $0.completed, completedAt: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, updatedAt: nil)
     }
     let eventsWire = events.map {
-      OmiAPI.Event(created: $0.created, description_: $0.description, duration: $0.duration, start: "", title: $0.title)
+      OmiAPI.Event(
+        created: $0.created,
+        description_: $0.description,
+        duration: $0.duration,
+        start: Event.encodeDateForWire($0.startsAt),
+        title: $0.title
+      )
     }
     let wire = OmiAPI.Structured(
       actionItems: actionItemsWire,
@@ -1163,13 +1182,27 @@ struct Event: Codable, Identifiable, Equatable {
 
   init(from decoder: Decoder) throws {
     // Decode via the generated wire shape, then adapt. `start` is the backend
-    // field name (generated); the legacy `starts_at` mapping is dropped.
-    let wire = try OmiAPI.Event(from: decoder)
-    self.title = wire.title
-    self.startsAt = try Self.decodeDate(wire.start, using: decoder)
-    self.duration = wire.duration ?? 0
-    self.description = wire.description_ ?? ""
-    self.created = wire.created ?? false
+    // field name (generated); cached rows may still use legacy `starts_at`.
+    if let wire = try? OmiAPI.Event(from: decoder) {
+      self.title = wire.title
+      self.startsAt = Self.parseDate(wire.start) ?? Date()
+      self.duration = wire.duration ?? 0
+      self.description = wire.description_ ?? ""
+      self.created = wire.created ?? false
+      return
+    }
+
+    enum LegacyKeys: String, CodingKey {
+      case title, start, startsAt = "starts_at", duration, description, created
+    }
+    let container = try decoder.container(keyedBy: LegacyKeys.self)
+    self.title = try container.decode(String.self, forKey: .title)
+    let startString = try container.decodeIfPresent(String.self, forKey: .start)
+      ?? container.decodeIfPresent(String.self, forKey: .startsAt)
+    self.startsAt = startString.flatMap(Self.parseDate) ?? Date()
+    self.duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
+    self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+    self.created = try container.decodeIfPresent(Bool.self, forKey: .created) ?? false
   }
 
   func encode(to encoder: Encoder) throws {
@@ -1207,6 +1240,10 @@ struct Event: Codable, Identifiable, Equatable {
 
   private static func encodeDate(_ date: Date) -> String {
     fractionalFormatter.string(from: date)
+  }
+
+  fileprivate static func encodeDateForWire(_ date: Date) -> String {
+    encodeDate(date)
   }
 }
 

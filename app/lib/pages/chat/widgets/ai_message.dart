@@ -132,24 +132,24 @@ String? _getIntegrationLogoPath(String thinkingText) {
 }
 
 /// Get the fallback icon for thinking text (used when no integration logo)
-IconData _getThinkingIcon(String thinkingText) {
+FaIconData _getThinkingIcon(String thinkingText) {
   final text = thinkingText.toLowerCase();
   if (text.contains('thinking')) {
-    return FontAwesomeIcons.brain.data;
+    return FontAwesomeIcons.brain;
   } else if (text.contains('searching the web') || text.contains('searching web')) {
-    return FontAwesomeIcons.magnifyingGlass.data;
+    return FontAwesomeIcons.magnifyingGlass;
   } else if (text.contains('conversations')) {
-    return FontAwesomeIcons.comments.data;
+    return FontAwesomeIcons.comments;
   } else if (text.contains('memories')) {
-    return FontAwesomeIcons.lightbulb.data;
+    return FontAwesomeIcons.lightbulb;
   } else if (text.contains('action item')) {
-    return FontAwesomeIcons.listCheck.data;
+    return FontAwesomeIcons.listCheck;
   } else if (text.contains('product info')) {
-    return FontAwesomeIcons.circleInfo.data;
+    return FontAwesomeIcons.circleInfo;
   } else if (text.contains('search')) {
-    return FontAwesomeIcons.magnifyingGlass.data;
+    return FontAwesomeIcons.magnifyingGlass;
   }
-  return FontAwesomeIcons.brain.data; // Default brain icon
+  return FontAwesomeIcons.brain; // Default brain icon
 }
 
 /// Build the thinking icon widget - either an integration logo or a fallback icon
@@ -881,7 +881,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               strokeWidth: 2,
                             ),
                           )
-                        : Icon(FontAwesomeIcons.chevronRight.data, size: 16, color: Colors.white54),
+                        : FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
                   ],
                 ),
               ),
@@ -1158,7 +1158,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
         children: [
           // Copy button
           _buildActionButton(
-            icon: FontAwesomeIcons.copy.data,
+            icon: FontAwesomeIcons.copy,
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
@@ -1188,7 +1188,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           const SizedBox(width: 20),
           // Thumbs up button
           _buildActionButton(
-            icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp.data : FontAwesomeIcons.thumbsUp.data,
+            icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
             isSelected: _selectedNps == 1,
             onTap: () {
               HapticFeedback.lightImpact();
@@ -1201,7 +1201,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           const SizedBox(width: 20),
           // Thumbs down button
           _buildActionButton(
-            icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown.data : FontAwesomeIcons.thumbsDown.data,
+            icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
             isSelected: _selectedNps == -1,
             onTap: () {
               HapticFeedback.lightImpact();
@@ -1220,7 +1220,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           const SizedBox(width: 20),
           // Share button
           _buildActionButton(
-            icon: FontAwesomeIcons.share.data,
+            icon: FontAwesomeIcons.share,
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
@@ -1241,14 +1241,14 @@ class _MessageActionBarState extends State<MessageActionBar> {
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required VoidCallback onTap, bool isSelected = false}) {
+  Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,
       hoverColor: Colors.transparent,
       highlightColor: Colors.transparent,
       onTap: onTap,
-      child: Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
+      child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
     );
   }
 }

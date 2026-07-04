@@ -35,7 +35,7 @@ class ActionFieldsWidget extends StatelessWidget {
                         onTap: () {
                           launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
                         },
-                        child: Icon(FontAwesomeIcons.solidCircleQuestion.data, color: Colors.grey.shade500, size: 18),
+                        child: FaIcon(FontAwesomeIcons.solidCircleQuestion, color: Colors.grey.shade500, size: 18),
                       ),
                     ],
                   ),
@@ -109,20 +109,20 @@ class ActionFieldsWidget extends StatelessWidget {
     );
   }
 
-  IconData _getIconForAction(String actionId) {
+  FaIconData _getIconForAction(String actionId) {
     switch (actionId) {
       case 'create_conversation':
-        return FontAwesomeIcons.solidComment.data;
+        return FontAwesomeIcons.solidComment;
       case 'create_facts':
-        return FontAwesomeIcons.solidLightbulb.data;
+        return FontAwesomeIcons.solidLightbulb;
       case 'read_conversations':
-        return FontAwesomeIcons.solidComments.data;
+        return FontAwesomeIcons.solidComments;
       case 'read_memories':
-        return FontAwesomeIcons.brain.data;
+        return FontAwesomeIcons.brain;
       case 'read_tasks':
-        return FontAwesomeIcons.listCheck.data;
+        return FontAwesomeIcons.listCheck;
       default:
-        return FontAwesomeIcons.puzzlePiece.data;
+        return FontAwesomeIcons.puzzlePiece;
     }
   }
 }

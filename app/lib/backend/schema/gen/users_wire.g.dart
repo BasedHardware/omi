@@ -258,6 +258,30 @@ class GeneratedTranscriptionPreferencesResponse {
   }
 }
 
+class GeneratedTranscriptionPreferencesUpdate {
+  final bool? singleLanguageMode;
+  final List<String>? vocabulary;
+
+  const GeneratedTranscriptionPreferencesUpdate({
+    this.singleLanguageMode,
+    this.vocabulary,
+  });
+
+  factory GeneratedTranscriptionPreferencesUpdate.fromJson(Map<String, dynamic> json) {
+    return GeneratedTranscriptionPreferencesUpdate(
+      singleLanguageMode: _readFieldValue<bool>(_readField(json, const ["single_language_mode"]), "single_language_mode", _readBool, requiredField: false, nullable: true),
+      vocabulary: _readFieldValue<List<String>>(_readField(json, const ["vocabulary"]), "vocabulary", _readStringList, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'single_language_mode': singleLanguageMode,
+      'vocabulary': vocabulary,
+    };
+  }
+}
+
 class GeneratedUserWebhookUrlResponse {
   final String? url;
 

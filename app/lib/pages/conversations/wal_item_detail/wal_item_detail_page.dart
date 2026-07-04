@@ -461,7 +461,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Widget _buildControlButton({
-    required IconData icon,
+    required FaIconData icon,
     VoidCallback? onPressed,
     double size = 48,
     Color? backgroundColor,
@@ -476,7 +476,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       ),
       child: IconButton(
         onPressed: onPressed,
-        icon: Icon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
+        icon: FaIcon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
       ),
     );
   }
@@ -558,7 +558,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ),
             ] else ...[
               ListTile(
-                leading: Icon(FontAwesomeIcons.share.data, color: Colors.white, size: 18),
+                leading: FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
                 title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(sheetContext);

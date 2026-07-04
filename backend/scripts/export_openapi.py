@@ -233,6 +233,14 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ): 'Firebase-authenticated app-client alias; public docs expose the Developer API key route only.',
 }
 
+APP_CLIENT_PUBLIC_PATHS = frozenset(
+    {
+        '/v1/action-items/shared/{token}',
+        '/v1/conversations/{conversation_id}/shared',
+        '/v2/messages/shared/{token}',
+    }
+)
+
 HTTP_METHODS = {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'}
 
 OPENAPI_TITLE = 'Omi Developer API'
@@ -748,8 +756,11 @@ def _normalize_app_client_security(schema: dict[str, Any]) -> None:
     for path, operations in schema.get('paths', {}).items():
         for method, operation in operations.items():
             if method.upper() in HTTP_METHODS:
-                operation['security'] = [{'firebaseBearer': []}]
-                operation.setdefault('responses', {})['401'] = {'$ref': '#/components/responses/Error401'}
+                if path in APP_CLIENT_PUBLIC_PATHS:
+                    operation['security'] = []
+                else:
+                    operation['security'] = [{'firebaseBearer': []}]
+                    operation.setdefault('responses', {})['401'] = {'$ref': '#/components/responses/Error401'}
                 if '{' in path and method.upper() in {'GET', 'PATCH', 'DELETE'}:
                     operation['responses'].setdefault('404', {'$ref': '#/components/responses/Error404'})
 

@@ -84,8 +84,8 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                               onTap: () {
                                 launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
                               },
-                              child: Icon(
-                                FontAwesomeIcons.solidCircleQuestion.data,
+                              child: FaIcon(
+                                FontAwesomeIcons.solidCircleQuestion,
                                 color: Colors.grey.shade500,
                                 size: 18,
                               ),
@@ -221,7 +221,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              Icon(FontAwesomeIcons.chevronRight.data, color: Colors.grey.shade400, size: 14),
+                              FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 14),
                             ],
                           ),
                         ),

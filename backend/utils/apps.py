@@ -1051,7 +1051,7 @@ def build_pagination_metadata(total: int, offset: int, limit: int, category: str
 
     metadata = {
         'total': total,
-        'count': min(limit, total - offset),
+        'count': max(0, min(limit, total - offset)),
         'offset': offset,
         'limit': limit,
         'hasNext': has_next,

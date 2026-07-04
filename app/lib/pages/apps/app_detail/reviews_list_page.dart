@@ -180,7 +180,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () => Navigator.pop(context),
-            icon: Icon(FontAwesomeIcons.arrowLeft.data, size: 16.0, color: Colors.white),
+            icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
           ),
         ),
         title: Text(
@@ -238,7 +238,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       padding: const EdgeInsets.only(top: 60.0),
                       child: Column(
                         children: [
-                          Icon(FontAwesomeIcons.star.data, size: 48, color: Colors.grey.shade600),
+                          FaIcon(FontAwesomeIcons.star, size: 48, color: Colors.grey.shade600),
                           const SizedBox(height: 16),
                           Text(
                             context.l10n.noReviewsFound,
@@ -331,8 +331,8 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       children: List.generate(5, (index) {
                         return Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
-                            FontAwesomeIcons.solidStar.data,
+                          child: FaIcon(
+                            FontAwesomeIcons.solidStar,
                             size: 14,
                             color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
                           ),
@@ -393,7 +393,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
               child: TextButton.icon(
                 onPressed: () => _showReplyDialog(review),
                 icon: Icon(
-                  review.response.isNotEmpty ? FontAwesomeIcons.pencil.data : FontAwesomeIcons.reply.data,
+                  review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
                   size: 12,
                   color: Colors.deepPurple,
                 ),

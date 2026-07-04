@@ -340,7 +340,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         children: [
           // Enable toggle row
           _buildSettingRow(
-            icon: FontAwesomeIcons.bell.data,
+            icon: FontAwesomeIcons.bell,
             title: context.l10n.enable,
             trailing: Switch(
               value: _dailySummaryEnabled,
@@ -362,7 +362,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
               onTap: _showHourPicker,
               behavior: HitTestBehavior.opaque,
               child: _buildSettingRow(
-                icon: FontAwesomeIcons.clock.data,
+                icon: FontAwesomeIcons.clock,
                 title: context.l10n.deliveryTime,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,

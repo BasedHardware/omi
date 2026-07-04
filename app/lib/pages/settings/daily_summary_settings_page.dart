@@ -273,7 +273,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
         children: [
           // Enable toggle row
           _buildSettingRow(
-            icon: FontAwesomeIcons.bell.data,
+            icon: FontAwesomeIcons.bell,
             title: context.l10n.dailySummary,
             trailing: Switch(value: _enabled, onChanged: _updateEnabled, activeThumbColor: const Color(0xFF6366F1)),
           ),
@@ -291,7 +291,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
               onTap: _showHourPicker,
               behavior: HitTestBehavior.opaque,
               child: _buildSettingRow(
-                icon: FontAwesomeIcons.clock.data,
+                icon: FontAwesomeIcons.clock,
                 title: context.l10n.deliveryTime,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,

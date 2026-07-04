@@ -378,7 +378,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 if (widget.conversation.starred)
                                   Padding(
                                     padding: EdgeInsets.only(right: 4.0),
-                                    child: Icon(FontAwesomeIcons.solidStar.data, size: 12, color: Colors.amber),
+                                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                                   ),
                               ],
                             )
@@ -405,7 +405,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 if (widget.conversation.starred)
                                   Padding(
                                     padding: EdgeInsets.only(right: 4.0),
-                                    child: Icon(FontAwesomeIcons.solidStar.data, size: 12, color: Colors.amber),
+                                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                                   ),
                               ],
                             ),
@@ -573,7 +573,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       if (widget.conversation.starred)
                         Padding(
                           padding: EdgeInsets.only(left: 8.0),
-                          child: Icon(FontAwesomeIcons.solidStar.data, size: 12, color: Colors.amber),
+                          child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                         ),
                     ],
                   ),

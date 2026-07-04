@@ -437,11 +437,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     color: Colors.white,
                                                     borderRadius: BorderRadius.circular(10),
                                                   ),
-                                                  child: Icon(
-                                                    FontAwesomeIcons.xmark.data,
-                                                    size: 10,
-                                                    color: Colors.black,
-                                                  ),
+                                                  child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: Colors.black),
                                                 ),
                                               ),
                                             ),
@@ -660,8 +656,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                       shape: BoxShape.circle,
                                                     ),
                                                     child: Center(
-                                                      child: Icon(
-                                                        FontAwesomeIcons.arrowUp.data,
+                                                      child: FaIcon(
+                                                        FontAwesomeIcons.arrowUp,
                                                         color:
                                                             voiceRecorderProvider.state == VoiceRecorderState.recording
                                                             ? const Color(0xFF1f1f25)
@@ -689,8 +685,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                       shape: BoxShape.circle,
                                                     ),
                                                     child: Center(
-                                                      child: Icon(
-                                                        FontAwesomeIcons.microphone.data,
+                                                      child: FaIcon(
+                                                        FontAwesomeIcons.microphone,
                                                         color: Color(0xFF1f1f25),
                                                         size: 16,
                                                       ),
@@ -728,8 +724,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                           shape: BoxShape.circle,
                                                         ),
                                                         child: Center(
-                                                          child: Icon(
-                                                            FontAwesomeIcons.arrowUp.data,
+                                                          child: FaIcon(
+                                                            FontAwesomeIcons.arrowUp,
                                                             color: Color(0xFF1f1f25),
                                                             size: 16,
                                                           ),
@@ -800,7 +796,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           itemBuilder: (context) => [
                                             PullDownMenuItem(
                                               title: context.l10n.takePhoto,
-                                              iconWidget: Icon(FontAwesomeIcons.camera.data, size: 16),
+                                              iconWidget: FaIcon(FontAwesomeIcons.camera, size: 16),
                                               onTap: () {
                                                 HapticFeedback.selectionClick();
                                                 if (mounted) {
@@ -810,7 +806,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             ),
                                             PullDownMenuItem(
                                               title: context.l10n.photoLibrary,
-                                              iconWidget: Icon(FontAwesomeIcons.images.data, size: 16),
+                                              iconWidget: FaIcon(FontAwesomeIcons.images, size: 16),
                                               onTap: () {
                                                 HapticFeedback.selectionClick();
                                                 if (mounted) {
@@ -820,7 +816,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             ),
                                             PullDownMenuItem(
                                               title: context.l10n.chooseFile,
-                                              iconWidget: Icon(FontAwesomeIcons.folder.data, size: 16),
+                                              iconWidget: FaIcon(FontAwesomeIcons.folder, size: 16),
                                               onTap: () {
                                                 HapticFeedback.selectionClick();
                                                 if (mounted) {
@@ -877,8 +873,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 ],
                                               ),
                                               child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.plus.data,
+                                                child: FaIcon(
+                                                  FontAwesomeIcons.plus,
                                                   color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
                                                   size: 18,
                                                 ),
@@ -1382,7 +1378,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       IconButton(
                         icon: Padding(
                           padding: EdgeInsets.only(left: 2, top: 1),
-                          child: Icon(FontAwesomeIcons.xmark.data, color: Colors.white60, size: 18),
+                          child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white60, size: 18),
                         ),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
@@ -1394,7 +1390,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 ListTile(
                   leading: Padding(
                     padding: EdgeInsets.only(left: 2, top: 1),
-                    child: Icon(FontAwesomeIcons.solidTrashCan.data, color: Colors.redAccent, size: 20),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.redAccent, size: 20),
                   ),
                   title: Text(context.l10n.clearChat, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
                   onTap: () {
@@ -1405,12 +1401,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 ListTile(
                   leading: Padding(
                     padding: EdgeInsets.only(left: 2, top: 1),
-                    child: Icon(FontAwesomeIcons.circlePlus.data, color: Colors.white, size: 20),
+                    child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
                   ),
                   title: Text(context.l10n.enableApps, style: const TextStyle(color: Colors.white, fontSize: 16)),
                   trailing: Padding(
                     padding: EdgeInsets.only(left: 2, top: 1),
-                    child: Icon(FontAwesomeIcons.chevronRight.data, color: Colors.white38, size: 14),
+                    child: FaIcon(FontAwesomeIcons.chevronRight, color: Colors.white38, size: 14),
                   ),
                   onTap: () {
                     Navigator.of(context).pop();
@@ -1552,7 +1548,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       trailing: isSelected
           ? Padding(
               padding: EdgeInsets.only(left: 2, top: 1),
-              child: Icon(FontAwesomeIcons.solidCircleCheck.data, color: Colors.white, size: 18),
+              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
             )
           : appId != null && onConfirmDelete != null
           ? GestureDetector(
@@ -1563,7 +1559,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               },
               child: Padding(
                 padding: EdgeInsets.only(left: 2, top: 1),
-                child: Icon(FontAwesomeIcons.solidTrashCan.data, color: Colors.white38, size: 16),
+                child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
               ),
             )
           : null,

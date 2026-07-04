@@ -98,18 +98,14 @@ def test_apiclient_swift_exists():
     assert APICLIENT_SWIFT.exists(), f'APIClient.swift missing at {APICLIENT_SWIFT}'
 
 
-def test_desktop_rest_routes_are_in_scope_or_documented_out_of_scope():
+def test_out_of_scope_prefixes_match_at_least_one_route():
+    """Every documented out-of-scope prefix must match at least one extracted route."""
     source = APICLIENT_SWIFT.read_text()
     all_routes = _extract_routes_from_swift(source)
-    in_scope = _in_scope(all_routes)
-    out_of_scope = all_routes - in_scope
-
-    # Every out-of-scope route must match a documented prefix.
-    undocumented_oos = sorted(r for r in out_of_scope if not r.startswith(OUT_OF_SCOPE_PREFIXES))
-    assert not undocumented_oos, (
-        'Desktop REST routes found that are neither in the app-client surface '
-        'nor documented as out of scope: ' + str(undocumented_oos)
+    unused_prefixes = sorted(
+        prefix for prefix in OUT_OF_SCOPE_PREFIXES if not any(route.startswith(prefix) for route in all_routes)
     )
+    assert not unused_prefixes, 'Unused OUT_OF_SCOPE_PREFIXES (no matching routes): ' + str(unused_prefixes)
 
 
 # Desktop REST routes that the macOS app calls but the backend does not

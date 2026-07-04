@@ -161,7 +161,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                     child: Column(
                       children: [
                         _buildPermissionRow(
-                          icon: FontAwesomeIcons.solidBell.data,
+                          icon: FontAwesomeIcons.solidBell,
                           title: context.l10n.notifications,
                           isGranted: _notificationsGranted,
                           onTap: () =>
@@ -169,21 +169,21 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                         ),
                         const Divider(height: 1, color: Color(0xFF3C3C43)),
                         _buildPermissionRow(
-                          icon: FontAwesomeIcons.locationArrow.data,
+                          icon: FontAwesomeIcons.locationArrow,
                           title: context.l10n.location,
                           isGranted: _locationGranted,
                           onTap: _handleLocationTap,
                         ),
                         const Divider(height: 1, color: Color(0xFF3C3C43)),
                         _buildPermissionRow(
-                          icon: FontAwesomeIcons.bluetooth.data,
+                          icon: FontAwesomeIcons.bluetooth,
                           title: context.l10n.bluetooth,
                           isGranted: _bluetoothGranted,
                           onTap: _handleBluetoothTap,
                         ),
                         const Divider(height: 1, color: Color(0xFF3C3C43)),
                         _buildPermissionRow(
-                          icon: FontAwesomeIcons.microphone.data,
+                          icon: FontAwesomeIcons.microphone,
                           title: context.l10n.microphone,
                           isGranted: _microphoneGranted,
                           onTap: () => _handlePermissionTap(Permission.microphone, _microphoneGranted, 'microphone'),
@@ -191,7 +191,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                         if (Platform.isAndroid) ...[
                           const Divider(height: 1, color: Color(0xFF3C3C43)),
                           _buildPermissionRow(
-                            icon: FontAwesomeIcons.batteryFull.data,
+                            icon: FontAwesomeIcons.batteryFull,
                             title: context.l10n.backgroundActivity,
                             isGranted: _backgroundGranted,
                             onTap: _handleBackgroundTap,

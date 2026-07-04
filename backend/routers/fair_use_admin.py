@@ -58,7 +58,7 @@ class FairUseStatusResponse(BaseModel):
     speech_hours_weekly: float
     limits: FairUseLimitsResponse
     usage_pct: FairUseUsagePctResponse
-    dg_budget: FairUseDailyGenerationsBudgetResponse = Field(default_factory=FairUseDailyGenerationsBudgetResponse)
+    dg_budget: FairUseDailyGenerationsBudgetResponse
     message: str
 
 

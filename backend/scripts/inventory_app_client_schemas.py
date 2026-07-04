@@ -1032,7 +1032,7 @@ def main() -> int:
         items = [
             item
             for item in report['app_operation_manifest']
-            if item['raw_response_decode_site_count']
+            if item['raw_decode_site_count']
             and (
                 not selected_operation_ids
                 or any(operation['operation_id'] in selected_operation_ids for operation in item['operations'])
@@ -1042,7 +1042,7 @@ def main() -> int:
             routes = [
                 f"{item['path']} {item['http_method'] or '*'} {item['normalized_route']} "
                 f"{item['function_name'] or '(unknown function)'} "
-                f"({item['raw_response_decode_site_count']} raw response sites)"
+                f"({item['raw_decode_site_count']} raw decode sites)"
                 for item in items[:50]
             ]
             print('OpenAPI route functions with raw Dart decode sites: ' + ', '.join(routes), flush=True)

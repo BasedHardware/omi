@@ -80,7 +80,7 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
     }
   }
 
-  IconData get icon {
+  FaIconData get icon {
     switch (this) {
       case TaskIntegrationApp.appleReminders:
         return Icons.checklist_rounded;
@@ -552,7 +552,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             else
             // Radio button for connected services
             if (isSelected)
-              Icon(FontAwesomeIcons.solidCircleCheck.data, color: Colors.green, size: 24)
+              FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
             else
               Container(
                 width: 24,
@@ -630,7 +630,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
                 child: Row(
                   children: [
-                    Icon(FontAwesomeIcons.solidLightbulb.data, color: Colors.yellow.withValues(alpha: 0.5), size: 20),
+                    FaIcon(FontAwesomeIcons.solidLightbulb, color: Colors.yellow.withValues(alpha: 0.5), size: 20),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(

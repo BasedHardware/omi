@@ -62,14 +62,23 @@ class Geolocation {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      ...toGenerated().toJson(),
+    final lat = latitude;
+    final lon = longitude;
+    final result = <String, dynamic>{
       'id': id,
       'altitude': altitude,
       'accuracy': accuracy,
       'time': time?.toUtc().toIso8601String(),
-      'google_place_id': googlePlaceId, // server
-      'location_type': locationType, // server
+      'google_place_id': googlePlaceId,
+      'location_type': locationType,
+      'address': address,
     };
+    if (lat != null && lon != null) {
+      result.addAll(toGenerated().toJson());
+    } else {
+      if (lat != null) result['latitude'] = lat;
+      if (lon != null) result['longitude'] = lon;
+    }
+    return result;
   }
 }

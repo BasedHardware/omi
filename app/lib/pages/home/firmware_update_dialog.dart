@@ -7,7 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class FirmwareUpdateStep {
   final String title;
   final String description;
-  final IconData icon;
+  final FaIconData icon;
   final bool isLastStep;
 
   FirmwareUpdateStep({required this.title, required this.description, required this.icon, this.isLastStep = false});
@@ -53,17 +53,17 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
       'no_usb': FirmwareUpdateStep(
         title: context.l10n.firmwareDisconnectUsb,
         description: context.l10n.firmwareUsbWarning,
-        icon: FontAwesomeIcons.plug.data,
+        icon: FontAwesomeIcons.plug,
       ),
       'battery': FirmwareUpdateStep(
         title: context.l10n.firmwareBatteryAbove15,
         description: context.l10n.firmwareEnsureBattery,
-        icon: FontAwesomeIcons.batteryHalf.data,
+        icon: FontAwesomeIcons.batteryHalf,
       ),
       'internet': FirmwareUpdateStep(
         title: context.l10n.firmwareStableConnection,
         description: context.l10n.firmwareConnectWifi,
-        icon: FontAwesomeIcons.wifi.data,
+        icon: FontAwesomeIcons.wifi,
       ),
     };
   }
@@ -105,7 +105,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(FontAwesomeIcons.circleExclamation.data, color: Color(0xFFFFB800), size: 20),
+                  FaIcon(FontAwesomeIcons.circleExclamation, color: Color(0xFFFFB800), size: 20),
                   const SizedBox(width: 10),
                   Text(
                     context.l10n.beforeUpdateMakeSure,
@@ -334,9 +334,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           ),
                         ],
                       ),
-                      child: Center(
-                        child: Icon(FontAwesomeIcons.chevronRight.data, color: Color(0xFF2A2A2E), size: 18),
-                      ),
+                      child: Center(child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18)),
                     ),
                   ),
                 ),

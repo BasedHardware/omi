@@ -324,7 +324,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: Icon(FontAwesomeIcons.share.data, color: Colors.grey.shade400, size: 16),
+                        icon: FaIcon(FontAwesomeIcons.share, color: Colors.grey.shade400, size: 16),
                         onPressed: _shareActionItem,
                       ),
                       IconButton(

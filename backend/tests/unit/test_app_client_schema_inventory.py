@@ -277,12 +277,20 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     assert 'app/lib/backend/schema/app.dart:31' in result.stdout
 
 
-def test_inventory_route_raw_decode_gate_passes_after_openapi_route_migration():
-    result = subprocess.run(
+def test_inventory_openapi_route_response_decode_migration_complete():
+    report = inventory_app_client_schemas.build_report(SPEC_PATH)
+    response_violations = [item for item in report['app_operation_manifest'] if item['raw_response_decode_site_count']]
+    assert not response_violations
+
+
+def test_inventory_route_raw_decode_gate_checks_total_decode_sites_for_targeted_routes():
+    clean_result = subprocess.run(
         [
             sys.executable,
             'scripts/inventory_app_client_schemas.py',
             '--fail-on-raw-json-decode-for-openapi-routes',
+            '--operation-id',
+            'update_transcription_preferences_endpoint_v1_users_transcription_preferences_patch',
         ],
         cwd=ROOT_DIR / 'backend',
         stdout=subprocess.PIPE,
@@ -290,9 +298,24 @@ def test_inventory_route_raw_decode_gate_passes_after_openapi_route_migration():
         text=True,
         check=False,
     )
+    assert clean_result.returncode == 0
 
-    assert result.returncode == 0
-    assert 'OpenAPI route functions with raw Dart decode sites:' not in result.stdout
+    dirty_result = subprocess.run(
+        [
+            sys.executable,
+            'scripts/inventory_app_client_schemas.py',
+            '--fail-on-raw-json-decode-for-openapi-routes',
+            '--operation-id',
+            'suggest_goal_v1_goals_suggest_get',
+        ],
+        cwd=ROOT_DIR / 'backend',
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    assert dirty_result.returncode == 1
+    assert 'suggestGoal' in dirty_result.stdout
 
 
 def test_inventory_route_raw_decode_gate_can_target_operation_ids():

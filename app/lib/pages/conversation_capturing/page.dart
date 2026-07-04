@@ -340,7 +340,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(FontAwesomeIcons.stop.data, color: Colors.black, size: 16.0),
+                              FaIcon(FontAwesomeIcons.stop, color: Colors.black, size: 16.0),
                               const SizedBox(width: 10),
                               Text(
                                 context.l10n.processNow,

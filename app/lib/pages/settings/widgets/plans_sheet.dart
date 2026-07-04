@@ -341,10 +341,10 @@ class _PlansSheetState extends State<PlansSheet> {
     await _handleSwitchToFreePlan();
   }
 
-  Widget _buildDowngradeLimitationRow(IconData icon, String text) {
+  Widget _buildDowngradeLimitationRow(FaIconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, color: Colors.red.shade400, size: 18),
+        FaIcon(icon, color: Colors.red.shade400, size: 18),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1749,7 +1749,7 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildLimitationItem({required IconData icon, required String text}) {
+  Widget _buildLimitationItem({required FaIconData icon, required String text}) {
     return Row(
       children: [
         Container(
@@ -1760,7 +1760,7 @@ class _PlansSheetState extends State<PlansSheet> {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.red.shade400, width: 1),
           ),
-          child: Center(child: Icon(icon, color: Colors.red.shade400, size: 18)),
+          child: Center(child: FaIcon(icon, color: Colors.red.shade400, size: 18)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -2107,11 +2107,11 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildBillingInfoItem({required IconData icon, required String text}) {
+  Widget _buildBillingInfoItem({required FaIconData icon, required String text}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: Colors.green, size: 16),
+        FaIcon(icon, color: Colors.green, size: 16),
         const SizedBox(width: 8),
         Expanded(
           child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),
