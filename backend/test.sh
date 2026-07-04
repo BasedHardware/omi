@@ -52,6 +52,7 @@ pytest tests/unit/test_user_speaker_embedding.py -v
 pytest tests/unit/test_parakeet_diarization.py -v
 pytest tests/unit/test_diarizer_embedding_decoder_bypass.py -v
 pytest tests/unit/test_parakeet_prerecorded.py -v
+pytest tests/unit/test_stt_router.py -v
 pytest tests/unit/test_parakeet_nim.py -v
 pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v

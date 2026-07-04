@@ -1,0 +1,204 @@
+"""Unit tests for the authed STT proxy (POST /v1/stt/transcribe).
+
+The route fronts parakeet's `/v2/transcribe` with the standard Omi auth guard
+plus per-UID rate limiting (issue #8854 step 1). These tests mount the real
+router with the auth dependency overridden and the shared STT httpx client
+replaced by a fake, and exercise: the auth requirement, the upstream config
+guard, payload validation, filename sanitization, response passthrough, and
+upstream error mapping.
+"""
+
+import os
+
+os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
+os.environ.setdefault(
+    'ENCRYPTION_SECRET',
+    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+)
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import routers.stt as stt_router
+from utils.other import endpoints as auth
+from utils.rate_limit_config import RATE_POLICIES
+
+_PARAKEET_URL = 'http://parakeet.internal:8000'
+_UID = 'test-uid'
+
+
+class _FakeResponse:
+    def __init__(self, status_code=200, json_data=None, text=''):
+        self.status_code = status_code
+        self._json = json_data
+        self.text = text
+
+    def json(self):
+        if self._json is None:
+            raise ValueError('not json')
+        return self._json
+
+
+class _FakeSttClient:
+    """Stands in for the shared httpx.AsyncClient from utils.http_client."""
+
+    def __init__(self, response=None, exc=None):
+        self.response = response
+        self.exc = exc
+        self.calls = []
+
+    async def post(self, url, files=None, data=None):
+        self.calls.append({'url': url, 'files': files, 'data': data})
+        if self.exc is not None:
+            raise self.exc
+        return self.response
+
+
+def _make_client(monkeypatch, fake_stt_client, authed=True) -> TestClient:
+    app = FastAPI()
+    app.include_router(stt_router.router)
+    if authed:
+        app.dependency_overrides[auth.get_current_user_uid] = lambda: _UID
+    monkeypatch.setattr(stt_router, 'get_stt_client', lambda: fake_stt_client)
+    # Rate limiting is fail-open on Redis errors, but skip it entirely so unit
+    # tests never touch a Redis connection attempt.
+    monkeypatch.setattr(auth, '_enforce_rate_limit', lambda *args, **kwargs: None)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', _PARAKEET_URL)
+    return TestClient(app)
+
+
+def _upload(client: TestClient, content=b'RIFF-fake-wav', filename='audio.wav', data=None):
+    return client.post(
+        '/v1/stt/transcribe',
+        files={'file': (filename, content, 'audio/wav')},
+        data=data or {},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Auth and configuration guards
+# ---------------------------------------------------------------------------
+def test_policy_registered():
+    # with_rate_limit raises at import time if the policy is missing; assert
+    # explicitly so a policy rename fails with a readable message.
+    assert 'stt:transcribe' in RATE_POLICIES
+
+
+def test_requires_auth(monkeypatch):
+    client = _make_client(monkeypatch, _FakeSttClient(), authed=False)
+    response = _upload(client)
+    assert response.status_code == 401
+
+
+def test_503_when_parakeet_not_configured(monkeypatch):
+    fake = _FakeSttClient()
+    client = _make_client(monkeypatch, fake)
+    monkeypatch.delenv('HOSTED_PARAKEET_API_URL')
+    response = _upload(client)
+    assert response.status_code == 503
+    assert fake.calls == []
+
+
+# ---------------------------------------------------------------------------
+# Payload validation
+# ---------------------------------------------------------------------------
+def test_rejects_empty_file(monkeypatch):
+    fake = _FakeSttClient()
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client, content=b'')
+    assert response.status_code == 400
+    assert fake.calls == []
+
+
+def test_rejects_oversized_body(monkeypatch):
+    fake = _FakeSttClient()
+    client = _make_client(monkeypatch, fake)
+    monkeypatch.setattr(stt_router, '_MAX_UPLOAD_BYTES', 10)
+    response = _upload(client, content=b'x' * 32)
+    assert response.status_code == 413
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize(
+    'raw,expected',
+    [
+        ('../../etc/passwd', 'passwd'),
+        ('..', 'audio.wav'),
+        ('', 'audio.wav'),
+        (None, 'audio.wav'),
+        ('my clip (1).wav', 'my_clip__1_.wav'),
+        ('recording.m4a', 'recording.m4a'),
+    ],
+)
+def test_safe_upstream_filename(raw, expected):
+    assert stt_router._safe_upstream_filename(raw) == expected
+
+
+def test_filename_sanitized_before_forwarding(monkeypatch):
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client, filename='clip.wav')
+    assert response.status_code == 200
+    forwarded_name = fake.calls[0]['files']['file'][0]
+    assert '/' not in forwarded_name
+    assert not forwarded_name.startswith('.')
+
+
+# ---------------------------------------------------------------------------
+# Proxy behavior
+# ---------------------------------------------------------------------------
+def test_success_passthrough(monkeypatch):
+    body = {
+        'text': 'hola mundo',
+        'segments': [{'start': 0.0, 'end': 1.2, 'text': 'hola mundo', 'speaker': 'SPEAKER_00'}],
+        'detected_language': 'es',
+    }
+    fake = _FakeSttClient(response=_FakeResponse(json_data=body))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client)
+    assert response.status_code == 200
+    assert response.json() == body
+    call = fake.calls[0]
+    assert call['url'] == f'{_PARAKEET_URL}/v2/transcribe'
+    assert call['data'] == {'diarize': 'true'}
+
+
+def test_diarize_false_forwarded(monkeypatch):
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client, data={'diarize': 'false'})
+    assert response.status_code == 200
+    assert fake.calls[0]['data'] == {'diarize': 'false'}
+
+
+@pytest.mark.parametrize('upstream_status', [413, 503])
+def test_actionable_upstream_errors_forwarded(monkeypatch, upstream_status):
+    fake = _FakeSttClient(response=_FakeResponse(status_code=upstream_status, json_data={'detail': 'nope'}))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client)
+    assert response.status_code == upstream_status
+    assert response.json()['detail'] == 'nope'
+
+
+def test_other_upstream_errors_become_502(monkeypatch):
+    fake = _FakeSttClient(response=_FakeResponse(status_code=500, text='internal trace'))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client)
+    assert response.status_code == 502
+    assert 'internal trace' not in response.text
+
+
+def test_network_error_becomes_502(monkeypatch):
+    fake = _FakeSttClient(exc=httpx.ConnectError('boom'))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client)
+    assert response.status_code == 502
+
+
+def test_non_json_success_body_becomes_502(monkeypatch):
+    fake = _FakeSttClient(response=_FakeResponse(status_code=200, json_data=None, text='<html>'))
+    client = _make_client(monkeypatch, fake)
+    response = _upload(client)
+    assert response.status_code == 502
