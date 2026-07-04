@@ -1,0 +1,60 @@
+backend/utils/telegram_connector.py
+  s_d1e19ef68d1180::t_d30baad8ea6275 327,335-339,349
+  s_d1e19ef68d1180::t_54c67ed6dd3ef6 371-372,380
+  s_d1e19ef68d1180::t_79d1b83b704318 226-233
+  s_d449130668ce59::t_ad3d00ec63de58 350
+backend/models/telegram.py
+  s_d1e19ef68d1180::t_155243e486fe43 37-42
+backend/utils/imessage_connector.py
+  s_d1e19ef68d1180::t_d1a14213d4523c 343-350
+  s_d1e19ef68d1180::t_02474d8e070672 267-271,273-274
+  s_d1e19ef68d1180::t_8725b4089f61dc 248,251-257,263,272
+backend/database/conversations.py
+  s_d1e19ef68d1180::t_d2d959f11c3c58 1017-1019,1023,1027
+  s_d1e19ef68d1180::t_4644be8c8b2b5f 1020-1022
+  s_d1e19ef68d1180::t_873ced0a1701b6 988-1016,1028-1048
+  s_d1e19ef68d1180::t_16467b2dbd04b4 1024-1026
+backend/tests/unit/test_conversation_append_segments.py
+  s_d1e19ef68d1180::t_292f88aee27b46 40,43,45-46
+  s_d1e19ef68d1180::t_94a161be2c0452 1-23,26-29,39,44,47-145
+  s_d1e19ef68d1180::t_64e95fef91d4b9 24-25,30-38,41-42
+  s_d1e19ef68d1180::t_ddf1c766830a4f 146-174
+backend/tests/unit/test_whatsapp_connector.py
+  s_d1e19ef68d1180::t_dc7ff685240cd1 195-300
+backend/tests/unit/test_telegram_connector.py
+  s_d1e19ef68d1180::t_f1a2db00dad6e9 195-292
+backend/models/whatsapp.py
+  s_d1e19ef68d1180::t_1994f2639eb0bf 37-42
+backend/utils/whatsapp_connector.py
+  s_d1e19ef68d1180::t_f5a73f02c8630d 371-372,380
+  s_d1e19ef68d1180::t_80f69b93238410 226-233
+  s_d1e19ef68d1180::t_b21e00f064d34e 327,335-339,349
+  s_d449130668ce59::t_44d1fab98e70e6 350
+backend/tests/unit/test_imessage_connector.py
+  s_d1e19ef68d1180::t_1170439e491cd0 238-267,269-302
+  s_d1e19ef68d1180::t_16467b2dbd04b4 268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ce8dc6761be34a73cfcfd13de35140459272ab72",
+  "prompts": {},
+  "sessions": {
+    "s_d1e19ef68d1180": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "83923764-66fd-417b-b7ad-d7d8af0abcfe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    },
+    "s_d449130668ce59": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "beea231a-88a0-4e79-a5aa-ffc0b1ecab19",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
