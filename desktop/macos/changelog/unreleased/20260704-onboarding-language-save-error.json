@@ -1,0 +1,3 @@
+{
+  "change": "Fixed onboarding language step silently continuing when your primary language failed to save to your account"
+}
