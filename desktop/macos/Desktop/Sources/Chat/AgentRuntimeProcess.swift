@@ -279,6 +279,23 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
+  func importConversationTurns(clientId: String, surface: AgentSurfaceReference, turns: [[String: Any]]) {
+    var dict: [String: Any] = [
+      "type": "import_conversation_turns",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "turns": turns,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
   func refreshAuthToken(_ token: String) {
     var dict: [String: Any] = [
       "type": "refresh_token",
@@ -356,6 +373,8 @@ actor AgentRuntimeProcess {
     mode: String?,
     model: String?,
     imageData: Data?,
+    attachmentMetadataJson: String?,
+    surfaceContextJson: String?,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolCall: @escaping AgentBridge.ToolCallHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -407,6 +426,12 @@ actor AgentRuntimeProcess {
       if let model { queryDict["model"] = model }
       if let imageData {
         queryDict["imageBase64"] = imageData.base64EncodedString()
+      }
+      if let attachmentMetadataJson, !attachmentMetadataJson.isEmpty {
+        queryDict["attachmentMetadataJson"] = attachmentMetadataJson
+      }
+      if let surfaceContextJson, !surfaceContextJson.isEmpty {
+        queryDict["surfaceContextJson"] = surfaceContextJson
       }
       if let ownerId = currentOwnerId() {
         queryDict["ownerId"] = ownerId
@@ -967,6 +992,9 @@ actor AgentRuntimeProcess {
       cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
       artifacts: AgentArtifactProjection.parseList(
         fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
+      ),
+      completionDeltaArtifacts: AgentArtifactProjection.parseList(
+        fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
       )
     )
   }

@@ -250,6 +250,7 @@ export class JsonlCompatibilityFacade {
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
         artifacts: result.artifacts.map(serializeArtifact),
+        completionDeltaArtifacts: result.completionDeltaArtifacts?.map(serializeArtifact),
       };
       this.send(this.withCorrelation(resultMessage, context));
     } catch (error) {
@@ -510,6 +511,9 @@ export class JsonlCompatibilityFacade {
         : message.legacyAdapterSessionId ?? message.resume,
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
       recoverAfterError: this.recoverAfterError(),
+      attachmentMetadataJson: message.attachmentMetadataJson ?? null,
+      surfaceContextJson: message.surfaceContextJson ?? null,
+      imagePresent: Boolean(message.imageBase64),
       metadata: {
         protocolVersion: message.protocolVersion ?? 1,
         legacyAdapterSessionId: hasSurfaceRef

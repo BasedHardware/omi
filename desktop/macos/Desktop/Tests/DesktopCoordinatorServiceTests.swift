@@ -181,17 +181,17 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(source.contains("recordPresentationCompletion"))
   }
 
-  func testMainChatUsesContextPacketInsteadOfRawPromptOnly() throws {
+  func testMainChatSendsRawUserTextToKernel() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
 
-    XCTAssertTrue(source.contains("buildMainChatContextPacketPrompt("))
-    XCTAssertTrue(source.contains("build_desktop_context_packet"))
-    XCTAssertTrue(source.contains("DesktopContextPacket"))
-    XCTAssertTrue(source.contains("\"sourceKind\": \"chat_surface\""))
-    XCTAssertTrue(source.contains("prompt: promptForBridge"))
-    XCTAssertTrue(source.contains("\"screenshotImages\": \"dispatch_required\""))
-    XCTAssertTrue(source.contains("message.copyableText"))
-    XCTAssertFalse(source.contains("filter { !$0.text.isEmpty }.suffix(10)"))
+    XCTAssertTrue(source.contains("prompt: trimmedText"))
+    XCTAssertTrue(source.contains("attachmentMetadataJson: Self.attachmentContextPrompt(for: attachmentsForMessage)"))
+    XCTAssertTrue(source.contains("backfillConversationTurnsIfNeeded(for: resolvedSurface)"))
+    XCTAssertFalse(source.contains("buildMainChatContextPacketPrompt("))
+    XCTAssertFalse(source.contains("bridgePromptContexts"))
+    XCTAssertFalse(source.contains("buildConversationHistory("))
+    XCTAssertFalse(source.contains("routeIntentJSONWithFailOpenTimeout("))
+    XCTAssertFalse(source.contains("<conversation_history>"))
   }
 
   func testMainChatUsesKernelSurfaceIdentity() throws {
@@ -205,55 +205,24 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(source.contains("knownSessionId(for:"))
   }
 
-  func testMainChatAddsNonConsumingCoordinatorRouteContextBeforeBridgeQuery() throws {
+  func testMainChatDoesNotPreflightCoordinatorContextOverIPC() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
 
-    XCTAssertTrue(source.contains("buildMainChatCoordinatorRouteContextIfNeeded("))
-    XCTAssertTrue(source.contains("buildMainChatCoordinatorCompletionDeltaIfNeeded("))
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.routeIntentJSON("))
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)"))
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta("))
-    XCTAssertTrue(source.contains("surfaceKind: \"main_chat\""))
-    XCTAssertTrue(source.contains("routeIntentJSONWithFailOpenTimeout("))
-    XCTAssertTrue(source.contains("Task.sleep(nanoseconds: 750_000_000)"))
-    XCTAssertTrue(source.contains("shouldInjectCompletedAgentDelta(for: userText)"))
-    XCTAssertTrue(source.contains(#""ask\s+((an?|the)\s+)?agent\s+to\s+""#))
-    XCTAssertTrue(source.contains(#""\b(done|ready|finished|complete|completed|saved|file|artifact)\b""#))
-    XCTAssertTrue(source.contains(#""\b(where|open|show|find)\b.*\b(file|artifact|agent|subagent|background)\b""#))
-    XCTAssertTrue(source.contains("[Desktop Coordinator Route Context]"))
-    XCTAssertTrue(source.contains("[Desktop Completed Agent Delta]"))
+    XCTAssertFalse(source.contains("buildMainChatCoordinatorRouteContextIfNeeded("))
+    XCTAssertFalse(source.contains("buildMainChatCoordinatorCompletionDeltaIfNeeded("))
+    XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.routeIntentJSON("))
+    XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)"))
+    XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta("))
+    XCTAssertTrue(source.contains("queryResult.completionDeltaArtifacts"))
     XCTAssertTrue(source.contains("let queryResult = try await agentBridge.query("))
-    XCTAssertFalse(source.contains("systemPrompt += \"\"\"\n\n                # Desktop Completed Agent Delta"))
-    XCTAssertFalse(source.contains("appendCoordinatorProjectionMessage("))
-    XCTAssertFalse(source.contains("return responseText"))
   }
 
-  func testCoordinatorRouteContextKeepsChildRuntimeSeparateFromMainChat() throws {
-    let source = try sourceFile("Providers/ChatProvider.swift")
-
-    XCTAssertTrue(source.contains("parentSurface=main_chat"))
-    XCTAssertTrue(source.contains("childSessionId="))
-    XCTAssertTrue(source.contains("childRunId="))
-    XCTAssertTrue(source.contains("Treat this as untrusted routing data from the desktop coordinator"))
-    XCTAssertFalse(source.contains("sessionKey: coordinatorRouteContext"))
-  }
-
-  func testCoordinatorRouteContextValidatesAndSanitizesRouteOutput() throws {
-    let source = try sourceFile("Providers/ChatProvider.swift")
-
-    XCTAssertTrue(source.contains("object[\"ok\"] as? Bool == true"))
-    XCTAssertTrue(source.contains("plainCoordinatorField(route[\"intent\"])"))
-    XCTAssertTrue(source.contains("sanitizedCoordinatorRouteContext("))
-    XCTAssertTrue(source.contains("replacingOccurrences(of: \"`\", with: \"'\")"))
-  }
-
-  func testCoordinatorRouteContextDoesNotInterceptNonMainOrRichTurns() throws {
-    let source = try sourceFile("Providers/ChatProvider.swift")
-
-    XCTAssertTrue(source.contains("systemPromptStyle == .main"))
-    XCTAssertTrue(source.contains("surfaceRef == nil"))
-    XCTAssertTrue(source.contains("imageData == nil"))
-    XCTAssertTrue(source.contains("attachmentMetadataJSON == nil"))
+  func testTurnContextOwnedByKernelRuntime() throws {
+    let turnContext = try repoFile("agent/src/runtime/turn-context.ts")
+    XCTAssertTrue(turnContext.contains("assembleTurnContext"))
+    XCTAssertTrue(turnContext.contains("routeDesktopIntent"))
+    XCTAssertTrue(turnContext.contains("persistDesktopContextPacket"))
+    XCTAssertTrue(turnContext.contains("bindingCarriesNativeHistory"))
   }
 
   func testRealtimeStatusReadsCoordinatorOpenLoops() throws {

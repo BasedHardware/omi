@@ -20,6 +20,17 @@ import {
   type ResolveSurfaceSessionResult,
   type SurfaceRef,
 } from "./surface-session.js";
+import {
+  appendConversationTurn,
+  conversationIdForSession,
+  importConversationTurnsForSurface,
+  type ConversationTurnImportEntry,
+} from "./conversation-turns.js";
+import {
+  acknowledgeCompletionDelta,
+  assembleTurnContext,
+  bindingCarriesNativeHistory,
+} from "./turn-context.js";
 import type {
   AdapterBinding,
   AgentEvent,
@@ -192,6 +203,9 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   metadata?: Record<string, unknown>;
   parentRunId?: string;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
+  attachmentMetadataJson?: string | null;
+  surfaceContextJson?: string | null;
+  imagePresent?: boolean;
 }
 
 export interface KernelRunResult {
@@ -202,6 +216,7 @@ export interface KernelRunResult {
   adapterSessionId: string | null;
   terminalStatus: "succeeded" | "failed" | "cancelled";
   text: string;
+  completionDeltaArtifacts?: AgentArtifact[];
 }
 
 export interface CancelRunResult {
@@ -637,6 +652,9 @@ export class AgentRuntimeKernel {
     let retryReason: string | null = null;
     let resumeFromAttemptId: string | null = null;
     let lastAttempt: RunAttempt | undefined;
+    let completionDeltaArtifacts: AgentArtifact[] = [];
+    const surfaceRef = this.surfaceRefForInput(input);
+    const conversationId = conversationIdForSession(this.store, accepted.session.sessionId);
 
     for (let attemptNo = 1; attemptNo <= maxAttempts; attemptNo += 1) {
       const attempt = this.createAttempt({
@@ -749,6 +767,52 @@ export class AgentRuntimeKernel {
       const protectedPinnedBindingId = pool.requiresPinnedWorkers ? handle.bindingId : null;
       pool.protectPinnedBinding(protectedPinnedBindingId);
 
+      let effectivePrompt = attemptInput.prompt;
+      let effectivePromptBlocks = attemptInput.promptBlocks;
+      let acknowledgedCompletionDelta: { ids: string[]; completedAtHighWaterMs?: number } | null = null;
+      if (surfaceRef && conversationId) {
+        const assembled = assembleTurnContext({
+          store: this.store,
+          services: this.turnContextServices(),
+          ownerId: input.ownerId,
+          sessionId: accepted.session.sessionId,
+          conversationId,
+          surfaceRef,
+          userText: input.prompt,
+          attachmentMetadataJson: input.attachmentMetadataJson,
+          surfaceContextJson: input.surfaceContextJson,
+          imagePresent: Boolean(input.imagePresent),
+          bindingCarriesNativeHistory: bindingCarriesNativeHistory(binding),
+          runId: accepted.run.runId,
+        });
+        effectivePrompt = assembled.prompt;
+        effectivePromptBlocks = attemptInput.promptBlocks
+          ? attemptInput.promptBlocks.map((block) =>
+              block.type === "text" ? { ...block, text: assembled.prompt } : block,
+            )
+          : undefined;
+        completionDeltaArtifacts = assembled.completionDeltaArtifacts;
+        if (assembled.acknowledgedCompletionDeltaIds.length > 0) {
+          acknowledgedCompletionDelta = {
+            ids: assembled.acknowledgedCompletionDeltaIds,
+            completedAtHighWaterMs: assembled.completionDeltaArtifacts
+              .map((artifact) => artifact.createdAtMs)
+              .reduce((max, value) => Math.max(max, value), 0) || undefined,
+          };
+        }
+      }
+
+      if (conversationId && surfaceRef) {
+        appendConversationTurn(this.store, {
+          conversationId,
+          role: "user",
+          surfaceKind: surfaceRef.surfaceKind,
+          content: input.prompt,
+          createdAtMs: Date.now(),
+          metadataJson: JSON.stringify({ runId: accepted.run.runId }),
+        });
+      }
+
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
           if (this.runStatus(accepted.run.runId) === "cancelling") {
@@ -782,7 +846,7 @@ export class AgentRuntimeKernel {
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               binding: handle,
-              prompt: input.promptBlocks ?? [{ type: "text", text: input.prompt }],
+              prompt: effectivePromptBlocks ?? [{ type: "text", text: effectivePrompt }],
               mode: input.mode ?? "ask",
               model: input.model,
               tools: input.tools ?? [],
@@ -793,7 +857,26 @@ export class AgentRuntimeKernel {
           );
         });
         this.activeExecutions.delete(accepted.run.runId);
-        return this.completeAttemptAndRun(accepted.session, accepted.run.runId, attempt, binding, result);
+        if (acknowledgedCompletionDelta && surfaceRef) {
+          acknowledgeCompletionDelta(this.store, {
+            ownerId: input.ownerId,
+            surfaceRef,
+            ids: acknowledgedCompletionDelta.ids,
+            completedAtHighWaterMs: acknowledgedCompletionDelta.completedAtHighWaterMs ?? null,
+          });
+        }
+        const completed = this.completeAttemptAndRun(
+          accepted.session,
+          accepted.run.runId,
+          attempt,
+          binding,
+          result,
+          {
+            conversationId,
+            surfaceKind: surfaceRef?.surfaceKind ?? accepted.session.surfaceKind,
+          },
+        );
+        return { ...completed, completionDeltaArtifacts };
       } catch (error) {
         this.activeExecutions.delete(accepted.run.runId);
         if (isStaleBindingError(error)) {
@@ -848,6 +931,27 @@ export class AgentRuntimeKernel {
       adapterSessionId: null,
       terminalStatus: finalRun.status === "cancelled" ? "cancelled" : "failed",
       text: finalRun.finalText ?? "",
+      completionDeltaArtifacts,
+    };
+  }
+
+  private turnContextServices() {
+    return {
+      persistDesktopContextPacket: (packetInput: DesktopContextPacketBuildInput) =>
+        this.persistDesktopContextPacket(packetInput),
+      routeDesktopIntent: (routeInput: Parameters<AgentRuntimeKernel["routeDesktopIntent"]>[0]) =>
+        this.routeDesktopIntent(routeInput),
+      listSessions: (listInput: ListSessionsInput) => this.listSessions(listInput),
+      inspectArtifacts: (inspectInput: InspectArtifactsInput) => this.inspectArtifacts(inspectInput),
+    };
+  }
+
+  private surfaceRefForInput(input: ExecuteAgentRunInput): SurfaceRef | null {
+    if (!input.surfaceKind || !input.externalRefKind || !input.externalRefId) return null;
+    return {
+      surfaceKind: input.surfaceKind,
+      externalRefKind: input.externalRefKind,
+      externalRefId: input.externalRefId,
     };
   }
 
@@ -1275,6 +1379,19 @@ export class AgentRuntimeKernel {
 
   importLegacyMainChatSessions(input: { ownerId: string; entries: LegacyMainChatSessionEntry[] }): number {
     return importLegacyMainChatSessions(this.store, input, () => Date.now());
+  }
+
+  importConversationTurns(input: {
+    ownerId: string;
+    surfaceRef: SurfaceRef;
+    turns: ConversationTurnImportEntry[];
+  }): number {
+    return importConversationTurnsForSurface(this.store, {
+      ownerId: input.ownerId,
+      surfaceRef: input.surfaceRef,
+      turns: input.turns,
+      nowMs: () => Date.now(),
+    });
   }
 
   clearOwnerState(ownerId: string): { invalidatedBindingIds: string[] } {
@@ -1923,7 +2040,8 @@ export class AgentRuntimeKernel {
     runId: string,
     attempt: RunAttempt,
     binding: AdapterBinding,
-    result: AdapterAttemptResult
+    result: AdapterAttemptResult,
+    turnRecord?: { conversationId: string | null; surfaceKind: string },
   ): KernelRunResult {
     const status = result.terminalStatus;
     this.withTransaction(() => {
@@ -1975,6 +2093,16 @@ export class AgentRuntimeKernel {
         errorMessage: status === "failed" ? result.failure?.userMessage ?? null : null,
         failure: result.failure,
       });
+      if (status === "succeeded" && turnRecord?.conversationId && result.text.trim()) {
+        appendConversationTurn(this.store, {
+          conversationId: turnRecord.conversationId,
+          role: "assistant",
+          surfaceKind: turnRecord.surfaceKind,
+          content: result.text,
+          createdAtMs: Date.now(),
+          metadataJson: JSON.stringify({ runId }),
+        });
+      }
     });
     return {
       session,

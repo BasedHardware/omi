@@ -29,14 +29,13 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
   }
 
-  func testTaskChatUsesContextPacketsWhilePreservingVisibleTaskContext() throws {
+  func testTaskChatSendsRawPromptAndSurfaceContextToKernel() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("buildContextPacketSummary("))
-    XCTAssertTrue(source.contains("build_desktop_context_packet"))
-    XCTAssertTrue(source.contains("DesktopContextPacket"))
-    XCTAssertTrue(source.contains("# Task Context\\n\\n\\(taskContext)\\n\\n---\\n\\n# User Message"))
-    XCTAssertTrue(source.contains("The full task context is included below in the prompt."))
+    XCTAssertTrue(source.contains("prompt: trimmedText"))
+    XCTAssertTrue(source.contains("surfaceContextJson: taskContext"))
+    XCTAssertFalse(source.contains("buildContextPacketSummary("))
+    XCTAssertFalse(source.contains("build_desktop_context_packet"))
   }
 
   @MainActor

@@ -60,9 +60,36 @@ export type NewSurfaceConversation = Pick<
   | "lastActiveAtMs"
 >;
 
+export type ConversationTurnRole = "user" | "assistant";
+
+export interface ConversationTurn {
+  conversationId: string;
+  turnId: string;
+  role: ConversationTurnRole;
+  surfaceKind: string;
+  content: string;
+  createdAtMs: number;
+  metadataJson: string;
+}
+
+export type NewConversationTurn = Pick<
+  ConversationTurn,
+  "conversationId" | "role" | "surfaceKind" | "content" | "createdAtMs"
+> &
+  Partial<Pick<ConversationTurn, "turnId" | "metadataJson">>;
+
+export interface CompletionDeltaCheckpoint {
+  ownerId: string;
+  surfaceKey: string;
+  seenIdsJson: string;
+  highWaterMs: number;
+  updatedAtMs: number;
+}
+
 export type AgentIdKind =
   | "session"
   | "conversation"
+  | "turn"
   | "run"
   | "attempt"
   | "event"
@@ -449,6 +476,7 @@ export interface AgentStore {
   reconcileStartup(): StartupReconciliationResult;
   insertSession(input: NewAgentSession): AgentSession;
   insertSurfaceConversation(input: NewSurfaceConversation): SurfaceConversation;
+  insertConversationTurn(input: NewConversationTurn): ConversationTurn;
   insertRun(input: NewAgentRun): AgentRun;
   insertAttempt(input: NewRunAttempt): RunAttempt;
   insertAdapterBinding(input: NewAdapterBinding): AdapterBinding;

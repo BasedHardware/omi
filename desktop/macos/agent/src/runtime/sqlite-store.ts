@@ -22,8 +22,10 @@ import type {
   NewAgentEvent,
   NewAgentArtifact,
   NewAgentGrant,
+  ConversationTurn,
   NewAgentRun,
   NewAgentSession,
+  NewConversationTurn,
   NewSurfaceConversation,
   SurfaceConversation,
   NewDesktopArtifactDelivery,
@@ -49,6 +51,7 @@ const DESKTOP_CONTEXT_ACCESS_LOG_MIGRATION_VERSION = 7;
 const DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION = 8;
 const ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION = 9;
 const SURFACE_CONVERSATIONS_MIGRATION_VERSION = 10;
+const CONVERSATION_TURNS_MIGRATION_VERSION = 11;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -315,6 +318,7 @@ export function generateAgentId(kind: AgentIdKind): string {
     memoryCandidate: "memcand",
     taskCandidate: "taskcand",
     contextAccess: "access",
+    turn: "turn",
   };
   return `${prefixByKind[kind]}_${randomUUID().replaceAll("-", "")}`;
 }
@@ -340,6 +344,7 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runDesktopAttentionOverridesMigration(db, Date.now());
     runActiveAttemptAuthorityMigration(db, Date.now());
     runSurfaceConversationsMigration(db, Date.now());
+    runConversationTurnsMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -420,6 +425,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(SURFACE_CONVERSATIONS_MIGRATION_VERSION)) {
       runSurfaceConversationsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CONVERSATION_TURNS_MIGRATION_VERSION)) {
+      runConversationTurnsMigration(this.db, this.nowMs());
     }
   }
 
@@ -656,6 +664,32 @@ export class SqliteAgentStore implements AgentStore {
       input.lastActiveAtMs,
     );
     return input;
+  }
+
+  insertConversationTurn(input: NewConversationTurn): ConversationTurn {
+    const turn: ConversationTurn = {
+      conversationId: input.conversationId,
+      turnId: input.turnId ?? generateAgentId("turn"),
+      role: input.role,
+      surfaceKind: input.surfaceKind,
+      content: input.content,
+      createdAtMs: input.createdAtMs,
+      metadataJson: input.metadataJson ?? "{}",
+    };
+    this.db.prepare(
+      `INSERT INTO conversation_turns (
+        conversation_id, turn_id, role, surface_kind, content, created_at_ms, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      turn.conversationId,
+      turn.turnId,
+      turn.role,
+      turn.surfaceKind,
+      turn.content,
+      turn.createdAtMs,
+      turn.metadataJson,
+    );
+    return turn;
   }
 
   insertSession(input: NewAgentSession): AgentSession {
@@ -1644,6 +1678,39 @@ function runSurfaceConversationsMigration(db: Pick<DatabaseSync, "exec" | "prepa
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       SURFACE_CONVERSATIONS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runConversationTurnsMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_turns(
+        conversation_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        surface_kind TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (conversation_id, turn_id)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS conversation_turns_recent_idx
+        ON conversation_turns(conversation_id, created_at_ms DESC);
+
+      CREATE TABLE IF NOT EXISTS completion_delta_checkpoints(
+        owner_id TEXT NOT NULL,
+        surface_key TEXT NOT NULL,
+        seen_ids_json TEXT NOT NULL DEFAULT '[]',
+        high_water_ms INTEGER NOT NULL DEFAULT 0,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (owner_id, surface_key)
+      ) STRICT;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CONVERSATION_TURNS_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

@@ -16,6 +16,7 @@ actor AgentBridge {
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
     let artifacts: [AgentArtifactProjection]
+    let completionDeltaArtifacts: [AgentArtifactProjection]
 
     init(
       text: String,
@@ -29,7 +30,8 @@ actor AgentBridge {
       outputTokens: Int,
       cacheReadTokens: Int,
       cacheWriteTokens: Int,
-      artifacts: [AgentArtifactProjection] = []
+      artifacts: [AgentArtifactProjection] = [],
+      completionDeltaArtifacts: [AgentArtifactProjection] = []
     ) {
       self.text = text
       self.costUsd = costUsd
@@ -43,6 +45,7 @@ actor AgentBridge {
       self.cacheReadTokens = cacheReadTokens
       self.cacheWriteTokens = cacheWriteTokens
       self.artifacts = artifacts
+      self.completionDeltaArtifacts = completionDeltaArtifacts
     }
   }
 
@@ -179,6 +182,23 @@ actor AgentBridge {
     )
   }
 
+  func importConversationTurns(
+    surface: AgentSurfaceReference,
+    turns: [(role: String, content: String, createdAtMs: Int?)]
+  ) async {
+    await runtime.importConversationTurns(
+      clientId: clientId,
+      surface: surface,
+      turns: turns.map {
+        var entry: [String: Any] = ["role": $0.role, "content": $0.content]
+        if let createdAtMs = $0.createdAtMs {
+          entry["createdAtMs"] = createdAtMs
+        }
+        return entry
+      }
+    )
+  }
+
   func controlTool(name: String, input: [String: Any]) async throws -> String {
     try await start()
     return try await runtime.directControlTool(
@@ -197,6 +217,8 @@ actor AgentBridge {
     mode: String? = nil,
     model: String? = nil,
     imageData: Data? = nil,
+    attachmentMetadataJson: String? = nil,
+    surfaceContextJson: String? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolCall: @escaping ToolCallHandler,
     onToolActivity: @escaping ToolActivityHandler,
@@ -246,6 +268,8 @@ actor AgentBridge {
       mode: mode,
       model: model,
       imageData: imageData,
+      attachmentMetadataJson: attachmentMetadataJson,
+      surfaceContextJson: surfaceContextJson,
       onTextDelta: onTextDelta,
       onToolCall: onToolCall,
       onToolActivity: onToolActivity,

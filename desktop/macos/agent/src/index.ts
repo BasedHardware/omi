@@ -1365,6 +1365,36 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "import_conversation_turns": {
+        const ownerId = msg.ownerId?.trim() || currentOwnerId;
+        const surfaceKind = typeof msg.surfaceKind === "string" ? msg.surfaceKind : "";
+        const externalRefKind = typeof msg.externalRefKind === "string" ? msg.externalRefKind : "";
+        const externalRefId = typeof msg.externalRefId === "string" ? msg.externalRefId : "";
+        const turns = Array.isArray(msg.turns) ? msg.turns : [];
+        const imported = kernel.importConversationTurns({
+          ownerId,
+          surfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          turns: turns
+            .map((turn) => {
+              if (!turn || typeof turn !== "object") return null;
+              const record = turn as Record<string, unknown>;
+              const role = record.role === "assistant" ? "assistant" : record.role === "user" ? "user" : null;
+              const content = typeof record.content === "string" ? record.content : "";
+              if (!role || !content.trim()) return null;
+              return {
+                role,
+                content,
+                surfaceKind: typeof record.surfaceKind === "string" ? record.surfaceKind : undefined,
+                createdAtMs: typeof record.createdAtMs === "number" ? record.createdAtMs : undefined,
+                metadataJson: typeof record.metadataJson === "string" ? record.metadataJson : undefined,
+              };
+            })
+            .filter((turn): turn is NonNullable<typeof turn> => turn !== null),
+        });
+        logErr(`Imported ${imported} conversation turn(s) for ${ownerId}/${surfaceKind}`);
+        break;
+      }
+
       case "invalidate_session":
         facade.handleInvalidateSession(msg);
         break;

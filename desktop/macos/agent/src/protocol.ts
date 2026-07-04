@@ -41,6 +41,8 @@ export interface QueryMessage extends ProtocolEnvelope, CanonicalCorrelation {
   model?: string;
   resume?: string;
   imageBase64?: string;
+  attachmentMetadataJson?: string;
+  surfaceContextJson?: string;
 }
 
 export interface ToolResultMessage {
@@ -174,6 +176,7 @@ export interface ResultMessage extends QueryScopedOutbound {
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   artifacts?: SerializedArtifact[];
+  completionDeltaArtifacts?: SerializedArtifact[];
 }
 
 export interface SerializedArtifact {
