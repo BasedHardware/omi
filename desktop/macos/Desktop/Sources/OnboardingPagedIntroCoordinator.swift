@@ -392,7 +392,17 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     lastActionError = nil
     AssistantSettings.shared.voiceLanguages = selectedLanguageCodes
     let primary = primaryLanguageCode
-    Task { _ = try? await APIClient.shared.updateUserLanguage(primary) }
+    // Await the backend primary-language write and surface failure BEFORE the step
+    // advances — fire-and-forget here silently lost the account language (the LLM
+    // output language) on network failure, regressing the old save-before-continue
+    // contract. The local selection stays saved either way; retrying is safe.
+    do {
+      _ = try await APIClient.shared.updateUserLanguage(primary)
+    } catch {
+      logError("Onboarding: saving primary language '\(primary)' to backend failed", error: error)
+      lastActionError = "Couldn't save your language to your account — check your connection and tap Continue again."
+      return
+    }
 
     let nodes: [[String: Any]] = selectedLanguageCodes.map { code in
       [
