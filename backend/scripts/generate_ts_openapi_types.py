@@ -155,6 +155,170 @@ def response_schema_to_ts(response: dict[str, Any]) -> str:
     return schema_to_ts(json_content.get('schema', {}))
 
 
+SKIP_CONTENT_PREFIXES = (
+    'application/octet-stream',
+    'text/event-stream',
+    'text/plain',
+    'text/html',
+    'application/xml',
+    'audio/',
+    'image/',
+    'multipart/form-data',
+)
+
+
+def _operation_return_type(operation: dict[str, Any]) -> str | None:
+    """Return the TS return type for an operation's success response, or None to skip."""
+    responses = operation.get('responses', {})
+    if not isinstance(responses, dict):
+        return 'void'
+    for status in ('200', '201', 'default'):
+        resp = responses.get(status)
+        if not isinstance(resp, dict):
+            continue
+        content = resp.get('content', {})
+        if not isinstance(content, dict) or not content:
+            return 'void'  # 204-style no content
+        json_content = content.get('application/json')
+        if isinstance(json_content, dict):
+            return schema_to_ts(json_content.get('schema', {}))
+        # Non-JSON success response → skip this operation
+        for ct in content:
+            if any(ct.startswith(p) or ct == p for p in SKIP_CONTENT_PREFIXES):
+                return None
+    # 204 with no 200/201
+    if '204' in responses:
+        return 'void'
+    return 'void'
+
+
+def generate_client_methods(spec: dict[str, Any]) -> str:
+    """Emit typed-fetch client methods for each JSON operation in the spec."""
+    paths = spec.get('paths', {})
+    if not isinstance(paths, dict):
+        return ''
+
+    lines: list[str] = [
+        '// --- Client methods (typed fetch wrappers). GENERATED - DO NOT EDIT. ---',
+        '',
+        'export interface OmiApiClientInit {',
+        '  baseURL?: string;',
+        '  token?: string;',
+        '  headers?: Record<string, string>;',
+        '}',
+        '',
+        'export class OmiApiError extends Error {',
+        '  constructor(public status: number, public response: Response) {',
+        "    super(`Omi API error: HTTP ${status}`);",
+        '    this.name = "OmiApiError";',
+        '  }',
+        '}',
+        '',
+    ]
+
+    method_count = 0
+    for path in sorted(paths):
+        path_item = paths[path]
+        if not isinstance(path_item, dict):
+            continue
+        for http_method in ('get', 'post', 'put', 'patch', 'delete'):
+            operation = path_item.get(http_method)
+            if not isinstance(operation, dict):
+                continue
+            op_id = operation.get('operationId')
+            if not isinstance(op_id, str):
+                continue
+
+            return_type = _operation_return_type(operation)
+            if return_type is None:
+                continue  # non-JSON response — skip
+
+            fn_name = ts_identifier(op_id)
+
+            # Parse parameters
+            raw_params = operation.get('parameters', [])
+            path_params: list[tuple[str, str]] = []
+            query_params: list[tuple[str, str, bool]] = []
+            if isinstance(raw_params, list):
+                for p in raw_params:
+                    if not isinstance(p, dict):
+                        continue
+                    location = p.get('in')
+                    pname = p.get('name', '')
+                    required = p.get('required', False)
+                    ts_type = schema_to_ts(p.get('schema', {}))
+                    if location == 'path':
+                        path_params.append((pname, ts_type))
+                    elif location == 'query':
+                        query_params.append((pname, ts_type, required))
+
+            # Parse requestBody
+            body_type: str | None = None
+            req_body = operation.get('requestBody', {})
+            if isinstance(req_body, dict):
+                content = req_body.get('content', {})
+                if isinstance(content, dict):
+                    json_content = content.get('application/json')
+                    if isinstance(json_content, dict):
+                        body_type = schema_to_ts(json_content.get('schema', {}))
+
+            # Build function signature
+            sig_parts: list[str] = []
+            if path_params:
+                fields = ', '.join(f'{ts_identifier(n)}: {t}' for n, t in path_params)
+                sig_parts.append(f'path: {{ {fields} }}')
+            if query_params:
+                fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in query_params)
+                sig_parts.append(f'query: {{ {fields} }}')
+            if body_type:
+                sig_parts.append(f'body: {body_type}')
+            sig_parts.append('init?: OmiApiClientInit')
+            sig = ', '.join(sig_parts)
+
+            # Build URL path expression with interpolation
+            url_path = path
+            for pname, _ in path_params:
+                url_path = url_path.replace(f'{{{pname}}}', f'${{path.{ts_identifier(pname)}}}')
+
+            # Build function body
+            body_lines = [
+                f'export async function {fn_name}({sig}): Promise<{return_type}> {{',
+                '  const _base = init?.baseURL ?? "";',
+                f'  const _path = `{url_path}`;',
+            ]
+            if query_params:
+                body_lines.append('  const _params = query ? Object.entries(query)')
+                body_lines.append("    .filter(([, v]) => v !== undefined && v !== null)")
+                body_lines.append("    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';")
+                body_lines.append('  const _search = _params ? `?${_params}` : "";')
+            else:
+                body_lines.append('  const _search = "";')
+            body_lines.append('  const _res = await fetch(`${_base}${_path}${_search}`, {')
+            body_lines.append(f'    method: {string_literal(http_method.upper())},')
+            body_lines.append('    headers: {')
+            if body_type:
+                body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
+            body_lines.append("      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),")
+            body_lines.append('      ...init?.headers,')
+            body_lines.append('    },')
+            if body_type:
+                body_lines.append('    body: body ? JSON.stringify(body) : undefined,')
+            body_lines.append('  });')
+            body_lines.append('  if (!_res.ok) throw new OmiApiError(_res.status, _res);')
+            if return_type == 'void':
+                body_lines.append('  return;')
+            else:
+                body_lines.append('  return _res.status === 204 ? (undefined as any) : await _res.json();')
+            body_lines.append('}')
+            body_lines.append('')
+
+            lines.extend(body_lines)
+            method_count += 1
+
+    lines.append(f'// Total: {method_count} client methods generated.')
+    return '\n'.join(lines)
+
+
 def generate(spec: dict[str, Any], source_label: str) -> str:
     schemas = spec.get('components', {}).get('schemas', {})
     if not isinstance(schemas, dict):
@@ -213,6 +377,10 @@ def generate(spec: dict[str, Any], source_label: str) -> str:
                 lines.append('    };')
             lines.append('  };')
         lines.append('}')
+        lines.append('')
+    client_code = generate_client_methods(spec)
+    if client_code:
+        lines.append(client_code.rstrip())
         lines.append('')
 
     return '\n'.join(lines).rstrip() + '\n'
