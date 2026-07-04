@@ -407,6 +407,7 @@
         "type": "object"
       },
       "EmptyResponse": {
+        "description": "200 response with no body. Use for endpoints that return nothing meaningful.",
         "properties": {},
         "title": "EmptyResponse",
         "type": "object"

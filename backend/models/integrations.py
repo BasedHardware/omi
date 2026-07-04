@@ -49,10 +49,6 @@ class ExternalIntegrationCreateMemory(BaseModel):
     )
 
 
-class EmptyResponse(BaseModel):
-    pass
-
-
 class IntegrationNotificationResponse(BaseModel):
     status: str
 
