@@ -896,7 +896,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured ?? OmiAPI.Structured())
+    structured = Structured(wire.structured ?? OmiAPI.Structured(actionItems: nil, category: nil, emoji: nil, events: nil, overview: nil, title: nil))
     transcriptSegmentsIncluded = wire.transcriptSegments != nil
     transcriptSegments = (wire.transcriptSegments ?? []).map(TranscriptSegment.init)
     geolocation = wire.geolocation.map(Geolocation.init)
