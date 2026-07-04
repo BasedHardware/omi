@@ -51,3 +51,29 @@ def test_search_apps_skips_malformed_record(monkeypatch):
 
     # The malformed record is skipped; the valid app still comes through (no 500).
     assert len(result['data']) == 1
+
+
+def test_search_apps_skips_record_without_id(monkeypatch):
+    # A record missing 'id' would KeyError in the app_ids list / installs / reviews lookups before
+    # the per-record ValidationError guard — it must be dropped up front, not 500.
+    good = _valid_app_dict('a1')
+    no_id = {'name': 'No Id App', 'category': 'productivity', 'author': 'Someone'}  # no 'id'
+    monkeypatch.setattr(apps_mod, 'search_apps_db', lambda **kw: [dict(no_id), dict(good)])
+    monkeypatch.setattr(apps_mod, 'get_enabled_apps', lambda uid: set())
+    monkeypatch.setattr(apps_mod, 'get_apps_installs_count', lambda ids: {})
+    monkeypatch.setattr(apps_mod, 'get_apps_reviews', lambda ids: {})
+
+    result = apps_mod.search_apps(
+        q=None,
+        category=None,
+        rating=None,
+        capability=None,
+        sort=None,
+        my_apps=None,
+        installed_apps=None,
+        offset=0,
+        limit=20,
+        uid='u1',
+    )
+
+    assert len(result['data']) == 1

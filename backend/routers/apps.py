@@ -385,6 +385,15 @@ def search_apps(
 
     user_enabled = set(get_enabled_apps(uid))
 
+    # Drop any malformed record missing an id before enrichment: id drives the installs/reviews/
+    # enabled lookups below and the pre-loop app_ids list, so a missing id would KeyError before the
+    # per-record ValidationError guard can catch it.
+    valid_apps_data = [a for a in apps_data if a.get('id')]
+    skipped_no_id = len(apps_data) - len(valid_apps_data)
+    if skipped_no_id:
+        logger.warning("Skipping %d malformed app record(s) without an id in search results", skipped_no_id)
+    apps_data = valid_apps_data
+
     app_ids = [app['id'] for app in apps_data]
     apps_installs = get_apps_installs_count(app_ids)
     apps_reviews = get_apps_reviews(app_ids)
