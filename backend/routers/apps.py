@@ -110,7 +110,7 @@ from utils.apps import (
     filter_apps_by_capability,
     generate_api_key,
     generate_persona_desc,
-    generate_persona_prompt,  # type: ignore[reportUnknownVariableType]  # utils.apps.generate_persona_prompt has partially-typed dict param
+    generate_persona_prompt,
     get_app_reviews,
     get_approved_available_apps,
     get_available_app_by_id,

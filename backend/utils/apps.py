@@ -632,7 +632,7 @@ def set_user_app_sub_customer_id(app_id: str, uid: str, customer_id: str):
     set_user_app_subscription_customer_id(app_id, uid, customer_id)
 
 
-def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> dict | None:
+def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> Dict[str, Any] | None:
     """
     Find a user's subscription for a specific app using cached customer ID or metadata search.
 
@@ -662,7 +662,7 @@ def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> 
 
             # Cache the customer ID for future lookups
             if latest_subscription and latest_subscription.get('customer'):
-                set_user_app_subscription_customer_id(app_id, uid, latest_subscription.get('customer'))
+                set_user_app_subscription_customer_id(app_id, uid, str(latest_subscription.get('customer')))
 
         return latest_subscription
     except Exception as e:
@@ -696,7 +696,7 @@ def get_omi_personas_by_uid(uid: str):
     return None
 
 
-async def generate_persona_prompt(uid: str, persona: dict):
+async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
     """Generate a persona prompt based on user memories and conversations."""
 
     # Get latest memories and user info — exclude locked content
@@ -721,7 +721,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     # Condense memories
     with track_usage(uid, Features.PERSONA):
         memories_text = await run_blocking(
-            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name or ""
         )
 
     # Generate updated chat prompt
@@ -818,7 +818,7 @@ def update_personas_async(uid: str):
         logger.info(f"[PERSONAS] No personas found for uid={uid}")
 
 
-async def update_persona_prompt(persona: dict):
+async def update_persona_prompt(persona: Dict[str, Any]):
     """Update a persona's chat prompt with latest memories and conversations."""
     uid = persona['uid']
     memory_system = pin_memory_system(uid, db_client=firestore_db)
@@ -848,7 +848,7 @@ async def update_persona_prompt(persona: dict):
     # Condense memories
     with track_usage(uid, Features.PERSONA):
         memories_text = await run_blocking(
-            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name or ""
         )
 
     # Generate updated chat prompt
@@ -942,7 +942,7 @@ def verify_api_key(app_id: str, api_key: str) -> bool:
 
 def app_has_action(app: Optional[Dict[str, Any]], action_name: str) -> bool:
     """Check if an app has a specific action capability."""
-    if not app or not isinstance(app, dict):
+    if not app:
         return False
 
     if not app.get('external_integration'):
@@ -1457,7 +1457,8 @@ def fetch_app_chat_tools_from_manifest(
             if validated_tool:
                 validated_tools.append(validated_tool)
             else:
-                tool_name: Any = tool.get('name', 'unknown') if isinstance(tool, dict) else 'unknown'
+                typed_t: Dict[str, Any] = cast(Dict[str, Any], tool) if isinstance(tool, dict) else {}
+                tool_name: str = str(typed_t.get('name') or 'unknown')
                 logger.error(f"⚠️ Skipping invalid tool in manifest: {tool_name}")
 
         # Parse chat_messages configuration
@@ -1509,9 +1510,7 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
 
     Returns normalized tool dict or None if invalid.
     """
-    if not isinstance(tool, dict):
-        return None
-    typed_tool: Dict[str, Any] = cast(Dict[str, Any], tool)
+    typed_tool: Dict[str, Any] = tool
 
     # Check required fields
     name = typed_tool.get('name')

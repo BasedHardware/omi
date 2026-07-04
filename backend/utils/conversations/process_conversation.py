@@ -57,7 +57,7 @@ from models.structured import Structured
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_persona_prompt  # type: ignore[reportUnknownVariableType]  # update_persona_prompt has partially-untyped signature
+from utils.apps import get_available_apps, update_persona_prompt
 from utils.executors import db_executor, llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
@@ -328,7 +328,7 @@ def _get_conversation_obj(
         result.app_id = create_conversation.app_id
         return result
     else:
-        main_conv = cast(Conversation, conversation)
+        main_conv = conversation
         main_conv.structured = structured
         main_conv.discarded = discarded
         return main_conv
@@ -1060,15 +1060,15 @@ def process_conversation(
             if audio_files:
                 conversation.audio_files = audio_files
                 conversations_db.update_conversation(
-                    uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
+                    uid, conversation.id, {'audio_files': [af.model_dump() for af in audio_files]}
                 )
                 # Pre-cache audio files in background
-                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
+                precache_conversation_audio(uid, conversation.id, [af.model_dump() for af in audio_files])
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
-    conversations_db.upsert_conversation(uid, conversation.dict())
+    conversations_db.upsert_conversation(uid, conversation.model_dump())
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:
@@ -1144,7 +1144,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
         created_at=now,
         status=TaskStatus.PROCESSING,
     )
-    tasks_db.create(task.dict())
+    tasks_db.create(task.model_dump())
 
     # emotion
     ok = get_hume().request_user_expression_mersurement(urls)
@@ -1161,7 +1161,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
     # update task
     task.request_id = request_id
     task.updated_at = datetime.now()
-    tasks_db.update(task.id, task.dict())
+    tasks_db.update(task.id, task.model_dump())
 
     return
 
@@ -1206,7 +1206,7 @@ def process_user_expression_measurement_callback(
 
     task.status = task_status
     task.updated_at = datetime.now()
-    tasks_db.update(task.id, task.dict())
+    tasks_db.update(task.id, task.model_dump())
 
     # done or not
     if task.status != TaskStatus.DONE:
