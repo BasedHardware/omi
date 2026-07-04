@@ -235,11 +235,11 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Check screen recording permission (and update cache)
         refreshScreenRecordingPermission()
         guard hasScreenRecordingPermission else {
-            if retryCount == 0 {
-                // First attempt: request permissions and schedule retry
-                ScreenCaptureService.requestAllScreenCapturePermissions()
-            }
-
+            // Must never trigger the OS permission prompt here: this method runs on
+            // non-user-initiated paths (launch, app re-activation, key load, wake),
+            // so requesting would pop the dialog on every login. User-initiated
+            // enable flows request permission before calling this; the retry loop
+            // below picks up out-of-band grants without prompting.
             if retryCount < maxRetries {
                 let delay = retryDelays[retryCount]
                 log("Screen recording permission not yet granted, retrying in \(delay)s (attempt \(retryCount + 1)/\(maxRetries))")
