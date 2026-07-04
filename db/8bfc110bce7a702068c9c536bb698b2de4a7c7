@@ -1,0 +1,68 @@
+backend/eval/reply_draft_harness/pipeline.py
+  s_ce2d1ff0ceb2f8::t_74a2cb972e0c64 1-296
+  s_ce2d1ff0ceb2f8::t_8992a2f0a95e91 297-314
+backend/eval/reply_draft_harness/server.py
+  s_ce2d1ff0ceb2f8::t_f7745257eaf67c 1-31,33-70,81-84,86-104,107-122,124-133,155-175,177-180,186-201,203-207,209-212,223,227-230,233-241,249
+  s_ce2d1ff0ceb2f8::t_828f1dccf7fa98 32
+  s_ce2d1ff0ceb2f8::t_d82186c5e75c6d 71-80,85
+  s_ce2d1ff0ceb2f8::t_82eac2ffbbad1d 123,134-154
+  s_ce2d1ff0ceb2f8::t_9f4cf38898be44 105-106
+  s_ce2d1ff0ceb2f8::t_894e1ebd52dee2 176,181-185,202,208,213-222,224-226,231-232,242-248
+  s_ce2d1ff0ceb2f8::t_51c53194c21fee 250-278
+backend/eval/reply_draft_harness/harness_env.py
+  s_ce2d1ff0ceb2f8::t_d977d3acf53c7b 61-62
+  s_ce2d1ff0ceb2f8::t_d9b13835e36382 1-60,63-80
+backend/eval/reply_draft_harness/models.py
+  s_ce2d1ff0ceb2f8::t_c4c4cfbd5ebdb0 1-68
+  s_ce2d1ff0ceb2f8::t_25ffb042091087 69-78
+backend/eval/reply_draft_harness/HARNESS.md
+  s_ce2d1ff0ceb2f8::t_9ba2726694adbc 1-75
+backend/eval/reply_draft_harness/run.sh
+  s_ce2d1ff0ceb2f8::t_b7e4c60e3fee53 1-39
+backend/eval/reply_draft_harness/_smoke.py
+  s_ce2d1ff0ceb2f8::t_fb526e825e8d70 1-45
+  s_ce2d1ff0ceb2f8::t_c439aebdad5c0f 46-47
+backend/eval/reply_draft_harness/scenarios.py
+  s_ce2d1ff0ceb2f8::t_573b9892eeafbf 1-87
+  s_ce2d1ff0ceb2f8::t_3f15470ed474ed 88-93
+backend/eval/reply_draft_harness/__init__.py
+  s_ce2d1ff0ceb2f8::t_8382cb0c13905b 1-16
+backend/eval/reply_draft_harness/cli.py
+  s_ce2d1ff0ceb2f8::t_0741a8e67424b7 1-80,112-136,146-151
+  s_ce2d1ff0ceb2f8::t_6faad93119a6de 140-145
+  s_ce2d1ff0ceb2f8::t_94e7b9b84121b4 81-111
+  s_ce2d1ff0ceb2f8::t_f40c8d1b5e3028 137-139
+  s_ce2d1ff0ceb2f8::t_7a00bbd84f1eb8 152-155
+backend/eval/reply_draft_harness/__main__.py
+  s_ce2d1ff0ceb2f8::t_c37b97492ae9b4 1-4
+backend/eval/reply_draft_harness/security.py
+  s_ce2d1ff0ceb2f8::t_ea53bfd247425f 1-270
+  s_ce2d1ff0ceb2f8::t_e7e577f7569600 271-325
+backend/eval/reply_draft_harness/trace.py
+  s_ce2d1ff0ceb2f8::t_27197f273940f5 1-52
+  s_ce2d1ff0ceb2f8::t_078cfc535c3c44 53-54
+backend/eval/reply_draft_harness/prod_client.py
+  s_ce2d1ff0ceb2f8::t_2842026cf35bc4 1-153
+  s_ce2d1ff0ceb2f8::t_a4f7d63e5c0807 154-155
+backend/eval/reply_draft_harness/judge.py
+  s_ce2d1ff0ceb2f8::t_c9cb02ac0c554d 1-87
+  s_ce2d1ff0ceb2f8::t_af35b3c028330d 88-100
+backend/.gitignore
+  s_ce2d1ff0ceb2f8::t_f2891372ad741a 7-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "db8bfc110bce7a702068c9c536bb698b2de4a7c7",
+  "prompts": {},
+  "sessions": {
+    "s_ce2d1ff0ceb2f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "208856ba-f286-4a3a-8028-b0164d883309",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
