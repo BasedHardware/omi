@@ -67,21 +67,27 @@ class DeviceUtils {
   /// when the GATT model read fails), so match by excluding the known non-CV1
   /// variants instead of allow-listing an exact CV1 string.
   ///
-  /// Requires at least one non-empty identifier: a device we can't identify at
-  /// all is not positively treated as CV1. A connected CV1 always advertises a
-  /// name, so this doesn't hide the tutorial from real devices.
+  /// A concrete GATT model number is authoritative — trust it and ignore the
+  /// name. The generic `'Omi Device'` / `'Unknown'` fallback (reported by CV1
+  /// and DevKit alike when the model read fails) is not concrete, so defer to
+  /// the advertised name in that case. With neither a concrete model nor a name
+  /// we can't positively identify a CV1, so return false.
   static bool isOmiCv1({String? modelNumber, String? deviceName}) {
     const nonCv1 = ['DEVKIT', 'DEV KIT', 'GLASS', 'NEO', 'FRIEND'];
-    final model = modelNumber?.trim() ?? '';
-    final name = deviceName?.trim() ?? '';
-    if (model.isEmpty && name.isEmpty) return false;
     bool isVariant(String value) {
       if (value.isEmpty) return false;
       final upper = value.toUpperCase();
       return nonCv1.any(upper.contains);
     }
 
-    return !isVariant(model) && !isVariant(name);
+    final model = modelNumber?.trim() ?? '';
+    final name = deviceName?.trim() ?? '';
+    final upperModel = model.toUpperCase();
+    final hasConcreteModel = model.isNotEmpty && upperModel != 'OMI DEVICE' && upperModel != 'UNKNOWN';
+
+    if (hasConcreteModel) return !isVariant(model);
+    if (name.isNotEmpty) return !isVariant(name);
+    return false;
   }
 
   /// Get device image path by device type and model number (most accurate)

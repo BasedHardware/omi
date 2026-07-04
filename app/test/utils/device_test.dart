@@ -74,6 +74,15 @@ void main() {
       expect(DeviceUtils.isOmiCv1(deviceName: 'Omi'), isTrue);
     });
 
+    test('concrete CV1 model is authoritative — name cannot veto it', () {
+      expect(DeviceUtils.isOmiCv1(modelNumber: 'Omi CV 1', deviceName: 'Omi Neo'), isTrue);
+    });
+
+    test('generic fallback model defers to the name (DevKit with failed read)', () {
+      expect(DeviceUtils.isOmiCv1(modelNumber: 'Omi Device', deviceName: 'Omi DevKit'), isFalse);
+      expect(DeviceUtils.isOmiCv1(modelNumber: 'Unknown', deviceName: 'Omi DevKit'), isFalse);
+    });
+
     test('no identifier at all is NOT positively CV1', () {
       expect(DeviceUtils.isOmiCv1(), isFalse);
       expect(DeviceUtils.isOmiCv1(modelNumber: '', deviceName: ''), isFalse);
