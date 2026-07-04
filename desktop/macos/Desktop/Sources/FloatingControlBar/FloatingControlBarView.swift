@@ -119,7 +119,7 @@ struct FloatingControlBarView: View {
     /// Composite key for the active PTT lifecycle — any change drives the
     /// pill ↔ notch-island morph (see FloatingControlBarWindow.syncActiveIsland).
     private var activeLifecycleKey: String {
-        "\(state.isVoiceListening)-\(state.isThinking)-\(state.isVoiceResponseActive)"
+        "\(state.isVoiceListening)-\(state.isThinking)-\(state.isVoiceResponseGlowActive)"
     }
 
     /// Whether the bar chrome should stretch to fill the window width
@@ -149,7 +149,8 @@ struct FloatingControlBarView: View {
     /// with no live listening or open conversation surface. Shows the spinning
     /// Omi mark + "Thinking" in the notch lobes.
     private var showingNotchThinking: Bool {
-        state.isThinking && !state.showingAIConversation && !state.isVoiceListening
+        (state.isThinking || state.isVoiceResponseWaiting)
+            && !state.showingAIConversation && !state.isVoiceListening
     }
 
     private var shouldUseOmiChatOverlayHitTarget: Bool {

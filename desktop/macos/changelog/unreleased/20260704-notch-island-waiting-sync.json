@@ -1,0 +1,3 @@
+{
+    "change": "The floating bar's notch island now stays in sync while a voice reply is warming up, so it no longer briefly flickers back to the pill during that gap"
+}

@@ -1719,7 +1719,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let base: NSSize
             if state.isVoiceListening {
                 base = notchSize(sideWidth: Self.notchActiveSideWidth, for: screen)
-            } else if state.isThinking {
+            } else if state.isThinking || state.isVoiceResponseWaiting {
                 base = notchSize(sideWidth: Self.notchThinkingSideWidth, for: screen)
             } else {
                 // Answering (voice-response glow) or a brief transient — collapsed island.
