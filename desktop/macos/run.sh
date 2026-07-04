@@ -156,6 +156,8 @@ APP_PATH="/Applications/$APP_NAME.app"
 # Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
 # copy is silently skipped → app shows "AI components missing".
 AGENT_DIR="$SCRIPT_DIR/agent"
+AGENT_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/agent-node_modules"
+PI_MONO_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/pi-mono-extension-node_modules"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
@@ -565,7 +567,12 @@ if [ -d "$AGENT_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
     macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    macos_copy_tree "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
+    if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
     cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.js" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -584,7 +591,12 @@ if [ -d "$PI_MONO_EXT_DIR" ]; then
     cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
 else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi
@@ -704,6 +716,10 @@ if [ -z "$SIGN_IDENTITY" ]; then
     if [ -z "$SIGN_IDENTITY" ]; then
         SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
     fi
+    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
+        SIGN_IDENTITY="-"
+        substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
+    fi
 fi
 
 if [ -n "$SIGN_IDENTITY" ]; then
@@ -779,6 +795,9 @@ else
     echo "  Fix: Install an Apple Development certificate in Keychain Access,"
     echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
     echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
+    echo ""
+    echo "       For named throwaway bundles only, tests may opt into ad-hoc signing:"
+    echo "       OMI_APP_NAME=\"omi-my-test\" OMI_ALLOW_ADHOC_SIGN=1 ./run.sh"
     echo ""
     exit 1
 fi

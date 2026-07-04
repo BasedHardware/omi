@@ -1,0 +1,3 @@
+{
+  "change": "Reduced the macOS app bundle footprint by trimming packaged agent runtimes and adding bundle-size checks for future releases."
+}
