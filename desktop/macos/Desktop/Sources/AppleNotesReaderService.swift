@@ -338,15 +338,12 @@ actor AppleNotesReaderService {
         || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
         throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
       }
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
-
-      let result = try await bridge.query(
+      let result = try await AgentClient.run(
+        surface: .service("apple_notes_reader"),
         prompt: synthesisPrompt,
+        model: ModelQoS.Claude.synthesis,
         systemPrompt:
           "You extract high-signal user facts from Apple Notes. Output only valid JSON.",
-        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in "" },
         onToolActivity: { @Sendable _, _, _, _ in }

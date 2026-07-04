@@ -85,15 +85,12 @@ actor OnboardingMemoryLogImportService {
       """
 
     do {
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
-
-      let result = try await bridge.query(
+      let result = try await AgentClient.run(
+        surface: .onboarding(),
         prompt: importPrompt,
+        model: ModelQoS.Claude.synthesis,
         systemPrompt:
           "You convert memory-log exports into concise durable user memories. Output only valid JSON.",
-        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in "" },
         onToolActivity: { @Sendable _, _, _, _ in }

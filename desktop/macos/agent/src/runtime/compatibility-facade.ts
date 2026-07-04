@@ -416,19 +416,30 @@ export class JsonlCompatibilityFacade {
   }
 
   handleInvalidateSession(message: InvalidateSessionMessage): void {
-    const legacySessionKey = message.sessionKey;
+    const hasSurfaceRef = Boolean(
+      message.surfaceKind && message.externalRefKind && message.externalRefId,
+    );
+    const legacySessionKey = hasSurfaceRef ? undefined : message.sessionKey;
     const result = this.kernel.invalidateBindings({
       ownerId: message.ownerId ?? this.ownerId,
-      surfaceKind: "legacy_jsonl",
-      legacyClientScope: this.legacyClientScope(undefined),
+      surfaceKind: message.surfaceKind ?? "legacy_jsonl",
+      externalRefKind: message.externalRefKind,
+      externalRefId: message.externalRefId,
+      legacyClientScope: legacySessionKey ? this.legacyClientScope(undefined) : undefined,
       legacySessionKey,
       defaultAdapterId: this.defaultAdapterId,
       adapterId: this.defaultAdapterId,
       reason: "jsonl_invalidate_session",
     });
-    this.warmupHints.delete(legacySessionKey);
+    if (legacySessionKey) {
+      this.warmupHints.delete(legacySessionKey);
+    } else if (hasSurfaceRef) {
+      this.warmupHints.delete(
+        `${message.surfaceKind}|${message.externalRefKind}|${message.externalRefId}`,
+      );
+    }
     this.log(
-      `Invalidated ${result.invalidatedBindingIds.length} binding(s) for legacy session key ${legacySessionKey}`
+      `Invalidated ${result.invalidatedBindingIds.length} binding(s) for surface ${hasSurfaceRef ? `${message.surfaceKind}/${message.externalRefKind}/${message.externalRefId}` : legacySessionKey}`,
     );
   }
 
@@ -445,12 +456,24 @@ export class JsonlCompatibilityFacade {
     const mode = message.mode ?? "act";
     const requestedAdapterId = message.adapterId ?? this.defaultAdapterId;
     const requestedModel = message.model ?? this.defaultModel(requestedAdapterId);
-    const legacySessionKey = message.legacySessionKey ?? message.sessionKey ?? requestedModel;
-    const hint = legacySessionKey ? this.warmupHints.get(legacySessionKey) : undefined;
+    const hasSurfaceRef = Boolean(
+      message.surfaceKind && message.externalRefKind && message.externalRefId,
+    );
+    const legacySessionKey = hasSurfaceRef
+      ? undefined
+      : message.legacySessionKey ?? message.sessionKey ?? requestedModel;
+    const warmupKey = hasSurfaceRef
+      ? `${message.surfaceKind}|${message.externalRefKind}|${message.externalRefId}`
+      : legacySessionKey;
+    const hint = warmupKey ? this.warmupHints.get(warmupKey) : undefined;
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
 
     const ownerId = message.ownerId ?? this.ownerId;
-    const sessionId = message.protocolVersion === 2 ? message.sessionId : undefined;
+    const sessionId = hasSurfaceRef
+      ? undefined
+      : message.protocolVersion === 2
+        ? message.sessionId
+        : undefined;
 
     return {
       ownerId,
@@ -458,8 +481,12 @@ export class JsonlCompatibilityFacade {
       surfaceKind: message.surfaceKind ?? "legacy_jsonl",
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
-      legacyClientScope: legacySessionKey ? this.legacyClientScope(message) : undefined,
-      legacySessionKey,
+      legacyClientScope: hasSurfaceRef
+        ? undefined
+        : legacySessionKey
+          ? this.legacyClientScope(message)
+          : undefined,
+      legacySessionKey: hasSurfaceRef ? undefined : legacySessionKey,
       defaultAdapterId: requestedAdapterId,
       adapterId: requestedAdapterId,
       clientId,
@@ -470,7 +497,7 @@ export class JsonlCompatibilityFacade {
       mode,
       cwd,
       model: message.model ?? hint?.model ?? requestedModel,
-      mcpServers: this.buildMcpServers?.(mode, cwd, legacySessionKey, {
+      mcpServers: this.buildMcpServers?.(mode, cwd, warmupKey, {
         ownerId,
         requestId,
         clientId,
@@ -478,12 +505,16 @@ export class JsonlCompatibilityFacade {
         sessionId,
         adapterId: requestedAdapterId,
       }),
-      legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
+      legacyAdapterSessionId: hasSurfaceRef
+        ? undefined
+        : message.legacyAdapterSessionId ?? message.resume,
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
       recoverAfterError: this.recoverAfterError(),
       metadata: {
         protocolVersion: message.protocolVersion ?? 1,
-        legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
+        legacyAdapterSessionId: hasSurfaceRef
+          ? undefined
+          : message.legacyAdapterSessionId ?? message.resume,
         source: "jsonl_compatibility_facade",
       },
     };

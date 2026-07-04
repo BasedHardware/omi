@@ -150,7 +150,7 @@ class TaskChatState: ObservableObject {
         do {
             let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
             let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
-            let bridge = AgentBridge(harnessMode: harness)
+            let bridge = AgentClient.makeBridge(harnessMode: harness)
             try await bridge.start()
             agentBridge = bridge
             bridgeStarted = true
@@ -284,15 +284,9 @@ class TaskChatState: ObservableObject {
             let queryResult = try await bridge.query(
                 prompt: fullPrompt,
                 systemPrompt: systemPrompt,
-                sessionKey: taskId,
-                omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId)),
-                surfaceKind: "task_chat",
-                externalRefKind: "task",
-                externalRefId: taskId,
-                legacyClientScope: "task-chat",
+                surface: .taskChat(taskId: taskId),
                 cwd: workspacePath.isEmpty ? nil : workspacePath,
                 mode: chatMode.rawValue,
-                resume: legacyAcpSessionId,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,

@@ -35,6 +35,18 @@ struct AgentSurfaceReference: Hashable, Sendable {
   static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
     AgentSurfaceReference(surfaceKind: "background_agent", externalRefKind: "pill", externalRefId: pillId.uuidString)
   }
+
+  static func onboarding() -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "onboarding", externalRefKind: "session", externalRefId: "default")
+  }
+
+  static func service(_ name: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "service", externalRefKind: "service", externalRefId: name)
+  }
+
+  static func chatLab(labSessionId: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "chat_lab", externalRefKind: "session", externalRefId: labSessionId)
+  }
 }
 
 enum AgentLegacyClientScope {
@@ -134,10 +146,6 @@ final class AgentRuntimeStatusStore: ObservableObject {
 
   func projection(for surface: AgentSurfaceReference) -> AgentRunProjection? {
     projectionsBySurface[surface.key]
-  }
-
-  func knownSessionId(for surface: AgentSurfaceReference) -> String? {
-    sessionIdBySurface[surface.key]
   }
 
   func clear(surface: AgentSurfaceReference) {

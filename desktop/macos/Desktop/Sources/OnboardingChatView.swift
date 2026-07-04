@@ -115,7 +115,6 @@ struct OnboardingChatView: View {
   @FocusState private var isInputFocused: Bool
 
   // Parallel exploration state
-  @State private var explorationBridge: AgentBridge?
   @State private var explorationRunning = false
   @State private var explorationCompleted = false
   @State private var explorationText = ""
@@ -682,8 +681,7 @@ struct OnboardingChatView: View {
         // Resume the conversation — tell the AI the app was restarted
         await chatProvider.sendMessage(
           "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
-          systemPromptPrefix: resumeSystemPrompt,
-          resume: savedSessionId
+          systemPromptPrefix: resumeSystemPrompt
         )
 
         await MainActor.run {
@@ -1291,10 +1289,6 @@ struct OnboardingChatView: View {
     // Clean up parallel exploration
     explorationTask?.cancel()
     explorationTask = nil
-    if let bridge = explorationBridge {
-      Task { await bridge.stop() }
-    }
-    explorationBridge = nil
 
     // Clean up Gmail reading
     gmailReadingTask?.cancel()
@@ -1369,21 +1363,18 @@ struct OnboardingChatView: View {
 
     explorationTask = Task {
       do {
-        let bridge = AgentBridge(harnessMode: "piMono")
-        await MainActor.run { explorationBridge = bridge }
-        try await bridge.start()
-
         let userName =
           AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName
         let schema = await Self.loadDatabaseSchema()
         let systemPrompt = ChatPromptBuilder.buildOnboardingExploration(
           userName: userName, databaseSchema: schema)
 
-        let result = try await bridge.query(
+        let result = try await AgentClient.run(
+          surface: .onboarding(),
           prompt:
             "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
-          systemPrompt: systemPrompt,
           model: ModelQoS.Claude.chat,
+          systemPrompt: systemPrompt,
           onTextDelta: { @Sendable delta in
             Task { @MainActor in
               explorationText += delta
@@ -1428,17 +1419,10 @@ struct OnboardingChatView: View {
         // Append to user profile and inject discovery card
         await appendExplorationToProfile()
         await injectExplorationDiscoveryCard()
-
-        await bridge.stop()
-        await MainActor.run { explorationBridge = nil }
       } catch {
         log("OnboardingChat: Exploration failed (non-fatal): \(error.localizedDescription)")
-        if let bridge = await MainActor.run(body: { explorationBridge }) {
-          await bridge.stop()
-        }
         await MainActor.run {
           explorationRunning = false
-          explorationBridge = nil
         }
       }
     }

@@ -1,0 +1,3 @@
+{
+  "change": "Improved chat memory reliability by keeping agent session identity in the local runtime kernel instead of app-side caches"
+}

@@ -11,6 +11,15 @@ import type { OutboundMessage } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
 import { AdapterRuntimeError, failureFromError, type RuntimeFailure } from "./failures.js";
+import {
+  clearOwnerSurfaceState,
+  importLegacyMainChatSessions,
+  resolveSurfaceSession,
+  type LegacyMainChatSessionEntry,
+  type ResolveSurfaceSessionInput,
+  type ResolveSurfaceSessionResult,
+  type SurfaceRef,
+} from "./surface-session.js";
 import type {
   AdapterBinding,
   AgentEvent,
@@ -151,6 +160,8 @@ function bindingMetadata(input: ExecuteAgentRunInput, adapter?: RuntimeAdapter):
     mcpServersHash: stableJsonHash(stableMcpServerConfig(effectiveMcpServers)),
   });
 }
+
+export type { ResolveSurfaceSessionResult, SurfaceRef };
 
 export interface KernelSessionResolutionInput {
   sessionId?: string;
@@ -1258,6 +1269,18 @@ export class AgentRuntimeKernel {
     return this.readSession(run.sessionId).defaultAdapterId;
   }
 
+  resolveSurfaceSession(input: ResolveSurfaceSessionInput): ResolveSurfaceSessionResult {
+    return resolveSurfaceSession(this.store, input, () => Date.now());
+  }
+
+  importLegacyMainChatSessions(input: { ownerId: string; entries: LegacyMainChatSessionEntry[] }): number {
+    return importLegacyMainChatSessions(this.store, input, () => Date.now());
+  }
+
+  clearOwnerState(ownerId: string): { invalidatedBindingIds: string[] } {
+    return clearOwnerSurfaceState(this.store, ownerId, () => Date.now());
+  }
+
   invalidateBindings(input: InvalidateBindingsInput): InvalidateBindingsResult {
     const session = this.findExistingSession(input);
     const sessionIds = session ? [session.sessionId] : this.findInvalidationSessionIds(input);
@@ -1509,6 +1532,19 @@ export class AgentRuntimeKernel {
   }
 
   private resolveSession(input: KernelSessionResolutionInput): AgentSession {
+    if (input.surfaceKind && input.externalRefKind && input.externalRefId) {
+      const resolved = this.resolveSurfaceSession({
+        ownerId: input.ownerId,
+        surfaceRef: {
+          surfaceKind: input.surfaceKind,
+          externalRefKind: input.externalRefKind,
+          externalRefId: input.externalRefId,
+        },
+        defaultAdapterId: input.defaultAdapterId,
+        title: input.title ?? null,
+      });
+      return this.readSession(resolved.agentSessionId);
+    }
     const existing = this.findExistingSession(input);
     if (existing) return existing;
     const shouldStoreLegacyAlias = !(input.externalRefKind && input.externalRefId);
@@ -1537,6 +1573,16 @@ export class AgentRuntimeKernel {
         throw new Error(`Session ${input.sessionId} does not belong to owner ${input.ownerId}`);
       }
       return session;
+    }
+    if (input.surfaceKind && input.externalRefKind && input.externalRefId) {
+      const mapped = this.store.getOptionalRow(
+        `SELECT agent_session_id FROM surface_conversations
+         WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+        [input.ownerId, input.surfaceKind, input.externalRefKind, input.externalRefId],
+      );
+      if (mapped) {
+        return this.readSession(String(mapped.agent_session_id));
+      }
     }
     if (input.externalRefKind && input.externalRefId) {
       const row = this.store.getOptionalRow(

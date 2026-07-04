@@ -1037,7 +1037,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
     private var activationObserver: AnyCancellable?
-    private var systemWakeObserver: AnyCancellable?
     private var signOutObserver: AnyCancellable?
 
     private var refreshAllObserver: AnyCancellable?
@@ -1173,38 +1172,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
 
-        // After the system wakes from sleep, the ACP bridge's internal state is
-        // stale — auth tokens expired, pipes half-dead, session context rotted.
-        // First query after wake often hangs because the bridge silently drops
-        // "stray turn_end" messages and the Swift waitForMessage() sits on an
-        // unbounded await forever. Preemptively restart the bridge on wake so
-        // the next query starts with a fresh subprocess. Skipped if a query is
-        // actively running (rare for user to wake mid-query).
-        systemWakeObserver = NSWorkspace.shared.notificationCenter
-            .publisher(for: NSWorkspace.didWakeNotification)
-            .sink { [weak self] _ in
-                Task { @MainActor in
-                    guard let self = self else { return }
-                    guard self.agentBridgeStarted else { return }
-                    guard !self.isSending else {
-                        log("ChatProvider: system woke but query in progress — skipping bridge restart")
-                        return
-                    }
-                    guard !self.modeSwitchInProgress else {
-                        log("ChatProvider: system woke but mode switch in progress — skipping bridge restart")
-                        return
-                    }
-                    log("ChatProvider: system woke — restarting agent bridge to clear stale session")
-                    self.agentBridgeStarted = false
-                    do {
-                        try await self.agentBridge.restart()
-                        self.agentBridgeStarted = true
-                    } catch {
-                        logError("ChatProvider: bridge restart after wake failed", error: error)
-                    }
-                }
-            }
-
         // Tear down the agent bridge on sign-out. The pi-mono subprocess
         // bakes OMI_API_KEY (Firebase ID token) at spawn and holds an
         // in-memory `piSessions` map keyed only by sessionKey ("main"). When
@@ -1219,12 +1186,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     guard let self = self else { return }
                     log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
                     if self.agentBridgeStarted {
+                        await self.agentBridge.clearOwnerState()
                         await self.agentBridge.stop()
                         self.agentBridgeStarted = false
                     }
                     self.resetSessionStateForAuthChange()
                     AgentRuntimeStatusStore.shared.reset()
-                    MainChatRuntimeSessionStore.clearAll()
                 }
             }
 
@@ -1292,10 +1259,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         _ = await ensureBridgeStarted()
     }
 
-    /// Drop a cached ACP session so the next query recreates it with fresh prompt context.
-    func invalidateAgentSession(sessionKey: String) async {
+    /// Drop a cached agent surface so the next query recreates it with fresh prompt context.
+    func invalidateAgentSurface(surface: AgentSurfaceReference) async {
         guard agentBridgeStarted else { return }
-        await agentBridge.invalidateSession(sessionKey: sessionKey)
+        await agentBridge.invalidateSurface(surface)
     }
 
     /// Test that the Playwright Chrome extension is connected and working.
@@ -1438,15 +1405,33 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     private func mainChatRuntimeChatId(sessionId: String?) -> String {
         guard let sessionId, !sessionId.isEmpty else {
-            // Default chat state is app-scoped on the backend, so namespace
-            // the runtime session store key by appId to avoid cross-app
-            // context leakage.
             if let appId = selectedAppId, !appId.isEmpty {
-                return "\(MainChatRuntimeSessionStore.defaultChatId)|\(appId)"
+                return "default|\(appId)"
             }
-            return MainChatRuntimeSessionStore.defaultChatId
+            return "default"
         }
         return sessionId
+    }
+
+    private func querySurface(
+        surfaceRef: AgentSurfaceReference?,
+        sessionId: String?,
+        systemPromptStyle: ChatSystemPromptStyle
+    ) -> AgentSurfaceReference {
+        if let surfaceRef {
+            return surfaceRef
+        }
+        if isOnboarding {
+            return .onboarding()
+        }
+        if systemPromptStyle == .floating {
+            return .floatingChat()
+        }
+        return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+    }
+
+    private func isFloatingPillSurface(_ surface: AgentSurfaceReference) -> Bool {
+        surface.surfaceKind == "background_agent" && surface.externalRefKind == "pill"
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
@@ -1813,9 +1798,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         deletingSessionIds.insert(session.id)
         do {
             try await APIClient.shared.deleteChatSession(sessionId: session.id)
-            if let ownerId = runtimeOwnerId {
-                MainChatRuntimeSessionStore.clear(ownerId: ownerId, chatId: session.id)
-            }
             deletingSessionIds.remove(session.id)
             sessions.removeAll { $0.id == session.id }
 
@@ -2367,7 +2349,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Run a single question through the agent bridge for Chat Lab evaluation.
     /// Uses a unique session key so it doesn't interfere with the real chat.
-    func labRunQuestion(question: String, systemPrompt: String, sessionKey: String) async -> String {
+    func labRunQuestion(question: String, systemPrompt: String, labSessionId: String) async -> String {
         // Ensure bridge is running
         guard await ensureBridgeStarted() else {
             return "[Bridge not available]"
@@ -2378,7 +2360,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let result = try await agentBridge.query(
                 prompt: question,
                 systemPrompt: systemPrompt,
-                sessionKey: sessionKey,
+                surface: .chatLab(labSessionId: labSessionId),
                 model: ModelQoS.Claude.chatLabQuery,
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
@@ -2439,10 +2421,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private func buildMainChatContextPacketPrompt(
         for userMessage: String,
         bridge: AgentBridge,
-        surface: AgentSurfaceReference?,
-        sessionKey: String
+        surface: AgentSurfaceReference
     ) async -> String? {
-        guard surface?.surfaceKind == "main_chat" else { return nil }
+        guard surface.surfaceKind == "main_chat" else { return nil }
         let recentMessages = messages
             .filter { !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .suffix(6)
@@ -2453,7 +2434,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     "snippetId": "recent_message_\(index + 1)",
                     "sourceKind": "chat_surface",
                     "operation": message.sender == .user ? "recent_user_message" : "recent_assistant_message",
-                    "provenance": ["sessionKey": sessionKey, "messageId": message.id],
+                    "provenance": ["surface": surface.displayRef, "messageId": message.id],
                     "content": String(content.prefix(2_000)),
                     "redactedContent": String(content.prefix(2_000)),
                     "sensitivityTier": "low",
@@ -2465,7 +2446,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             "snippetId": "current_user_message",
             "sourceKind": "chat_surface",
             "operation": "current_user_message",
-            "provenance": ["sessionKey": sessionKey],
+            "provenance": ["surface": surface.displayRef],
             "content": userMessage,
             "redactedContent": userMessage,
             "sensitivityTier": "low",
@@ -2523,16 +2504,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         for userMessage: String,
         systemPromptStyle: ChatSystemPromptStyle,
         surfaceRef: AgentSurfaceReference?,
-        sessionKey: String?,
-        legacyClientScope: String?,
         imageData: Data?,
         attachmentMetadataJSON: String?
     ) async -> String? {
         guard systemPromptStyle == .main,
               !isOnboarding,
               surfaceRef == nil,
-              sessionKey == nil,
-              legacyClientScope == nil,
               imageData == nil,
               attachmentMetadataJSON == nil
         else { return nil }
@@ -2558,15 +2535,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         for userText: String,
         systemPromptStyle: ChatSystemPromptStyle,
         surfaceRef: AgentSurfaceReference?,
-        sessionKey: String?,
         sessionId: String?,
-        legacyClientScope: String?,
         imageData: Data?,
         attachmentMetadataJSON: String?
     ) async -> (delta: DesktopCoordinatorCompletionDelta, surface: AgentSurfaceReference)? {
         guard !isOnboarding,
               surfaceRef == nil,
-              legacyClientScope == nil,
               imageData == nil,
               attachmentMetadataJSON == nil
         else { return nil }
@@ -2575,8 +2549,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let consumerSurface: AgentSurfaceReference
         switch systemPromptStyle {
         case .main:
-            // Only the plain main chat (no explicit session key) consumes the delta.
-            guard sessionKey == nil else { return nil }
             consumerSurface = AgentSurfaceReference.mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
         case .floating:
             consumerSurface = AgentSurfaceReference.floatingChat()
@@ -3139,10 +3111,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let systemPromptSuffix: String?
         let systemPromptPrefix: String?
         let systemPromptStyle: ChatSystemPromptStyle
-        let sessionKey: String?
-        let omiSessionId: String?
         let surfaceRef: AgentSurfaceReference?
-        let legacyClientScope: String?
         let turnOwner: ChatTurnOwner
     }
 
@@ -3245,10 +3214,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             systemPromptSuffix: nil,
             systemPromptPrefix: nil,
             systemPromptStyle: .main,
-            sessionKey: nil,
-            omiSessionId: nil,
             surfaceRef: nil,
-            legacyClientScope: nil,
             turnOwner: activeTurnOwner ?? .mainChat
         )
         pendingFollowUps.append(PendingFollowUpRequest(
@@ -3257,10 +3223,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             systemPromptSuffix: context.systemPromptSuffix,
             systemPromptPrefix: context.systemPromptPrefix,
             systemPromptStyle: context.systemPromptStyle,
-            sessionKey: context.sessionKey,
-            omiSessionId: context.omiSessionId,
             surfaceRef: context.surfaceRef,
-            legacyClientScope: context.legacyClientScope,
             turnOwner: context.turnOwner
         ))
         await agentBridge.interrupt()
@@ -3633,11 +3596,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         systemPromptSuffix: String? = nil,
         systemPromptPrefix: String? = nil,
         systemPromptStyle: ChatSystemPromptStyle = .main,
-        sessionKey: String? = nil,
-        omiSessionId: String? = nil,
         surfaceRef: AgentSurfaceReference? = nil,
-        legacyClientScope: String? = nil,
-        resume: String? = nil,
         imageData: Data? = nil,
         turnOwner: ChatTurnOwner = .mainChat,
         clientTurnId: String = UUID().uuidString
@@ -3685,10 +3644,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             systemPromptSuffix: systemPromptSuffix,
             systemPromptPrefix: systemPromptPrefix,
             systemPromptStyle: systemPromptStyle,
-            sessionKey: sessionKey,
-            omiSessionId: omiSessionId,
             surfaceRef: surfaceRef,
-            legacyClientScope: legacyClientScope,
             turnOwner: turnOwner
         )
 
@@ -3842,8 +3798,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             for: trimmedText,
             systemPromptStyle: systemPromptStyle,
             surfaceRef: surfaceRef,
-            sessionKey: sessionKey,
-            legacyClientScope: legacyClientScope,
             imageData: imageData,
             attachmentMetadataJSON: attachmentMetadataJSON
         )
@@ -3851,11 +3805,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             for: trimmedText,
             systemPromptStyle: systemPromptStyle,
             surfaceRef: surfaceRef,
-            sessionKey: sessionKey,
             sessionId: sessionId,
-            legacyClientScope: legacyClientScope,
             imageData: imageData,
             attachmentMetadataJSON: attachmentMetadataJSON
+        )
+        let resolvedSurface = querySurface(
+            surfaceRef: surfaceRef,
+            sessionId: sessionId,
+            systemPromptStyle: systemPromptStyle
         )
 
         // Create a placeholder AI message shown immediately in the UI while
@@ -3905,7 +3862,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 systemPrompt = prefix
             } else {
                 if systemPromptStyle == .floating {
-                    if legacyClientScope == AgentLegacyClientScope.floatingPill {
+                    if isFloatingPillSurface(resolvedSurface) {
                         if cachedFloatingPillSystemPrompt.isEmpty {
                             cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
                                 contextString: formatMemoriesSection(),
@@ -3968,7 +3925,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // any kind (text delta OR tool_use start). It also brackets the
             // text-streaming window so the `generation` span excludes tool time.
             let currentChatMode = chatMode
-            let currentLegacyClientScope = legacyClientScope
+            let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
+                ? AgentLegacyClientScope.floatingPill
+                : nil
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 let nowMs = ChatProvider.monotonicNowMs()
                 if responseMetrics.markFirstOutputIfNeeded() {
@@ -3992,7 +3951,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let result = await ChatToolExecutor.execute(
                     toolCall,
                     originatingChatMode: currentChatMode,
-                    originatingClientScope: currentLegacyClientScope)
+                    originatingClientScope: currentToolClientScope)
                 if let tracer {
                     let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                     let inputJson =
@@ -4048,7 +4007,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                                 self?.stopAgent(owner: turnOwner)
                                 // Keep floating-bar sessions non-intrusive: do not foreground
                                 // the main window when the query originated from the floating bar.
-                                if sessionKey != "floating" {
+                                if systemPromptStyle != .floating {
                                     // Bring the app to the foreground so the setup sheet is visible
                                     // (the failed browser attempt may have opened Chrome, stealing focus)
                                     NSApp.activate()
@@ -4124,36 +4083,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 tracer.begin("ttft")
             }
 
-            let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
-            let resolvedMainChatRuntimeChatId = systemPromptStyle == .main && !isOnboarding
-                ? mainChatRuntimeChatId(sessionId: sessionId)
-                : nil
-            let resolvedSurface =
-                surfaceRef
-                ?? resolvedMainChatRuntimeChatId.map { AgentSurfaceReference.mainChat(chatId: $0) }
-            let persistedMainChatSessionId =
-                resolvedSurface?.surfaceKind == "main_chat"
-                ? (runtimeOwnerId.flatMap {
-                    MainChatRuntimeSessionStore.sessionId(
-                        ownerId: $0,
-                        chatId: resolvedMainChatRuntimeChatId ?? MainChatRuntimeSessionStore.defaultChatId
-                    )
-                })
-                : nil
-            let resolvedOmiSessionId =
-                omiSessionId
-                ?? persistedMainChatSessionId
-                ?? resolvedSurface.flatMap {
-                    AgentRuntimeStatusStore.shared.knownSessionId(for: $0)
-                }
-            let resolvedLegacyClientScope =
-                legacyClientScope
-                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(resolvedSessionKey)" : nil)
             let basePromptForBridge = await buildMainChatContextPacketPrompt(
                 for: trimmedText,
                 bridge: agentBridge,
-                surface: resolvedSurface,
-                sessionKey: resolvedSessionKey
+                surface: resolvedSurface
             ) ?? trimmedText
             // Prepend per-turn coordinator context to the user prompt so the
             // system prompt hash stays stable across turns.
@@ -4174,16 +4107,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let queryResult = try await agentBridge.query(
                 prompt: promptForBridge,
                 systemPrompt: systemPrompt,
-                sessionKey: resolvedSessionKey,
-                omiSessionId: resolvedOmiSessionId,
-                surfaceKind: resolvedSurface?.surfaceKind,
-                externalRefKind: resolvedSurface?.externalRefKind,
-                externalRefId: resolvedSurface?.externalRefId,
-                legacyClientScope: resolvedLegacyClientScope,
+                surface: resolvedSurface,
                 cwd: effectiveAgentWorkingDirectory(),
                 mode: chatMode.rawValue,
                 model: effectiveRequestModel,
-                resume: resume,
                 imageData: effectiveImageData,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
@@ -4356,16 +4283,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Persist the ACP session ID during onboarding so we can resume after app restart
             if isOnboarding, let adapterSessionId = queryResult.adapterSessionId, !adapterSessionId.isEmpty {
                 OnboardingChatPersistence.saveSessionId(adapterSessionId)
-            }
-            if !isOnboarding,
-               resolvedSurface?.surfaceKind == "main_chat",
-               !queryResult.omiSessionId.isEmpty,
-               let ownerId = runtimeOwnerId {
-                MainChatRuntimeSessionStore.save(
-                    sessionId: queryResult.omiSessionId,
-                    ownerId: ownerId,
-                    chatId: resolvedMainChatRuntimeChatId ?? MainChatRuntimeSessionStore.defaultChatId
-                )
             }
 
             // Analytics: track query completion
@@ -4544,10 +4461,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 systemPromptSuffix: followUp.systemPromptSuffix,
                 systemPromptPrefix: followUp.systemPromptPrefix,
                 systemPromptStyle: followUp.systemPromptStyle,
-                sessionKey: followUp.sessionKey,
-                omiSessionId: followUp.omiSessionId,
                 surfaceRef: followUp.surfaceRef,
-                legacyClientScope: followUp.legacyClientScope,
                 turnOwner: followUp.turnOwner
             )
         }
@@ -4806,19 +4720,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard ["write", "edit", "multiedit"].contains(normalizedName) else { return [] }
         return localFileURLs(from: texts.joined(separator: "\n")).map { url in
             let mimeType = mimeType(forLocalFile: url)
-            return ChatResource(
+            return ChatResource.localGeneratedFile(
                 id: "generated-file:\(url.path)",
-                origin: .generatedArtifact,
                 title: url.lastPathComponent,
                 subtitle: localFileSubtitle(url: url, mimeType: mimeType),
                 mimeType: mimeType,
-                thumbnailURL: nil,
-                imageData: nil,
-                uri: url.absoluteString,
-                artifactId: nil,
-                omiSessionId: nil,
-                runId: nil,
-                state: .ready
+                uri: url.absoluteString
             )
         }
     }
@@ -5097,13 +5004,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             messages = []
             resetMessagesPagination()
             AgentRuntimeStatusStore.shared.clear(surface: surface)
-            await invalidateAgentSession(sessionKey: "main")
-            if let ownerId = runtimeOwnerId {
-                MainChatRuntimeSessionStore.clear(
-                    ownerId: ownerId,
-                    chatId: runtimeChatId
-                )
-            }
+            await invalidateAgentSurface(surface: surface)
             log("Cleared default chat messages")
             Task {
                 do {
@@ -5115,12 +5016,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         } else {
             // Session mode: clear UI immediately, delete old session in background, create new
             let sessionToDelete = currentSession
-            if let session = sessionToDelete, let ownerId = runtimeOwnerId {
-                MainChatRuntimeSessionStore.clear(ownerId: ownerId, chatId: session.id)
-            }
             if let session = sessionToDelete {
-                AgentRuntimeStatusStore.shared.clear(surface: .mainChat(chatId: session.id))
-                await invalidateAgentSession(sessionKey: session.id)
+                let surface = AgentSurfaceReference.mainChat(chatId: session.id)
+                AgentRuntimeStatusStore.shared.clear(surface: surface)
+                await invalidateAgentSurface(surface: surface)
             }
 
             // Immediately clear UI state
@@ -5213,8 +5112,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Snapshot for `main_chat_snapshot` / `wait_main_chat_idle` harness actions.
     func automationMainChatSnapshot(limit: Int) -> [String: String] {
         let boundedLimit = max(1, limit)
-        let runtimeChatId = currentSessionId ?? MainChatRuntimeSessionStore.defaultChatId
-        let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
+        let runtimeChatId = mainChatRuntimeChatId(sessionId: currentSessionId)
         let rows: [[String: String]] = messages.suffix(boundedLimit).map { message in
             [
                 "id": message.id,
@@ -5234,7 +5132,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var detail: [String: String] = [
             "chat_session_id": currentSessionId ?? "",
             "runtime_chat_id": runtimeChatId,
-            "omi_session_id": AgentRuntimeStatusStore.shared.knownSessionId(for: surface) ?? "",
             "is_sending": isSending ? "true" : "false",
             "is_streaming": messages.contains(where: { $0.isStreaming }) ? "true" : "false",
             "message_count": "\(messages.count)",
@@ -5242,10 +5139,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         ]
         if let ownerId = runtimeOwnerId {
             detail["owner_id"] = ownerId
-            detail["persisted_runtime_session_id"] = MainChatRuntimeSessionStore.sessionId(
-                ownerId: ownerId,
-                chatId: runtimeChatId
-            )
         }
         return detail
     }

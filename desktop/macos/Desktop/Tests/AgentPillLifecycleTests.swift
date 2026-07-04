@@ -75,7 +75,7 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testFloatingPillPromptRemovesNestedSpawnCapabilities() throws {
     let source = try chatProviderSource()
 
-    XCTAssertTrue(source.contains("legacyClientScope == AgentLegacyClientScope.floatingPill"))
+    XCTAssertTrue(source.contains("isFloatingPillSurface(resolvedSurface)"))
     XCTAssertTrue(source.contains("private var cachedFloatingPillSystemPrompt: String = \"\""))
     XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = floatingPillSystemPrompt"))
     XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))

@@ -27,8 +27,8 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(source.contains("@Published var legacyAcpSessionId: String?"))
     XCTAssertTrue(source.contains("@Published var currentOmiSessionId: String?"))
     XCTAssertFalse(source.contains("@Published var currentSessionId: String?"))
-    XCTAssertTrue(source.contains("omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId))"))
-    XCTAssertTrue(source.contains("resume: legacyAcpSessionId"))
+    XCTAssertTrue(source.contains("surface: .taskChat(taskId: taskId)"))
+    XCTAssertTrue(source.contains("currentOmiSessionId = queryResult.omiSessionId"))
     XCTAssertTrue(source.contains("legacyAcpSessionId = adapterSessionId"))
     XCTAssertFalse(source.contains("legacyAcpSessionId = queryResult.omiSessionId"))
 

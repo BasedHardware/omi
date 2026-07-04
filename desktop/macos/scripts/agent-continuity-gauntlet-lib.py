@@ -516,6 +516,10 @@ def self_check() -> int:
     if not script.is_file():
         print("self-check failed: agent-continuity-gauntlet.sh missing", file=sys.stderr)
         return 1
+    source = (DESKTOP_DIR / "Desktop/Sources/Providers/ChatProvider.swift").read_text(encoding="utf-8")
+    if "clearOwnerState()" not in source:
+        print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
+        return 1
     print("self-check passed")
     return 0
 

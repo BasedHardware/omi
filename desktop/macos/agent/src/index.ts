@@ -1348,6 +1348,23 @@ async function main(): Promise<void> {
         });
         break;
 
+      case "clear_owner_state": {
+        const ownerId = msg.ownerId?.trim() || currentOwnerId;
+        const result = kernel.clearOwnerState(ownerId);
+        logErr(
+          `Cleared owner state for ${ownerId}: invalidated ${result.invalidatedBindingIds.length} binding(s)`,
+        );
+        break;
+      }
+
+      case "import_legacy_main_chat_sessions": {
+        const ownerId = msg.ownerId?.trim() || currentOwnerId;
+        const entries = Array.isArray(msg.entries) ? msg.entries : [];
+        const imported = kernel.importLegacyMainChatSessions({ ownerId, entries });
+        logErr(`Imported ${imported} legacy main-chat surface session(s) for ${ownerId}`);
+        break;
+      }
+
       case "invalidate_session":
         facade.handleInvalidateSession(msg);
         break;

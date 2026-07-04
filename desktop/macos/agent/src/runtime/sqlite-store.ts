@@ -24,6 +24,8 @@ import type {
   NewAgentGrant,
   NewAgentRun,
   NewAgentSession,
+  NewSurfaceConversation,
+  SurfaceConversation,
   NewDesktopArtifactDelivery,
   NewDesktopAttentionOverride,
   NewDesktopContextAccessLog,
@@ -46,6 +48,7 @@ const DESKTOP_CANDIDATES_MIGRATION_VERSION = 6;
 const DESKTOP_CONTEXT_ACCESS_LOG_MIGRATION_VERSION = 7;
 const DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION = 8;
 const ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION = 9;
+const SURFACE_CONVERSATIONS_MIGRATION_VERSION = 10;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -298,6 +301,7 @@ CREATE INDEX grants_lookup_idx
 export function generateAgentId(kind: AgentIdKind): string {
   const prefixByKind: Record<AgentIdKind, string> = {
     session: "ses",
+    conversation: "conv",
     run: "run",
     attempt: "att",
     event: "evt",
@@ -335,6 +339,7 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runDesktopContextAccessLogMigration(db, Date.now());
     runDesktopAttentionOverridesMigration(db, Date.now());
     runActiveAttemptAuthorityMigration(db, Date.now());
+    runSurfaceConversationsMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -412,6 +417,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION)) {
       runActiveAttemptAuthorityMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(SURFACE_CONVERSATIONS_MIGRATION_VERSION)) {
+      runSurfaceConversationsMigration(this.db, this.nowMs());
     }
   }
 
@@ -629,6 +637,25 @@ export class SqliteAgentStore implements AgentStore {
         eventIds,
       };
     });
+  }
+
+  insertSurfaceConversation(input: NewSurfaceConversation): SurfaceConversation {
+    this.db.prepare(
+      `INSERT INTO surface_conversations (
+        owner_id, surface_kind, external_ref_kind, external_ref_id,
+        conversation_id, agent_session_id, created_at_ms, last_active_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.ownerId,
+      input.surfaceKind,
+      input.externalRefKind,
+      input.externalRefId,
+      input.conversationId,
+      input.agentSessionId,
+      input.createdAtMs,
+      input.lastActiveAtMs,
+    );
+    return input;
   }
 
   insertSession(input: NewAgentSession): AgentSession {
@@ -1592,6 +1619,31 @@ function runDesktopAttentionOverridesMigration(db: Pick<DatabaseSync, "exec" | "
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runSurfaceConversationsMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS surface_conversations(
+        owner_id TEXT NOT NULL,
+        surface_kind TEXT NOT NULL,
+        external_ref_kind TEXT NOT NULL,
+        external_ref_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        agent_session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+        created_at_ms INTEGER NOT NULL,
+        last_active_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (owner_id, surface_kind, external_ref_kind, external_ref_id)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS surface_conversations_session_idx
+        ON surface_conversations(agent_session_id, last_active_at_ms DESC);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      SURFACE_CONVERSATIONS_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

@@ -324,15 +324,12 @@ actor CalendarReaderService {
         || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
         throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
       }
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
-
-      let result = try await bridge.query(
+      let result = try await AgentClient.run(
+        surface: .service("calendar_reader"),
         prompt: synthesisPrompt,
+        model: ModelQoS.Claude.synthesis,
         systemPrompt:
           "You are a profile extraction assistant. Analyze calendar events and output structured JSON. Be concise and factual.",
-        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }

@@ -37,8 +37,32 @@ export type GrantEffect = "allow" | "deny";
 
 export type GrantSource = "legacy_default" | "policy" | "user" | "system";
 
+export interface SurfaceConversation {
+  ownerId: string;
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  conversationId: string;
+  agentSessionId: string;
+  createdAtMs: number;
+  lastActiveAtMs: number;
+}
+
+export type NewSurfaceConversation = Pick<
+  SurfaceConversation,
+  | "ownerId"
+  | "surfaceKind"
+  | "externalRefKind"
+  | "externalRefId"
+  | "conversationId"
+  | "agentSessionId"
+  | "createdAtMs"
+  | "lastActiveAtMs"
+>;
+
 export type AgentIdKind =
   | "session"
+  | "conversation"
   | "run"
   | "attempt"
   | "event"
@@ -424,6 +448,7 @@ export interface AgentStore {
   migrate(): void;
   reconcileStartup(): StartupReconciliationResult;
   insertSession(input: NewAgentSession): AgentSession;
+  insertSurfaceConversation(input: NewSurfaceConversation): SurfaceConversation;
   insertRun(input: NewAgentRun): AgentRun;
   insertAttempt(input: NewRunAttempt): RunAttempt;
   insertAdapterBinding(input: NewAdapterBinding): AdapterBinding;

@@ -74,7 +74,19 @@ export interface InterruptMessage extends ProtocolEnvelope, CanonicalCorrelation
 
 export interface InvalidateSessionMessage extends ProtocolEnvelope {
   type: "invalidate_session";
-  sessionKey: string;
+  sessionKey?: string;
+  surfaceKind?: string;
+  externalRefKind?: string;
+  externalRefId?: string;
+}
+
+export interface ClearOwnerStateMessage extends ProtocolEnvelope {
+  type: "clear_owner_state";
+}
+
+export interface ImportLegacyMainChatSessionsMessage extends ProtocolEnvelope {
+  type: "import_legacy_main_chat_sessions";
+  entries: Array<{ chatId: string; agentSessionId: string }>;
 }
 
 /** Swift tells the bridge which auth method the user chose */
@@ -113,6 +125,8 @@ export type InboundMessage =
   | StopMessage
   | InterruptMessage
   | InvalidateSessionMessage
+  | ClearOwnerStateMessage
+  | ImportLegacyMainChatSessionsMessage
   | AuthenticateMessage
   | WarmupMessage
   | RefreshTokenMessage;

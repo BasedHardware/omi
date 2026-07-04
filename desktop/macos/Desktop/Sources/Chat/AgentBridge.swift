@@ -44,9 +44,6 @@ actor AgentBridge {
       self.cacheWriteTokens = cacheWriteTokens
       self.artifacts = artifacts
     }
-
-    @available(*, deprecated, message: "Use omiSessionId or adapterSessionId explicitly")
-    var sessionId: String { adapterSessionId ?? omiSessionId }
   }
 
   typealias TextDeltaHandler = @Sendable (String) -> Void
@@ -102,6 +99,7 @@ actor AgentBridge {
     guard !registered else { return }
     try await runtime.registerClient(clientId: clientId, harnessMode: harnessMode)
     registered = true
+    await migrateLegacyMainChatSessionsIfNeeded()
 
     if isPiMonoHarness, tokenRefreshTask == nil {
       tokenRefreshTask = Task { [weak self] in
@@ -166,10 +164,19 @@ actor AgentBridge {
     }
   }
 
-  func invalidateSession(sessionKey: String) {
-    Task {
-      await runtime.invalidateSession(clientId: clientId, sessionKey: sessionKey)
-    }
+  func invalidateSurface(_ surface: AgentSurfaceReference) async {
+    await runtime.invalidateSurface(clientId: clientId, surface: surface)
+  }
+
+  func clearOwnerState() async {
+    await runtime.clearOwnerState(clientId: clientId)
+  }
+
+  func importLegacyMainChatSessions(_ entries: [(chatId: String, agentSessionId: String)]) async {
+    await runtime.importLegacyMainChatSessions(
+      clientId: clientId,
+      entries: entries.map { ["chatId": $0.chatId, "agentSessionId": $0.agentSessionId] }
+    )
   }
 
   func controlTool(name: String, input: [String: Any]) async throws -> String {
@@ -185,16 +192,10 @@ actor AgentBridge {
   func query(
     prompt: String,
     systemPrompt: String,
-    sessionKey: String? = nil,
-    omiSessionId: String? = nil,
-    surfaceKind: String? = nil,
-    externalRefKind: String? = nil,
-    externalRefId: String? = nil,
-    legacyClientScope: String? = nil,
+    surface: AgentSurfaceReference,
     cwd: String? = nil,
     mode: String? = nil,
     model: String? = nil,
-    resume: String? = nil,
     imageData: Data? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolCall: @escaping ToolCallHandler,
@@ -240,16 +241,10 @@ actor AgentBridge {
       harnessMode: harnessMode,
       prompt: prompt,
       systemPrompt: systemPrompt,
-      sessionKey: sessionKey,
-      omiSessionId: omiSessionId,
-      surfaceKind: surfaceKind,
-      externalRefKind: externalRefKind,
-      externalRefId: externalRefId,
-      legacyClientScope: legacyClientScope,
+      surface: surface,
       cwd: cwd,
       mode: mode,
       model: model,
-      resume: resume,
       imageData: imageData,
       onTextDelta: onTextDelta,
       onToolCall: onToolCall,
@@ -291,6 +286,7 @@ actor AgentBridge {
         "Call browser_snapshot to verify the extension is connected. Only call that one tool, then report success or failure.",
       systemPrompt:
         "You are a connection test agent. Call the browser_snapshot tool exactly once. If it succeeds, respond with exactly 'CONNECTED'. If it fails, respond with 'FAILED' followed by the error.",
+      surface: .service("playwright_connection_test"),
       mode: "ask",
       onTextDelta: { _ in },
       onToolCall: { _, _, _ in "" },
@@ -309,6 +305,29 @@ actor AgentBridge {
 
   private func cacheQuota(_ quota: APIClient.ChatUsageQuota) {
     lastKnownQuota = quota
+  }
+
+  private static let legacyMainChatDefaultsKey = "mainChatRuntimeSessionIdsByOwnerAndChat"
+
+  private func migrateLegacyMainChatSessionsIfNeeded() async {
+    let ownerId = await MainActor.run {
+      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId")
+    }
+    guard let ownerId, !ownerId.isEmpty else { return }
+    guard let map = UserDefaults.standard.dictionary(forKey: Self.legacyMainChatDefaultsKey) as? [String: String],
+          !map.isEmpty
+    else { return }
+
+    let prefix = "\(ownerId)|"
+    let entries = map.compactMap { key, sessionId -> (chatId: String, agentSessionId: String)? in
+      guard key.hasPrefix(prefix), !sessionId.isEmpty else { return nil }
+      let chatId = String(key.dropFirst(prefix.count))
+      return (chatId: chatId.isEmpty ? "default" : chatId, agentSessionId: sessionId)
+    }
+    if !entries.isEmpty {
+      await importLegacyMainChatSessions(entries)
+    }
+    UserDefaults.standard.removeObject(forKey: Self.legacyMainChatDefaultsKey)
   }
 }
 

@@ -236,13 +236,42 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func invalidateSession(clientId: String, sessionKey: String) {
+  func invalidateSurface(clientId: String, surface: AgentSurfaceReference) {
     var dict: [String: Any] = [
       "type": "invalidate_session",
       "protocolVersion": 2,
       "requestId": UUID().uuidString,
       "clientId": clientId,
-      "sessionKey": sessionKey,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func clearOwnerState(clientId: String) {
+    var dict: [String: Any] = [
+      "type": "clear_owner_state",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func importLegacyMainChatSessions(clientId: String, entries: [[String: String]]) {
+    var dict: [String: Any] = [
+      "type": "import_legacy_main_chat_sessions",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "entries": entries,
     ]
     if let ownerId = currentOwnerId() {
       dict["ownerId"] = ownerId
@@ -322,16 +351,10 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     prompt: String,
     systemPrompt: String,
-    sessionKey: String?,
-    omiSessionId: String?,
-    surfaceKind: String?,
-    externalRefKind: String?,
-    externalRefId: String?,
-    legacyClientScope: String?,
+    surface: AgentSurfaceReference,
     cwd: String?,
     mode: String?,
     model: String?,
-    resume: String?,
     imageData: Data?,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolCall: @escaping AgentBridge.ToolCallHandler,
@@ -347,16 +370,7 @@ actor AgentRuntimeProcess {
     }
 
     return try await withCheckedThrowingContinuation { continuation in
-      let surfaceRef: AgentSurfaceReference?
-      if let surfaceKind, let externalRefKind, let externalRefId {
-        surfaceRef = AgentSurfaceReference(
-          surfaceKind: surfaceKind,
-          externalRefKind: externalRefKind,
-          externalRefId: externalRefId
-        )
-      } else {
-        surfaceRef = nil
-      }
+      let surfaceRef = surface
       let request = ActiveRequest(
         clientId: clientId,
         requestId: requestId,
@@ -371,10 +385,8 @@ actor AgentRuntimeProcess {
         continuation: continuation
       )
       activeRequests[RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)] = request
-      if let surfaceRef {
-        Task { @MainActor in
-          AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
-        }
+      Task { @MainActor in
+        AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
       }
 
       var queryDict: [String: Any] = [
@@ -386,33 +398,13 @@ actor AgentRuntimeProcess {
         "prompt": prompt,
         "systemPrompt": systemPrompt,
         "adapterId": adapterId,
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
       ]
-      if let sessionKey {
-        queryDict["sessionKey"] = sessionKey
-        queryDict["legacySessionKey"] = sessionKey
-      }
-      if let omiSessionId {
-        queryDict["sessionId"] = omiSessionId
-      }
-      if let surfaceKind {
-        queryDict["surfaceKind"] = surfaceKind
-      }
-      if let externalRefKind {
-        queryDict["externalRefKind"] = externalRefKind
-      }
-      if let externalRefId {
-        queryDict["externalRefId"] = externalRefId
-      }
-      if let legacyClientScope {
-        queryDict["legacyClientScope"] = legacyClientScope
-      }
       if let cwd { queryDict["cwd"] = cwd }
       if let mode { queryDict["mode"] = mode }
       if let model { queryDict["model"] = model }
-      if let resume {
-        queryDict["legacyAdapterSessionId"] = resume
-        queryDict["resume"] = resume
-      }
       if let imageData {
         queryDict["imageBase64"] = imageData.base64EncodedString()
       }

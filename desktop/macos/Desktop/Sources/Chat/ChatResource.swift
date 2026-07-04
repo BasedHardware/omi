@@ -51,6 +51,29 @@ struct ChatResource: Identifiable, Equatable {
     fileURL != nil
   }
 
+  static func localGeneratedFile(
+    id: String,
+    title: String,
+    subtitle: String?,
+    mimeType: String?,
+    uri: String
+  ) -> ChatResource {
+    ChatResource(
+      id: id,
+      origin: .generatedArtifact,
+      title: title,
+      subtitle: subtitle,
+      mimeType: mimeType,
+      thumbnailURL: nil,
+      imageData: nil,
+      uri: uri,
+      artifactId: nil,
+      omiSessionId: nil,
+      runId: nil,
+      state: .ready
+    )
+  }
+
   static func attachment(_ attachment: ChatAttachment) -> ChatResource {
     let state: State
     switch attachment.state {

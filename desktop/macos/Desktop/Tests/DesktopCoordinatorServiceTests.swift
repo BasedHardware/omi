@@ -194,18 +194,15 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(source.contains("filter { !$0.text.isEmpty }.suffix(10)"))
   }
 
-  func testMainChatPersistsRuntimeSessionContinuity() throws {
+  func testMainChatUsesKernelSurfaceIdentity() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
 
-    XCTAssertTrue(source.contains("let resolvedMainChatRuntimeChatId = systemPromptStyle == .main && !isOnboarding"))
-    XCTAssertTrue(source.contains("AgentSurfaceReference.mainChat(chatId: $0)"))
-    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.sessionId("))
-    XCTAssertTrue(source.contains("?? persistedMainChatSessionId"))
-    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.save("))
-    XCTAssertTrue(source.contains("if let ownerId = runtimeOwnerId"))
-    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.clear("))
-    XCTAssertTrue(source.contains("MainChatRuntimeSessionStore.clearAll()"))
-    XCTAssertTrue(source.contains("if !isOnboarding,"))
+    XCTAssertTrue(source.contains("func querySurface("))
+    XCTAssertTrue(source.contains("AgentSurfaceReference.mainChat(chatId:"))
+    XCTAssertTrue(source.contains("surface: resolvedSurface"))
+    XCTAssertTrue(source.contains("agentBridge.clearOwnerState()"))
+    XCTAssertFalse(source.contains("MainChatRuntimeSessionStore"))
+    XCTAssertFalse(source.contains("knownSessionId(for:"))
   }
 
   func testMainChatAddsNonConsumingCoordinatorRouteContextBeforeBridgeQuery() throws {
@@ -255,8 +252,6 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
     XCTAssertTrue(source.contains("systemPromptStyle == .main"))
     XCTAssertTrue(source.contains("surfaceRef == nil"))
-    XCTAssertTrue(source.contains("sessionKey == nil"))
-    XCTAssertTrue(source.contains("legacyClientScope == nil"))
     XCTAssertTrue(source.contains("imageData == nil"))
     XCTAssertTrue(source.contains("attachmentMetadataJSON == nil"))
   }
