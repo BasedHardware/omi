@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from scripts.sync_firebase_google_provider_secret import (
     build_provider_patch,
     firebase_auth_redirect_uri,
@@ -7,6 +9,10 @@ from scripts.sync_firebase_google_provider_secret import (
     redact_value,
     safe_http_error_message,
 )
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+SCRIPT_PATH = BACKEND_DIR / "scripts" / "sync_firebase_google_provider_secret.py"
+TEST_SH_PATH = BACKEND_DIR / "test.sh"
 
 
 def test_redact_value_keeps_prefix_and_suffix_only():
@@ -83,3 +89,19 @@ def test_safe_http_error_message_does_not_echo_secret_values():
     assert "raw-secret-value" not in message
     assert "raw-token" not in message
     assert "client_secret=***" in message
+
+
+def test_static_review_guards_cover_secret_sync_regressions():
+    source = SCRIPT_PATH.read_text()
+
+    assert "body={error_body}" not in source
+    assert "failed status={error.code} body=" not in source
+    assert "updateMask=clientSecret,clientId,enabled" not in source
+    assert '"redirect_uri": "https://based-hardware.firebaseapp.com/__/auth/handler"' not in source
+
+
+def test_secret_sync_tests_are_registered_in_backend_test_sh():
+    test_sh = TEST_SH_PATH.read_text()
+
+    assert "pytest tests/unit/test_mcp_oauth_template.py -v" in test_sh
+    assert "pytest tests/unit/test_sync_firebase_google_provider_secret.py -v" in test_sh
