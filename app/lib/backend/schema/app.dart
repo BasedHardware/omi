@@ -146,11 +146,6 @@ class ChatTool {
       'is_mcp': isMcp,
     };
   }
-
-  static List<ChatTool> fromJsonList(List<dynamic>? jsonList) {
-    if (jsonList == null) return [];
-    return jsonList.map((e) => ChatTool.fromJson(e)).toList();
-  }
 }
 
 class ExternalIntegration {
@@ -240,10 +235,6 @@ class AppUsageHistory {
 
   factory AppUsageHistory.fromJson(Map<String, dynamic> json) {
     return AppUsageHistory(date: DateTime.parse(json['date']).toLocal(), count: json['count']);
-  }
-
-  static List<AppUsageHistory> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => AppUsageHistory.fromJson(e)).toList();
   }
 
   toJson() {
@@ -610,10 +601,6 @@ class Category {
   toJson() {
     return {'title': title, 'id': id};
   }
-
-  static List<Category> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => Category.fromJson(e)).toList();
-  }
 }
 
 class AppCapability {
@@ -655,10 +642,6 @@ class AppCapability {
     };
   }
 
-  static List<AppCapability> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => AppCapability.fromJson(e)).toList();
-  }
-
   bool hasTriggers() => triggerEvents.isNotEmpty;
   bool hasScopes() => notificationScopes.isNotEmpty;
   bool hasActions() => actions.isNotEmpty;
@@ -688,10 +671,6 @@ class CapacityAction {
   toJson() {
     return {'title': title, 'id': id, 'doc_url': docUrl, 'description': description};
   }
-
-  static List<CapacityAction> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => CapacityAction.fromJson(e)).toList();
-  }
 }
 
 class TriggerEvent {
@@ -710,10 +689,6 @@ class TriggerEvent {
   toJson() {
     return {'title': title, 'id': id};
   }
-
-  static List<TriggerEvent> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => TriggerEvent.fromJson(e)).toList();
-  }
 }
 
 class NotificationScope {
@@ -731,10 +706,6 @@ class NotificationScope {
 
   toJson() {
     return {'title': title, 'id': id};
-  }
-
-  static List<NotificationScope> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => NotificationScope.fromJson(e)).toList();
   }
 }
 
@@ -773,10 +744,6 @@ class PaymentPlan {
   toJson() {
     return {'title': title, 'id': id};
   }
-
-  static List<PaymentPlan> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => PaymentPlan.fromJson(e)).toList();
-  }
 }
 
 class AppApiKey {
@@ -807,9 +774,5 @@ class AppApiKey {
       'created_at': createdAt.toUtc().toIso8601String(),
       if (secret != null) 'secret': secret,
     };
-  }
-
-  static List<AppApiKey> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => AppApiKey.fromJson(e)).toList();
   }
 }
