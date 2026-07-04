@@ -143,6 +143,7 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `routers/payment.py`
   - `routers/pusher.py`
   - `routers/sync.py`
+  - `routers/transcribe.py`
   - `routers/users.py`
   - `utils/__init__.py`
   - `utils/audio.py`

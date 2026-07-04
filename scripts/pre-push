@@ -447,6 +447,7 @@ check_backend_typecheck_if_needed() {
     'backend/routers/payment.py' \
     'backend/routers/pusher.py' \
     'backend/routers/sync.py' \
+    'backend/routers/transcribe.py' \
     'backend/routers/users.py' \
     'backend/utils/__init__.py' \
     'backend/utils/audio.py' \

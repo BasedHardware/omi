@@ -126,6 +126,7 @@
         "routers/mcp_sse.py",
         "routers/pusher.py",
         "routers/sync.py",
+        "routers/transcribe.py",
         "routers/users.py",
         "utils/__init__.py",
         "utils/audio.py",
