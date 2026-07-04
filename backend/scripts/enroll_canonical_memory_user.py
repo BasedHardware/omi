@@ -14,7 +14,7 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from google.cloud import firestore
 
@@ -136,21 +136,21 @@ def v3_read_prerequisite_paths(uid: str) -> list[str]:
     ]
 
 
-def _snapshot_data(snapshot) -> dict[str, Any] | None:
+def _snapshot_data(snapshot: Any) -> dict[str, Any] | None:
     if not getattr(snapshot, "exists", False):
         return None
-    data = snapshot.to_dict()
-    return data if isinstance(data, dict) else None
+    raw: object = snapshot.to_dict()
+    return cast(dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
-def inspect_existing_docs(db_client, documents: list[RolloutDocumentPlan]) -> dict[str, Any]:
+def inspect_existing_docs(db_client: Any, documents: list[RolloutDocumentPlan]) -> dict[str, Any]:
     existing: dict[str, Any] = {}
     for document in documents:
         existing[document.path] = _snapshot_data(db_client.document(document.path).get())
     return existing
 
 
-def inspect_v3_read_prerequisites(db_client, *, uid: str) -> dict[str, bool]:
+def inspect_v3_read_prerequisites(db_client: Any, *, uid: str) -> dict[str, bool]:
     result: dict[str, bool] = {}
     for path in v3_read_prerequisite_paths(uid):
         result[path] = _snapshot_data(db_client.document(path).get()) is not None
@@ -164,7 +164,7 @@ def assert_v3_read_prerequisites_ready(prerequisites: dict[str, bool]) -> None:
 
 
 def apply_documents(
-    db_client,
+    db_client: Any,
     documents: list[RolloutDocumentPlan],
     *,
     allow_existing_update: bool,

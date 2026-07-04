@@ -134,7 +134,9 @@ def build_stripe_source_of_truth(
     for sub in iter_stripe_subscriptions(api_key, statuses):
         metadata: dict[str, Any] = cast(dict[str, Any], sub.get("metadata") or {})
         uid: Any = metadata.get("uid")
-        items: list[dict[str, Any]] = cast(list[dict[str, Any]], cast(dict[str, Any], sub.get("items") or {}).get("data") or [])
+        items: list[dict[str, Any]] = cast(
+            list[dict[str, Any]], cast(dict[str, Any], sub.get("items") or {}).get("data") or []
+        )
         price_id: Any = items[0].get("price", {}).get("id") if items else None
         expected_plan: Any = plan_by_price.get(price_id or "")
         if not uid or not expected_plan:
@@ -149,6 +151,7 @@ def build_stripe_source_of_truth(
             )
             continue
 
+        customer: Any = sub.get("customer")
         customer_id: Any
         customer_email: Any
         if isinstance(customer, dict):
@@ -185,8 +188,8 @@ def compare_firestore(project: str, stripe_by_uid: dict[str, StripeSub]) -> list
     db = firestore.Client(project=project)
     mismatches: list[Mismatch] = []
 
-        if not cast(Any, snap).exists:
-        snap: Any = cast(Any, db.collection("users").document(uid).get())
+    for uid, stripe_sub in sorted(stripe_by_uid.items()):
+        snap: Any = cast(Any, db.collection("users").document(uid).get())  # type: ignore[reportUnknownMemberType]
         if not snap.exists:
             mismatches.append(
                 Mismatch(

@@ -51,6 +51,9 @@ def _find_dicts_with_key(value: Any, key: str) -> list[dict[str, Any]]:
             matches.extend(_find_dicts_with_key(child, key))
     return matches
 
+
+def _find_secret_paths(value: Any, prefix: str = "$") -> list[str]:
+    paths: list[str] = []
     if isinstance(value, dict):
         data = cast(dict[str, Any], value)
         for key, child in data.items():

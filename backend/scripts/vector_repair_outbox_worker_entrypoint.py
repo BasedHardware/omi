@@ -420,14 +420,6 @@ def _summary_has_failures(summary: Dict[str, Any]) -> bool:
     )
 
 
-def _missing_production_dependency(record: Dict[str, Any]) -> None:
-    raise RuntimeError("production vector repair worker dependencies are not wired in this wrapper contract")
-
-
-def _missing_production_repair_dependency(record: Dict[str, Any], item: Any) -> None:
-    raise RuntimeError("production vector repair worker dependencies are not wired in this wrapper contract")
-
-
 app = create_vector_repair_outbox_worker_app()
 
 
