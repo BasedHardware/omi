@@ -7577,6 +7577,7 @@
           "speech_hours_weekly",
           "limits",
           "usage_pct",
+          "dg_budget",
           "message"
         ],
         "title": "FairUseStatusResponse",
@@ -17238,9 +17239,6 @@
             },
             "description": "Successful Response"
           },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
           "404": {
             "$ref": "#/components/responses/Error404"
           },
@@ -17255,11 +17253,7 @@
             "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
+        "security": [],
         "summary": "Get Shared Action Items",
         "tags": [
           "action-items"
@@ -25585,9 +25579,6 @@
             },
             "description": "Successful Response"
           },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
           "404": {
             "$ref": "#/components/responses/Error404"
           },
@@ -25602,11 +25593,7 @@
             "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
+        "security": [],
         "summary": "Get Shared Conversation By Id",
         "tags": [
           "conversations"
@@ -42995,9 +42982,6 @@
             },
             "description": "Successful Response"
           },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
           "404": {
             "$ref": "#/components/responses/Error404"
           },
@@ -43012,11 +42996,7 @@
             "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
+        "security": [],
         "summary": "Get Shared Chat Messages",
         "tags": [
           "chat"
