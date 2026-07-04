@@ -98,3 +98,72 @@ def test_request_model_applies_defaults():
 def test_request_model_rejects_empty_text():
     with pytest.raises(ValidationError):
         TtsSynthesizeRequest(text="")
+
+
+# ---------------------------------------------------------------------------
+# /v2/tts/voices helpers
+# ---------------------------------------------------------------------------
+def test_normalize_voices_maps_fields():
+    raw = {
+        "voices": [
+            {
+                "voice_id": "v1",
+                "name": "Sloane",
+                "category": "premade",
+                "preview_url": "http://p",
+                "labels": {"accent": "american"},
+            }
+        ]
+    }
+    assert tts_router._normalize_voices(raw) == [
+        {
+            "voice_id": "v1",
+            "name": "Sloane",
+            "category": "premade",
+            "preview_url": "http://p",
+            "labels": {"accent": "american"},
+        }
+    ]
+
+
+def test_normalize_voices_defaults_missing_fields():
+    assert tts_router._normalize_voices({"voices": [{"voice_id": "v1"}]}) == [
+        {"voice_id": "v1", "name": None, "category": None, "preview_url": None, "labels": {}}
+    ]
+
+
+def test_normalize_voices_empty_or_non_list():
+    assert tts_router._normalize_voices({"voices": []}) == []
+    assert tts_router._normalize_voices({}) == []
+    assert tts_router._normalize_voices({"voices": "not-a-list"}) == []
+    assert tts_router._normalize_voices("not-a-dict") == []
+
+
+def test_normalize_voices_skips_bad_entries():
+    raw = {
+        "voices": [
+            {"voice_id": "v1", "name": "Ok"},
+            "not-a-dict",
+            {"name": "no-id"},
+            {"voice_id": "", "name": "empty-id"},
+        ]
+    }
+    assert [v["voice_id"] for v in tts_router._normalize_voices(raw)] == ["v1"]
+
+
+def test_normalize_voices_non_dict_labels_defaulted():
+    result = tts_router._normalize_voices({"voices": [{"voice_id": "v1", "labels": "bad"}]})
+    assert result[0]["labels"] == {}
+
+
+def test_is_cache_fresh_boundary():
+    ttl = tts_router._VOICES_CACHE_TTL_SECS
+    assert tts_router._is_cache_fresh(100.0, 100.0)  # same instant is fresh
+    assert tts_router._is_cache_fresh(100.0, 100.0 + ttl - 1)
+    assert not tts_router._is_cache_fresh(100.0, 100.0 + ttl)  # boundary: expired
+    assert not tts_router._is_cache_fresh(100.0, 100.0 + ttl + 10)
+
+
+def test_voices_constants():
+    assert tts_router._ELEVENLABS_VOICES_URL == "https://api.elevenlabs.io/v1/voices"
+    assert tts_router._VOICES_CACHE_TTL_SECS == 3600

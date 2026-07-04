@@ -12,7 +12,8 @@ Rate limits per user (Redis-backed sliding-window + daily counter):
 
 import logging
 import os
-from typing import Any, Callable, Dict, cast
+import time
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,6 +42,9 @@ _TTS_BURST_WINDOW_SECS = 60
 _TTS_REQUEST_CHAR_LIMIT = 5_000
 
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+_ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
+_VOICES_CACHE_TTL_SECS = 3600
+_voices_cache: Optional[Tuple[float, List[dict]]] = None
 
 
 def _is_valid_voice_id(voice_id: str) -> bool:
@@ -48,6 +52,35 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     ElevenLabs URL template (e.g. `../../history` retargeting `xi-api-key`).
     """
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
+
+
+def _normalize_voices(raw: dict) -> List[dict]:
+    """Reduce the ElevenLabs /v1/voices payload to a minimal, client-safe voice list.
+
+    Tolerates a missing/non-list `voices` key and non-dict/partial entries so an upstream shape
+    change yields an empty or partial list rather than a 500.
+    """
+    voices = raw.get("voices") if isinstance(raw, dict) else None
+    if not isinstance(voices, list):
+        return []
+    result = []
+    for v in voices:
+        if not isinstance(v, dict) or not v.get("voice_id"):
+            continue
+        result.append(
+            {
+                "voice_id": v.get("voice_id"),
+                "name": v.get("name"),
+                "category": v.get("category"),
+                "preview_url": v.get("preview_url"),
+                "labels": v.get("labels") if isinstance(v.get("labels"), dict) else {},
+            }
+        )
+    return result
+
+
+def _is_cache_fresh(cached_at: float, now: float, ttl: int = _VOICES_CACHE_TTL_SECS) -> bool:
+    return (now - cached_at) < ttl
 
 
 @router.post(
@@ -178,3 +211,36 @@ async def tts_synthesize(
                 pass
 
     return StreamingResponse(audio_stream(), media_type="audio/mpeg")
+
+
+@router.get('/v2/tts/voices', tags=['tts'])
+async def get_voices(uid: str = Depends(auth.get_current_user_uid)) -> dict:
+    """List the available ElevenLabs voices, proxied server-side (the API key is server-only).
+
+    Cached in-process for _VOICES_CACHE_TTL_SECS so a client voice picker does not hammer the upstream.
+    The synthesize endpoint already accepts any voice_id; this just lets clients discover them.
+    """
+    global _voices_cache
+    now = time.monotonic()
+    if _voices_cache is not None and _is_cache_fresh(_voices_cache[0], now):
+        return {"voices": _voices_cache[1]}
+
+    api_key = os.getenv('ELEVENLABS_API_KEY')
+    if not api_key:
+        logger.error("get_voices: ELEVENLABS_API_KEY not configured")
+        raise HTTPException(status_code=503, detail="TTS service not configured")
+
+    async with get_tts_semaphore():
+        try:
+            resp = await get_tts_client().get(_ELEVENLABS_VOICES_URL, headers={"xi-api-key": api_key}, timeout=15.0)
+        except httpx.HTTPError as e:
+            logger.error(f"get_voices: upstream request failed uid={uid}: {sanitize(str(e))}")
+            raise HTTPException(status_code=502, detail="TTS upstream unavailable")
+
+    if resp.status_code != 200:
+        logger.warning(f"get_voices: ElevenLabs returned {resp.status_code} uid={uid}")
+        raise HTTPException(status_code=502, detail="TTS upstream error")
+
+    voices = _normalize_voices(resp.json())
+    _voices_cache = (now, voices)
+    return {"voices": voices}
