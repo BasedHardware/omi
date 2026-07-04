@@ -1189,6 +1189,13 @@ final class AgentPillsManager: ObservableObject {
                 pill.conversationMessages.append(finalMessage)
             }
             pill.latestActivity = String(messageText.prefix(140))
+            FloatingControlBarManager.shared.recordAgentArtifactCompletion(
+                pillID: pill.id,
+                runId: pill.canonicalRunId,
+                title: pill.title,
+                finalText: trimmed,
+                resources: resources
+            )
         } else {
             pill.latestActivity = "Done"
         }

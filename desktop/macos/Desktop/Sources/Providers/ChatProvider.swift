@@ -3253,17 +3253,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         _ text: String,
         clientTurnId: String? = nil,
         notificationContext: String? = nil,
-        notificationScreenshot: Data? = nil
+        notificationScreenshot: Data? = nil,
+        resources: [ChatResource] = []
     ) -> ChatMessage? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return nil }
+        guard !trimmedText.isEmpty || !resources.isEmpty else { return nil }
 
+        let messageText = trimmedText.isEmpty ? "Done." : trimmedText
         let aiMessage = ChatMessage(
             clientTurnId: clientTurnId,
-            text: trimmedText,
+            text: messageText,
             sender: .ai,
             notificationContext: notificationContext,
-            notificationScreenshot: notificationScreenshot
+            notificationScreenshot: notificationScreenshot,
+            resources: resources
         )
         let localId = aiMessage.id
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
@@ -3278,7 +3281,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         Task { [weak self] in
             do {
                 let response = try await APIClient.shared.saveMessage(
-                    text: trimmedText,
+                    text: messageText,
                     sender: "ai",
                     appId: capturedAppId,
                     sessionId: capturedSessionId,
