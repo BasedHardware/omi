@@ -435,20 +435,22 @@ final class DesktopAutomationActionRegistry {
       return ["sent": query]
     }
 
-    // Force the notch "thinking" indicator on/off so the spinning-Omi animation
-    // can be exercised without a mic. Same state a committed PTT turn sets in
-    // PushToTalkManager.finalize(); non-prod bridge only.
+    // Force the floating-bar active state so the pill↔notch-island morph and the
+    // "thinking" animation can be exercised without a mic. Same flags a real PTT
+    // turn sets; non-prod bridge only. state = idle|listening|thinking|answering.
     register(
-      name: "debug_thinking",
-      summary: "Force the floating-bar 'thinking' indicator on/off (visual verification)",
-      params: ["on"]
+      name: "debug_bar_state",
+      summary: "Force floating-bar state: idle|listening|thinking|answering (visual verification)",
+      params: ["state"]
     ) { params in
-      let on = boolParam(params["on"], default: true)
-      if on, !FloatingControlBarManager.shared.isVisible {
-        FloatingControlBarManager.shared.show()
-      }
-      FloatingControlBarManager.shared.barState?.isThinking = on
-      return ["isThinking": on ? "true" : "false"]
+      let s = (params["state"] ?? "thinking").lowercased()
+      let mgr = FloatingControlBarManager.shared
+      guard let bar = mgr.barState else { return ["error": "no bar state"] }
+      if s != "idle", !mgr.isVisible { mgr.show() }
+      bar.isVoiceResponseActive = (s == "answering")
+      bar.isVoiceListening = (s == "listening")
+      bar.isThinking = (s == "thinking")
+      return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
     // Send a message through the real main-window chat pipeline (ChatPage),

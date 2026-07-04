@@ -109,6 +109,17 @@ struct FloatingControlBarView: View {
         )
         .background(Color.clear)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+        // Placed on the always-mounted root (not inside unifiedFloatingSurface) so
+        // the pill→island morph still fires when transitioning out of the idle pill.
+        .onChange(of: activeLifecycleKey) { _, _ in
+            (window as? FloatingControlBarWindow)?.syncActiveIsland()
+        }
+    }
+
+    /// Composite key for the active PTT lifecycle — any change drives the
+    /// pill ↔ notch-island morph (see FloatingControlBarWindow.syncActiveIsland).
+    private var activeLifecycleKey: String {
+        "\(state.isVoiceListening)-\(state.isThinking)-\(state.isVoiceResponseActive)"
     }
 
     /// Whether the bar chrome should stretch to fill the window width
@@ -311,10 +322,6 @@ struct FloatingControlBarView: View {
                 notchLogoHovering = false
                 (window as? FloatingControlBarWindow)?.setPillAgentListVisible(false)
             }
-        }
-        .onChange(of: state.isThinking) { _, thinking in
-            guard state.usesNotchIsland else { return }
-            (window as? FloatingControlBarWindow)?.resizeForThinking(active: thinking)
         }
         .onDisappear { state.setNotchHoverMenuOpen(false) }
     }
