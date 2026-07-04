@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 DEFAULT_DATABASE = "(default)"
 DEFAULT_WORKER_SA_NAME = "memory-vector-repair-outbox-worker"
@@ -178,7 +178,7 @@ def evaluate_results(
 
 def json_result(command_results: Mapping[str, Mapping[str, Any]], name: str) -> Optional[Mapping[str, Any]]:
     value = command_results.get(name, {}).get("json")
-    return value if isinstance(value, Mapping) else None
+    return cast(Mapping[str, Any], value) if isinstance(value, Mapping) else None
 
 
 def evaluate_firestore_database(database: Mapping[str, Any]) -> List[Dict[str, str]]:

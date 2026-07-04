@@ -83,7 +83,7 @@ def embedding_endpoint(file: UploadFile) -> List[float]:
     """
     upload_id = str(uuid.uuid4())
     # Sanitize filename to prevent path traversal
-    filename = os.path.basename(file.filename) if file.filename else upload_id
+    filename = os.path.basename(cast(str, file.filename))
     file_path = f"_temp/{upload_id}_{filename}"
 
     try:
@@ -118,7 +118,7 @@ def embedding_endpoint_v2(file: UploadFile) -> List[float]:
     """
     upload_id = str(uuid.uuid4())
     # Sanitize filename to prevent path traversal
-    filename = os.path.basename(file.filename) if file.filename else upload_id
+    filename = os.path.basename(cast(str, file.filename))
     file_path = f"_temp/{upload_id}_{filename}"
 
     try:

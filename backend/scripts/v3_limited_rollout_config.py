@@ -6,6 +6,7 @@ or deployment pipeline may apply. It intentionally performs no cloud writes.
 """
 
 from __future__ import annotations
+from typing import Any, Dict
 
 import argparse
 import json
@@ -19,7 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 from utils.memory.v3_limited_rollout_config import build_limited_rollout_config_bundle
 
 
-def build_report(*, uid: str, account_generation: int) -> dict:
+def build_report(*, uid: str, account_generation: int) -> Dict[str, Any]:
     bundle = build_limited_rollout_config_bundle(uid=uid, account_generation=account_generation)
     return {
         'artifact': 'v3_limited_rollout_config',

@@ -15,7 +15,7 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
 from llm_gateway.gateway.schemas import ProviderRef
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
-from utils.llm.gateway_client import _chat_structured_payload
+from utils.llm.gateway_client import _chat_structured_payload  # type: ignore[reportPrivateUsage]  # test script accessing internal helper
 
 PROVIDER_REF = ProviderRef(provider='openai', model='gpt-4.1-mini')
 SMOKE_FEATURES = (

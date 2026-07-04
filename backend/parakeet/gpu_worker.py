@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-import soundfile as sf  # type: ignore[reportMissingImports]  # soundfile not installed in dev venv
+import soundfile as sf
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 
 try:
@@ -33,8 +33,8 @@ _torch: Any = cast(Any, torch)
 _sf: Any = cast(Any, sf)
 nemo_asr: Any = _nemo_asr
 pam: Any = _pam
-PyannoteModel: Any = _PyannoteModel
-PyannoteInference: Any = _PyannoteInference
+PyannoteModel: Any = cast(Any, _PyannoteModel)
+PyannoteInference: Any = cast(Any, _PyannoteInference)
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +70,8 @@ class GPUWorker:
     def __init__(self) -> None:
         self._queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
         self._thread: Optional[threading.Thread] = None
-        self._model: Optional[Any] = None
-        self._embedding_model: Optional[Any] = None
+        self._model: Any = None
+        self._embedding_model: Any = None
         self._poll_timeout: float = float(os.getenv("PARAKEET_GPU_POLL_TIMEOUT", "0.05"))
         self._gc_interval: int = int(os.getenv("PARAKEET_GC_INTERVAL", "50"))
         self._gc_counter: int = 0
@@ -427,13 +427,13 @@ class GPUWorker:
     @staticmethod
     def _extract_results(results: Any, timestamps: bool) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
-        items: Any = results if isinstance(results, list) else [results]
+        items: List[Any] = cast(List[Any], results if isinstance(results, list) else [results])
         for r in items:
             if timestamps and hasattr(r, 'text') and hasattr(r, 'timestamp'):
                 ts: Dict[str, Any] = {}
                 r_timestamp: Any = r.timestamp
                 if isinstance(r_timestamp, dict):
-                    for k, entries in r_timestamp.items():
+                    for k, entries in cast(Dict[Any, Any], r_timestamp).items():
                         if k == 'timestep':
                             continue
                         ts[k] = [
