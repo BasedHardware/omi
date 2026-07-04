@@ -68,7 +68,9 @@ final class LimitlessFlashDrainEngine {
             )
         }
         queue.async {
+            if let config = self.loadConfig(), config.deviceId != peripheralUuid.lowercased() { return }
             self.deviceUuid = peripheralUuid
+            if self.phase != .draining { self.setBoolPref("pendantDraining", false) }
             self.cycleTimer?.cancel()
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(
@@ -90,8 +92,8 @@ final class LimitlessFlashDrainEngine {
             self.deviceUuid = nil
             self.messageIndex = 0
             self.requestId = 0
+            self.writer.stop("ble_disconnected")
         }
-        writer.stop("ble_disconnected")
     }
 
     func stop(_ reason: String) {
@@ -121,7 +123,11 @@ final class LimitlessFlashDrainEngine {
     private func runCycle() {
         guard let uuid = deviceUuid else { return }
         guard phase == .idle else { return }
-        guard let config = loadConfig(), config.deviceId == uuid.lowercased() else { return }
+        guard let config = loadConfig() else {
+            writer.stop("batch_disabled")
+            return
+        }
+        guard config.deviceId == uuid.lowercased() else { return }
 
         phase = .awaitingStatus
         write(uuid, LimitlessProtocol.encodeSetCurrentTime(

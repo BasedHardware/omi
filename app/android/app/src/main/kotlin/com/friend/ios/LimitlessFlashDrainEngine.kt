@@ -65,7 +65,10 @@ class LimitlessFlashDrainEngine(
 
     fun onDeviceReady(address: String) {
         executor.execute {
+            val config = loadConfig()
+            if (config != null && !config.deviceId.equals(address, ignoreCase = true)) return@execute
             deviceAddress = address
+            if (phase != Phase.DRAINING) setBoolPref("pendantDraining", false)
             cycleTask?.cancel(false)
             cycleTask = executor.scheduleWithFixedDelay({ runCycle() }, FIRST_CYCLE_DELAY_MS, CYCLE_MS, TimeUnit.MILLISECONDS)
         }
@@ -80,8 +83,8 @@ class LimitlessFlashDrainEngine(
             deviceAddress = null
             messageIndex = 0
             requestId = 0
+            writer.stop("ble_disconnected")
         }
-        writer.stop("ble_disconnected")
     }
 
     fun stop(reason: String) {
@@ -106,7 +109,12 @@ class LimitlessFlashDrainEngine(
     private fun runCycle() {
         val address = deviceAddress ?: return
         if (phase != Phase.IDLE) return
-        if (loadConfig() == null) return
+        val config = loadConfig()
+        if (config == null) {
+            writer.stop("batch_disabled")
+            return
+        }
+        if (!config.deviceId.equals(address, ignoreCase = true)) return
 
         phase = Phase.AWAITING_STATUS
         write(address, LimitlessProtocol.encodeSetCurrentTime(messageIndex++, ++requestId, System.currentTimeMillis()))
