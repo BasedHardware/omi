@@ -307,6 +307,43 @@ class AppApiKeyResponse(PydanticBaseModel):
     secret: Optional[str] = None
 
 
+class PersonaMutationResponse(AppMutationResponse):
+    app_id: str
+    username: str
+
+
+class TwitterProfileResponse(PydanticBaseModel):
+    name: str
+    profile: str
+    rest_id: str
+    avatar: str
+    desc: str
+    friends: int
+    sub_count: int
+    id: str
+    status: str
+    persona_id: Optional[str] = None
+    persona_username: Optional[str] = None
+
+
+class TwitterOwnershipVerificationResponse(PydanticBaseModel):
+    tweet: str
+    verified: bool
+    persona_id: Optional[str] = None
+
+
+class TwitterInitialMessageResponse(PydanticBaseModel):
+    message: str
+
+
+class ConversationSummaryAppIdsResponse(PydanticBaseModel):
+    app_ids: List[str] = Field(default_factory=list)
+
+
+class PersonaRecordResponse(App):
+    doc_id: Optional[str] = None
+
+
 def _write_file(path: str, data: bytes):
     """Write bytes to file — offloaded to storage_executor."""
     with open(path, 'wb') as f:
@@ -744,7 +781,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     return {'status': 'ok', 'app_id': app.id}
 
 
-@router.post('/v1/personas', tags=['v1'])
+@router.post('/v1/personas', tags=['v1'], response_model=PersonaMutationResponse)
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
@@ -787,7 +824,7 @@ async def create_persona(
     return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
 
-@router.patch('/v1/personas/{persona_id}', tags=['v1'])
+@router.patch('/v1/personas/{persona_id}', tags=['v1'], response_model=PersonaMutationResponse)
 async def update_persona(
     persona_id: str,
     persona_data: str = Form(...),
@@ -837,7 +874,7 @@ async def update_persona(
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
 
-@router.get('/v1/personas', tags=['v1'])
+@router.get('/v1/personas', tags=['v1'], response_model=App)
 def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
     app = get_persona_by_uid(uid)
     # print(app)
@@ -853,7 +890,7 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
     return app
 
 
-@router.post('/v1/user/persona', tags=['v1'])
+@router.post('/v1/user/persona', tags=['v1'], response_model=App)
 async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
     """Get or create a user persona.
 
@@ -1493,7 +1530,7 @@ async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_cur
 # ******************************************************
 
 
-@router.get('/v1/personas/twitter/profile', tags=['v1'])
+@router.get('/v1/personas/twitter/profile', tags=['v1'], response_model=TwitterProfileResponse)
 async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     if handle.startswith('@'):
         handle = handle[1:]
@@ -1526,7 +1563,7 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     return res
 
 
-@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
+@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'], response_model=TwitterOwnershipVerificationResponse)
 async def verify_twitter_ownership_tweet(
     username: str, handle: str, uid: str = Depends(auth.get_current_user_uid), persona_id: str | None = None
 ):
@@ -1559,7 +1596,7 @@ async def verify_twitter_ownership_tweet(
     return res
 
 
-@router.get('/v1/personas/twitter/initial-message', tags=['v1'])
+@router.get('/v1/personas/twitter/initial-message', tags=['v1'], response_model=TwitterInitialMessageResponse)
 def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
     persona = get_persona_by_username_db(username)
     if persona:
@@ -1773,7 +1810,9 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         }
 
 
-@router.get('/v1/apps/mcp/callback', tags=['v1'], response_class=HTMLResponse)
+@router.get(
+    '/v1/apps/mcp/callback', tags=['v1'], response_class=HTMLResponse
+)  # response_model omitted: OAuth callback returns HTML
 async def mcp_oauth_callback(code: str, state: str):
     """OAuth callback for MCP server authorization.
 
@@ -2079,7 +2118,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/personas/{persona_id}', tags=['v1'])
+@router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppThumbnailUploadResponse)
 @router.post('/v1/app/thumbnails', tags=['v1'], response_model=AppThumbnailUploadResponse)
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
     """Upload a thumbnail image for an app.
@@ -2122,7 +2161,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/personas/{persona_id}', tags=['v1'])
+@router.get('/v1/personas/{persona_id}', tags=['v1'], response_model=List[PersonaRecordResponse])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -2183,7 +2222,7 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
 # ******************************************************
 
 
-@router.get('/v1/summary-app-ids', tags=['v1'])
+@router.get('/v1/summary-app-ids', tags=['v1'], response_model=ConversationSummaryAppIdsResponse)
 def get_summary_app_ids(secret_key: str = Header(...)):
     """Get all conversation summary app IDs from Redis"""
     if secret_key != os.getenv('ADMIN_KEY'):
@@ -2194,7 +2233,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
     return {'app_ids': app_ids or []}
 
 
-@router.post('/v1/summary-app-ids/{app_id}', tags=['v1'])
+@router.post('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Add an app ID to the conversation summary apps list"""
     if secret_key != os.getenv('ADMIN_KEY'):
@@ -2207,7 +2246,7 @@ def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
         return {'status': 'ok', 'message': f'App {app_id} already exists in conversation summary apps'}
 
 
-@router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'])
+@router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Remove an app ID from the conversation summary apps list"""
     if secret_key != os.getenv('ADMIN_KEY'):
