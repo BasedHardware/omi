@@ -18,7 +18,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from utils import x_connector
 from utils.executors import start_background_task
@@ -34,6 +34,35 @@ class OAuthUrlResponse(BaseModel):
     success: bool
     auth_url: Optional[str] = None
     error: Optional[str] = None
+
+
+class XConnectionStatusResponse(BaseModel):
+    """X integration connection status for the current user."""
+
+    success: bool = Field(description='Whether the request succeeded.')
+    connected: bool = Field(description='Whether the user has connected their X account.')
+    handle: Optional[str] = Field(default=None, description='X handle, when connected.')
+    post_count: int = Field(default=0, description='Number of synced posts.')
+    memory_count: int = Field(default=0, description='Number of extracted memories.')
+    syncing: bool = Field(default=False, description='Whether a sync is currently in progress.')
+    last_synced_at: Optional[str] = Field(default=None, description='ISO timestamp of the last successful sync.')
+    last_sync_source: Optional[str] = Field(default=None, description='Source of the last sync (oauth|rapidapi).')
+
+
+class XSyncResponse(BaseModel):
+    """Outcome of an X posts sync."""
+
+    success: bool = Field(description='Whether the sync completed without error.')
+    source: Optional[str] = Field(default=None, description='Sync source used (oauth|rapidapi).')
+    new_posts: int = Field(default=0, description='Number of new posts stored.')
+    memories_created: int = Field(default=0, description='Number of memories extracted from new posts.')
+    error: Optional[str] = Field(default=None, description='Error code on failure (not_connected|fetch_failed).')
+
+
+class XDisconnectResponse(BaseModel):
+    """Ack for disconnecting the X integration."""
+
+    success: bool = Field(description='Whether the disconnect succeeded.')
 
 
 @router.get('/v1/x/oauth-url', response_model=OAuthUrlResponse, tags=['x'])
@@ -103,17 +132,17 @@ async def x_oauth_callback(
         return _redirect_html(f'{deep_link}?error=exchange_failed', False, 'Connection failed')
 
 
-@router.get('/v1/x/connection-status', tags=['x'])
+@router.get('/v1/x/connection-status', tags=['x'], response_model=XConnectionStatusResponse)
 def x_connection_status(uid: str = Depends(auth.get_current_user_uid)):
     return x_connector.connection_status(uid)
 
 
-@router.post('/v1/x/sync', tags=['x'])
+@router.post('/v1/x/sync', tags=['x'], response_model=XSyncResponse)
 async def x_sync(uid: str = Depends(auth.get_current_user_uid)):
     return await x_connector.sync_x_for_user(uid)
 
 
-@router.post('/v1/x/disconnect', tags=['x'])
+@router.post('/v1/x/disconnect', tags=['x'], response_model=XDisconnectResponse)
 def x_disconnect(uid: str = Depends(auth.get_current_user_uid)):
     x_connector.disconnect(uid)
     return {'success': True}
