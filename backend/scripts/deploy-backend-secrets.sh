@@ -111,20 +111,24 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-helm -n "$NAMESPACE" upgrade --install "${HELM_ARGS[@]}"
+helm -n "$NAMESPACE" upgrade --install --create-namespace "${HELM_ARGS[@]}"
 force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 kubectl -n "$NAMESPACE" annotate externalsecret \
   "$EXTERNAL_SECRET_NAME" \
   force-sync="${force_sync_at}" --overwrite
 if [[ "$WAIT_EXTERNAL_SECRET" == "true" ]]; then
-  if python3 backend/scripts/wait_external_secret_refresh.py \
+  wait_status=0
+  python3 backend/scripts/wait_external_secret_refresh.py \
     --namespace "$NAMESPACE" \
     --name "$EXTERNAL_SECRET_NAME" \
     --min-refresh-time "${force_sync_at}" \
-    --timeout-seconds "$EXTERNAL_SECRET_WAIT_TIMEOUT_SECONDS"; then
+    --timeout-seconds "$EXTERNAL_SECRET_WAIT_TIMEOUT_SECONDS" || wait_status=$?
+  if [[ "$wait_status" -eq 0 ]]; then
     verify_target_secret_keys
-  else
+  elif [[ "$wait_status" -eq 2 ]]; then
     echo "WARNING: ExternalSecret did not report a fresh refresh before timeout; verifying current target secret keys." >&2
     verify_target_secret_keys
+  else
+    exit "$wait_status"
   fi
 fi
