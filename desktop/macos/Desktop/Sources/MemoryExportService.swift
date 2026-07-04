@@ -174,6 +174,15 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     self == .agents
   }
 
+  var hasLocallyVerifiableLiveSetup: Bool {
+    switch self {
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return true
+    case .notion, .obsidian, .chatgpt, .claude, .gemini:
+      return false
+    }
+  }
+
   /// Whether this destination offers the classic copy/paste memory-pack export.
   var supportsMemoryPack: Bool {
     switch self {
@@ -263,11 +272,10 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         copyTitle: nil,
         copyText: nil,
         steps: [
-          "Open ChatGPT → Settings → Apps → Advanced, enable Developer mode",
-          "Create app → name it “Omi Memory” and paste the server URL below",
-          "Authentication: OAuth. In Advanced OAuth settings set Client ID “\(cloudOAuthClientID ?? "")”, leave Client Secret blank, and set token auth method “\(cloudTokenAuthMethod ?? "none")”",
-          "Auth URL: \(Self.mcpAuthorizeURL) · Token URL: \(Self.mcpTokenURL)",
-          "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
+          "Open ChatGPT → Settings → Apps → Advanced, then enable Developer mode",
+          "Click Create app, then fill the first visible fields: Name “Omi Memory”, Connection / server URL, and Authentication OAuth",
+          "Paste OAuth Client ID “\(cloudOAuthClientID ?? "")”, leave Client Secret blank, set token auth method “\(cloudTokenAuthMethod ?? "none")”, Auth URL, and Token URL",
+          "Click Create app, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
         ],
         openURL: URL(string: "https://chatgpt.com/#settings/Connectors"),
         openTitle: "Open ChatGPT"
@@ -543,34 +551,64 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   /// Field-by-field payload for assisted cloud setup — rendered as copy rows on
   /// the on-screen guidance card so the user transfers one value at a time.
   func assistedSetupFields(key: String) -> [CloudConnectorCopyField]? {
+    assistedSetupSections(key: key).map(CloudConnectorCopySection.flattenedFields)
+  }
+
+  /// Sectioned field payload for assisted cloud setup. Use sections when the
+  /// provider form hides some fields behind an advanced disclosure.
+  func assistedSetupSections(key: String) -> [CloudConnectorCopySection]? {
     guard let setup = mcpSetup(key: key) else { return nil }
     switch self {
     case .claude:
       // Public OAuth client: match the manual setup copy and native automation.
       // Claude may render a secret field, but the backend expects it to stay blank.
       return [
-        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
-        CloudConnectorCopyField(
-          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
-        CloudConnectorCopyField(
-          id: "oauth_client_id", label: "OAuth Client ID", value: cloudOAuthClientID ?? ""),
-        CloudConnectorCopyField(
-          id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+        CloudConnectorCopySection(
+          id: "main_fields",
+          title: "Main fields",
+          fields: [
+            CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+            CloudConnectorCopyField(
+              id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+          ]),
+        CloudConnectorCopySection(
+          id: "advanced_settings",
+          title: "Advanced settings",
+          fields: [
+            CloudConnectorCopyField(
+              id: "oauth_client_id", label: "OAuth Client ID", value: cloudOAuthClientID ?? ""),
+            CloudConnectorCopyField(
+              id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+          ]),
       ]
     case .chatgpt:
       // Public PKCE client: the backend rejects token requests that carry a
       // client secret, so the form's Client Secret field must stay empty.
       return [
-        CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
-        CloudConnectorCopyField(
-          id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
-        CloudConnectorCopyField(id: "authentication", label: "Authentication", value: "OAuth"),
-        CloudConnectorCopyField(
-          id: "oauth_client_id", label: "OAuth Client ID", value: Self.chatgptOAuthClientID),
-        CloudConnectorCopyField(
-          id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
-        CloudConnectorCopyField(id: "auth_url", label: "Auth URL", value: Self.mcpAuthorizeURL),
-        CloudConnectorCopyField(id: "token_url", label: "Token URL", value: Self.mcpTokenURL),
+        CloudConnectorCopySection(
+          id: "visible_fields",
+          title: "Main fields",
+          fields: [
+            CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+            CloudConnectorCopyField(
+              id: "server_url", label: "Connection / server URL", value: setup.serverURL),
+            CloudConnectorCopyField(id: "authentication", label: "Authentication", value: "OAuth"),
+          ]),
+        CloudConnectorCopySection(
+          id: "advanced_oauth_settings",
+          title: "Advanced OAuth settings",
+          fields: [
+            CloudConnectorCopyField(
+              id: "oauth_client_id", label: "OAuth Client ID", value: Self.chatgptOAuthClientID),
+            CloudConnectorCopyField(
+              id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+            CloudConnectorCopyField(
+              id: "token_auth_method", label: "Token auth method", value: cloudTokenAuthMethod ?? "none",
+              masksValue: false),
+            CloudConnectorCopyField(id: "auth_url", label: "Auth URL", value: Self.mcpAuthorizeURL),
+            CloudConnectorCopyField(
+              id: "token_url", label: "Token URL", value: Self.mcpTokenURL, masksValue: false),
+          ]),
       ]
     default:
       return nil
@@ -588,7 +626,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt:
       return (
         "Finish in ChatGPT",
-        "Turn on Developer mode in Settings → Apps, then copy each value into the connector form."
+        "In Settings → Apps → Advanced, enable Developer mode. Then click Create app and fill the fields below."
       )
     default:
       return nil
@@ -713,11 +751,28 @@ enum MemoryExportError: LocalizedError {
 actor MemoryExportService {
   static let shared = MemoryExportService()
 
+  private static let authUserIDDefaultsKey = "auth_userId"
+  private static let mcpKeyDefaultsKey = "memoryExportMCPApiKey"
+  private static let mcpKeyOwnerDefaultsKey = "memoryExportMCPApiKeyOwnerUserId"
+  private static let mcpKeyCreatedAtDefaultsKey = "memoryExportMCPApiKeyCreatedAt"
+
   private let defaults = UserDefaults.standard
   private let notionVersion = "2026-03-11"
   private let notionBaseURL = URL(string: "https://api.notion.com/v1")!
+  private var mcpKeyWarmTask: (ownerUserId: String, id: UUID, task: Task<String, Error>)?
 
   func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
+    let currentMCPKey = storedMCPKey()
+    let localConnections: Set<MemoryExportDestination> = destination.supportsMCP
+      ? MemoryExportConnectionDetector.scanLocalMCPConnections(for: destination, matchingKey: currentMCPKey)
+      : []
+    return status(for: destination, localMCPConnections: localConnections)
+  }
+
+  private func status(
+    for destination: MemoryExportDestination,
+    localMCPConnections: Set<MemoryExportDestination>
+  ) -> MemoryExportStatus {
     let exportedCount = max(defaults.integer(forKey: destination.exportedCountKey), 0)
 
     let lastExportedAt: Date?
@@ -729,10 +784,17 @@ actor MemoryExportService {
     }
 
     let detailText = defaults.string(forKey: destination.detailKey)
-    let hasConnection =
-      exportedCount > 0
-      || defaults.double(forKey: destination.connectedAtKey) > 0
-      || MemoryExportConnectionDetector.hasExistingConnection(for: destination)
+    let hasLocalMCPConnection = localMCPConnections.contains(destination)
+    let hasConnectedTimestamp = defaults.double(forKey: destination.connectedAtKey) > 0
+    let hasConnection: Bool
+    switch destination {
+    case .claudeCode, .codex, .openclaw, .hermes:
+      hasConnection = hasLocalMCPConnection
+    case .claude:
+      hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
+    case .chatgpt, .notion, .obsidian, .gemini, .agents:
+      hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
+    }
     let isConfigured: Bool
     switch destination {
     case .obsidian:
@@ -742,7 +804,7 @@ actor MemoryExportService {
         hasStoredMCPKey && LocalAgentAPISettings.isEnabled
         && LocalAgentAPISettings.storedToken() != nil
     case .claudeCode, .codex, .openclaw, .hermes:
-      isConfigured = hasStoredMCPKey
+      isConfigured = hasConnection
     case .chatgpt, .claude:
       isConfigured = hasConnection
     case .notion, .gemini:
@@ -759,9 +821,10 @@ actor MemoryExportService {
   }
 
   func allStatuses() -> [MemoryExportDestination: MemoryExportStatus] {
-    Dictionary(
+    let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(matchingKey: storedMCPKey())
+    return Dictionary(
       uniqueKeysWithValues: MemoryExportDestination.allCases.map { destination in
-        (destination, status(for: destination))
+        (destination, status(for: destination, localMCPConnections: localConnections))
       })
   }
 
@@ -778,15 +841,27 @@ actor MemoryExportService {
 
   // MARK: - MCP key
 
-  private var mcpKeyDefaultsKey: String { "memoryExportMCPApiKey" }
-
   nonisolated var hasStoredMCPKey: Bool {
-    !(UserDefaults.standard.string(forKey: "memoryExportMCPApiKey") ?? "").isEmpty
+    let defaults = UserDefaults.standard
+    guard
+      let userId = Self.normalizedDefaultsString(defaults.string(forKey: Self.authUserIDDefaultsKey)),
+      let ownerUserId = Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyOwnerDefaultsKey)),
+      ownerUserId == userId
+    else {
+      return false
+    }
+    return Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyDefaultsKey)) != nil
   }
 
   func storedMCPKey() -> String? {
-    let value = defaults.string(forKey: mcpKeyDefaultsKey) ?? ""
-    return value.isEmpty ? nil : value
+    guard
+      let userId = currentAuthUserId(),
+      let ownerUserId = Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyOwnerDefaultsKey)),
+      ownerUserId == userId
+    else {
+      return nil
+    }
+    return Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyDefaultsKey))
   }
 
   /// Returns the cached MCP key, minting a fresh one via the backend on first use.
@@ -794,14 +869,100 @@ actor MemoryExportService {
     if let existing = storedMCPKey() {
       return existing
     }
-    return try await createNewMCPKey()
+    let ownerUserId = try requireCurrentAuthUserId()
+    if let inFlight = mcpKeyWarmTask {
+      if inFlight.ownerUserId == ownerUserId {
+        return try await finishMCPKeyTask(inFlight.task, id: inFlight.id, ownerUserId: ownerUserId)
+      }
+      inFlight.task.cancel()
+      mcpKeyWarmTask = nil
+    }
+
+    let task = Task<String, Error> {
+      try await APIClient.shared.createMCPKey(name: "Omi Desktop")
+    }
+    let id = UUID()
+    mcpKeyWarmTask = (ownerUserId, id, task)
+    return try await finishMCPKeyTask(task, id: id, ownerUserId: ownerUserId)
+  }
+
+  /// Returns the key for a user-triggered local connector setup. Uses an
+  /// existing cached key or in-flight warmup first, and mints only when warmup
+  /// did not prepare a key in time.
+  func mcpKeyForLocalConnectorSetup() async throws -> String {
+    if let existing = storedMCPKey() {
+      return existing
+    }
+    let ownerUserId = try requireCurrentAuthUserId()
+    if let inFlight = mcpKeyWarmTask, inFlight.ownerUserId == ownerUserId {
+      return try await finishMCPKeyTask(inFlight.task, id: inFlight.id, ownerUserId: ownerUserId)
+    }
+    return try await ensureMCPKey()
+  }
+
+  func warmMCPKeyForCurrentUser() async {
+    do {
+      _ = try await ensureMCPKey()
+      log("MemoryExportService: hosted MCP key ready for current user")
+    } catch {
+      log("MemoryExportService: hosted MCP key warmup failed: \(error.localizedDescription)")
+    }
   }
 
   /// Mint a fresh hosted MCP key and make future setup prompts use it.
   func createNewMCPKey() async throws -> String {
+    let ownerUserId = try requireCurrentAuthUserId()
+    mcpKeyWarmTask?.task.cancel()
+    mcpKeyWarmTask = nil
     let key = try await APIClient.shared.createMCPKey(name: "Omi Desktop")
-    defaults.set(key, forKey: mcpKeyDefaultsKey)
+    storeMCPKey(key, ownerUserId: ownerUserId)
     return key
+  }
+
+  private func finishMCPKeyTask(
+    _ task: Task<String, Error>,
+    id: UUID,
+    ownerUserId: String
+  ) async throws -> String {
+    do {
+      let key = try await task.value
+      guard currentAuthUserId() == ownerUserId else {
+        throw MemoryExportError.requestFailed(
+          "Signed-in Omi account changed while preparing the connection key.")
+      }
+      storeMCPKey(key, ownerUserId: ownerUserId)
+      if mcpKeyWarmTask?.id == id {
+        mcpKeyWarmTask = nil
+      }
+      return key
+    } catch {
+      if mcpKeyWarmTask?.id == id {
+        mcpKeyWarmTask = nil
+      }
+      throw error
+    }
+  }
+
+  private func storeMCPKey(_ key: String, ownerUserId: String) {
+    defaults.set(key, forKey: Self.mcpKeyDefaultsKey)
+    defaults.set(ownerUserId, forKey: Self.mcpKeyOwnerDefaultsKey)
+    defaults.set(Date().timeIntervalSince1970, forKey: Self.mcpKeyCreatedAtDefaultsKey)
+  }
+
+  private func requireCurrentAuthUserId() throws -> String {
+    guard let userId = currentAuthUserId() else {
+      throw MemoryExportError.requestFailed("Sign in to Omi before creating a connection key.")
+    }
+    return userId
+  }
+
+  private func currentAuthUserId() -> String? {
+    Self.normalizedDefaultsString(defaults.string(forKey: Self.authUserIDDefaultsKey))
+  }
+
+  private nonisolated static func normalizedDefaultsString(_ value: String?) -> String? {
+    let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   func testAgentConnections(hostedKey: String, localToken: String) async throws

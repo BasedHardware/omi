@@ -220,6 +220,14 @@ struct DashboardPage: View {
     @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
+    @State private var selectedCatalogApp: OmiApp?
+    @State private var selectedImportConnector: ImportConnector?
+    @State private var selectedExportDestination: MemoryExportDestination?
+    @State private var isShowingAppsPopup = false
+    @State private var appsPopupAcceptsInput = false
+    @State private var homeConnectSheetAcceptsInput = false
+    @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
+    @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
     @State private var screenshotCount: Int?
     // True totals for the "What omi knows" tiles. Without these the tiles showed
@@ -232,6 +240,7 @@ struct DashboardPage: View {
     @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
         forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
     @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
+    @State private var lastHomeStatusRefreshAt = Date.distantPast
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -279,6 +288,52 @@ struct DashboardPage: View {
     }
 
     private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+    private static let homeStageMaxWidth: CGFloat = 1120
+    private static let homeStageHorizontalPadding: CGFloat = 34
+    private static let appsPopupMaxWidth: CGFloat = 1040
+    private static let appsPopupMaxHeight: CGFloat = 600
+    private static let appsPopupMinWidth: CGFloat = 360
+    private static let appsPopupMinHeight: CGFloat = 360
+    private static let appsPopupHorizontalMargin: CGFloat = 48
+    private static let appsPopupVerticalMargin: CGFloat = 32
+    private static let appsPopupCornerRadius: CGFloat = 22
+    private static let homeConnectSheetHorizontalMargin: CGFloat = 56
+    private static let homeConnectSheetVerticalMargin: CGFloat = 44
+    private static let homeConnectSheetMinWidth: CGFloat = 360
+    private static let homeConnectSheetMinHeight: CGFloat = 360
+    private static let homeConnectSheetCornerRadius: CGFloat = 24
+    private static let appDetailSheetPreferredSize = CGSize(width: 500, height: 600)
+    private static let importConnectorSheetPreferredSize = CGSize(width: 520, height: 500)
+    private static let exportDestinationSheetPreferredSize = CGSize(width: 520, height: 560)
+
+    private var homeConnectSheetIsPresented: Bool {
+        selectedCatalogApp != nil || selectedImportConnector != nil || selectedExportDestination != nil
+    }
+
+    private var isHomeModalPresented: Bool {
+        isShowingAppsPopup || homeConnectSheetIsPresented
+    }
+
+    private var legacySelectedCatalogApp: Binding<OmiApp?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedCatalogApp : nil },
+            set: { selectedCatalogApp = $0 }
+        )
+    }
+
+    private var legacySelectedImportConnector: Binding<ImportConnector?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedImportConnector : nil },
+            set: { selectedImportConnector = $0 }
+        )
+    }
+
+    private var legacySelectedExportDestination: Binding<MemoryExportDestination?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedExportDestination : nil },
+            set: { selectedExportDestination = $0 }
+        )
+    }
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
@@ -321,6 +376,34 @@ struct DashboardPage: View {
             )
             .frame(minWidth: 500, minHeight: 500)
         }
+        .dismissableSheet(item: legacySelectedCatalogApp) { app in
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedCatalogApp = nil })
+                .frame(width: 500, height: 650)
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
+        }
+        .dismissableSheet(item: legacySelectedImportConnector) { connector in
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: importConnectorStatusStore,
+                onDismiss: {
+                    selectedImportConnector = nil
+                }
+            )
+            .frame(width: 520, height: 620)
+        }
+        .dismissableSheet(item: legacySelectedExportDestination) { destination in
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $memoryExportStatuses,
+                onDismiss: {
+                    selectedExportDestination = nil
+                }
+            )
+            .frame(width: 520, height: 620)
+        }
         .overlay {
             if isLoadingCitation {
                 ZStack {
@@ -342,19 +425,13 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
-            Task { await importConnectorStatusStore.refresh() }
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses() }
+            Task { await refreshHomeStatusData(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
-            Task { await importConnectorStatusStore.refresh() }
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses() }
+            Task { await refreshHomeStatusData(force: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -448,22 +525,222 @@ struct DashboardPage: View {
         GeometryReader { proxy in
             let panelHeight = min(max(proxy.size.height - 132, CGFloat(440)), CGFloat(640))
             let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
+            let panelWidth = min(
+                Self.homeStageMaxWidth,
+                max(CGFloat(0), proxy.size.width - (Self.homeStageHorizontalPadding * 2))
+            )
 
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
                 homeRoutingStage
-                    .frame(maxWidth: 1120)
-                    .padding(.horizontal, 34)
+                    .frame(maxWidth: Self.homeStageMaxWidth)
+                    .padding(.horizontal, Self.homeStageHorizontalPadding)
                     .frame(width: proxy.size.width)
                     .frame(height: panelHeight)
                     .position(x: proxy.size.width / 2, y: panelTop + panelHeight / 2)
+                    // The popup/sheet overlays are modal: while one is up, the
+                    // stage underneath must not be reachable by VoiceOver /
+                    // Full Keyboard Access.
+                    .accessibilityHidden(isHomeModalPresented)
 
                 homeHeader
-                    .padding(.horizontal, 34)
+                    .padding(.horizontal, Self.homeStageHorizontalPadding)
                     .padding(.top, 26)
+                    .accessibilityHidden(isHomeModalPresented)
+
+                appsPopupOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
+
+                homeConnectSheetOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
+            }
+            .animation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
+            .animation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
+        }
+    }
+
+    @ViewBuilder
+    private func appsPopupOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        ZStack {
+            if isShowingAppsPopup {
+                Color.black.opacity(0.16)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissAppsPopup()
+                    }
+                    .transition(.opacity)
+                    .zIndex(2)
+
+                let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+                AppsPage(
+                    appProvider: appProvider,
+                    appState: appState,
+                    initialSection: appsPopupInitialSection,
+                    onDismiss: {
+                        dismissAppsPopup()
+                    },
+                    onSelectApp: { app in
+                        openAppFromAppsPopup(app)
+                    },
+                    onSelectConnector: { connector in
+                        openImportConnectorFromAppsPopup(connector)
+                    },
+                    onSelectDestination: { destination in
+                        openExportDestinationFromAppsPopup(destination)
+                    }
+                )
+                .id(appsPopupPresentationID)
+                .frame(width: popupSize.width, height: popupSize.height)
+                .background(OmiColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
+                        .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
+                .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
+                .accessibilityAddTraits(.isModal)
+                .zIndex(3)
+
+                // Only the topmost modal owns Esc; the connect sheet takes over
+                // while it is presented (including the brief crossfade overlap).
+                if appsPopupAcceptsInput && !homeConnectSheetIsPresented {
+                    OverlayModalEscapeCatcher {
+                        dismissAppsPopup()
+                    }
+                    .zIndex(3)
+                }
             }
         }
+        .allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)
+        .zIndex(2)
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        ZStack {
+            if homeConnectSheetIsPresented {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissHomeConnectSheet()
+                    }
+                    .transition(.opacity)
+                    .zIndex(4)
+
+                let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+                homeConnectSheetContent()
+                    .frame(width: sheetSize.width, height: sheetSize.height)
+                    .background(OmiColors.backgroundPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
+                            .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
+                    .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .accessibilityAddTraits(.isModal)
+                    .zIndex(5)
+
+                if homeConnectSheetAcceptsInput {
+                    OverlayModalEscapeCatcher {
+                        dismissHomeConnectSheet()
+                    }
+                    .zIndex(5)
+                }
+            }
+        }
+        .allowsHitTesting(homeConnectSheetAcceptsInput)
+        .zIndex(4)
+    }
+
+    private func homeConnectSheetSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        let preferred = homeConnectSheetPreferredSize
+        return CGSize(
+            width: min(
+                preferred.width,
+                max(Self.homeConnectSheetMinWidth, panelWidth - (Self.homeConnectSheetHorizontalMargin * 2))
+            ),
+            height: min(
+                preferred.height,
+                max(Self.homeConnectSheetMinHeight, panelHeight - (Self.homeConnectSheetVerticalMargin * 2))
+            )
+        )
+    }
+
+    private var homeConnectSheetPreferredSize: CGSize {
+        if selectedCatalogApp != nil {
+            return Self.appDetailSheetPreferredSize
+        }
+        if selectedImportConnector != nil {
+            return Self.importConnectorSheetPreferredSize
+        }
+        return Self.exportDestinationSheetPreferredSize
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetContent() -> some View {
+        if let app = selectedCatalogApp {
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { dismissHomeConnectSheet() })
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
+        } else if let connector = selectedImportConnector {
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: importConnectorStatusStore,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
+        } else if let destination = selectedExportDestination {
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $memoryExportStatuses,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
+        }
+    }
+
+    private func appsPopupSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        CGSize(
+            width: min(
+                Self.appsPopupMaxWidth,
+                max(Self.appsPopupMinWidth, panelWidth - (Self.appsPopupHorizontalMargin * 2))
+            ),
+            height: min(
+                Self.appsPopupMaxHeight,
+                max(Self.appsPopupMinHeight, panelHeight - (Self.appsPopupVerticalMargin * 2))
+            )
+        )
     }
 
     private var homeHeader: some View {
@@ -590,7 +867,7 @@ struct DashboardPage: View {
                 openOmiDeviceWebsite()
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup(initialSection: .imports)
             }
         }
     }
@@ -625,7 +902,7 @@ struct DashboardPage: View {
                 openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup(initialSection: .exports)
             }
         }
     }
@@ -696,30 +973,73 @@ struct DashboardPage: View {
         AnalyticsManager.shared.tabChanged(tabName: item.title)
     }
 
-    private func openAppsPage() {
-        navigate(to: .apps)
+    private func openAppsPopup(initialSection: AppsCatalogInitialSection) {
+        // Filters left behind by earlier catalog visits (a category, a search,
+        // "Installed") would otherwise replace the Imports/Exports sections
+        // this popup exists to show.
+        appProvider.clearFilters()
+        appsPopupInitialSection = initialSection
+        appsPopupPresentationID = UUID()
+        appsPopupAcceptsInput = true
+        isShowingAppsPopup = true
+    }
+
+    private func dismissAppsPopup() {
+        appsPopupAcceptsInput = false
+        isShowingAppsPopup = false
+    }
+
+    private func openAppFromAppsPopup(_ app: OmiApp) {
+        dismissAppsPopup()
+        presentCatalogApp(app)
+    }
+
+    private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
+        dismissAppsPopup()
+        presentImportConnector(connector)
+    }
+
+    private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
+        dismissAppsPopup()
+        presentExportDestination(destination)
     }
 
     private func openImportConnector(_ connectorID: String) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenImportRequested,
-                object: nil,
-                userInfo: ["connector": connectorID]
-            )
+        if let connector = ImportConnector.all.first(where: { $0.id == connectorID }) {
+            presentImportConnector(connector)
         }
     }
 
     private func openExportDestination(_ destination: MemoryExportDestination) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenExportRequested,
-                object: nil,
-                userInfo: ["destination": destination.rawValue]
-            )
-        }
+        presentExportDestination(destination)
+    }
+
+    private func presentCatalogApp(_ app: OmiApp) {
+        homeConnectSheetAcceptsInput = true
+        selectedImportConnector = nil
+        selectedExportDestination = nil
+        selectedCatalogApp = app
+    }
+
+    private func presentImportConnector(_ connector: ImportConnector) {
+        homeConnectSheetAcceptsInput = true
+        selectedCatalogApp = nil
+        selectedExportDestination = nil
+        selectedImportConnector = connector
+    }
+
+    private func presentExportDestination(_ destination: MemoryExportDestination) {
+        homeConnectSheetAcceptsInput = true
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
+        selectedExportDestination = destination
+    }
+
+    private func dismissHomeConnectSheet() {
+        homeConnectSheetAcceptsInput = false
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
+        selectedExportDestination = nil
     }
 
     private func openReferFriend() {
@@ -830,6 +1150,32 @@ struct DashboardPage: View {
         }
     }
 
+    /// Refreshes Home-only status tiles and connector rows. Forced loads run
+    /// when the Home view is recreated; activation-triggered loads share the
+    /// app-wide cooldown so Cmd-Tab bursts do not rescan configs or hit count
+    /// endpoints repeatedly while Home is still mounted.
+    private func refreshHomeStatusData(force: Bool) async {
+        let shouldRefresh = await MainActor.run {
+            let now = Date()
+            if !force,
+               !PollingConfig.shouldAllowActivationRefresh(
+                   now: now,
+                   lastRefresh: lastHomeStatusRefreshAt
+               ) {
+                return false
+            }
+            lastHomeStatusRefreshAt = now
+            return true
+        }
+        guard shouldRefresh else { return }
+
+        async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()
+        async let screenshots: Void = loadScreenshotCount()
+        async let knowledgeCounts: Void = loadKnowledgeCounts()
+        async let exportStatuses: Void = loadMemoryExportStatuses()
+        _ = await (importConnectorStatuses, screenshots, knowledgeCounts, exportStatuses)
+    }
+
     private func loadMemoryExportStatuses() async {
         let statuses = await MemoryExportService.shared.allStatuses()
         await MainActor.run {
@@ -846,7 +1192,8 @@ struct DashboardPage: View {
         // Open tasks only (matches the "Tasks" label and the old tile's intent —
         // the old value just under-counted, capping each bucket at a 7-day window).
         async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        async let deviceHistory = try? APIClient.shared.hasOmiDeviceConversations()
+        let shouldLoadDeviceHistory = await MainActor.run { !accountHasOmiDeviceConversations }
+        async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil
         let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
         await MainActor.run {
             if let c { conversationCount = c }
@@ -859,6 +1206,10 @@ struct DashboardPage: View {
                 UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
             }
         }
+    }
+
+    private func loadOmiDeviceHistory() async -> Bool? {
+        try? await APIClient.shared.hasOmiDeviceConversations()
     }
 
     private func formattedCount(_ count: Int) -> String {

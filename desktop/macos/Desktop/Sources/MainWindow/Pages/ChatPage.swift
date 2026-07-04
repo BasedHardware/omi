@@ -538,6 +538,7 @@ struct ChatBubble: View {
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
+  @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
   /// Cached grouped content blocks — pre-computed on init to avoid recreating
   /// `[ContentBlockGroup]` on every SwiftUI layout pass.
@@ -767,6 +768,10 @@ struct ChatBubble: View {
         copyButton
       }
 
+      if includeCopyButton, message.metadata != nil {
+        infoButton
+      }
+
       Text(message.createdAt, format: .dateTime.hour().minute())
         .scaledFont(size: 10, weight: .medium)
         .foregroundColor(OmiColors.textTertiary)
@@ -848,6 +853,25 @@ struct ChatBubble: View {
     }
     .buttonStyle(.plain)
     .help("Copy message")
+  }
+
+  /// Response Context popover — same developer info the floating bar shows
+  /// (model, screenshot, prompt context counts, tools). Only fresh responses
+  /// carry metadata; it is in-memory only and not persisted across restarts.
+  @ViewBuilder
+  private var infoButton: some View {
+    Button(action: { showInfoPopover.toggle() }) {
+      Image(systemName: "info.circle")
+        .scaledFont(size: 11)
+        .foregroundColor(showInfoPopover ? OmiColors.textPrimary : OmiColors.textTertiary)
+    }
+    .buttonStyle(.plain)
+    .help("View response context")
+    .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+      if let metadata = message.metadata {
+        MessageMetadataPopover(metadata: metadata)
+      }
+    }
   }
 }
 

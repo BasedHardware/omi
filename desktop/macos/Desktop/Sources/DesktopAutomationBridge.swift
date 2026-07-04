@@ -419,6 +419,23 @@ final class DesktopAutomationActionRegistry {
       return ["sent": query]
     }
 
+    // Send a message through the real main-window chat pipeline (ChatPage),
+    // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
+    // or keyboard input, so it never touches the user's actual cursor.
+    register(
+      name: "ask_main_chat",
+      summary: "Send a query to the main-window chat (typed path); exercises the full chat pipeline",
+      params: ["query"]
+    ) { params in
+      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      _ = await provider.sendMessage(query)
+      return ["sent": query]
+    }
+
     register(
       name: "memories_qa_export",
       summary: "Export memory counts by tier from the live API (local QA automation)",

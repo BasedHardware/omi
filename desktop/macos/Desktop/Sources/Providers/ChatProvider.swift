@@ -791,6 +791,12 @@ enum ChatSystemPromptStyle {
 @MainActor
 class ChatProvider: ObservableObject {
 
+    /// Weak reference to the app-root main-window instance (set by
+    /// ViewModelContainer.init()), so the local automation bridge can drive
+    /// the real main chat surface in-process — no synthetic mouse/keyboard
+    /// input, so it never touches the user's actual cursor.
+    static weak var mainInstance: ChatProvider?
+
     // MARK: - Floating Bar System Prompt Prefix
     /// Static prefix injected at the top of the system prompt for floating bar sessions.
     /// Defined here so it can be referenced both at warmup time and at query time.
