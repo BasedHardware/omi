@@ -611,6 +611,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     }
 
+    if CommitmentService.isAnalysisEnabled {
+      Task.detached(priority: .utility) {
+        await CommitmentService.shared.scanPastConversations()
+        await CommitmentService.shared.checkOverdueCommitments()
+      }
+    }
+
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 

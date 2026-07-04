@@ -1106,6 +1106,8 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
+      case 11:
+        CommitmentsPage()
       case 12:
         HelpPage()
       default:

@@ -143,6 +143,7 @@ actor ConversationFinalizationService {
     )
     if completed {
       log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
+      Task { await CommitmentService.shared.processFinalizedSession(sessionId: sessionId) }
     }
   }
 
@@ -207,6 +208,7 @@ actor ConversationFinalizationService {
           conversationStatus: status
         )
         log("ConversationFinalization: Finalized cloud session \(sessionId) by backend id \(conversation.id)")
+        Task { await CommitmentService.shared.processFinalizedSession(sessionId: sessionId) }
         return
       }
       throw TranscriptionStorageError.invalidState("Bound backend conversation is not completed")
@@ -303,6 +305,7 @@ actor ConversationFinalizationService {
       conversationStatus: status
     )
     log("ConversationFinalization: Reconciled cloud session \(sessionId) by timestamp \(conversation.id)")
+    Task { await CommitmentService.shared.processFinalizedSession(sessionId: sessionId) }
     return true
   }
 
@@ -386,6 +389,7 @@ actor ConversationFinalizationService {
       conversationStatus: status
     )
     log("ConversationFinalization: Reconciled cloud session \(sessionId) by conversation id \(conversation.id)")
+    Task { await CommitmentService.shared.processFinalizedSession(sessionId: sessionId) }
     return true
   }
 
