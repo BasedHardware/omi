@@ -12,6 +12,7 @@ HARNESS_DIR="$MACOS_DIR/.harness/bundle-size"
 REPORT_PATH="$HARNESS_DIR/latest.txt"
 JSON_PATH="$HARNESS_DIR/latest.json"
 LOG_PATH="$HARNESS_DIR/run.log"
+BUILD_TIMEOUT_SECONDS="${OMI_BUNDLE_SIZE_BUILD_TIMEOUT_SECONDS:-600}"
 RUN_PID=""
 
 usage() {
@@ -25,6 +26,8 @@ Environment:
   OMI_BUNDLE_SIZE_APP_NAME   Named app bundle to build (default: omi-bundle-size)
   OMI_BUNDLE_SIZE_NO_ADHOC   Set to 1 to require a real signing identity
   OMI_BUNDLE_SIZE_KEEP_APP   Set to 1 to leave the launched named app running
+  OMI_BUNDLE_SIZE_BUILD_TIMEOUT_SECONDS
+                             Seconds to wait for build + launch (default: 600)
 USAGE
 }
 
@@ -47,6 +50,10 @@ if [[ "$APP_NAME" != omi-* ]]; then
   echo "ERROR: OMI_BUNDLE_SIZE_APP_NAME must start with omi- (got: $APP_NAME)" >&2
   exit 2
 fi
+if ! [[ "$BUILD_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || ((BUILD_TIMEOUT_SECONDS < 60)); then
+  echo "ERROR: OMI_BUNDLE_SIZE_BUILD_TIMEOUT_SECONDS must be an integer >= 60 (got: $BUILD_TIMEOUT_SECONDS)" >&2
+  exit 2
+fi
 
 mkdir -p "$HARNESS_DIR"
 : > "$LOG_PATH"
@@ -56,11 +63,34 @@ cleanup() {
     kill "$RUN_PID" 2>/dev/null || true
     wait "$RUN_PID" 2>/dev/null || true
   fi
+  cleanup_stale_run_lock_if_safe
   if [[ "${OMI_BUNDLE_SIZE_KEEP_APP:-0}" != "1" ]]; then
-    pkill -f "/Applications/$APP_NAME.app/Contents/MacOS/Omi Computer" 2>/dev/null || true
+    local executable_path="/Applications/$APP_NAME.app/Contents/MacOS/Omi Computer"
+    while read -r pid command; do
+      if [[ "$pid" =~ ^[0-9]+$ && "$command" == *"$executable_path"* ]]; then
+        kill "$pid" 2>/dev/null || true
+      fi
+    done < <(ps -axo pid=,command=)
   fi
 }
 trap cleanup EXIT INT TERM
+
+cleanup_stale_run_lock_if_safe() {
+  local lock_dir="${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
+  [[ -d "$lock_dir" ]] || return 0
+
+  local other_run_sh=0
+  while read -r pid command; do
+    if [[ "$pid" =~ ^[0-9]+$ && "$command" == *"./run.sh"* ]]; then
+      other_run_sh=1
+      break
+    fi
+  done < <(ps -axo pid=,command=)
+
+  if [[ "$other_run_sh" == "0" ]]; then
+    rmdir "$lock_dir" 2>/dev/null || true
+  fi
+}
 
 run_bundle_build() {
   local ad_hoc=1
@@ -79,7 +109,7 @@ run_bundle_build() {
   ) >"$LOG_PATH" 2>&1 &
   RUN_PID="$!"
 
-  local deadline=$((SECONDS + 240))
+  local deadline=$((SECONDS + BUILD_TIMEOUT_SECONDS))
   while kill -0 "$RUN_PID" 2>/dev/null; do
     if grep -q "Press Ctrl+C to stop all services" "$LOG_PATH"; then
       return 0
@@ -90,7 +120,7 @@ run_bundle_build() {
     fi
     if (( SECONDS > deadline )); then
       tail -80 "$LOG_PATH" >&2
-      echo "ERROR: timed out waiting for bundle build" >&2
+      echo "ERROR: timed out after ${BUILD_TIMEOUT_SECONDS}s waiting for bundle build" >&2
       return 1
     fi
     sleep 2

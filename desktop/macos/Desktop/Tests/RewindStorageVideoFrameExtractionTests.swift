@@ -44,6 +44,19 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     XCTAssertGreaterThan(center.green, center.blue)
   }
 
+  func testLoadVideoFrameUsesSampleOrdinalForLowCadenceChunks() async throws {
+    let relativePath = "2026-07-04/chunk_low_cadence_frame_selection.mp4"
+    let fullPath = try await createChunk(relativePath: relativePath, colors: [.red, .green, .blue], frameRate: 1.0 / 3.0)
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: fullPath.path), "precondition: MP4 chunk written")
+
+    let frame = try await RewindStorage.shared.loadVideoFrame(videoPath: relativePath, frameOffset: 1)
+    let center = try XCTUnwrap(centerPixel(in: frame))
+
+    XCTAssertGreaterThan(center.green, center.red)
+    XCTAssertGreaterThan(center.green, center.blue)
+  }
+
   func testLoadVideoFrameReturnsNotFoundWhenFrameOffsetIsPastEnd() async throws {
     let relativePath = "2026-07-04/chunk_missing_frame.mp4"
     _ = try await createChunk(relativePath: relativePath, colors: [.red, .green, .blue], frameRate: 2.0)

@@ -22,10 +22,12 @@ Useful variants:
 OMI_BUNDLE_SIZE_APP_NAME=omi-size-probe ./scripts/bundle-size-harness.sh
 OMI_BUNDLE_SIZE_NO_ADHOC=1 ./scripts/bundle-size-harness.sh
 OMI_BUNDLE_SIZE_KEEP_APP=1 ./scripts/bundle-size-harness.sh
+OMI_BUNDLE_SIZE_BUILD_TIMEOUT_SECONDS=900 ./scripts/bundle-size-harness.sh
 ```
 
 The app name must start with `omi-`. Do not aim this harness at `Omi`,
-`Omi Beta`, or `Omi Dev`.
+`Omi Beta`, or `Omi Dev`. The build timeout covers the full `run.sh` build and
+launch wait; raise it on cold machines or when another bundle build is finishing.
 
 Before accepting a size reduction, compare `latest.json` before/after and keep
 the runtime smoke checks green. For Node dependency pruning, prefer edits in

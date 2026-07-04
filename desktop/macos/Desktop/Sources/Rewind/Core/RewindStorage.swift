@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreImage
 import Foundation
 import Sentry
 
@@ -234,43 +235,74 @@ actor RewindStorage {
             throw RewindError.storageError("AVFoundation found no video track")
         }
 
-        let frameRate = try await track.load(.nominalFrameRate)
-        guard frameRate > 0 else {
-            throw RewindError.storageError("AVFoundation found invalid frame rate: \(frameRate)")
-        }
-
-        let requestedTime = CMTime(
-            seconds: Double(frameOffset) / Double(frameRate),
-            preferredTimescale: 600
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(
+            track: track,
+            outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
         )
-        let duration = try await asset.load(.duration)
-        guard CMTimeCompare(requestedTime, duration) < 0 else {
-            throw RewindError.screenshotNotFound
+        output.alwaysCopiesSampleData = false
+
+        guard reader.canAdd(output) else {
+            throw RewindError.storageError("AVFoundation cannot add video track output")
+        }
+        reader.add(output)
+
+        guard reader.startReading() else {
+            let message = reader.error?.localizedDescription ?? "unknown error"
+            throw RewindError.storageError("AVFoundation reader failed to start: \(message)")
         }
 
-        let imageGenerator = AVAssetImageGenerator(asset: asset)
-        imageGenerator.requestedTimeToleranceBefore = .zero
-        imageGenerator.requestedTimeToleranceAfter = .zero
+        var sampleIndex = 0
+        while let sampleBuffer = output.copyNextSampleBuffer() {
+            defer { CMSampleBufferInvalidate(sampleBuffer) }
 
-        let (cgImage, actualTime) = try await imageGenerator.image(at: requestedTime)
-        guard CMTimeCompare(actualTime, requestedTime) == 0 else {
-            throw RewindError.screenshotNotFound
+            guard sampleIndex == frameOffset else {
+                sampleIndex += 1
+                continue
+            }
+
+            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                reader.cancelReading()
+                throw RewindError.storageError("AVFoundation sample had no image buffer")
+            }
+
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let context = CIContext(options: [.useSoftwareRenderer: false])
+            let rect = CGRect(
+                x: 0,
+                y: 0,
+                width: CVPixelBufferGetWidth(pixelBuffer),
+                height: CVPixelBufferGetHeight(pixelBuffer)
+            )
+            guard let cgImage = context.createCGImage(ciImage, from: rect) else {
+                reader.cancelReading()
+                throw RewindError.storageError("AVFoundation failed to render decoded frame")
+            }
+
+            let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+
+            let breadcrumb = Breadcrumb(level: .info, category: "frame_extraction")
+            breadcrumb.message = "Extracted frame from video"
+            breadcrumb.data = [
+                "video_path": videoPath,
+                "frame_offset": frameOffset,
+                "image_width": cgImage.width,
+                "image_height": cgImage.height,
+                "decoder": "AVAssetReader"
+            ]
+            SentrySDK.addBreadcrumb(breadcrumb)
+
+            return image
         }
 
-        let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        if reader.status == .failed {
+            let message = reader.error?.localizedDescription ?? "unknown error"
+            throw RewindError.storageError("AVFoundation reader failed: \(message)")
+        }
 
-        let breadcrumb = Breadcrumb(level: .info, category: "frame_extraction")
-        breadcrumb.message = "Extracted frame from video"
-        breadcrumb.data = [
-            "video_path": videoPath,
-            "frame_offset": frameOffset,
-            "image_width": cgImage.width,
-            "image_height": cgImage.height,
-            "decoder": "AVAssetImageGenerator"
-        ]
-        SentrySDK.addBreadcrumb(breadcrumb)
-
-        return image
+        throw RewindError.screenshotNotFound
     }
 
     /// Extract a frame from video using ffmpeg
