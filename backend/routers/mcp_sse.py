@@ -1433,6 +1433,18 @@ class McpSseInfoResponse(BaseModel):
     instructions: McpSseInstructionsResponse
 
 
+class McpAuthorizeConsentResponse(BaseModel):
+    redirect_uri: str
+
+
+class McpTokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+    scope: str
+
+
 def _validate_authorize_request(
     response_type: str,
     client_id: str,
@@ -1525,7 +1537,7 @@ def mcp_authorize(
     )
 
 
-@router.post("/authorize", tags=["mcp"])
+@router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
 def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
@@ -1557,7 +1569,7 @@ def mcp_authorize_consent(
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 
-@router.post("/token", tags=["mcp"])
+@router.post("/token", tags=["mcp"], response_model=McpTokenResponse)
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     try:

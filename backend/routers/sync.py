@@ -869,6 +869,8 @@ def _cleanup_files(file_paths):
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
+# response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
+# the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
 @router.post("/v1/sync-local-files", deprecated=True)
 async def sync_local_files(
     request: Request,
@@ -1650,6 +1652,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return resp
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: runs one sync job inside the request.
@@ -1736,6 +1740,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.
