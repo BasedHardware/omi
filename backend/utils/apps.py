@@ -623,7 +623,7 @@ def upsert_app_payment_link(
         app.payment_link = payment_link.url
 
     # updates
-    update_app_in_db(app.dict())
+    update_app_in_db(app.model_dump())
     return app
 
 

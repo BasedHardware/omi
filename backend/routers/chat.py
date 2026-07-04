@@ -171,7 +171,7 @@ def _build_quota_exceeded_reply(
         type='text',
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, user_msg.dict())
+    chat_db.add_message(uid, user_msg.model_dump())
 
     plan = detail.get('plan') or 'Free'
     unit = detail.get('unit')
@@ -204,8 +204,8 @@ def _build_quota_exceeded_reply(
         type='text',
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, ai_msg.dict())
-    return ResponseMessage(**ai_msg.dict(), ask_for_nps=False)
+    chat_db.add_message(uid, ai_msg.model_dump())
+    return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
 def _record_chat_quota_question_safe(
@@ -301,7 +301,7 @@ def send_message(
         message.chat_session_id = chat_session.id
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
     _record_chat_quota_question_safe(
         uid,
         idempotency_key=f'v2_messages:{message.id}',
@@ -368,7 +368,7 @@ def send_message(
             ai_message.chat_session_id = chat_session.id
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.dict())
+        chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
@@ -396,7 +396,7 @@ def send_message(
                     response = callback_data.get('answer')
                     if response:
                         ai_message, ask_for_nps = process_message(response, callback_data)
-                        ai_message_dict = ai_message.dict()
+                        ai_message_dict = ai_message.model_dump()
                         response_message = ResponseMessage(**ai_message_dict)
                         response_message.ask_for_nps = ask_for_nps
                         encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
@@ -1061,11 +1061,11 @@ def upload_file_chat(
                 thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response = [fc.model_dump() for fc in files_chat]
 
     return response
 
@@ -1119,11 +1119,11 @@ def upload_file_chat(
             thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response = [fc.model_dump() for fc in files_chat]
 
     return response
 

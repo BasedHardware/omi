@@ -1258,7 +1258,7 @@ def get_user_subscription(uid: str) -> Subscription:
     # If subscription doesn't exist for the user, create and return a default free plan.
     default_subscription = get_default_basic_subscription()
     # Strip dynamic fields before storing
-    sub_to_store = default_subscription.dict()
+    sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)

@@ -1025,7 +1025,7 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     for i, segment in enumerate(segments):
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
-        batch.set(segment_ref, segment.dict())
+        batch.set(segment_ref, segment.model_dump())
         if i >= 400:
             batch.commit()
             batch = db.batch()
@@ -1096,7 +1096,7 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
     for photo in photos:
         photo_id = photo.id or str(uuid.uuid4())
         photo_ref = photos_ref.document(photo_id)
-        data = photo.dict()
+        data = photo.model_dump()
         data['id'] = photo_id
         prepared_data = _prepare_photo_for_write(data, uid, level)
         batch.set(photo_ref, prepared_data)

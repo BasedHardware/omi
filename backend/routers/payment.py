@@ -276,7 +276,7 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
             if stripe_sub:
                 new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
                 if new_subscription:
-                    users_db.update_user_subscription(uid, new_subscription.dict())
+                    users_db.update_user_subscription(uid, new_subscription.model_dump())
                     logger.info(f"Subscription for user {uid} updated from session {session.id}.")
     except FirestoreNotFound:
         logger.warning(
@@ -310,7 +310,7 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
 
                 # Update our database
                 current_subscription.cancel_at_period_end = False
-                users_db.update_user_subscription(uid, current_subscription.dict())
+                users_db.update_user_subscription(uid, current_subscription.model_dump())
 
                 # Calculate next billing date
                 next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end'], tz=timezone.utc).strftime(
@@ -659,7 +659,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             # Update our database immediately
             new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
             if new_subscription:
-                users_db.update_user_subscription(uid, new_subscription.dict())
+                users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
                 clear_trial_paywall_cache(uid)
                 if is_paid_plan(new_subscription.plan):
@@ -673,7 +673,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             return {
                 "status": "success",
                 "message": f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now.",
-                "subscription": new_subscription.dict() if new_subscription else current_subscription.dict(),
+                "subscription": (
+                    new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
+                ),
                 "days_remaining": 0,
                 "schedule_id": None,
             }
@@ -716,7 +718,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         return {
             "status": "success",
             "message": f"Upgrade scheduled! Your monthly plan continues for {remaining_days} more days, then automatically switches to annual.",
-            "subscription": current_subscription.dict(),
+            "subscription": current_subscription.model_dump(),
             "days_remaining": remaining_days,
             "schedule_id": schedule.id,
         }
@@ -782,7 +784,7 @@ def cancel_subscription_endpoint(
 
             # Update our database to reflect the scheduled cancellation
             subscription.cancel_at_period_end = True
-            users_db.update_user_subscription(uid, subscription.dict())
+            users_db.update_user_subscription(uid, subscription.model_dump())
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
         else:
@@ -792,7 +794,7 @@ def cancel_subscription_endpoint(
                 raise HTTPException(status_code=500, detail="Could not cancel subscription with Stripe.")
 
             subscription.cancel_at_period_end = updated_sub.cancel_at_period_end
-            users_db.update_user_subscription(uid, subscription.dict())
+            users_db.update_user_subscription(uid, subscription.model_dump())
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
 
@@ -1006,7 +1008,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
                         await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                         await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
-                    await run_blocking(db_executor, users_db.update_user_subscription, uid, new_subscription.dict())
+                    await run_blocking(
+                        db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                    )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
@@ -1052,7 +1056,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             )
                         else:
                             await run_blocking(
-                                db_executor, users_db.update_user_subscription, uid, new_subscription.dict()
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
@@ -1085,7 +1089,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         else:
                             new_subscription.cancel_at_period_end = True
                             await run_blocking(
-                                db_executor, users_db.update_user_subscription, uid, new_subscription.dict()
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                             await run_blocking(db_executor, clear_trial_paywall_cache, uid)

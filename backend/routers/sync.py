@@ -707,7 +707,7 @@ def process_segment(
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
 
-            transcript_segments = [s.dict() for s in transcript_segments]
+            transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
             for segment in transcript_segments:
@@ -852,7 +852,7 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
             if not audio_files:
                 continue
-            files_payload = [af.dict() for af in audio_files]
+            files_payload = [af.model_dump() for af in audio_files]
             conversations_db.update_conversation(uid, conversation_id, {'audio_files': files_payload})
             precache_conversation_audio(uid, conversation_id, files_payload)
         except Exception as e:

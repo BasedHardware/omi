@@ -38,9 +38,9 @@ class FileChat(BaseModel):
     def is_image(self):
         return self.mime_type.startswith("image")
 
-    def dict(self, **kwargs):
+    def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
-        return super().dict(exclude=exclude_fields, **kwargs)
+        return super().model_dump(exclude=exclude_fields, **kwargs)
 
 
 class ChartDataPoint(BaseModel):

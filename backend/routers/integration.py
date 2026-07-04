@@ -399,7 +399,7 @@ def get_conversations_via_integration(
 
     # Create response with exclude_none=True
     response = integration_models.ConversationsResponse(conversations=conversation_items)
-    return response.dict(exclude_none=True)
+    return response.model_dump(exclude_none=True)
 
 
 @router.post(
@@ -528,7 +528,7 @@ def search_conversations_via_integration(
         per_page=search_results['per_page'],
     )
 
-    return response.dict(exclude_none=True)
+    return response.model_dump(exclude_none=True)
 
 
 @router.post(
@@ -718,4 +718,4 @@ def get_tasks_via_integration(
             continue
 
     response = integration_models.TasksResponse(tasks=task_items)
-    return response.dict(exclude_none=True)
+    return response.model_dump(exclude_none=True)

@@ -427,7 +427,7 @@ async def create_memories_batch(
                 )
         committed_ids: List[str] = []
         for memory_db in memory_dbs:
-            payload = memory_db.dict()
+            payload = memory_db.model_dump()
             if memory_db.manually_added:
                 payload = required_promotion_payload(payload, source_surface="v3_manual")
             committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)

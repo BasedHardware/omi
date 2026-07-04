@@ -70,8 +70,8 @@ class DailySummary(BaseModel):
     # Locations
     locations: List[LocationPin] = []
 
-    def dict(self, **kwargs):
-        data = super().dict(**kwargs)
+    def model_dump(self, **kwargs):
+        data = super().model_dump(**kwargs)
         if isinstance(data.get('created_at'), datetime):
             data['created_at'] = data['created_at'].isoformat()
         return data

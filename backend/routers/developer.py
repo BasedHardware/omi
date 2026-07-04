@@ -1769,7 +1769,7 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.dict()):
+        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.model_dump()):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1806,7 +1806,7 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.dict())
+        conversations_db.upsert_conversation(uid, conversation.model_dump())
 
     return ConversationResponse(
         id=conversation.id,

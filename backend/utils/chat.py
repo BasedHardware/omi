@@ -37,7 +37,7 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None):
     chat_session = chat_db.get_chat_session(uid, app_id=app_id)
     if chat_session is None:
         cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
-        chat_session = chat_db.add_chat_session(uid, cs.dict())
+        chat_session = chat_db.add_chat_session(uid, cs.model_dump())
     return chat_session
 
 
@@ -84,7 +84,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
         memories_id=[],
         chat_session_id=chat_session['id'],
     )
-    chat_db.add_message(uid, ai_message.dict())
+    chat_db.add_message(uid, ai_message.model_dump())
     chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
     return ai_message
 
@@ -260,7 +260,7 @@ def process_voice_message_segment(
     message = Message(
         id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
 
     # not support plugin
     app = None
@@ -279,19 +279,19 @@ def process_voice_message_segment(
         type='text',
         memories_id=memories_id,
     )
-    chat_db.add_message(uid, ai_message.dict())
+    chat_db.add_message(uid, ai_message.model_dump())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-    ai_message_resp = ai_message.dict()
+    ai_message_resp = ai_message.model_dump()
 
     ai_message_resp['ask_for_nps'] = ask_for_nps
 
     # send notification
     send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
 
-    return [message.dict(), ai_message_resp]
+    return [message.model_dump(), ai_message_resp]
 
 
 async def process_voice_message_segment_stream(
@@ -337,7 +337,7 @@ async def process_voice_message_segment_stream(
         message.chat_session_id = chat_session.id
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
 
     # stream
     mdata = base64.b64encode(bytes(message.model_dump_json(), 'utf-8')).decode('utf-8')
@@ -383,7 +383,7 @@ async def process_voice_message_segment_stream(
             ai_message.chat_session_id = chat_session.id
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.dict())
+        chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 
         if app_id:
@@ -405,7 +405,7 @@ async def process_voice_message_segment_stream(
                 response = callback_data.get('answer')
                 if response:
                     ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
+                    ai_message_dict = ai_message.model_dump()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')

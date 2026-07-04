@@ -170,7 +170,7 @@ def process_in_progress_conversation(
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
 
     # Geolocation
     geolocation = redis_db.get_cached_user_geolocation(uid)
@@ -209,7 +209,7 @@ def finalize_conversation(
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
         claim_updates['external_data'] = conversation.external_data
 
     if not conversations_db.claim_conversation_status(
@@ -655,7 +655,7 @@ def set_conversation_events_state(
             continue
         events[event_idx].created = data.values[i]
 
-    conversations_db.update_conversation_events(uid, conversation_id, [event.dict() for event in events])
+    conversations_db.update_conversation_events(uid, conversation_id, [event.model_dump() for event in events])
     return {"status": "Ok"}
 
 
@@ -693,7 +693,7 @@ def set_action_item_status(
             action_item.completed_at = None
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
     # Mirror status updates to the standalone action_items collection
@@ -745,7 +745,7 @@ def update_action_item_description(
         raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
     # Mirror description update in the standalone action_items collection
@@ -770,7 +770,7 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
     action_items = conversation.structured.action_items
     updated_action_items = [item for item in action_items if not (item.description == data.description)]
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in updated_action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in updated_action_items]
     )
 
     # Mirror deletion in the standalone action_items collection
@@ -837,7 +837,7 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -911,7 +911,7 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -968,7 +968,7 @@ def assign_segments_bulk(
                 raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
 
     # Trigger speaker sample extraction when assigning to a person
@@ -1044,7 +1044,7 @@ def get_shared_conversation_by_id(conversation_id: str):
 
     # Return conversation with people data
     response_dict = conversation_to_dict(conversation)
-    response_dict['people'] = [p.dict() for p in people]
+    response_dict['people'] = [p.model_dump() for p in people]
     return response_dict
 
 
@@ -1118,7 +1118,7 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
 
             suggested_apps.append(app)
 
-    return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
+    return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
 
 
 @router.post(
