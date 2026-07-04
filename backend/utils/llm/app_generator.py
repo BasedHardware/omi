@@ -5,13 +5,16 @@ Generates app configuration from a natural language prompt using LLM
 
 import json
 import base64
+import re
 import httpx
 from typing import Optional
 from pydantic import BaseModel
 from openai import OpenAI
 
 from langchain_core.messages import SystemMessage, HumanMessage
+from utils.executors import llm_executor, run_blocking
 from utils.llm.clients import get_llm
+from utils.llm.gateway_client import generate_image_via_gateway, should_route_features_through_gateway
 
 # App categories available in the system
 APP_CATEGORIES = [
@@ -122,8 +125,6 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
         app_data = json.loads(content)
     except json.JSONDecodeError:
         # Try to extract JSON from the response
-        import re
-
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
             app_data = json.loads(json_match.group())
@@ -153,8 +154,6 @@ async def generate_app_icon(app_name: str, app_description: str, category: str) 
     Returns:
         PNG image bytes of the generated icon
     """
-    client = OpenAI()
-
     # Create a prompt for icon generation
     icon_prompt = f"""Create a modern, minimal app icon for an AI app called "{app_name}".
 
@@ -167,15 +166,38 @@ Design requirements:
 - Simple geometric shapes or abstract representation
 - Professional and polished look
 - Should work well at small sizes (app icon)
-- No text or letters in the icon
-- Vibrant but not overwhelming colors
-- Style: Similar to modern iOS/Android app icons"""
+    - No text or letters in the icon
+    - Vibrant but not overwhelming colors
+    - Style: Similar to modern iOS/Android app icons"""
 
-    response = client.images.generate(
-        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
+    if not should_route_features_through_gateway():
+        return await run_blocking(
+            llm_executor,
+            _generate_app_icon_via_openai,
+            icon_prompt,
+        )
+
+    response = await run_blocking(
+        llm_executor,
+        generate_image_via_gateway,
+        model="dall-e-3",
+        prompt=icon_prompt,
+        size="1024x1024",
+        quality="standard",
+        n=1,
+        response_format="b64_json",
     )
 
     # Get the base64 image data and decode it
+    image_data = response["data"][0]["b64_json"]
+    return base64.b64decode(image_data)
+
+
+def _generate_app_icon_via_openai(icon_prompt: str) -> bytes:
+    client = OpenAI()
+    response = client.images.generate(
+        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
+    )
     image_data = response.data[0].b64_json
     return base64.b64decode(image_data)
 

@@ -39,6 +39,9 @@ describe('validateStep', () => {
   it('rejects empty/whitespace value-bearing fields', () => {
     bad({ type: 'invoke_element', elementRef: '' })
     bad({ type: 'focus_window', windowRef: '   ' })
+    bad({ type: 'send_keys', keys: '' })
+    bad({ type: 'send_keys', keys: '   ' })
+    bad({ type: 'send_keys' } as unknown as AutomationStep)
   })
 
   it('rejects set_value with an empty value', () => {
@@ -101,5 +104,16 @@ describe('validatePlan', () => {
     const r = validatePlan(plan)
     expect(r.ok).toBe(false)
     expect(r.ok ? '' : r.reason).toMatch(/step 1/)
+  })
+
+  it('rejects malformed send_keys plans before any bridge execution', () => {
+    const plan: AutomationPlan = {
+      id: 'p',
+      summary: 's',
+      targetWindow: 'Notepad',
+      steps: [{ type: 'send_keys' } as unknown as AutomationStep]
+    }
+    const r = validatePlan(plan)
+    expect(r).toEqual({ ok: false, reason: 'step 0: keys is empty' })
   })
 })

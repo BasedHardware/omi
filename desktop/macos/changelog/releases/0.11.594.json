@@ -1,0 +1,8 @@
+{
+  "version": "0.11.594",
+  "date": "2026-07-02",
+  "changes": [
+    "Fixed connector rows showing disconnected when Notes or local MCP clients are already set up",
+    "Home: shortened the memory export subtitle so it fits on one line"
+  ]
+}

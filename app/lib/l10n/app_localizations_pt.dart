@@ -9374,16 +9374,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Este dispositivo';
+
   @override
   String get memoryThisIphone => 'Este iPhone';
+
   @override
   String get memoryThisPhone => 'Este telefone';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Como usar o Omi';
 
   @override
@@ -9485,4 +9492,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get latest => 'Mais recente';
+
+  @override
+  String get flashFirmware => 'Gravar firmware';
 }

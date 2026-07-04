@@ -39,3 +39,20 @@ def test_firestore_config_declares_v3_compatibility_projection_index():
         and _fields(index) == required_fields
         for index in _index_specs()
     )
+
+
+def test_firestore_config_declares_mcp_conversation_category_filter_index():
+    required_fields = [
+        ('discarded', 'ASCENDING'),
+        ('status', 'ASCENDING'),
+        ('structured.category', 'ASCENDING'),
+        ('created_at', 'DESCENDING'),
+        ('__name__', 'DESCENDING'),
+    ]
+
+    assert any(
+        index.get('collectionGroup') == 'conversations'
+        and index.get('queryScope') == 'COLLECTION'
+        and _fields(index) == required_fields
+        for index in _index_specs()
+    )

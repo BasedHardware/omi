@@ -13,6 +13,17 @@ import Foundation
 final class SystemAudioMuteController {
   static let shared = SystemAudioMuteController()
 
+  enum OutputReadiness: Equatable {
+    case audible
+    case muted
+    case zeroVolume
+    case unavailable
+
+    var shouldAskUserToTurnUpVolume: Bool {
+      self == .muted || self == .zeroVolume
+    }
+  }
+
   /// The device we muted, or nil if we currently hold no mute.
   private var mutedDevice: AudioDeviceID?
   /// Per-channel volumes to restore when the fallback path was used.
@@ -47,6 +58,18 @@ final class SystemAudioMuteController {
       usedVolumeFallback = true
       log("SystemAudioMuteController: muted via volume fallback on device \(device)")
     }
+  }
+
+  /// Current readiness of the default output device for hearing PTT responses.
+  func defaultOutputReadiness() -> OutputReadiness {
+    if mutedDevice != nil { return .audible }
+    guard let device = Self.defaultOutputDevice() else { return .unavailable }
+    if Self.deviceIsMuted(device) == true { return .muted }
+
+    let volumes = Self.readOutputVolumes(device)
+    guard !volumes.isEmpty else { return .unavailable }
+
+    return volumes.contains(where: { $0 > 0.001 }) ? .audible : .zeroVolume
   }
 
   /// Restore whatever `muteForListening()` changed. No-op if we hold no mute.
@@ -163,5 +186,16 @@ final class SystemAudioMuteController {
       }
     }
     return saved
+  }
+
+  private static func readOutputVolumes(_ device: AudioDeviceID) -> [Float32] {
+    let main = kAudioObjectPropertyElementMain
+    if let mainVolume = getVolume(device, channel: main) {
+      return [mainVolume]
+    }
+
+    return [UInt32(1), UInt32(2)].compactMap { channel in
+      getVolume(device, channel: channel)
+    }
   }
 }

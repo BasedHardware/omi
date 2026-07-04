@@ -16,6 +16,7 @@ from database.memory_vector_metadata import (
     build_memory_vector_metadata,
     parse_memory_search_vector_hit,
     parse_search_vector_hit,
+    strip_null_metadata_values,
 )
 from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
@@ -249,9 +250,11 @@ def upsert_memory_vector(
         },
     }
     data["metadata"].update(
-        projection_metadata
-        or memory_projection_metadata(
-            {'id': memory_id, 'category': category, 'subject_entity_id': subject_entity_id, 'status': 'accepted'}
+        strip_null_metadata_values(
+            projection_metadata
+            or memory_projection_metadata(
+                {'id': memory_id, 'category': category, 'subject_entity_id': subject_entity_id, 'status': 'accepted'}
+            )
         )
     )
     if subject_entity_id:
@@ -290,14 +293,16 @@ def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
             "created_at": now_ts,
         }
         metadata.update(
-            item.get('projection_metadata')
-            or memory_projection_metadata(
-                {
-                    'id': item['memory_id'],
-                    'category': item['category'],
-                    'subject_entity_id': item.get('subject_entity_id'),
-                    'status': item.get('status', 'accepted'),
-                }
+            strip_null_metadata_values(
+                item.get('projection_metadata')
+                or memory_projection_metadata(
+                    {
+                        'id': item['memory_id'],
+                        'category': item['category'],
+                        'subject_entity_id': item.get('subject_entity_id'),
+                        'status': item.get('status', 'accepted'),
+                    }
+                )
             )
         )
         if item.get('subject_entity_id'):

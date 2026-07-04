@@ -579,10 +579,10 @@ def _apply_superseded_item(
         if getattr(snapshot, "exists", False):
             item = MemoryItem(**(snapshot.to_dict() or {}))
     if item is not None and item.tier == MemoryLayer.long_term:
-        delete_atom_keyword_doc(uid, item.memory_id)
+        delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
     delete_canonical_memory_vector(uid, memory_id)
-    invalidate_kg_for_memory_retraction(uid, [memory_id])
-    purge_stale_review_conflicts_for_memories(uid, [memory_id], reason="memory_superseded")
+    invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=db_client)
+    purge_stale_review_conflicts_for_memories(uid, [memory_id], reason="memory_superseded", db_client=db_client)
 
 
 def _escalate_to_review_queue(

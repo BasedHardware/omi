@@ -89,6 +89,36 @@ function setup_firebase() {
   cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
 }
 
+##########################################
+# Setup Firebase with Service Account Json
+##########################################
+function setup_firebase_with_service_account() {
+  dart pub global activate flutterfire_cli
+  flutterfire config \
+    --platforms="android,ios,web" \
+    --out=lib/firebase_options_dev.dart \
+    --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
+    --android-app-id=com.friend.ios.dev \
+    --android-out=android/app/src/dev/  \
+    --ios-out=ios/Config/Dev/ \
+    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
+    --project="based-hardware-dev" \
+    --ios-target="Runner" \
+    --yes
+
+  flutterfire config \
+    --platforms="android,ios,web" \
+    --out=lib/firebase_options_prod.dart \
+    --ios-bundle-id=com.friend-app-with-wearable.ios12 \
+    --android-app-id=com.friend.ios.dev \
+    --android-out=android/app/src/prod/ \
+    --ios-out=ios/Config/Prod/ \
+    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
+    --project="based-hardware-dev" \
+    --ios-target="Runner" \
+    --yes
+}
+
 ######################################
 # Setup provisioning profile
 ######################################
@@ -105,16 +135,13 @@ function setup_provisioning_profile() {
 }
 
 
-############################
-# Set up public client env
-############################
+#################
+# Set up App .env
+#################
 function setup_app_env() {
-  echo PUBLIC_API_BASE_URL=$API_BASE_URL > .client.dev.env
-  echo PUBLIC_USE_WEB_AUTH=true >> .client.dev.env
-  echo PUBLIC_USE_AUTH_CUSTOM_TOKEN=true >> .client.dev.env
-  echo PUBLIC_STAGING_API_URL= >> .client.dev.env
-  cp .client.dev.env .client.env
-  ../scripts/check-public-client-secrets.py --env-file .client.dev.env --env-file .client.env
+  echo API_BASE_URL=$API_BASE_URL > .dev.env
+  echo USE_WEB_AUTH=true >> .dev.env
+  echo USE_AUTH_CUSTOM_TOKEN=true >> .dev.env
 }
 
 # #######################

@@ -15,10 +15,12 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
 from llm_gateway.gateway.schemas import ProviderRef
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
+from utils.llm.chat import RequiresContext
 from utils.llm.gateway_client import _chat_structured_payload
 
 PROVIDER_REF = ProviderRef(provider='openai', model='gpt-4.1-mini')
 SMOKE_FEATURES = (
+    ('chat_extraction.requires_context', RequiresContext),
     ('conversation_structure.extract.shadow', ConversationStructureExtraction),
     ('conversation_action_items.extract.shadow', ActionItemsExtraction),
 )

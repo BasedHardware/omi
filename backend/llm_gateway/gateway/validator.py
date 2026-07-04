@@ -11,7 +11,7 @@ from llm_gateway.gateway.schemas import LaneConfig, StructuredOutputMode
 class ValidatedChatCompletionRequest:
     model: str
     messages: tuple[Mapping[str, Any], ...]
-    response_format: Mapping[str, Any]
+    response_format: Mapping[str, Any] | None
     forwarded_params: Mapping[str, Any]
 
 
@@ -26,6 +26,7 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'max_tokens',
         'n',
         'presence_penalty',
+        'prompt_cache_key',
         'seed',
         'stop',
         'temperature',
@@ -47,11 +48,11 @@ def validate_chat_completion_request(
     if not isinstance(model, str) or not model.strip():
         raise GatewayInvalidRequestError('model is required', param='model')
 
-    if request.get('stream') is True:
+    if request.get('stream') is True and not lane.capabilities.streaming:
         raise GatewayCapabilityMismatchError('streaming is not supported for this lane', param='stream')
-    if 'tools' in request:
+    if 'tools' in request and not lane.capabilities.tools:
         raise GatewayCapabilityMismatchError('tools are not supported for this lane', param='tools')
-    if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none'):
+    if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none') and not lane.capabilities.tools:
         raise GatewayCapabilityMismatchError('tool_choice is not supported for this lane', param='tool_choice')
 
     messages = _validate_messages(request.get('messages'))
@@ -99,7 +100,10 @@ def _is_text_content_part(part: Any) -> bool:
     return isinstance(part, Mapping) and part.get('type') == 'text' and isinstance(part.get('text'), str)
 
 
-def _validate_response_format(value: Any, lane: LaneConfig) -> Mapping[str, Any]:
+def _validate_response_format(value: Any, lane: LaneConfig) -> Mapping[str, Any] | None:
+    if value is None:
+        return None
+
     if not isinstance(value, Mapping):
         raise GatewayInvalidRequestError('response_format with json_schema is required', param='response_format')
 
@@ -142,4 +146,8 @@ def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
             f'unsupported chat completion parameter: {unsupported[0]}',
             param=unsupported[0],
         )
-    return {key: request[key] for key in FORWARDED_CHAT_COMPLETION_PARAMS if key in request}
+    forwarded = {key: request[key] for key in FORWARDED_CHAT_COMPLETION_PARAMS if key in request}
+    for key in ('tools', 'tool_choice', 'stream'):
+        if key in request:
+            forwarded[key] = request[key]
+    return forwarded

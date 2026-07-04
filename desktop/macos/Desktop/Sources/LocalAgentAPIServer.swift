@@ -201,6 +201,10 @@ final class LocalAgentAPIServer {
   }
 
   private func route(_ request: LocalHTTPRequest) async -> LocalHTTPResponse {
+    guard acceptsLoopbackHostAndOrigin(request.headers) else {
+      return errorResponse("invalid_host_or_origin", statusCode: 403)
+    }
+
     if request.method == "GET", request.path == "/health" || request.path == "/" {
       return jsonResponse([
         "ok": true,
@@ -255,6 +259,34 @@ final class LocalAgentAPIServer {
     let result = await ChatToolExecutor.execute(
       ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
     return toolResponse(name: toolName, result: result)
+  }
+
+  private func acceptsLoopbackHostAndOrigin(_ headers: [String: String]) -> Bool {
+    if let host = headers["host"], !isAllowedLoopbackHost(host) {
+      return false
+    }
+    if let origin = headers["origin"], !origin.isEmpty {
+      guard let url = URL(string: origin), let host = url.host, let port = url.port else {
+        return false
+      }
+      guard (url.scheme == "http" || url.scheme == "https"), port == Int(LocalAgentAPISettings.port) else {
+        return false
+      }
+      guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
+        return false
+      }
+    }
+    return true
+  }
+
+  private func isAllowedLoopbackHost(_ hostHeader: String) -> Bool {
+    let value = hostHeader.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let allowed = [
+      "127.0.0.1:\(LocalAgentAPISettings.port)",
+      "localhost:\(LocalAgentAPISettings.port)",
+      "[::1]:\(LocalAgentAPISettings.port)",
+    ]
+    return allowed.contains(value)
   }
 
   private func authenticate(_ authorization: String?) -> Bool {

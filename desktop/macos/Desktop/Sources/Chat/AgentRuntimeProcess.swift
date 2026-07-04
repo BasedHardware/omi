@@ -11,6 +11,13 @@ actor AgentRuntimeProcess {
     useExtension && !token.isEmpty && targetHasExtension
   }
 
+  nonisolated static func isConfirmedOutOfMemoryDiagnostic(_ text: String) -> Bool {
+    let lower = text.lowercased()
+    return lower.contains("fatalprocessoutofmemory")
+      || lower.contains("javascript heap out of memory")
+      || lower.contains("failed to reserve virtual memory")
+  }
+
   struct WarmupSessionConfig {
     let key: String
     let model: String?
@@ -125,7 +132,9 @@ actor AgentRuntimeProcess {
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
+  private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
+  private var advertisedAgentControlTools: Set<String> = []
   private var isRestarting = false
 
   var isAlive: Bool { isRunning }
@@ -146,6 +155,7 @@ actor AgentRuntimeProcess {
     clients[clientId] = registration
 
     if isRunning {
+      try await waitForInit(timeout: 30.0)
       return
     }
 
@@ -261,6 +271,9 @@ actor AgentRuntimeProcess {
       throw BridgeError.agentError("Agent control requires a signed-in owner")
     }
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    guard advertisedAgentControlTools.contains(name) else {
+      throw BridgeError.agentError("Agent runtime does not advertise direct control tool \(name)")
+    }
 
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -422,6 +435,7 @@ actor AgentRuntimeProcess {
     closePipes()
     lastExitWasOOM = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
 
     guard let nodePath = findNodeBinary() else {
       throw BridgeError.nodeNotFound
@@ -518,22 +532,18 @@ actor AgentRuntimeProcess {
     stderrPipe = stderr
     process = proc
 
-    stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
+    processGeneration &+= 1
+    let expectedGeneration = processGeneration
+    oomDiagnosticLatch.reset(generation: expectedGeneration)
+    let oomDiagnosticLatch = oomDiagnosticLatch
+    stderr.fileHandleForReading.readabilityHandler = { handle in
       let data = handle.availableData
       if !data.isEmpty, let text = String(data: data, encoding: .utf8) {
         log("AgentRuntimeProcess stderr: \(text.trimmingCharacters(in: .whitespacesAndNewlines))")
-        if text.contains("FatalProcessOutOfMemory")
-          || text.contains("JavaScript heap out of memory")
-          || text.contains("Failed to reserve virtual memory")
-          || text.contains("out of memory")
-        {
-          Task { await self?.markOOM() }
-        }
+        oomDiagnosticLatch.markIfConfirmed(text, generation: expectedGeneration)
       }
     }
 
-    processGeneration &+= 1
-    let expectedGeneration = processGeneration
     proc.terminationHandler = { [weak self] terminatedProc in
       let code = terminatedProc.terminationStatus
       let reason = terminatedProc.terminationReason
@@ -648,6 +658,7 @@ actor AgentRuntimeProcess {
     closePipes()
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: BridgeError.stopped)
     resumeInitContinuations(throwing: BridgeError.stopped)
   }
@@ -688,6 +699,9 @@ actor AgentRuntimeProcess {
 
   private func stopProcess(resumeRequestsWith error: BridgeError) async {
     let proc = process
+    processGeneration &+= 1
+    lastExitWasOOM = false
+    oomDiagnosticLatch.reset(generation: processGeneration)
     sendJson(["type": "stop"])
     try? stdinPipe?.fileHandleForWriting.close()
     proc?.terminate()
@@ -707,8 +721,11 @@ actor AgentRuntimeProcess {
 
     process = nil
     closePipes()
+    lastExitWasOOM = false
+    oomDiagnosticLatch.reset(generation: processGeneration)
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -770,6 +787,8 @@ actor AgentRuntimeProcess {
     switch message.kind {
     case .initMessage:
       log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")
+      let tools = message.payload["agentControlTools"] as? [String] ?? []
+      advertisedAgentControlTools = Set(tools)
       receivedInit = true
       resolveInitContinuations()
 
@@ -977,10 +996,6 @@ actor AgentRuntimeProcess {
     return value
   }
 
-  private func markOOM() {
-    lastExitWasOOM = true
-  }
-
   private func handleTermination(
     exitCode: Int32 = -1,
     reason: Process.TerminationReason = .exit,
@@ -996,22 +1011,22 @@ actor AgentRuntimeProcess {
       let remaining = stderrHandle.availableData
       if !remaining.isEmpty, let text = String(data: remaining, encoding: .utf8) {
         log("AgentRuntimeProcess stderr (final): \(text.trimmingCharacters(in: .whitespacesAndNewlines))")
-        if text.contains("out of memory") || text.contains("Failed to reserve virtual memory") {
+        if Self.isConfirmedOutOfMemoryDiagnostic(text) {
           lastExitWasOOM = true
+          oomDiagnosticLatch.markConfirmed(generation: processGeneration)
         }
       }
     }
 
-    let likelyOOM =
-      lastExitWasOOM
-      || (reason == .uncaughtSignal
-        && (exitCode == 134 || exitCode == 133 || exitCode == 5 || exitCode == 6))
+    let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)
     let error: BridgeError = likelyOOM ? .outOfMemory : .processExited
     lastExitWasOOM = false
+    oomDiagnosticLatch.reset(generation: processGeneration)
 
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     closePipes()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
@@ -1163,5 +1178,36 @@ actor AgentRuntimeProcess {
     }
 
     return nil
+  }
+}
+
+private final class AgentRuntimeOOMDiagnosticLatch: @unchecked Sendable {
+  private let lock = NSLock()
+  private var generation: UInt64?
+  private var confirmed = false
+
+  func reset(generation: UInt64) {
+    lock.withLock {
+      self.generation = generation
+      confirmed = false
+    }
+  }
+
+  func markIfConfirmed(_ text: String, generation: UInt64) {
+    guard AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(text) else { return }
+    markConfirmed(generation: generation)
+  }
+
+  func markConfirmed(generation: UInt64) {
+    lock.withLock {
+      guard self.generation == generation else { return }
+      confirmed = true
+    }
+  }
+
+  func isConfirmed(generation: UInt64) -> Bool {
+    lock.withLock {
+      self.generation == generation && confirmed
+    }
   }
 }

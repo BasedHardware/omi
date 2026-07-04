@@ -9,32 +9,31 @@ final class CaptureScreenToolTests: XCTestCase {
 
   /// Verify "capture_screen" is handled by ChatToolExecutor and does NOT fall
   /// through to "Unknown tool: capture_screen".
-  func testCaptureScreenToolIsHandled() async {
+  func testCaptureScreenToolIsDeniedByDefaultPolicy() async {
     let toolCall = ToolCall(name: "capture_screen", arguments: [:], thoughtSignature: nil)
     let result = await ChatToolExecutor.execute(toolCall)
 
-    // Must be handled — never "Unknown tool"
     XCTAssertFalse(
       result.hasPrefix("Unknown tool"),
       "capture_screen should be dispatched, got: \(result)")
+    XCTAssertTrue(result.hasPrefix("POLICY_DENIED:"), "capture_screen should fail closed, got: \(result)")
+    XCTAssertTrue(result.contains("\"capability\":\"desktop.context.screenshot_image\""))
+    XCTAssertTrue(result.contains("Screenshot image access requires explicit approval"))
   }
 
-  /// Verify the result is either a file path (permission granted) or a
-  /// descriptive permission error (permission denied).
-  func testCaptureScreenReturnsPathOrPermissionError() async {
-    let toolCall = ToolCall(name: "capture_screen", arguments: [:], thoughtSignature: nil)
-    let result = await ChatToolExecutor.execute(toolCall)
+  func testScreenshotImagePolicyDeniesLocalImageBytesByDefault() {
+    for toolName in ["capture_screen", "get_screenshot"] {
+      let decision = ChatToolExecutor.localPolicyDecision(
+        toolName: toolName,
+        arguments: ["screenshot_id": "123"])
 
-    if result.hasPrefix("Error:") {
-      // Permission denied path — the error message should guide the user
-      XCTAssertTrue(
-        result.contains("Screen recording permission") || result.contains("Failed to capture"),
-        "Expected helpful capture error, got: \(result)")
-    } else {
-      // Permission granted path — result should be a valid file path
-      XCTAssertTrue(
-        result.hasPrefix("/"),
-        "Expected file path starting with /, got: \(result)")
+      guard case .deny(let message) = decision else {
+        return XCTFail("\(toolName) should require approval")
+      }
+      XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"))
+      XCTAssertTrue(message.contains("\"capability\":\"desktop.context.screenshot_image\""))
+      XCTAssertTrue(message.contains("Screenshot image access requires explicit approval"))
+      XCTAssertFalse(message.contains("123"))
     }
   }
 

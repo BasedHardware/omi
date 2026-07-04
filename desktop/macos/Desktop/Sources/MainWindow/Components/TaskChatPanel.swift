@@ -82,8 +82,8 @@ struct TaskChatPanel: View {
                             onSend: { text in
                                 AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                                 Task {
-                                    // On the first message, include full task details so the AI
-                                    // has complete context (same data the Investigate button sends).
+                                    // On the first message, provide task details through a scoped
+                                    // DesktopContextPacket instead of raw prompt prepending.
                                     let isFirstMessage = taskState.messages.isEmpty
                                     let taskContext: String? = (isFirstMessage && task != nil) ? task!.chatContext : nil
                                     await taskState.sendMessage(text, taskContext: taskContext)

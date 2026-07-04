@@ -137,8 +137,11 @@ if "utils.byok" not in sys.modules:
 
 if "utils.llm.gateway_client" not in sys.modules:
     gateway_mod = _stub_module("utils.llm.gateway_client")
-    gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
-    gateway_mod.record_chat_extraction_gateway_result = MagicMock()
+else:
+    gateway_mod = sys.modules["utils.llm.gateway_client"]
+gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
+gateway_mod.record_chat_extraction_gateway_result = MagicMock()
+gateway_mod.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 
 if "utils.llm.gateway_observability" not in sys.modules:
     gateway_observability_mod = _stub_module("utils.llm.gateway_observability")
@@ -211,6 +214,7 @@ llm_clients_stub.parser = MagicMock()
 llm_clients_stub.llm_high = MagicMock()
 llm_clients_stub.llm_medium_experiment = MagicMock()
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
 
 # Stub utils.llm.conversation_folder (conversation_processing imports from it after a recent refactor)
 conv_folder_stub = _stub_module("utils.llm.conversation_folder")

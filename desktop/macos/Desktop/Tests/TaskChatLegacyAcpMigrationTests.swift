@@ -49,6 +49,16 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
   }
 
+  func testTaskChatUsesContextPacketsWhilePreservingVisibleTaskContext() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("buildContextPacketSummary("))
+    XCTAssertTrue(source.contains("build_desktop_context_packet"))
+    XCTAssertTrue(source.contains("DesktopContextPacket"))
+    XCTAssertTrue(source.contains("# Task Context\\n\\n\\(taskContext)\\n\\n---\\n\\n# User Message"))
+    XCTAssertTrue(source.contains("The full task context is included below in the prompt."))
+  }
+
   @MainActor
   func testTaskChatFailureAddsTextWhenMessageAlreadyHasBlocks() {
     var message = ChatMessage(
@@ -142,6 +152,20 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(branch.contains("let shouldPersistPartial"))
     XCTAssertTrue(branch.contains("if shouldPersistPartial"))
     XCTAssertFalse(branch.contains("persistMessage(messages[index])"))
+  }
+
+  func testTerminalFailureMarksRemainingToolCallsFailed() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(
+      source.contains("private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed)")
+    )
+    XCTAssertTrue(
+      source.contains("ToolCallBlockUpdater.completeRemainingToolCalls(\n            in: &messages[index].contentBlocks,\n            terminalStatus: terminalStatus\n        )")
+    )
+    XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)"))
+    XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))
+    XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)"))
   }
 
   func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {

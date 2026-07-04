@@ -7,6 +7,7 @@ import os
 from typing import Optional
 
 import httpx
+from google.cloud import firestore
 
 import database.users as users_db
 from utils.executors import db_executor, run_blocking
@@ -48,6 +49,15 @@ class GoogleAPIError(Exception):
         return self.status_code in _RETRYABLE_STATUS_CODES
 
 
+async def _mark_google_calendar_reauth_required(uid: str, integration: dict, reason: str) -> None:
+    updated = dict(integration)
+    updated['connected'] = False
+    updated['reauth_required'] = True
+    updated['reauth_reason'] = reason
+    updated['access_token'] = firestore.DELETE_FIELD
+    await run_blocking(db_executor, users_db.set_integration, uid, 'google_calendar', updated)
+
+
 async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
     """
     Refresh Google access token using refresh token.
@@ -63,6 +73,7 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
     refresh_token = integration.get('refresh_token')
     if not refresh_token:
         logger.warning(f"🔄 No refresh_token stored for uid={uid}, cannot refresh")
+        await _mark_google_calendar_reauth_required(uid, integration, 'missing_refresh_token')
         return None
 
     client_id = os.getenv('GOOGLE_CLIENT_ID')
@@ -104,6 +115,7 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
                 f"🔄 Google refresh token revoked for uid={uid} (invalid_grant). "
                 f"User needs to reconnect. Response: {error_body}"
             )
+            await _mark_google_calendar_reauth_required(uid, integration, 'invalid_grant')
         else:
             logger.error(
                 f"🔄 Google token refresh failed for uid={uid}: " f"status={response.status_code}, body={error_body}"

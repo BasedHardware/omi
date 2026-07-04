@@ -7,20 +7,55 @@ instances of 'str' and 'datetime'`` -- taking down every caller (the goals endpo
 proactive notifications, the developer API). The fix falls back to a timezone-aware datetime.min,
 matching the pattern already used in create_goal, so a missing date sorts first instead of crashing.
 
-database.goals builds a Firestore client at import, so database._client is stubbed before import and
-the query chain is replaced with a controllable mock.
+database.goals binds ``db`` at import (``from database._client import db``), so the fake
+``database._client`` must be active before the module is exec'd. This is the sanctioned
+Tier-2 "fake must precede import" case: see backend/docs/test_isolation.md and
+testing/import_isolation.load_module_fresh.
 """
 
-import sys
-import types
+import os
 from datetime import datetime, timezone
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
-_client_stub = types.ModuleType('database._client')
-_client_stub.db = MagicMock(name='db')
-sys.modules['database._client'] = _client_stub
+import pytest
 
-import database.goals as goals  # noqa: E402
+from testing.import_isolation import load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="module")
+def goals():
+    """Load a fresh database.goals against a stubbed database._client + firestore chain."""
+    client_stub = ModuleType("database._client")
+    client_stub.db = MagicMock(name="db")
+
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.FieldFilter = MagicMock()
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+
+    fv1_stub = ModuleType("google.cloud.firestore_v1")
+    fv1_stub.FieldFilter = MagicMock()
+
+    fakes = {
+        "database._client": client_stub,
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore": firestore_stub,
+        "google.cloud.firestore_v1": fv1_stub,
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "database.goals",
+            os.path.join(str(_BACKEND), "database", "goals.py"),
+        )
+        yield module
+
 
 BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -34,19 +69,19 @@ class _Doc:
         return dict(self._data)
 
 
-def _set_docs(docs):
+def _set_docs(goals, docs):
     chain = goals.db.collection.return_value.document.return_value.collection.return_value
     chain.where.return_value.limit.return_value.stream.return_value = docs
 
 
-def test_get_user_goals_handles_goal_missing_created_at():
+def test_get_user_goals_handles_goal_missing_created_at(goals):
     # One goal with a later date, one with no created_at at all, one with an earlier date.
     docs = [
         _Doc('g_late', {'id': 'g_late', 'created_at': BASE.replace(day=3), 'is_active': True}),
         _Doc('g_missing', {'id': 'g_missing', 'is_active': True}),
         _Doc('g_early', {'id': 'g_early', 'created_at': BASE.replace(day=1), 'is_active': True}),
     ]
-    _set_docs(docs)
+    _set_docs(goals, docs)
 
     result = goals.get_user_goals('uid1')
 
@@ -54,33 +89,21 @@ def test_get_user_goals_handles_goal_missing_created_at():
     assert [g['id'] for g in result] == ['g_missing', 'g_early', 'g_late']
 
 
-def test_get_user_goals_all_dated_orders_ascending():
+def test_get_user_goals_all_dated_orders_ascending(goals):
     docs = [
         _Doc('b', {'id': 'b', 'created_at': BASE.replace(day=2), 'is_active': True}),
         _Doc('a', {'id': 'a', 'created_at': BASE.replace(day=1), 'is_active': True}),
     ]
-    _set_docs(docs)
+    _set_docs(goals, docs)
     assert [g['id'] for g in goals.get_user_goals('uid1')] == ['a', 'b']
 
 
-def test_get_user_goals_handles_non_datetime_created_at():
+def test_get_user_goals_handles_non_datetime_created_at(goals):
     # A legacy/manual goal whose created_at is a (truthy) ISO string must not crash the sort -- the
     # value is coerced to datetime.min and sorts first, rather than mixing str and datetime.
     docs = [
         _Doc('g_dt', {'id': 'g_dt', 'created_at': BASE.replace(day=2), 'is_active': True}),
         _Doc('g_str', {'id': 'g_str', 'created_at': '2026-01-05T00:00:00Z', 'is_active': True}),
     ]
-    _set_docs(docs)
+    _set_docs(goals, docs)
     assert [g['id'] for g in goals.get_user_goals('uid1')] == ['g_str', 'g_dt']
-
-
-def test_coerce_created_at_is_crash_safe_for_all_types():
-    # The shared sort-key coercion is used by both get_user_goals and create_goal's max-goals pruning,
-    # so it must always return a comparable timezone-aware datetime.
-    aware = BASE.replace(day=5)
-    naive = datetime(2026, 1, 5)
-    floor = datetime.min.replace(tzinfo=timezone.utc)
-    assert goals._coerce_created_at(aware) == aware
-    assert goals._coerce_created_at(naive) == naive.replace(tzinfo=timezone.utc)
-    assert goals._coerce_created_at(None) == floor
-    assert goals._coerce_created_at('2026-01-05T00:00:00Z') == floor

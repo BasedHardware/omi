@@ -50,15 +50,15 @@ export function rot13(s: string): string {
 // hold the focus-time field (control/sentinel entries can be tiny).
 export function parseUserAssistData(data: Buffer): ParsedUserAssist | null {
   if (data.length < OFF_FOCUS_MS + 4) return null
-  const focusMs = data.readInt32LE(OFF_FOCUS_MS)
+  const focusMs = data.readUInt32LE(OFF_FOCUS_MS)
   let lastUsed = 0
   if (data.length >= OFF_LAST_USED_FILETIME + 8) {
     const ticks = data.readBigUInt64LE(OFF_LAST_USED_FILETIME)
     if (ticks > 0n) lastUsed = Number(ticks / 10_000n - FILETIME_UNIX_OFFSET_MS)
   }
   return {
-    runCount: data.readInt32LE(OFF_RUN_COUNT),
-    focusCount: data.readInt32LE(OFF_FOCUS_COUNT),
+    runCount: data.readUInt32LE(OFF_RUN_COUNT),
+    focusCount: data.readUInt32LE(OFF_FOCUS_COUNT),
     focusSeconds: Math.round(focusMs / 1000),
     lastUsed
   }

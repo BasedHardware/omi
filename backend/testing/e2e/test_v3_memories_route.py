@@ -95,8 +95,14 @@ def test_enrolled_memory_fake_success_maps_body_cursor_and_allowlisted_headers(c
         from utils.memory.v3_composed_get_service import V3ComposedResponse
 
         captured.append(params)
+        composed_body = {
+            **memory_body,
+            "memory_tier": "short_term",
+            "layer": "short_term",
+            "memory_only": "internal-default",
+        }
         response = V3ComposedResponse.success(
-            body=[memory_body],
+            body=[composed_body],
             next_cursor="cursor-next-1",
             source="memory_compatibility_projection",
             read_count=1,
@@ -111,7 +117,9 @@ def test_enrolled_memory_fake_success_maps_body_cursor_and_allowlisted_headers(c
         resp = client.get("/v3/memories?limit=2&offset=0&cursor=cursor-start", headers=auth_headers)
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == [memory_body]
+    assert resp.json()[0] == {**memory_body, "memory_tier": "short_term", "layer": "short_term"}
+    assert resp.json()[0]["layer"] == "short_term"
+    assert "memory_only" not in resp.json()[0]
     assert len(captured) == 1
     assert captured[0].limit == 2
     assert captured[0].offset == 0

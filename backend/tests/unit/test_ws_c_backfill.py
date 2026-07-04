@@ -62,6 +62,7 @@ from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import extraction_memory_id, read_canonical_memories
+from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 from utils.memory.legacy_backfill import (
     BackfillCohortGateError,
     LegacyBackfillBucket,
@@ -579,22 +580,125 @@ def test_bucketed_reviewed_apply_writes_long_term_with_legacy_timestamp(_trusted
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    report = backfill_user_bucketed(
-        LEGACY_UID,
-        bucket=LegacyBackfillBucket.reviewed_long_term,
-        dry_run=False,
-        db_client=db,
-        get_non_filtered_memories_fn=get_non_filtered_fn,
-    )
+    def _extract_kg(uid, item, *, db_client=None, preserve_item_updated_at=False, **_kwargs):
+        assert preserve_item_updated_at is True
+        db_client.document(f"users/{uid}/memory_items/{item.memory_id}").set({"kg_extracted": True}, merge=True)
+        return CanonicalKgPromotionResult(attempted=True, success=True, node_count=1, edge_count=1)
+
+    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
+        report = backfill_user_bucketed(
+            LEGACY_UID,
+            bucket=LegacyBackfillBucket.reviewed_long_term,
+            dry_run=False,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+        )
 
     assert report.completed is True
     assert report.verified is True
+    assert report.kg_extraction_failures == 0
     canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
     stored = db.docs[f"users/{LEGACY_UID}/memory_items/{canonical_id}"]
     assert stored["tier"] == MemoryTier.long_term.value
     assert stored["captured_at"] == created_at
+    assert stored["updated_at"] == created_at
     assert stored["expires_at"] is None
+    assert stored["kg_extracted"] is True
     assert stored["promotion"]["bucket"] == LegacyBackfillBucket.reviewed_long_term.value
+    extract_kg.assert_called_once()
+
+
+def test_bucketed_reviewed_rerun_repairs_missing_kg_on_existing_item(_trusted_account):
+    row = _legacy_row(
+        legacy_id="leg-reviewed-repair",
+        content="User prefers memory bucket repairs",
+        conversation_id="conv-reviewed",
+    )
+    row["user_review"] = True
+    rows = [row]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    def _extract_kg(uid, item, *, db_client=None, preserve_item_updated_at=False, **_kwargs):
+        assert preserve_item_updated_at is True
+        db_client.document(f"users/{uid}/memory_items/{item.memory_id}").set({"kg_extracted": True}, merge=True)
+        return CanonicalKgPromotionResult(attempted=True, success=True, node_count=1, edge_count=0)
+
+    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg):
+        first = backfill_user_bucketed(
+            LEGACY_UID,
+            bucket=LegacyBackfillBucket.reviewed_long_term,
+            dry_run=False,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+        )
+
+    canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
+    item_path = f"users/{LEGACY_UID}/memory_items/{canonical_id}"
+    assert first.written_count == 1
+    assert db.docs[item_path]["kg_extracted"] is True
+
+    db.docs[item_path]["kg_extracted"] = False
+
+    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
+        repaired = backfill_user_bucketed(
+            LEGACY_UID,
+            bucket=LegacyBackfillBucket.reviewed_long_term,
+            dry_run=False,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+        )
+
+    assert repaired.written_count == 0
+    assert repaired.skipped_already_present == 1
+    assert repaired.kg_extraction_failures == 0
+    assert db.docs[item_path]["kg_extracted"] is True
+    extract_kg.assert_called_once()
+
+
+def test_resume_completed_checkpoint_repairs_missing_kg_side_effect(_trusted_account):
+    row = _legacy_row(legacy_id="leg-resume-kg", content="User prefers local rollout harnesses")
+    rows = [row]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    def _extract_kg(uid, item, *, db_client=None, preserve_item_updated_at=False, **_kwargs):
+        assert preserve_item_updated_at is True
+        db_client.document(f"users/{uid}/memory_items/{item.memory_id}").set({"kg_extracted": True}, merge=True)
+        return CanonicalKgPromotionResult(attempted=True, success=True, node_count=1, edge_count=0)
+
+    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg):
+        first = backfill_user(
+            LEGACY_UID,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+            batch_size=1,
+            resume=False,
+        )
+
+    canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
+    item_path = f"users/{LEGACY_UID}/memory_items/{canonical_id}"
+    assert first.completed is True
+    assert db.docs[item_path]["kg_extracted"] is True
+
+    db.docs[item_path]["kg_extracted"] = False
+
+    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
+        repaired = backfill_user(
+            LEGACY_UID,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+            batch_size=1,
+            resume=True,
+        )
+
+    assert repaired.resumed_from_index == 1
+    assert repaired.written_count == 0
+    assert repaired.kg_extraction_failures == 0
+    assert db.docs[item_path]["kg_extracted"] is True
+    extract_kg.assert_called_once()
 
 
 def test_bucketed_hold_bucket_never_writes(_trusted_account):
@@ -805,12 +909,32 @@ def test_pagination_regression_would_miss_page_two_with_old_post_filtered_paging
     old_rows = _old_broken_post_filtered_pagination()
     new_rows = _fetch_active_legacy_memories(
         LEGACY_UID,
+        db_client=MagicMock(),
         get_non_filtered_memories_fn=_make_paginated_non_filtered_store(page_size=page_size, pages=[page1, page2]),
         scan_page_size=page_size,
     )
 
     assert len(old_rows) == 1
     assert len(new_rows) == 3
+
+
+def test_fetch_active_legacy_memories_passes_explicit_firestore_client():
+    db_client = MagicMock(name="explicit-db-client")
+    calls = []
+
+    def _source(uid, *, limit, offset, firestore_client):
+        calls.append((uid, limit, offset, firestore_client))
+        return [_legacy_row(legacy_id="active-explicit", content="Active row")] if offset == 0 else []
+
+    rows = _fetch_active_legacy_memories(
+        LEGACY_UID,
+        db_client=db_client,
+        get_non_filtered_memories_fn=_source,
+        scan_page_size=1,
+    )
+
+    assert [row["id"] for row in rows] == ["active-explicit"]
+    assert calls[0][3] is db_client
 
 
 def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, monkeypatch):

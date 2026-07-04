@@ -1,0 +1,9 @@
+{
+  "version": "0.11.583",
+  "date": "2026-07-01",
+  "changes": [
+    "Fixed duplicate tool-call rows in chat so completed tools no longer leave a second spinner behind",
+    "Added a safe helper for reviewing and resetting stale macOS privacy permissions from temporary Omi test builds",
+    "Fixed AI connection setup showing a misleading memory-pressure error after non-memory agent runtime crashes"
+  ]
+}

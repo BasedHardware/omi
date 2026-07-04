@@ -21,7 +21,7 @@ struct DesktopHomeView: View {
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
-  @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
+  @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
@@ -44,8 +44,6 @@ struct DesktopHomeView: View {
   @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
   @State private var didScheduleConversationWarmup = false
   @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
-  // Dismiss state for the Neo "no desktop access" banner (resets each launch).
-  @State private var neoDesktopBannerDismissed = false
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -139,12 +137,25 @@ struct DesktopHomeView: View {
                 )
               }
             }
+            .overlay(alignment: .top) {
+              if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
+                DesktopUpdatePolicyBanner(
+                  policy: policy,
+                  onDownload: { updatePolicyManager.openDownload(policy) },
+                  onDismiss: { updatePolicyManager.dismiss(policy) }
+                )
+                .padding(.top, 12)
+                .padding(.horizontal, 20)
+                .transition(.move(edge: .top).combined(with: .opacity))
+              }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
               let reason = notification.userInfo?["reason"] as? String ?? ""
               appState.triggerUsageLimitPopup(reason: reason)
             }
             .onAppear {
               log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
+              updatePolicyManager.refresh(force: true)
               // Check all permissions on launch
               appState.checkAllPermissions()
 
@@ -236,6 +247,7 @@ struct DesktopHomeView: View {
                 lastActivationRefresh = now
                 Task { await appState.refreshConversations() }
               }
+              updatePolicyManager.refresh()
               // Auto-start monitoring when returning to app if screen analysis is enabled
               // but monitoring is not running. Handles the case where the user granted
               // screen recording permission in System Settings and switched back.
@@ -364,6 +376,17 @@ struct DesktopHomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(OmiColors.backgroundPrimary)
             .transition(.opacity.animation(.easeOut(duration: 0.3)))
+          }
+
+          if let policy = updatePolicyManager.visiblePolicy, policy.isRequired {
+            Color.black.opacity(0.62)
+              .ignoresSafeArea()
+              .zIndex(20)
+            DesktopRequiredUpdatePrompt(
+              policy: policy,
+              onDownload: { updatePolicyManager.openDownload(policy) }
+            )
+            .zIndex(21)
           }
         }
       }
@@ -882,24 +905,6 @@ struct DesktopHomeView: View {
       }
       .padding(14)
     }
-    .safeAreaInset(edge: .top, spacing: 0) {
-      if usageLimiter.neoNeedsDesktopUpgrade && !neoDesktopBannerDismissed {
-        NeoDesktopBanner(
-          onUpgrade: {
-            selectedSettingsSection = .planUsage
-            withAnimation(Self.pageNavigationAnimation) {
-              selectedIndex = SidebarNavItem.settings.rawValue
-            }
-          },
-          onDismiss: {
-            withAnimation(Self.pageNavigationAnimation) {
-              neoDesktopBannerDismissed = true
-            }
-          }
-        )
-        .transition(.move(edge: .top).combined(with: .opacity))
-      }
-    }
     .overlay {
       // Goal completion celebration overlay
       GoalCelebrationView()
@@ -1049,54 +1054,6 @@ private struct PageChromeButton: View {
   }
 }
 
-/// Dismissible top banner shown when a Neo (unlimited) user opens the desktop app.
-/// Neo is a mobile/web plan with no desktop access; the CTA routes to Settings →
-/// Plan & Usage where the existing Operator upgrade flow lives.
-private struct NeoDesktopBanner: View {
-  var onUpgrade: () -> Void
-  var onDismiss: () -> Void
-
-  var body: some View {
-    HStack(spacing: 12) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .scaledFont(size: 14, weight: .semibold)
-        .foregroundColor(OmiColors.warning)
-
-      Text("Neo doesn't include desktop access. Upgrade to Operator to use Omi on Mac.")
-        .scaledFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
-        .fixedSize(horizontal: false, vertical: true)
-
-      Spacer(minLength: 12)
-
-      Button(action: onUpgrade) {
-        Text("Upgrade to Operator")
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(.white)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 7)
-          .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.purplePrimary))
-      }
-      .buttonStyle(.plain)
-
-      Button(action: onDismiss) {
-        Image(systemName: "xmark")
-          .scaledFont(size: 12, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 10)
-    .frame(maxWidth: .infinity)
-    .background(OmiColors.backgroundSecondary)
-    .overlay(
-      Rectangle().fill(OmiColors.border.opacity(0.4)).frame(height: 1),
-      alignment: .bottom
-    )
-  }
-}
-
 /// Isolated page content switch — does NOT observe AppState or ViewModelContainer
 /// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
 /// AppState properties (conversations, permissions, etc.) change.
@@ -1175,6 +1132,8 @@ private struct ConversationsPageHost: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   DesktopHomeView()
 }
+#endif

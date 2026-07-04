@@ -47,6 +47,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import memory_system_request_scope
@@ -94,6 +95,10 @@ from utils.conversations.calendar_linking import (
 from utils.other.storage import precache_conversation_audio
 
 logger = logging.getLogger(__name__)
+
+
+def _calendar_auto_link_enabled() -> bool:
+    return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[dict]:
@@ -193,7 +198,7 @@ def _get_structured(
 
             if conversation.text_source == ExternalIntegrationConversationSource.other:
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                    structured = summarize_experience_text(conversation.text, conversation.text_source_spec)
+                    structured = summarize_experience_text(conversation.text, conversation.text_source_spec, tz=tz)
                 return structured, False
 
             # not supported conversation source
@@ -636,7 +641,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation):
         return
 
     logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
-    memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
+    memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) for fact in parsed_memories])
 
     for memory_db_obj in parsed_memories:
         upsert_memory_vector(
@@ -945,8 +950,16 @@ def process_conversation(
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
-    # Check for overlapping calendar events and auto-write conversation link to the event description
-    if not discarded and conversation.started_at and conversation.finished_at and conversation.calendar_event is None:
+    # Calendar auto-linking calls and mutates a user's Google Calendar during generic
+    # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
+    # fan out provider traffic for every connected user.
+    if (
+        _calendar_auto_link_enabled()
+        and not discarded
+        and conversation.started_at
+        and conversation.finished_at
+        and conversation.calendar_event is None
+    ):
         try:
             calendar_event = asyncio.run(
                 get_overlapping_calendar_event(

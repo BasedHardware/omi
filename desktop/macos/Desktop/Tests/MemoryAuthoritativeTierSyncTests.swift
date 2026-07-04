@@ -57,7 +57,7 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
         XCTAssertEqual(record?.updatedAt, localUpdatedAt, "Tier merge must not bump updatedAt")
     }
 
-    func testSyncLeavesLegacyUntieredLocalRecordBadgeLess() async throws {
+    func testSyncClearsLegacyUntieredLocalRecordTierState() async throws {
         let backendId = "tier-sync-legacy-\(UUID().uuidString)"
         let serverUpdatedAt = Date(timeIntervalSince1970: 1_000)
         let localUpdatedAt = Date(timeIntervalSince1970: 2_000)
@@ -73,15 +73,16 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
         try await corruptLocalTier(
             backendId: backendId,
             tier: MemoryLayer.shortTerm.rawValue,
-            tierIsExplicit: false,
+            tierIsExplicit: true,
             updatedAt: localUpdatedAt
         )
 
         try await MemoryStorage.shared.syncServerMemories([legacyServerMemory])
 
         let record = try await MemoryStorage.shared.getMemoryByBackendId(backendId)
-        XCTAssertEqual(record?.tier, MemoryLayer.shortTerm.rawValue, "Local tier value is preserved")
-        XCTAssertEqual(record?.tierIsExplicit, false, "Legacy server rows must not force a badge")
+        XCTAssertEqual(record?.tier, MemoryLayer.longTerm.rawValue, "Legacy server rows clear stale tier filters")
+        XCTAssertEqual(record?.tierIsExplicit, false, "Legacy server rows clear stale tier badges")
+        XCTAssertEqual(record?.updatedAt, localUpdatedAt, "Tier cleanup must not bump updatedAt")
     }
 
     func testMarkSyncedDoesNotBumpUpdatedAt() async throws {

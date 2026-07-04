@@ -12,10 +12,25 @@ environments:
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
+          OMI_ENV_STAGE:
+            value: dev
+            category: runtime_identity
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: "true"
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+            value: "1.0"
+            category: rollout
+          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
+            value: "true"
+            category: rollout
+          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
+            value: "1.0"
+            category: rollout
+          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+            value: "true"
+            category: rollout
+          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: "1.0"
             category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
@@ -37,6 +52,9 @@ environments:
           MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
             value: "false"
             category: memory_rollout
+          MEMORY_TYPESENSE_COLLECTION:
+            value: canonical_memory_atoms
+            category: memory_rollout
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend_auto_dev.yml
@@ -51,6 +69,9 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -58,6 +79,18 @@ environments:
               value: "true"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             MEMORY_MODE:
@@ -75,12 +108,21 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -89,6 +131,9 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -96,6 +141,18 @@ environments:
               value: "true"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             MEMORY_MODE:
@@ -113,12 +170,21 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -127,6 +193,9 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -134,6 +203,18 @@ environments:
               value: "true"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             MEMORY_MODE:
@@ -151,12 +232,21 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -173,6 +263,9 @@ environments:
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
             category: service_discovery
+          OMI_ENV_STAGE:
+            value: prod
+            category: runtime_identity
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
               name: prod-omi-backend-secrets
@@ -196,6 +289,9 @@ environments:
           MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
             value: "false"
             category: memory_rollout
+          MEMORY_TYPESENSE_COLLECTION:
+            value: canonical_memory_atoms
+            category: memory_rollout
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend.yml
@@ -209,6 +305,9 @@ environments:
       services:
         backend:
           env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
@@ -228,18 +327,30 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
         backend-sync:
           env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
@@ -259,18 +370,30 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
         backend-integration:
           env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
@@ -290,12 +413,21 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            GOOGLE_CLIENT_ID:
+              secret: GOOGLE_CLIENT_ID
+              version: latest
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN

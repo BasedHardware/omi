@@ -10,27 +10,116 @@ Verifies:
 """
 
 import os
-import sys
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+import pytest
 
-# Mock heavy dependencies at sys.modules level before importing storage
-sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("database.redis_db", MagicMock())
-sys.modules.setdefault("database.users", MagicMock())
-sys.modules.setdefault("opuslib", MagicMock())
-
-_mock_gcs_storage = MagicMock()
-_mock_gcs_client_instance = MagicMock()
-_mock_gcs_storage.Client.return_value = _mock_gcs_client_instance
-sys.modules.setdefault("google.cloud.storage", _mock_gcs_storage)
-sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
-sys.modules.setdefault("google.cloud.exceptions", MagicMock())
-sys.modules.setdefault("google.oauth2", MagicMock())
-sys.modules.setdefault("google.oauth2.service_account", MagicMock())
-
+from testing.import_isolation import load_module_fresh, stub_modules
 from utils.other import storage as storage_mod
+
+_BACKEND = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _mock_storage_client(monkeypatch):
+    """``utils.other.storage`` constructs a real GCS ``storage_client`` at import
+    time. Swap it for a controllable ``MagicMock`` so every test can wire its own
+    bucket/blob returns. Auto-restored at fixture teardown (no ``sys.modules``
+    mutation)."""
+    monkeypatch.setattr(storage_mod, 'storage_client', MagicMock())
+
+
+@pytest.fixture(scope="module")
+def merge():
+    """Load a fresh ``utils.conversations.merge_conversations`` against stubbed
+    database/models/memory/storage chains.
+
+    Mirrors ``tests/unit/test_merge_validation.py``. The module is exec'd inside a
+    ``stub_modules`` block so its heavy transitive imports are faked, and the
+    freshly-loaded module is evicted from ``sys.modules`` on teardown — keeping the
+    suite hermetic regardless of collection/test ordering. The yielded module object
+    is the single stable identity that tests patch (via ``monkeypatch.setattr``) and
+    read ``_copy_audio_chunks_for_merge`` from, so the function always closes over
+    the same module its patches target.
+    """
+    database_pkg = ModuleType("database")
+    database_pkg.__path__ = []  # type: ignore[attr-defined]
+
+    client_stub = ModuleType("database._client")
+    client_stub.db = MagicMock(name="db")
+
+    conversations_stub = ModuleType("database.conversations")
+    conversations_stub.get_conversation = MagicMock(return_value=None)
+
+    vector_db_stub = ModuleType("database.vector_db")
+    vector_db_stub.delete_vector = MagicMock()
+
+    # utils.other.storage is stubbed (not imported real) so the merge module's
+    # ``_get_storage_client`` / ``list_audio_chunks`` / ``private_cloud_sync_bucket``
+    # references resolve to fakes that tests then override via monkeypatch.
+    storage_stub = ModuleType("utils.other.storage")
+    for _name in [
+        "delete_conversation_audio_files",
+        "list_audio_chunks",
+        "_get_storage_client",
+        "private_cloud_sync_bucket",
+        "_get_extension_for_path",
+    ]:
+        setattr(storage_stub, _name, MagicMock())
+
+    models_pkg = ModuleType("models")
+    models_pkg.__path__ = []  # type: ignore[attr-defined]
+    model_submods = {
+        "models.audio_file": ["AudioFile"],
+        "models.conversation": ["Conversation"],
+        "models.conversation_enums": ["ConversationStatus"],
+        "models.structured": ["Structured"],
+    }
+    model_stubs: dict[str, ModuleType] = {}
+    for _modname, _attrs in model_submods.items():
+        _mod = ModuleType(_modname)
+        for _attr in _attrs:
+            setattr(_mod, _attr, MagicMock())
+        model_stubs[_modname] = _mod
+
+    memory_service_stub = ModuleType("utils.memory.memory_service")
+    setattr(memory_service_stub, "MemoryService", MagicMock())
+
+    class _MemorySystem:
+        LEGACY = "legacy"
+        CANONICAL = "canonical"
+
+    memory_system_stub = ModuleType("utils.memory.memory_system")
+    setattr(memory_system_stub, "MemorySystem", _MemorySystem)
+
+    canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
+    setattr(canonical_activation_stub, "canonical_write_enabled", MagicMock(return_value=False))
+
+    surface_routing_stub = ModuleType("utils.memory.surface_routing")
+    setattr(surface_routing_stub, "pin_memory_system", MagicMock(return_value=_MemorySystem.LEGACY))
+
+    fakes: dict[str, ModuleType] = {
+        "database": database_pkg,
+        "database._client": client_stub,
+        "database.conversations": conversations_stub,
+        "database.vector_db": vector_db_stub,
+        "utils.other.storage": storage_stub,
+        "models": models_pkg,
+        "utils.memory.memory_service": memory_service_stub,
+        "utils.memory.memory_system": memory_system_stub,
+        "utils.memory.canonical_activation": canonical_activation_stub,
+        "utils.memory.surface_routing": surface_routing_stub,
+    }
+    fakes.update(model_stubs)
+
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "utils.conversations.merge_conversations",
+            os.path.join(str(_BACKEND), "utils", "conversations", "merge_conversations.py"),
+        )
+        yield module
 
 
 class _FakeNotFound(Exception):
@@ -574,32 +663,14 @@ class TestDownloadAudioChunksMergeBatchAware:
 class TestCopyAudioChunksForMergeBatchAware:
     """Tests for _copy_audio_chunks_for_merge preserving batch blob filenames."""
 
-    @classmethod
-    def setup_class(cls):
-        """Mock heavy transitive imports before loading merge_conversations."""
-        for mod_name in [
-            'openai',
-            'openai.resources',
-            'openai._client',
-            'utils.llm',
-            'utils.llm.clients',
-            'utils.apps',
-            'database.apps',
-            'database.memories',
-            'database.tasks',
-            'database.plugins',
-            'database.notifications',
-            'database.vector_db',
-            'pinecone',
-        ]:
-            sys.modules.setdefault(mod_name, MagicMock())
-
-    @patch('utils.conversations.merge_conversations.conversations_db')
-    @patch('utils.conversations.merge_conversations.list_audio_chunks')
-    @patch('utils.conversations.merge_conversations.storage_client')
-    def test_copy_preserves_batch_filename(self, mock_storage_client, mock_list, mock_conv_db):
+    def test_copy_preserves_batch_filename(self, merge, monkeypatch):
         """Batch blob filenames are preserved during copy (not renamed to single-timestamp)."""
-        from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge
+        mock_storage_client = MagicMock()
+        mock_list = MagicMock()
+        mock_conv_db = MagicMock()
+        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
+        monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
+        monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
 
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
@@ -614,19 +685,21 @@ class TestCopyAudioChunksForMergeBatchAware:
         ]
         mock_conv_db.create_audio_files_from_chunks.return_value = []
 
-        _copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
+        merge._copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
 
         # Verify the copy preserved the batch filename
         copy_call = mock_bucket.copy_blob.call_args
         new_path = copy_call[0][2]  # third positional arg is new_name
         assert new_path == 'chunks/uid/conv-new/1000.000-1060.000.batch.bin'
 
-    @patch('utils.conversations.merge_conversations.conversations_db')
-    @patch('utils.conversations.merge_conversations.list_audio_chunks')
-    @patch('utils.conversations.merge_conversations.storage_client')
-    def test_copy_preserves_single_chunk_filename(self, mock_storage_client, mock_list, mock_conv_db):
+    def test_copy_preserves_single_chunk_filename(self, merge, monkeypatch):
         """Single-chunk filenames are also preserved during copy."""
-        from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge
+        mock_storage_client = MagicMock()
+        mock_list = MagicMock()
+        mock_conv_db = MagicMock()
+        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
+        monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
+        monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
 
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
@@ -641,18 +714,20 @@ class TestCopyAudioChunksForMergeBatchAware:
         ]
         mock_conv_db.create_audio_files_from_chunks.return_value = []
 
-        _copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
+        merge._copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
 
         copy_call = mock_bucket.copy_blob.call_args
         new_path = copy_call[0][2]
         assert new_path == 'chunks/uid/conv-new/1000.000.bin'
 
-    @patch('utils.conversations.merge_conversations.conversations_db')
-    @patch('utils.conversations.merge_conversations.list_audio_chunks')
-    @patch('utils.conversations.merge_conversations.storage_client')
-    def test_copy_mixed_single_and_batch(self, mock_storage_client, mock_list, mock_conv_db):
+    def test_copy_mixed_single_and_batch(self, merge, monkeypatch):
         """Mixed single + batch blobs are all copied with original filenames."""
-        from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge
+        mock_storage_client = MagicMock()
+        mock_list = MagicMock()
+        mock_conv_db = MagicMock()
+        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
+        monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
+        monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
 
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
@@ -673,7 +748,7 @@ class TestCopyAudioChunksForMergeBatchAware:
         ]
         mock_conv_db.create_audio_files_from_chunks.return_value = []
 
-        _copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
+        merge._copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
 
         assert mock_bucket.copy_blob.call_count == 2
         paths = [call[0][2] for call in mock_bucket.copy_blob.call_args_list]
