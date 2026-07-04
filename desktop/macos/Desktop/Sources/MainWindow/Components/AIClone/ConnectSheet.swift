@@ -106,10 +106,29 @@ struct ConnectSheet: View {
     /// account as a userbot. We persist the value to UserDefaults
     /// so the user only has to acknowledge once per desktop.
     @AppStorage("ai_clone.telegram_user_acknowledged") private var telegramAccountAcknowledged: Bool = false
-    /// The Python interpreter to use for the subprocess. Defaults to
-    /// `python3` (the user's PATH). Tests can override to a stub.
-    private let pythonExecutable: String = "/usr/bin/env"
-    private let sessionGeneratorArgs: [String] = ["python3"]
+    /// The Python interpreter to use for the subprocess. We prefer
+    /// the venv that ships next to session_string_generator.py in the
+    /// bundle (it has telethon installed); fall back to /usr/bin/env
+    /// python3 on the user's PATH for development runs.
+    private var pythonExecutable: String {
+        let venvPython = (Bundle.main.bundlePath as NSString)
+            .appendingPathComponent("Contents/Resources/plugins/telegram-user-account/.venv/bin/python3")
+        if FileManager.default.fileExists(atPath: venvPython) {
+            return venvPython
+        }
+        return "/usr/bin/env"
+    }
+    /// When using the venv python directly, no extra args are needed.
+    /// When falling back to /usr/bin/env, we need ["python3"] to tell
+    /// env which interpreter to use.
+    private var sessionGeneratorArgs: [String] {
+        let venvPython = (Bundle.main.bundlePath as NSString)
+            .appendingPathComponent("Contents/Resources/plugins/telegram-user-account/.venv/bin/python3")
+        if FileManager.default.fileExists(atPath: venvPython) {
+            return []
+        }
+        return ["python3"]
+    }
 
     private static let maxPollIterations = 15  // 15 × 3s = 45s (was 60s)
     private static let botFatherURL = URL(string: "https://t.me/BotFather")!
@@ -1167,11 +1186,28 @@ struct ConnectSheet: View {
         // Locate session_string_generator.py. It's a plugin file
         // under $WORKTREE/plugins/telegram-user-account/. If we
         // can't find it, fail fast.
-        let candidates = [
-            "/Applications/omi.app/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
-            "/Applications/omi Dev.app/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
-            Bundle.main.bundlePath + "/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
-        ]
+        //
+        // We try the canonical prod path, the Omi Dev path, the
+        // current bundle path, and any omi-*.app bundle in
+        // /Applications (covers named bundles like omi-feat-ai-clone-e2e).
+        // The desktop launch script copies the user-account plugin's
+        // files into the bundle's Resources/plugins/ directory.
+        let candidates: [String] = {
+            var paths: [String] = [
+                "/Applications/omi.app/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
+                "/Applications/omi Dev.app/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
+                Bundle.main.bundlePath + "/Contents/Resources/plugins/telegram-user-account/session_string_generator.py",
+            ]
+            // Scan /Applications for any omi-*.app that has the script.
+            let fm = FileManager.default
+            if let apps = try? fm.contentsOfDirectory(atPath: "/Applications") {
+                for app in apps where app.hasPrefix("omi") && app.hasSuffix(".app") {
+                    let p = "/Applications/\(app)/Contents/Resources/plugins/telegram-user-account/session_string_generator.py"
+                    if !paths.contains(p) { paths.append(p) }
+                }
+            }
+            return paths
+        }()
         var scriptPath: String?
         for c in candidates {
             if FileManager.default.fileExists(atPath: c) {
@@ -1187,114 +1223,87 @@ struct ConnectSheet: View {
             return
         }
 
-        // cubic review 4616126827 P1: detect "no terminal attached"
-        // BEFORE spawning the subprocess. When the desktop is launched
-        // from Finder (the normal production path), fd 0 is /dev/null
-        // and the controlling terminal is nil -- the generator
-        // would either hit EOF immediately or hang forever waiting
-        // for input the user can't provide. isatty(0) is the
-        // canonical POSIX check; on macOS GUI apps launched from
-        // Finder it returns 0. The user must run the desktop via
-        // `./run.sh` from a terminal to use "Reply as me".
-        if isatty(0) == 0 {
-            let bundleDir = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
-            let hint = "Reply as me requires a terminal-attached session. " +
-                "Open Terminal.app and run the desktop from there (e.g. via ./run.sh). " +
-                "Current bundle path: " + bundleDir + ". " +
-                "Then try 'Generate session' again."
-            await MainActor.run {
-                self.sessionGeneratorError = hint
-                self.generatingSession = false
-            }
-            return
-        }
+        // Launch the script in a VISIBLE Terminal.app window so
+        // the user can see prompts (api_id, phone, code, 2FA) and
+        // type responses. The script writes the session to a temp
+        // file; we poll for a marker to know when it finished.
+        let tempDir = NSTemporaryDirectory()
+        let sessionFile = tempDir + "omi-telegram-session.txt"
+        let markerFile = tempDir + "omi-telegram-marker.txt"
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = baseArgs + [scriptPath]
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        // cubic review 4616126827 P1 (continued): wire stdin to a
-        // Pipe (NOT fd 0) so we own the lifecycle. We still don't
-        // Wire stdin to the controlling terminal directly. We
-        // reached this point only when isatty(0) != 0, so fd 0
-        // is a real terminal and the generator's input() / getpass
-        // calls will read from the user's keyboard. cubic review
-        // 4616235108: the previous attempt used Pipe() and never
-        // connected it to fd 0 -- the child would block forever
-        // on stdin reads. FileHandle(fileDescriptor: 0) is the
-        // original pattern; the isatty(0) check above guarantees
-        // fd 0 is a usable terminal in the only case we get here.
-        process.standardInput = FileHandle(fileDescriptor: 0)
-        // cubic review 4616126827 P1 (actor-isolation): the
-        // @State mutation must happen on the main actor. We
-        // initialize it AFTER the isatty check so the
-        // cancelSessionGeneration() entry point on the UI
-        // thread sees a consistent value.
-        await MainActor.run {
-            self.sessionGeneratorProcess = process
-        }
+        // Clean up any stale files from a previous run.
+        try? FileManager.default.removeItem(atPath: sessionFile)
+        try? FileManager.default.removeItem(atPath: markerFile)
 
+        // Build the shell command for Terminal.app.
+        let argsStr = baseArgs.isEmpty ? "" : (" " + baseArgs.joined(separator: " "))
+        let shellCmd = "\(executable)\(argsStr) \(scriptPath) --output-file \(sessionFile); echo $? > \(markerFile); echo ''; echo 'Done. You can close this window.'; sleep 3"
+
+        // Open Terminal.app via osascript (simpler than NSAppleScript).
+        #if os(macOS)
+        let termProcess = Process()
+        termProcess.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        termProcess.arguments = ["-e",
+            "tell application \"Terminal\"",
+            "-e", "activate",
+            "-e", "do script \"" + shellCmd + "\"",
+            "-e", "end tell"]
         do {
-            try process.run()
+            try termProcess.run()
+            termProcess.waitUntilExit()
         } catch {
             await MainActor.run {
-                self.sessionGeneratorProcess = nil
-                self.sessionGeneratorError = "Could not launch Python: \(error.localizedDescription)"
+                self.sessionGeneratorError = "Could not open Terminal: \(error.localizedDescription)"
                 self.generatingSession = false
             }
             return
         }
+        #endif
 
-        // Read stdout off the main actor. The blocking
-        // availableData loop is fine in a Task.detached context --
-        // only @State mutations need to hop back to the main
-        // actor. cubic review 4616126827 P1: previously this
-        // synchronous loop ran on the main actor and froze the
-        // UI for the entire subprocess lifetime.
-        var capturedStdout = ""
-        let stdoutHandle = stdoutPipe.fileHandleForReading
-        // Read until EOF in a tight loop. Process's termination closes
-        // the write end of the pipe, so this terminates naturally.
-        while true {
-            let chunk = stdoutHandle.availableData
-            if chunk.isEmpty { break }
-            if let s = String(data: chunk, encoding: .utf8) {
-                capturedStdout += s
+        // Poll for the marker file (written when the script exits).
+        var found = false
+        for _ in 0..<600 {
+            if Task.isCancelled { break }
+            if FileManager.default.fileExists(atPath: markerFile) {
+                found = true
+                break
             }
+            try? await Task.sleep(nanoseconds: 500_000_000)
         }
-        process.waitUntilExit()
 
-        let exitCode = process.terminationStatus
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrString = String(data: stderrData, encoding: .utf8) ?? ""
+        let exitCode: Int32
+        if found, let data = try? String(contentsOfFile: markerFile, encoding: .utf8) {
+            exitCode = Int32(data.trimmingCharacters(in: .whitespacesAndNewlines)) ?? -1
+        } else {
+            exitCode = -1
+        }
+        try? FileManager.default.removeItem(atPath: markerFile)
 
         await MainActor.run {
             self.sessionGeneratorProcess = nil
             self.generatingSession = false
             if exitCode == 0 {
-                // The session string is the LAST line of stdout.
-                let lines = capturedStdout.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-                guard let session = lines.last, !session.isEmpty else {
+                guard let data = try? Data(contentsOf: URL(fileURLWithPath: sessionFile)),
+                      let session = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !session.isEmpty
+                else {
                     self.sessionGeneratorError = "Generator produced no session string."
+                    try? FileManager.default.removeItem(atPath: sessionFile)
                     return
                 }
                 do {
                     try self.config.setTelegramUserSession(session)
-                    // SECURITY: clear the in-memory copy NOW. The
-                    // session now lives in Keychain; we don't need
-                    // a Swift-level reference.
                     self.sessionGeneratorOutput = ""
                 } catch {
                     self.sessionGeneratorError = "Could not save session to Keychain: \(error.localizedDescription)"
                 }
+                try? FileManager.default.removeItem(atPath: sessionFile)
+            } else if exitCode == -1 {
+                self.sessionGeneratorError = "Timed out waiting for session generation (5 min)."
+                try? FileManager.default.removeItem(atPath: sessionFile)
             } else {
-                // Error path: show stderr (or a generic message).
-                self.sessionGeneratorError = stderrString.isEmpty
-                    ? "Session generation failed (exit code \(exitCode))."
-                    : stderrString
+                self.sessionGeneratorError = "Session generation failed (exit code \(exitCode)). Check the Terminal window."
+                try? FileManager.default.removeItem(atPath: sessionFile)
             }
         }
     }

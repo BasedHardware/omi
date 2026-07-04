@@ -625,6 +625,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // unit tests can construct AICloneConfig without touching the
       // real ~/.config/omi/ai-clone-plugin.json. P2 (cubic).
       config.applyDiscovery()
+      // plan: also apply the user-account plugin's discovery
+      // (separate file at ~/.config/omi/ai-clone-telegram-user.json).
+      // Without this call, the "Reply as me" section in the
+      // ConnectSheet is invisible even when the user-account
+      // plugin is running and ready.
+      config.applyUserAccountDiscovery()
     }
   }
 
