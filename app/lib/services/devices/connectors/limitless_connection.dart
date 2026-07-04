@@ -101,6 +101,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   Future<void> _reinitializeAfterReconnect() async {
+    _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
     // Re-enabling streaming here is the same msg8 that toggles drain mode, so it
     // must not fire mid-drain or while Transcribe Later keeps the pendant on flash.
     if (_isBatchMode || _realtimeSuppressed) return;
