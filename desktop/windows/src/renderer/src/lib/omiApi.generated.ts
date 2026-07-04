@@ -1258,7 +1258,7 @@ export interface FairUseLimitsResponse {
 
 export interface FairUseStatusResponse {
   case_ref: string;
-  dg_budget?: FairUseDailyGenerationsBudgetResponse;
+  dg_budget: FairUseDailyGenerationsBudgetResponse;
   limits: FairUseLimitsResponse;
   message: string;
   speech_hours_3day: number;
@@ -3219,7 +3219,6 @@ export interface OmiApiPaths {
       operationId: "get_shared_action_items_v1_action_items_shared__token__get";
       responses: {
         "200": SharedActionItemsResponse;
-        "401": void;
         "404": void;
         "422": HTTPValidationError;
       };
@@ -4168,7 +4167,6 @@ export interface OmiApiPaths {
       operationId: "get_shared_conversation_by_id_v1_conversations__conversation_id__shared_get";
       responses: {
         "200": SharedConversationResponse;
-        "401": void;
         "404": void;
         "422": HTTPValidationError;
       };
@@ -6297,7 +6295,6 @@ export interface OmiApiPaths {
       operationId: "get_shared_chat_messages_v2_messages_shared__token__get";
       responses: {
         "200": SharedChatMessagesResponse;
-        "401": void;
         "404": void;
         "422": HTTPValidationError;
       };
