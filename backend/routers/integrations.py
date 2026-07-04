@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional, cast
 from pydantic import BaseModel, Field
+from urllib.parse import urlencode
 import os
 import secrets
 import json
 import base64
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import httpx
 
 import database.users as users_db
@@ -35,7 +36,7 @@ OAUTH_CONFIGS = {
 }
 
 # Provider-specific OAuth URL configuration
-AUTH_PROVIDERS = {
+AUTH_PROVIDERS: Dict[str, Dict[str, Any]] = {
     'google_calendar': {
         'client_env': 'GOOGLE_CLIENT_ID',
         'auth_base': 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -88,7 +89,7 @@ def render_oauth_response(
     config = OAUTH_CONFIGS.get(app_key, {'name': app_key.title()})
 
     if success:
-        context = {
+        context: Dict[str, Any] = {
             'request': request,
             'title': f"{config['name']} Auth",
             'icon': '✓',
@@ -98,7 +99,7 @@ def render_oauth_response(
             'show_spinner': True,
         }
     else:
-        error_messages = {
+        error_messages: Dict[str, str] = {
             'missing_code': 'No authorization code received from {}.'.format(config['name']),
             'invalid_state': 'Invalid or expired authentication request.',
             'config_error': '{} OAuth not properly configured.'.format(config['name']),
@@ -110,7 +111,7 @@ def render_oauth_response(
             'title': f"{config['name']} Auth Error",
             'icon': '❌',
             'message': f"{'Security' if error_type == 'invalid_state' else 'Configuration' if error_type == 'config_error' else 'Authentication'} Error",
-            'description': error_messages.get(error_type, 'An error occurred.'),
+            'description': error_messages.get(error_type or 'unknown', 'An error occurred.'),
             'redirect_url': f'omi://{app_key}/callback?error={error_type or "unknown"}',
             'show_spinner': False,
         }
@@ -136,7 +137,8 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
         return None
 
     try:
-        state_data = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
+        loaded: object = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
+        state_data = cast(Dict[str, str], loaded) if isinstance(loaded, dict) else {}
         # Delete after successful parse to prevent replay
         redis_db.r.delete(state_key)
         return state_data
@@ -164,14 +166,18 @@ class AppleHealthSyncData(BaseModel):
     # Steps data
     total_steps: Optional[int] = Field(default=None, description="Total steps in period")
     average_steps_per_day: Optional[float] = Field(default=None, description="Average steps per day")
-    daily_steps: Optional[list] = Field(default=None, description="Daily steps breakdown [{date, steps}]")
+    daily_steps: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="Daily steps breakdown [{date, steps}]"
+    )
 
     # Sleep data
     total_sleep_hours: Optional[float] = Field(default=None, description="Total sleep hours")
     total_in_bed_hours: Optional[float] = Field(default=None, description="Total time in bed hours")
     sleep_sessions_count: Optional[int] = Field(default=None, description="Number of sleep sessions")
-    sleep_sessions: Optional[list] = Field(default=None, description="Sleep session details")
-    daily_sleep: Optional[list] = Field(default=None, description="Daily sleep breakdown [{date, sleepHours}]")
+    sleep_sessions: Optional[List[Dict[str, Any]]] = Field(default=None, description="Sleep session details")
+    daily_sleep: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="Daily sleep breakdown [{date, sleepHours}]"
+    )
 
     # Heart rate data
     heart_rate_average: Optional[float] = Field(default=None, description="Average heart rate")
@@ -181,10 +187,12 @@ class AppleHealthSyncData(BaseModel):
     # Active energy data
     total_active_energy: Optional[float] = Field(default=None, description="Total active energy kcal")
     average_active_energy_per_day: Optional[float] = Field(default=None, description="Average daily active energy")
-    daily_active_energy: Optional[list] = Field(default=None, description="Daily energy breakdown [{date, calories}]")
+    daily_active_energy: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="Daily energy breakdown [{date, calories}]"
+    )
 
     # Workouts data
-    workouts: Optional[list] = Field(default=None, description="List of workout records")
+    workouts: Optional[List[Dict[str, Any]]] = Field(default=None, description="List of workout records")
 
 
 class IntegrationResponse(BaseModel):
@@ -243,7 +251,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
     Unlike other integrations that use OAuth, Apple Health data is pushed from the device.
     """
     # Build the health data structure
-    health_data = {
+    health_data: Dict[str, Any] = {
         'period_days': data.period_days,
     }
 
@@ -288,7 +296,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
         health_data['workouts'] = data.workouts
 
     # Save the integration with health data
-    integration_data = {
+    integration_data: Dict[str, Any] = {
         'connected': True,
         'health_data': health_data,
         'last_synced': datetime.now(timezone.utc).isoformat(),
@@ -341,7 +349,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
 
     if app_key in AUTH_PROVIDERS:
         cfg = AUTH_PROVIDERS[app_key]
-        client_id = os.getenv(cfg['client_env'])
+        client_id = os.getenv(cast(str, cfg['client_env']))
         if not client_id:
             logger.error(f"ERROR: {cfg['client_env']} not configured for {cfg['log_name']} integration OAuth")
             raise HTTPException(status_code=500, detail=cfg['error_detail'])
@@ -349,14 +357,12 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         base_url_clean = base_url.rstrip('/')
         redirect_uri = f"{base_url_clean}{cfg['redirect_path']}"
 
-        from urllib.parse import urlencode
-
-        params = {
+        params: Dict[str, str] = {
             'client_id': client_id,
             'redirect_uri': redirect_uri,
             'state': state_token,
         }
-        params.update(cfg['query'])
+        params.update(cast(Dict[str, str], cfg['query']))
 
         if cfg.get('requires_pkce'):
             code_verifier = secrets.token_urlsafe(32)
@@ -455,7 +461,8 @@ async def handle_oauth_callback(
             )
 
         if token_response.status_code == 200:
-            token_data = token_response.json()
+            token_data_raw: object = token_response.json()
+            token_data = cast(Dict[str, Any], token_data_raw) if isinstance(token_data_raw, dict) else {}
             access_token = token_data.get('access_token', '')
             refresh_token = token_data.get('refresh_token')
 
@@ -463,7 +470,7 @@ async def handle_oauth_callback(
                 logger.info(f'{app_key}: No access token received in response')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
-            integration_data = {
+            integration_data: Dict[str, Any] = {
                 'connected': True,
                 'access_token': access_token,
             }
@@ -526,7 +533,7 @@ async def oauth_callback(
     client_secret = os.getenv(client_secret_env)
     base_url = os.getenv('BASE_API_URL')
 
-    if not all([client_id, client_secret, base_url]):
+    if not client_id or not client_secret or not base_url:
         return render_oauth_response(request, normalized_key, success=False, error_type='config_error')
 
     base_url_clean = base_url.rstrip('/')
@@ -551,7 +558,7 @@ async def oauth_callback(
         return await handle_oauth_callback(request, normalized_key, code, state, config)
 
 
-@router.on_event("shutdown")
+@router.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_http_client():
     """Cleanup HTTP client on app shutdown."""
     await close_http_client()

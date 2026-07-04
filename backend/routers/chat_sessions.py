@@ -7,9 +7,7 @@ streams AI responses.
 """
 
 import logging
-import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Callable, List, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -24,6 +22,11 @@ from utils.other import endpoints as auth
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
+# parameter; route access through a cast so this strict-checked file sees a
+# concrete callable type instead of `Unknown`.
+_auth_module = cast(Any, auth)
 
 
 # ============================================================================
@@ -211,7 +214,9 @@ def rate_message(
 @router.post('/v2/chat/initial-message', tags=['chat-sessions'])
 def create_initial_message(
     request: InitialMessageRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "chat:initial"))
+    ),
 ):
     """Generate an initial greeting message for a chat session.
 
@@ -225,7 +230,9 @@ def create_initial_message(
 @router.post('/v2/chat/generate-title', tags=['chat-sessions'])
 def generate_session_title(
     request: GenerateTitleRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "chat:initial"))
+    ),
 ):
     """Generate a title for a chat session based on its messages."""
     conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
@@ -234,7 +241,11 @@ def generate_session_title(
         "Return ONLY the title text, no quotes or punctuation.\n\n"
         f"{conversation}"
     )
-    title = get_llm('session_titles').invoke(prompt).content.strip().strip('"\'')
+    # `BaseChatModel.invoke(...).content` is typed `str | list[str | dict]` by
+    # langchain's stubs; session-title responses are plain strings, so reach
+    # the response through `Any` and annotate the result as `str`.
+    response = cast(Any, get_llm('session_titles').invoke(prompt))
+    title: str = response.content.strip().strip('"\'')
     if not title:
         title = 'New Chat'
 

@@ -6,7 +6,7 @@ import uuid
 from utils.executors import db_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Optional, List
+from typing import Any, Dict, List, Optional, cast
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
@@ -22,14 +22,13 @@ from database.vector_db import (
 from utils.users import get_user_display_name
 from utils.other import endpoints as auth
 from utils.notifications import (
-    send_notification,
+    send_notification,  # type: ignore[reportUnknownVariableType]  # utils.notifications.send_notification has untyped dict/list params
     send_action_item_data_message,
-    send_action_item_update_message,
     send_action_item_deletion_message,
     send_action_items_batch_deletion_message,
     sync_action_item_reminder,
 )
-from utils.task_sync import auto_sync_action_item
+from utils.task_sync import auto_sync_action_item  # type: ignore[reportUnknownVariableType]  # utils.task_sync.auto_sync_action_item has untyped dict param/return
 from pydantic import BaseModel, Field, ValidationError
 
 router = APIRouter()
@@ -37,14 +36,18 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -> dict:
+def _batch_mutation_response(
+    result: "action_items_db.BatchMutationResult",
+    *,
+    locked_ids: Optional[set[str]] = None,
+) -> Dict[str, Any]:
     """Preserve legacy success shape unless there is partial-outcome detail.
 
     Mobile clients historically treat batch endpoints as boolean success paths,
     and the hermetic e2e harness pins that happy-path contract. Missing/no-op
     details are only emitted when they carry actionable information.
     """
-    body = {"status": "ok", "updated_count": result.updated_count}
+    body: Dict[str, Any] = {"status": "ok", "updated_count": result.updated_count}
     locked_ids = locked_ids or set()
     if result.missing_ids or result.noop_ids or locked_ids:
         body.update(result.model())
@@ -93,7 +96,7 @@ class ActionItemResponse(BaseModel):
     indent_level: int = 0
 
 
-def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
+def _get_valid_action_item(uid: str, action_item_id: str) -> Dict[str, Any]:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
@@ -120,7 +123,9 @@ class BatchUpdateActionItemsRequest(BaseModel):
 
 
 @router.patch("/v1/action-items/batch", tags=['action-items'])
-def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
+def batch_update_action_items(
+    request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)
+) -> Dict[str, Any]:
     """Batch update sort_order and indent_level for multiple action items."""
     result = action_items_db.batch_update_action_items(uid, request.items)
     return _batch_mutation_response(result)
@@ -161,23 +166,23 @@ def get_pending_sync_items(
 
 
 @router.patch("/v1/action-items/sync-batch", tags=['action-items'])
-def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_current_user_uid)):
+def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
     """Batch update action items during reminders sync. Single Firestore batch commit."""
     if not request.items:
         return {"status": "ok", "updated_count": 0}
 
     # Pre-fetch items to skip locked ones
-    locked_ids = set()
+    locked_ids: set[str] = set()
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
         if existing and existing.get('is_locked', False):
             locked_ids.add(item.id)
 
-    updates = []
+    updates: List[Dict[str, Any]] = []
     for item in request.items:
         if item.id in locked_ids:
             continue
-        update_data = {}
+        update_data: Dict[str, Any] = {}
         if item.description is not None:
             update_data['description'] = item.description
         if item.completed is not None:
@@ -267,9 +272,11 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
     upsert_action_item_vector(uid, action_item_id, request.description)
 
     def _run_auto_sync():
-        asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
+        asyncio.run(
+            cast(Any, auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
+        )
 
-    db_executor.submit(_run_auto_sync)
+    db_executor.submit(_run_auto_sync)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit is untyped
 
     return ActionItemResponse(**action_item)
 
@@ -345,7 +352,7 @@ def search_action_items(
     query: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results"),
     uid: str = Depends(auth.get_current_user_uid),
-):
+) -> Dict[str, List[ActionItemResponse]]:
     """Semantic search across action items using vector similarity."""
     action_item_ids = search_action_items_by_vector(uid, query, limit=limit)
     if not action_item_ids:
@@ -378,7 +385,7 @@ def update_action_item(
         raise HTTPException(status_code=404, detail="Action item not found")
 
     # Prepare update data
-    update_data = {}
+    update_data: Dict[str, Any] = {}
     if request.description is not None:
         update_data['description'] = request.description
     if request.completed is not None:
@@ -418,6 +425,8 @@ def update_action_item(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if not updated_item:
+        raise HTTPException(status_code=500, detail="Failed to fetch updated action item")
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
     # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
@@ -453,6 +462,8 @@ def toggle_action_item_completion(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if not updated_item:
+        raise HTTPException(status_code=500, detail="Failed to fetch updated action item")
 
     # Cancel the scheduled client reminder on completion, or re-schedule it when un-completing an
     # item that still has a future due date (#5085).
@@ -524,7 +535,9 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
 
 
 @router.get("/v1/conversations/{conversation_id}/action-items", tags=['action-items'])
-def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_action_items(
+    conversation_id: str, uid: str = Depends(auth.get_current_user_uid)
+) -> Dict[str, Any]:
     """Get all action items for a specific conversation."""
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
@@ -532,7 +545,7 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-    response_items = []
+    response_items: List[ActionItemResponse] = []
     for item in action_items:
         try:
             response_items.append(ActionItemResponse(**item))
@@ -549,7 +562,7 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
     existing = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-    existing_ids = [item['id'] for item in existing]
+    existing_ids: List[str] = [item['id'] for item in existing]
 
     deleted_count = action_items_db.delete_action_items_for_conversation(uid, conversation_id)
 
@@ -562,13 +575,13 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
 @router.post("/v1/action-items/batch", tags=['action-items'])
 def create_action_items_batch(
     action_items: List[CreateActionItemRequest], uid: str = Depends(auth.get_current_user_uid)
-):
+) -> Dict[str, Any]:
     """Create multiple action items in a batch."""
     if not action_items:
         return {"action_items": [], "created_count": 0}
 
     # Prepare action items data
-    action_items_data = []
+    action_items_data: List[Dict[str, Any]] = []
     for item in action_items:
         action_item_data = {
             'description': item.description,
@@ -582,20 +595,23 @@ def create_action_items_batch(
     created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
 
     # Fetch created items and send FCM messages
-    created_items = []
+    created_items: List[ActionItemResponse] = []
     for idx, item_id in enumerate(created_ids):
         item = action_items_db.get_action_item(uid, item_id)
         if item:
             created_items.append(ActionItemResponse(**item))
 
             # Send FCM data message if action item has a due date
-            if idx < len(action_items) and action_items[idx].due_at:
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=item_id,
-                    description=action_items[idx].description,
-                    due_at=action_items[idx].due_at.isoformat(),
-                )
+            if idx < len(action_items):
+                req_item = action_items[idx]
+                due_at = req_item.due_at
+                if due_at:
+                    send_action_item_data_message(
+                        user_id=uid,
+                        action_item_id=item_id,
+                        description=req_item.description,
+                        due_at=due_at.isoformat(),
+                    )
 
     upsert_action_item_vectors_batch(
         uid,
@@ -645,7 +661,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
 
 
 @router.get("/v1/action-items/shared/{token}", tags=['action-items'])
-def get_shared_action_items(token: str):
+def get_shared_action_items(token: str) -> Dict[str, Any]:
     """Public endpoint — get shared task preview (no auth required)."""
     share_data = redis_db.get_task_share(token)
     if not share_data:
@@ -655,7 +671,7 @@ def get_shared_action_items(token: str):
     task_ids = share_data['task_ids']
 
     # Fetch tasks — only expose description + due_at, skip locked items
-    tasks = []
+    tasks: List[Dict[str, Any]] = []
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
         if item and not item.get('is_locked', False):
@@ -674,7 +690,9 @@ def get_shared_action_items(token: str):
 
 
 @router.post("/v1/action-items/accept", tags=['action-items'])
-def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
+def accept_shared_action_items(
+    request: AcceptSharedTasksRequest, uid: str = Depends(auth.get_current_user_uid)
+) -> Dict[str, Any]:
     """Save shared tasks to the recipient's task list."""
     share_data = redis_db.get_task_share(request.token)
     if not share_data:
@@ -688,7 +706,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     task_ids = share_data['task_ids']
 
     # Pre-validate: check which items are eligible (exist and not locked)
-    eligible_ids = []
+    eligible_ids: List[str] = []
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
         if item and not item.get('is_locked', False):
@@ -705,13 +723,13 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         raise HTTPException(status_code=409, detail="You have already accepted this share")
 
     # Copy each eligible task to recipient's list
-    created_ids = []
+    created_ids: List[str] = []
     for task_id in eligible_ids:
         original = action_items_db.get_action_item(sender_uid, task_id)
         if not original or original.get('is_locked', False):
             continue
 
-        new_item = {
+        new_item: Dict[str, Any] = {
             'description': original.get('description', ''),
             'completed': False,
             'due_at': original.get('due_at'),

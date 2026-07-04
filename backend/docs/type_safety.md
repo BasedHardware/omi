@@ -123,6 +123,18 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `routers/omni_relay.py`
   - `routers/updates.py`
   - `routers/wrapped.py`
+  - `routers/action_items.py`
+  - `routers/agent_tools.py`
+  - `routers/agents.py`
+  - `routers/announcements.py`
+  - `routers/auth.py`
+  - `routers/auto_model.py`
+  - `routers/chat_sessions.py`
+  - `routers/goals.py`
+  - `routers/integration.py`
+  - `routers/integrations.py`
+  - `routers/notifications.py`
+  - `routers/oauth.py`
   - `utils/conversations/memories.py`
   - `utils/llm/__init__.py`
   - `utils/llm/clients.py`

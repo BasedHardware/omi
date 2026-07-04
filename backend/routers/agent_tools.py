@@ -10,7 +10,9 @@ Endpoints:
 """
 
 import asyncio
+import contextvars
 import logging
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from utils.executors import db_executor, run_blocking
 
@@ -18,13 +20,21 @@ import google.auth
 import google.auth.transport.requests
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
 from database.users import get_agent_vm
-from utils.other.endpoints import get_current_user_uid, with_rate_limit
-from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
+
+# `utils.other.endpoints.with_rate_limit`, `utils.retrieval.agentic.agent_config_context`,
+# and `utils.retrieval.tools.app_tools.load_app_tools` are untyped; reach them
+# through getattr + cast so the untyped symbol never lands in a typed binding.
+from utils.other import endpoints as _endpoints
+from utils.other.endpoints import get_current_user_uid
+from utils.retrieval import agentic as _agentic
+from utils.retrieval.agentic import CORE_TOOLS
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
-from utils.retrieval.tools.app_tools import load_app_tools
+from utils.retrieval.tools import app_tools as _app_tools
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -33,15 +43,29 @@ router = APIRouter()
 
 GCE_PROJECT = "based-hardware"
 
+# Typed aliases for untyped utils (getattr yields Any; cast pins the signature).
+RateLimitFactory = Callable[[Callable[..., Any], str], Callable[..., Any]]
+with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(_endpoints, "with_rate_limit"))
+# `agent_config_context` in agentic.py is typed as ContextVar[dict] (untyped value
+# type); cast to a fully-typed binding so strict checking sees the dict value shape.
+agent_config_context: contextvars.ContextVar[Dict[str, Any]] = cast(
+    contextvars.ContextVar[Dict[str, Any]],
+    getattr(_agentic, "agent_config_context"),
+)
+# `load_app_tools` in app_tools.py is annotated to return List[Callable] (untyped
+# callable); each returned item is a LangChain BaseTool, so cast to that contract.
+LoadAppTools = Callable[[str], List[BaseTool]]
+load_app_tools: LoadAppTools = cast(LoadAppTools, getattr(_app_tools, "load_app_tools"))
+
 
 # --------------- GCE helpers ---------------
 
 
 def _get_gce_access_token() -> str:
     """Get a GCE access token via Application Default Credentials."""
-    creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
+    creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])  # type: ignore[reportUnknownMemberType]  # google.auth.default is untyped
     creds.refresh(google.auth.transport.requests.Request())
-    return creds.token
+    return creds.token  # type: ignore[reportUnknownVariableType]  # google.auth credentials token is untyped
 
 
 async def _check_gce_status(vm_name: str, zone: str) -> str:
@@ -94,7 +118,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         instance_url = (
             f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
         )
-        ip = None
+        ip: Optional[str] = None
         for attempt in range(6):
             token = await run_blocking(db_executor, _get_gce_access_token)
             inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
@@ -120,17 +144,17 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         return ip
 
 
-def _update_firestore_vm(uid: str, ip: str | None, status: str):
+def _update_firestore_vm(uid: str, ip: str | None, status: str) -> None:
     """Update the user's agentVm fields in Firestore."""
     from database.users import db as firestore_db
 
-    update = {"agentVm.status": status}
+    update: Dict[str, Any] = {"agentVm.status": status}
     if ip:
         update["agentVm.ip"] = ip
     firestore_db.collection('users').document(uid).update(update)
 
 
-async def _restart_vm_background(uid: str, vm_name: str, zone: str):
+async def _restart_vm_background(uid: str, vm_name: str, zone: str) -> None:
     """Background task: start stopped VM, update Firestore with new IP when ready."""
     try:
         ip = await _start_vm_and_wait(vm_name, zone)
@@ -145,7 +169,7 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
 
 
 @router.get("/v1/agent/vm-status")
-def get_vm_status(uid: str = Depends(get_current_user_uid)):
+def get_vm_status(uid: str = Depends(get_current_user_uid)) -> Dict[str, Any]:
     """Return the user's agent VM info from Firestore."""
     vm = get_agent_vm(uid)
     logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
@@ -158,13 +182,13 @@ def get_vm_status(uid: str = Depends(get_current_user_uid)):
 
 
 @router.post("/v1/agent/vm-ensure")
-async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
+async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)) -> Dict[str, Any]:
     """Check VM status; if stopped/terminated, restart it in the background."""
     vm = await run_blocking(db_executor, get_agent_vm, uid)
     if not vm:
         return {"has_vm": False}
 
-    vm_name = vm.get("vmName")
+    vm_name = cast(str, vm.get("vmName"))
     zone = vm.get("zone", "us-central1-a")
     fs_status = vm.get("status", "")
 
@@ -194,7 +218,7 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
 
 
 @router.post("/v1/agent/keepalive")
-async def keepalive(uid: str = Depends(get_current_user_uid)):
+async def keepalive(uid: str = Depends(get_current_user_uid)) -> Dict[str, Any]:
     """Ping the VM's /ping endpoint to reset its idle auto-stop timer."""
     vm = await run_blocking(db_executor, get_agent_vm, uid)
     if not vm or vm.get("status") != "ready":
@@ -217,11 +241,14 @@ async def keepalive(uid: str = Depends(get_current_user_uid)):
         return {"ok": False, "reason": "unreachable"}
 
 
-def _tool_schema(t) -> dict:
+def _tool_schema(t: BaseTool) -> Dict[str, Any]:
     """Extract a clean JSON schema from a LangChain tool."""
-    schema = t.args_schema.model_json_schema() if t.args_schema else {}
-    props = schema.get("properties", {})
-    required = list(schema.get("required", []))
+    args_schema = t.args_schema
+    # At runtime args_schema is always a pydantic BaseModel subclass for these tools;
+    # cast to Any to call model_json_schema() without narrowing the union member.
+    schema: Dict[str, Any] = cast(Any, args_schema).model_json_schema() if args_schema else {}
+    props: Dict[str, Any] = schema.get("properties", {})
+    required: List[str] = list(schema.get("required", []))
 
     # Strip the 'config' parameter — it's internal LangChain plumbing
     props.pop("config", None)
@@ -240,9 +267,9 @@ def _tool_schema(t) -> dict:
 
 
 @router.get("/v1/agent/tools")
-def list_tools(uid: str = Depends(get_current_user_uid)):
+def list_tools(uid: str = Depends(get_current_user_uid)) -> Dict[str, Any]:
     """Return all available tool definitions for a user."""
-    tools = []
+    tools: List[Dict[str, Any]] = []
 
     for t in CORE_TOOLS:
         tools.append(_tool_schema(t))
@@ -259,7 +286,7 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
 
 class ExecuteToolRequest(BaseModel):
     tool_name: str
-    params: dict = {}
+    params: Dict[str, Any] = {}
 
 
 class ExecuteToolResponse(BaseModel):
@@ -271,10 +298,10 @@ class ExecuteToolResponse(BaseModel):
 async def execute_tool(
     body: ExecuteToolRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
-):
+) -> Dict[str, Any]:
     """Execute a named tool and return its result."""
     # Set up agent_config_context so tools can resolve the UID
-    config = {
+    config: Dict[str, Any] = {
         "configurable": {
             "user_id": uid,
         },
@@ -282,14 +309,14 @@ async def execute_tool(
     agent_config_context.set(config)
 
     # Find the tool
-    all_tools = list(CORE_TOOLS)
+    all_tools: List[BaseTool] = list(CORE_TOOLS)
     try:
         app_tools = load_app_tools(uid)
         all_tools.extend(app_tools)
     except Exception as e:
         logger.error(f"⚠️ Error loading app tools: {e}")
 
-    target = None
+    target: Optional[BaseTool] = None
     for t in all_tools:
         if t.name == body.tool_name:
             target = t
@@ -299,15 +326,18 @@ async def execute_tool(
         raise HTTPException(status_code=404, detail=f"Tool '{body.tool_name}' not found")
 
     # Strip config param if caller accidentally included it
-    params = {k: v for k, v in body.params.items() if k != "config"}
+    params: Dict[str, Any] = {k: v for k, v in body.params.items() if k != "config"}
 
     try:
-        # Prefer async coroutine if available (app tools), else sync invoke
-        if hasattr(target, "coroutine") and target.coroutine is not None:
-            result = await target.coroutine(**params)
+        # Prefer async coroutine if available (app tools), else sync invoke.
+        # `coroutine` is an optional dynamic attribute on BaseTool subclasses;
+        # use getattr to avoid statically invalid attribute access.
+        coroutine_attr = getattr(target, "coroutine", None)
+        if coroutine_attr is not None:
+            result: Any = await coroutine_attr(**params)
         else:
             # Pass config as second arg (LangChain RunnableConfig), not as tool input
-            result = target.invoke(params, config=config)
+            result = target.invoke(params, config=cast(RunnableConfig, config))  # type: ignore[reportUnknownMemberType]  # BaseTool.invoke input type parametrized with untyped dict
         result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
         return {"result": result}
     except Exception as e:
