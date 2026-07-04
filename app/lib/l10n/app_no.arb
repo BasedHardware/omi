@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.",
     "transcribeLaterTitle": "Transkriber senere",
     "transcribeLaterDescription": "Ta opp lyd nå og transkriber den ved behov i stedet for direkte. Opptakene lagres på telefonen, og du laster dem opp for å lage samtaler.",
-    "transcribeLaterNote": "Fungerer foreløpig med Omi-enheter. Lyden blir værende på telefonen til du velger å laste den opp.",
+    "transcribeLaterNote": "Fungerer foreløpig med Omi- og Limitless-enheter. Lyden blir værende på telefonen til du velger å laste den opp.",
     "transcribeLaterStorageFull": "Telefonen har lite lagringsplass, så opptaket er satt på pause. Frigjør plass eller last opp opptakene dine, så fortsetter det automatisk.",
     "unmute": "Slå på lyd",
     "newRecording": "Nytt opptak",
@@ -3104,5 +3104,17 @@
     "deviceOnboardingIntroDuration": "Cirka 1 minutt",
     "jumpToLatestMessage": "Gå til nyeste melding",
     "latest": "Nyeste",
-    "flashFirmware": "Flash fastvare"
+    "flashFirmware": "Flash fastvare",
+    "pendantRecordingTitle": "Tar opp på anhenget",
+    "pendantRecordingNote": "Anhenget ditt tar opp på egen hånd. Opptak synkroniseres til telefonen mens appen er åpen.",
+    "pendantSyncingRecordings": "Synkroniserer opptak fra anhenget ditt…",
+    "pendantMinutesStored": "~{minutes} min lagret",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Lagringsplassen på anhenget er nesten full — hold appen åpen for å synkronisere."
 }

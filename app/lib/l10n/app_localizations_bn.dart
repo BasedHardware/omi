@@ -9347,7 +9347,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'আপাতত শুধু Omi ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।';
+      'আপাতত Omi এবং Limitless ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9496,4 +9496,22 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get flashFirmware => 'ফার্মওয়্যার ফ্ল্যাশ করুন';
+
+  @override
+  String get pendantRecordingTitle => 'পেনড্যান্টে রেকর্ডিং চলছে';
+
+  @override
+  String get pendantRecordingNote =>
+      'আপনার পেনড্যান্ট নিজে থেকেই রেকর্ড করছে। অ্যাপ খোলা থাকাকালীন রেকর্ডিং আপনার ফোনে সিঙ্ক হয়।';
+
+  @override
+  String get pendantSyncingRecordings => 'আপনার পেনড্যান্ট থেকে রেকর্ডিং সিঙ্ক হচ্ছে…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes মিনিট সংরক্ষিত';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'পেনড্যান্টের স্টোরেজ প্রায় পূর্ণ — সিঙ্ক করতে অ্যাপটি খোলা রাখুন।';
 }

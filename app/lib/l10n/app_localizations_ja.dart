@@ -9187,7 +9187,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
 
   @override
-  String get transcribeLaterNote => '現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+  String get transcribeLaterNote => '現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
 
   @override
   String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
@@ -9335,4 +9335,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get flashFirmware => 'ファームウェアを書き込む';
+
+  @override
+  String get pendantRecordingTitle => 'ペンダントで録音中';
+
+  @override
+  String get pendantRecordingNote => 'ペンダントが自動的に録音しています。アプリを開いている間に録音がスマートフォンに同期されます。';
+
+  @override
+  String get pendantSyncingRecordings => 'ペンダントから録音を同期しています…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes 分保存済み';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'ペンダントのストレージがまもなくいっぱいになります。同期するにはアプリを開いたままにしてください。';
 }

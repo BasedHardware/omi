@@ -9425,7 +9425,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Gumagana muna sa mga Omi device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
+      'Gumagana muna sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9578,4 +9578,23 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get flashFirmware => 'I-flash ang Firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Nagre-record sa pendant';
+
+  @override
+  String get pendantRecordingNote =>
+      'Kusang nagre-record ang iyong pendant. Nasi-sync ang mga recording sa iyong telepono habang nakabukas ang app.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sini-sync ang mga recording mula sa iyong pendant…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min ang nakaimbak';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Halos puno na ang storage ng pendant — panatilihing bukas ang app para makapag-sync.';
 }

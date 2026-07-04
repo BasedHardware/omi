@@ -9335,7 +9335,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9485,4 +9485,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flash Firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Recording on Pendant';
+
+  @override
+  String get pendantRecordingNote =>
+      'Your pendant is recording on its own. Recordings sync to your phone while the app is open.';
+
+  @override
+  String get pendantSyncingRecordings => 'Syncing recordings from your pendant…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min stored';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Pendant storage is almost full — keep the app open to sync.';
 }
