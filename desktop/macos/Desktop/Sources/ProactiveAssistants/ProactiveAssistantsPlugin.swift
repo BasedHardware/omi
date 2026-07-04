@@ -235,18 +235,11 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Check screen recording permission (and update cache)
         refreshScreenRecordingPermission()
         guard hasScreenRecordingPermission else {
-            // Do NOT request the permission here. This method is invoked
-            // automatically on launch, on API-key load, on app re-activation, and
-            // after sleep/unlock (screen analysis is enabled by default), so
-            // requesting here surfaced the macOS Screen Recording dialog on every
-            // login while permission was ungranted. The permission is now handled
-            // only by explicit user-initiated enable flows before they reach this
-            // point: the menu-bar and Settings toggles deep-link to System Settings
-            // via openScreenRecordingPreferences(), the Sidebar and Rewind toggles
-            // additionally call requestAllScreenCapturePermissions() to trigger the
-            // prompt, and onboarding uses its dedicated permission step. If the user
-            // grants access out-of-band, the retry loop below and the
-            // app-active/auto-restart paths pick it up without prompting.
+            // Must never trigger the OS permission prompt here: this method runs on
+            // non-user-initiated paths (launch, app re-activation, key load, wake),
+            // so requesting would pop the dialog on every login. User-initiated
+            // enable flows request permission before calling this; the retry loop
+            // below picks up out-of-band grants without prompting.
             if retryCount < maxRetries {
                 let delay = retryDelays[retryCount]
                 log("Screen recording permission not yet granted, retrying in \(delay)s (attempt \(retryCount + 1)/\(maxRetries))")
