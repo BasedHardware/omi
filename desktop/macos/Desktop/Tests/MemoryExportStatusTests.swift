@@ -90,6 +90,46 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertFalse(chatGPTStatus.hasConnection)
   }
 
+  func testCodexSetupCompletionRefreshHidesPrimarySetupCTA() async throws {
+    storeOwnedMCPKey()
+
+    var statuses = await MemoryExportService.shared.allStatuses()
+    XCTAssertFalse(statuses[.codex]?.hasConnection == true)
+    XCTAssertEqual(
+      MemoryExportConnectionPresentation.make(
+        destination: .codex,
+        status: statuses[.codex],
+        isRunning: false
+      ).primaryActionTitle,
+      "Do it for me"
+    )
+
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+      [mcp_servers.omi-memory]
+      command = "npx"
+      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+      """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    statuses = await MemoryExportService.shared.allStatuses()
+    let presentation = MemoryExportConnectionPresentation.make(
+      destination: .codex,
+      status: statuses[.codex],
+      isRunning: false
+    )
+
+    XCTAssertTrue(statuses[.codex]?.hasConnection == true)
+    XCTAssertNil(presentation.primaryActionTitle)
+    XCTAssertEqual(
+      presentation.completion,
+      MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "Restart Codex to load Omi Memory."
+      )
+    )
+  }
+
   func testExistingCodexMCPConfigWithDifferentKeyDoesNotMarkCodexConnected() async throws {
     storeOwnedMCPKey(key: "current-key")
     let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)

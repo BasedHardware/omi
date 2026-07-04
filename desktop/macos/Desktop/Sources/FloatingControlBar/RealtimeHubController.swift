@@ -141,7 +141,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var sessionAuth: HubAuth?
   private var pcmPlayer: StreamingPCMPlayer?
   private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active in
-    self?.barState?.isVoiceResponseActive = active
+    if active {
+      self?.barState?.isVoiceResponseActive = true
+    } else {
+      self?.barState?.clearVoiceResponseState()
+    }
   }
   private let agentControlService = AgentControlService()
 
@@ -897,17 +901,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     }
     guard let s = session else {
-      if pendingBargeInReplacement != nil {
-        log("RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — falling back to buffered transcription")
-        clearBargeInReplacementState()
-        responding = false
+      if var pending = pendingBargeInReplacement {
+        pending.pendingCommit = true
+        pendingBargeInReplacement = pending
+        log(
+          "RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — "
+            + "deferring commit (bufferedChunks=\(pending.audioBuffer.count))"
+        )
         ensureWarm()
-        return .rejectedNoSession
-      } else {
-        responding = false
-        exitVoiceUI(clearResponseGlow: true)
-        return .rejectedNoSession
+        return .deferredForReplacement
       }
+      responding = false
+      exitVoiceUI(clearResponseGlow: true)
+      return .rejectedNoSession
     }
     // Hint the provider's transcription with the identified language, entirely
     // synchronously: one configured language → hint it directly; several → whatever the
@@ -1583,66 +1589,79 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           agentBrief: handoff.brief,
           earlyUserMessageId: earlyUserMessageId)
       } else {
-      let candidates = AssistantSettings.shared.voiceBaseLanguages
-      let fullTask = fullLIDTask
-      let provider = providerTag
-      // Capture THIS turn's early bubble id NOW: the task below awaits language-ID (up to
-      // ~1.5s), by which point the next PTT turn may have reset/replaced the controller's
-      // earlyUserMessageId. Reconciling against the captured id keeps a late completion
-      // from rewriting a newer turn's bubble.
-      let capturedEarlyId = earlyUserMessageId
-      Task { @MainActor [weak self] in
-        var userText = heard
-        var providerLang: String?
-        var usedLocal = false
-        var localTranscript: String?
-        var localLang: String?
-        // Bubble-language guard: the provider transcript is auto-detected per utterance
-        // and can come back in a language the user doesn't speak (Russian speech saved
-        // as an Italian bubble). When it does — or when it's empty — substitute the
-        // on-device transcript from the language-ID pass, but only if that transcript
-        // itself is confidently in one of the user's languages.
-        if !candidates.isEmpty, let fullTask {
-          // Classify the provider transcript UNBIASED: hinting toward the user's
-          // languages here masks genuinely foreign transcripts (tested: the Italian
-          // misdetect classified as "en" with hints and slipped through). Wrong swaps
-          // stay bounded because the local transcript must independently classify
-          // into the user's set before it can replace anything.
-          providerLang =
-            heard.isEmpty
-            ? nil : PTTLanguageIdentifier.dominantLanguage(of: heard, hints: [])
-          let mismatch = heard.isEmpty || (providerLang.map { !candidates.contains($0) } ?? false)
-          if mismatch {
-            // The decode started at commit and the reply takes seconds — normally long done.
-            let verdict = await Self.value(of: fullTask, timeoutMs: 1500)
-            localTranscript = verdict?.transcript
-            localLang = verdict?.languageCode
-            if let local = localTranscript, !local.isEmpty, localLang != nil {
-              log(
-                "RealtimeHub: provider transcript lang=\(providerLang ?? "none") outside user "
-                  + "languages \(candidates) — using local \(localLang ?? "?") transcript for chat"
-              )
-              userText = local
-              usedLocal = true
+        let candidates = AssistantSettings.shared.voiceBaseLanguages
+        let fullTask = fullLIDTask
+        let provider = providerTag
+        // Capture THIS turn's early bubble id NOW: the task below awaits language-ID (up to
+        // ~1.5s), by which point the next PTT turn may have reset/replaced the controller's
+        // earlyUserMessageId. Reconciling against the captured id keeps a late completion
+        // from rewriting a newer turn's bubble.
+        let capturedEarlyId = earlyUserMessageId
+        let provisionalHeard = heard
+        let provisionalReply = reply
+        rememberVoiceContinuityTurn(
+          userText: provisionalHeard,
+          assistantText: provisionalReply,
+          interrupted: false)
+        Task { @MainActor [weak self] in
+          var userText = heard
+          var providerLang: String?
+          var usedLocal = false
+          var localTranscript: String?
+          var localLang: String?
+          // Bubble-language guard: the provider transcript is auto-detected per utterance
+          // and can come back in a language the user doesn't speak (Russian speech saved
+          // as an Italian bubble). When it does — or when it's empty — substitute the
+          // on-device transcript from the language-ID pass, but only if that transcript
+          // itself is confidently in one of the user's languages.
+          if !candidates.isEmpty, let fullTask {
+            // Classify the provider transcript UNBIASED: hinting toward the user's
+            // languages here masks genuinely foreign transcripts (tested: the Italian
+            // misdetect classified as "en" with hints and slipped through). Wrong swaps
+            // stay bounded because the local transcript must independently classify
+            // into the user's set before it can replace anything.
+            providerLang =
+              heard.isEmpty
+              ? nil : PTTLanguageIdentifier.dominantLanguage(of: heard, hints: [])
+            let mismatch = heard.isEmpty || (providerLang.map { !candidates.contains($0) } ?? false)
+            if mismatch {
+              // The decode started at commit and the reply takes seconds — normally long done.
+              let verdict = await Self.value(of: fullTask, timeoutMs: 1500)
+              localTranscript = verdict?.transcript
+              localLang = verdict?.languageCode
+              if let local = localTranscript, !local.isEmpty, localLang != nil {
+                log(
+                  "RealtimeHub: provider transcript lang=\(providerLang ?? "none") outside user "
+                    + "languages \(candidates) — using local \(localLang ?? "?") transcript for chat"
+                )
+                userText = local
+                usedLocal = true
+              }
             }
           }
+          // Continuity memory + persistence use the CORRECTED text, so a swapped
+          // bubble and the model's follow-up context stay consistent.
+          if usedLocal {
+            self?.replaceVoiceContinuityTurn(
+              originalUserText: provisionalHeard,
+              originalAssistantText: provisionalReply,
+              correctedUserText: userText,
+              correctedAssistantText: reply,
+              interrupted: false)
+          }
+          FloatingControlBarManager.shared.recordVoiceTurn(
+            userText: userText, assistantText: reply, earlyUserMessageId: capturedEarlyId)
+          self?.lastTurnDiagnostics = [
+            "provider": provider,
+            "provider_transcript": heard,
+            "provider_transcript_language": providerLang ?? "",
+            "saved_user_text": userText,
+            "used_local_transcript": usedLocal ? "true" : "false",
+            "local_transcript": localTranscript ?? "",
+            "local_language": localLang ?? "",
+            "assistant_reply": reply,
+          ]
         }
-        // Continuity memory + persistence use the CORRECTED text, so a swapped
-        // bubble and the model's follow-up context stay consistent.
-        self?.rememberVoiceContinuityTurn(userText: userText, assistantText: reply, interrupted: false)
-        FloatingControlBarManager.shared.recordVoiceTurn(
-          userText: userText, assistantText: reply, earlyUserMessageId: capturedEarlyId)
-        self?.lastTurnDiagnostics = [
-          "provider": provider,
-          "provider_transcript": heard,
-          "provider_transcript_language": providerLang ?? "",
-          "saved_user_text": userText,
-          "used_local_transcript": usedLocal ? "true" : "false",
-          "local_transcript": localTranscript ?? "",
-          "local_language": localLang ?? "",
-          "assistant_reply": reply,
-        ]
-      }
       }
     }
     if !pendingCompletedAgentDeltaAckIds.isEmpty {
@@ -1655,6 +1674,39 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
     exitVoiceUI()
+  }
+
+  private func replaceVoiceContinuityTurn(
+    originalUserText: String,
+    originalAssistantText: String,
+    correctedUserText: String,
+    correctedAssistantText: String,
+    interrupted: Bool
+  ) {
+    let originalUser = originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let originalAssistant = originalAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let correctedUser = correctedUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let correctedAssistant = correctedAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !correctedUser.isEmpty || !correctedAssistant.isEmpty else { return }
+
+    if let index = voiceContinuityTurns.lastIndex(where: {
+      $0.userText == originalUser
+        && $0.assistantText == originalAssistant
+        && $0.interrupted == interrupted
+    }) {
+      voiceContinuityTurns[index] = RealtimeVoiceContinuityTurn(
+        userText: correctedUser,
+        assistantText: correctedAssistant,
+        interrupted: interrupted,
+        recordedAt: voiceContinuityTurns[index].recordedAt
+      )
+      return
+    }
+
+    rememberVoiceContinuityTurn(
+      userText: correctedUser,
+      assistantText: correctedAssistant,
+      interrupted: interrupted)
   }
 
   private func rememberVoiceContinuityTurn(userText: String, assistantText: String, interrupted: Bool) {

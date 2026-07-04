@@ -31,6 +31,23 @@ final class DashboardCaptureStateTests: XCTestCase {
         )
     }
 
+    func testListeningPillShowsAndTogglesCaptureMode() throws {
+        let source = try dashboardSource()
+
+        XCTAssertTrue(source.contains("@AppStorage(\"systemAudioCaptureMode\")"))
+        XCTAssertTrue(source.contains("private var listeningModeTitle: String"))
+        XCTAssertTrue(source.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
+        XCTAssertTrue(source.contains("HomeListeningStatusButton("))
+        XCTAssertTrue(source.contains("modeAction: toggleListeningMode"))
+        XCTAssertTrue(source.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
+        XCTAssertTrue(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"person.fill\")"))
+        XCTAssertTrue(source.contains("private var modeIconColor: Color"))
+        XCTAssertTrue(source.contains(".frame(height: 34)"))
+        XCTAssertFalse(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"infinity\")"))
+        XCTAssertFalse(source.contains("Circle()\n                    .fill(status.indicator)"))
+        XCTAssertFalse(source.contains("OmiColors.purplePrimary"))
+    }
+
     func testHomeConnectorButtonsOpenSheetsDirectly() throws {
         let source = try dashboardSource()
         let importMethod = try methodBody(named: "openImportConnector", in: source)

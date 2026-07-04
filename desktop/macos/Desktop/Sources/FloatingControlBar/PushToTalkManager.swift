@@ -645,7 +645,7 @@ class PushToTalkManager: ObservableObject {
     activeTracer?.end("ptt_recording")
 
     if isWaitingForHub {
-      barState?.isVoiceResponseActive = true
+      barState?.beginVoiceResponseWaiting()
       updateBarState()
       log("PushToTalkManager: finalizing while realtime hub warms — holding buffered audio")
       return
@@ -704,6 +704,7 @@ class PushToTalkManager: ObservableObject {
       }
       silentMicRecoveryPolicy.recordSuccessfulHubTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
+      barState?.beginVoiceResponseWaiting()
       // Collapse the bar on release — the hub speaks its reply as audio (no inline
       // status UI), the same as the legacy voice path.
       updateBarState()
@@ -931,6 +932,7 @@ class PushToTalkManager: ObservableObject {
     // openAIInputWithQuery / sendFollowUpQuery inherits the bound value.
     let tracer = activeTracer
     activeTracer = nil
+    barState?.beginVoiceResponseWaiting()
     let dispatch = {
       if wasFollowUp {
         log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
@@ -1131,6 +1133,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
+    barState?.beginVoiceResponseWaiting()
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
@@ -1421,7 +1424,7 @@ class PushToTalkManager: ObservableObject {
     barState.isVoiceLocked = (state == .lockedListening)
     barState.isVoiceFollowUp = isCurrentSessionFollowUp && isShowingVoiceUI
     if isShowingVoiceUI {
-      barState.isVoiceResponseActive = false
+      barState.clearVoiceResponseState()
     }
     if !isShowingVoiceUI {
       barState.voiceTranscript = ""

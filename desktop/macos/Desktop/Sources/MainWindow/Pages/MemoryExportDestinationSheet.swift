@@ -654,20 +654,19 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var executeButtonTitle: String {
+    let presentation = executePresentation
     _ = permissionRefreshID
-    if isConnected {
-      return "Connected"
-    }
-    switch destination.mcpExecuteKind {
-    case .localAutonomous:
-      return "Do it for me"
-    case .browserAutonomous:
-      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
-        ? "Grant Accessibility"
-        : "Do it for me"
-    case .assisted:
-      return destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
-    }
+    return presentation.primaryActionTitle ?? "Connected"
+  }
+
+  private var executePresentation: MemoryExportConnectionPresentation {
+    MemoryExportConnectionPresentation.make(
+      destination: destination,
+      status: statuses[destination],
+      isRunning: model.isExecuting,
+      accessibilityPreflightMissing: MemoryExportExecutor.accessibilityPreflightMissing(
+        for: destination)
+    )
   }
 
   private var executeBlockSubtitle: String {
@@ -696,44 +695,75 @@ struct MemoryExportDestinationSheet: View {
   /// "Execute" — hands the whole setup to Omi to run as a task.
   private var executeBlock: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 8) {
-        Image(systemName: "sparkles")
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
-        Text("Let Omi do it")
+      if let completion = executePresentation.completion {
+        setupCompleteBlock(completion)
+      } else {
+        HStack(spacing: 8) {
+          Image(systemName: "sparkles")
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+          Text("Let Omi do it")
+            .scaledFont(size: 15, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text("FASTEST")
+            .scaledFont(size: 9, weight: .bold)
+            .foregroundColor(OmiColors.success)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(OmiColors.success.opacity(0.15)))
+        }
+        Text(executeBlockSubtitle)
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
+
+        Button {
+          Task {
+            await model.executeWithOmi(destination: destination)
+            statuses[destination] = await MemoryExportService.shared.status(for: destination)
+            // Assisted flow: the user pastes values by hand, so surface the
+            // field-by-field steps instead of leaving them collapsed.
+            if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
+              showManualSetup = true
+            }
+          }
+        } label: {
+          ConnectionModalActionButton(
+            title: model.isExecuting ? "Starting Omi…" : executeButtonTitle,
+            isConnected: isConnected
+          )
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isExecuting || isConnected)
+      }
+    }
+  }
+
+  private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "checkmark.seal.fill")
+        .scaledFont(size: 16, weight: .semibold)
+        .foregroundColor(OmiColors.success)
+        .padding(.top, 1)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(completion.title)
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text("FASTEST")
-          .scaledFont(size: 9, weight: .bold)
-          .foregroundColor(OmiColors.success)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 2)
-          .background(Capsule().fill(OmiColors.success.opacity(0.15)))
+        Text(completion.subtitle)
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
       }
-      Text(executeBlockSubtitle)
-        .scaledFont(size: 12)
-        .foregroundColor(OmiColors.textTertiary)
-        .fixedSize(horizontal: false, vertical: true)
-
-      Button {
-        Task {
-          await model.executeWithOmi(destination: destination)
-          statuses[destination] = await MemoryExportService.shared.status(for: destination)
-          // Assisted flow: the user pastes values by hand, so surface the
-          // field-by-field steps instead of leaving them collapsed.
-          if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
-            showManualSetup = true
-          }
-        }
-      } label: {
-        ConnectionModalActionButton(
-          title: model.isExecuting ? "Starting Omi…" : executeButtonTitle,
-          isConnected: isConnected
-        )
-      }
-      .buttonStyle(.plain)
-      .disabled(model.isExecuting || isConnected)
     }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(OmiColors.backgroundSecondary)
+        .overlay(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
+    )
   }
 
   private var isConnected: Bool {
