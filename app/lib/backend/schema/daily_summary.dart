@@ -1,4 +1,10 @@
 import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
+// Phase 4.1 — none of these classes typedef to their GeneratedDailySummary* types.
+// The generated fields are all nullable (String?/bool?/int?/double?) while these
+// classes coerce them to non-null with defaults (?? '', ?? 'medium', ?? false,
+// ?? 0, ?? 0.0). DayStats.formattedDuration and DailySummary.formattedDate are
+// computed getters, and DailySummary.fromJson carries a degraded try/catch fallback.
+// All are kept as deliberate adapters.
 
 class ActionItemSummary {
   final String description;

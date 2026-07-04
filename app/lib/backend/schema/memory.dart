@@ -40,6 +40,11 @@ MemoryCategory _parseMemoryCategory(String? category) {
   return MemoryCategory.system;
 }
 
+// Phase 4.1 — Memory is kept as a deliberate adapter, not a typedef: it exposes Dart
+// enums (MemoryCategory/MemoryVisibility/MemoryLayer) absent from GeneratedMemoryDB,
+// normalizes layer/tier aliases in fromJson, and emits a bespoke toJson. The enums and
+// helpers above are client-only and also stay.
+
 class Memory {
   String id;
   String uid;

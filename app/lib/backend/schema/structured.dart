@@ -2,6 +2,15 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+// Phase 4.1 — Structured, ActionItem, AppResponse, and Event are kept as deliberate
+// adapters, not typedefs:
+//  - Structured: client-only `id`, getEmoji() behavior (utf8 decode + random pick),
+//    fromJson that accepts String action items, and toJson that serializes actionItems
+//    as description strings (generated emits objects).
+//  - ActionItem: client-only `id`/`deleted` fields absent from GeneratedActionItem.
+//  - AppResponse: client-only `id` and toJson key 'appId' (generated emits 'app_id').
+//  - Event: client-only `id`, field name `startsAt` (generated `start`), and fromJson
+//    epoch-int -> DateTime conversion.
 
 class Structured {
   int id = 0;
