@@ -17,6 +17,7 @@ initialization, and blocks non-local network while importing the app.
 from __future__ import annotations
 
 import argparse
+import importlib
 import ipaddress
 import json
 import logging
@@ -25,7 +26,7 @@ import socket
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, cast
 
 from fastapi.routing import APIRoute
 from fastapi.openapi.utils import get_openapi
@@ -329,9 +330,9 @@ def is_local_address(host: object) -> bool:
         return False
 
 
-def _host_from_address(address: object) -> object:
+def _host_from_address(address: object) -> Any:
     if isinstance(address, tuple) and address:
-        return address[0]
+        return cast(Any, address[0])
     return None
 
 
@@ -348,37 +349,37 @@ def record_and_block_outbound_network() -> Iterator[list[str]]:
     def record(kind: str, target: object) -> None:
         attempts.append(f'{kind}: {target!r}')
 
-    def guarded_connect(sock: socket.socket, address: object):
+    def guarded_connect(sock: socket.socket, address: Any) -> Any:
         if sock.family != socket.AF_UNIX and not is_local_address(_host_from_address(address)):
             record('connect', address)
             raise OpenAPIContractError(f'blocked outbound network connection to {address!r}')
         return original_connect(sock, address)
 
-    def guarded_connect_ex(sock: socket.socket, address: object):
+    def guarded_connect_ex(sock: socket.socket, address: Any) -> Any:
         if sock.family != socket.AF_UNIX and not is_local_address(_host_from_address(address)):
             record('connect_ex', address)
             raise OpenAPIContractError(f'blocked outbound network connection to {address!r}')
         return original_connect_ex(sock, address)
 
-    def guarded_create_connection(address: object, *args, **kwargs):
+    def guarded_create_connection(address: Any, *args: Any, **kwargs: Any) -> Any:
         if not is_local_address(_host_from_address(address)):
             record('create_connection', address)
             raise OpenAPIContractError(f'blocked outbound network connection to {address!r}')
         return original_create_connection(address, *args, **kwargs)
 
-    def guarded_getaddrinfo(host: object, *args, **kwargs):
+    def guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
         if not is_local_address(host):
             record('getaddrinfo', host)
             raise OpenAPIContractError(f'blocked DNS resolution for {host!r}')
         return original_getaddrinfo(host, *args, **kwargs)
 
-    def guarded_gethostbyname(host: object):
+    def guarded_gethostbyname(host: Any) -> Any:
         if not is_local_address(host):
             record('gethostbyname', host)
             raise OpenAPIContractError(f'blocked DNS resolution for {host!r}')
         return original_gethostbyname(host)
 
-    def guarded_gethostbyname_ex(host: object):
+    def guarded_gethostbyname_ex(host: Any) -> Any:
         if not is_local_address(host):
             record('gethostbyname_ex', host)
             raise OpenAPIContractError(f'blocked DNS resolution for {host!r}')
@@ -413,7 +414,7 @@ def snapshot_side_effect_paths() -> dict[Path, tuple[bool, int | None, int | Non
 
 
 def assert_no_side_effect_path_mutations(snapshot: dict[Path, tuple[bool, int | None, int | None]]) -> None:
-    mutations = []
+    mutations: list[str] = []
     for path, before in snapshot.items():
         if path.exists():
             stat = path.stat()
@@ -448,7 +449,7 @@ def assert_env_unchanged(expected_env: dict[str, str]) -> None:
     added = sorted(set(current_env) - set(expected_env))
     removed = sorted(set(expected_env) - set(current_env))
     changed = sorted(key for key in set(current_env) & set(expected_env) if current_env[key] != expected_env[key])
-    details = []
+    details: list[str] = []
     if added:
         details.append('added=' + ','.join(added))
     if removed:
@@ -458,37 +459,59 @@ def assert_env_unchanged(expected_env: dict[str, str]) -> None:
     raise OpenAPIContractError('OpenAPI export mutated environment: ' + '; '.join(details))
 
 
-def install_hermetic_dependency_patches():
+def install_hermetic_dependency_patches() -> tuple[Any, Any, Any, Any]:
     import dotenv
     import google.auth
     import google.auth.credentials
-    from fakes.firestore import get_mock_firestore, patch_google_firestore, setup_fake_firestore
-    from fakes.redis import get_fake_redis, patch_redis_client, setup_fake_redis
-    from fakes.storage import patch_google_storage, setup_fake_storage
 
-    dotenv.load_dotenv = lambda *args, **kwargs: False
-    google.auth.default = lambda *args, **kwargs: (
-        google.auth.credentials.AnonymousCredentials(),
-        'test-openapi-project',
-    )
+    # `fakes/*` live under testing/e2e (added to sys.path at runtime by
+    # _install_import_paths); resolve them dynamically so static analysis does
+    # not need that path on its search path.
+    fakes_firestore = cast(Any, importlib.import_module('fakes.firestore'))
+    fakes_redis = cast(Any, importlib.import_module('fakes.redis'))
+    fakes_storage = cast(Any, importlib.import_module('fakes.storage'))
 
-    fake_firestore = setup_fake_firestore()
-    fake_redis = setup_fake_redis()
-    setup_fake_storage()
+    def _load_dotenv_noop(*args: Any, **kwargs: Any) -> bool:
+        return False
 
-    patch_google_firestore()
-    patch_redis_client()
-    patch_google_storage()
+    def _auth_default(*args: Any, **kwargs: Any) -> tuple[Any, str]:
+        return google.auth.credentials.AnonymousCredentials(), 'test-openapi-project'
+
+    dotenv_module = cast(Any, dotenv)
+    dotenv_module.load_dotenv = _load_dotenv_noop
+    google_auth = cast(Any, google.auth)
+    google_auth.default = _auth_default
+
+    fake_firestore = fakes_firestore.setup_fake_firestore()
+    fake_redis = fakes_redis.setup_fake_redis()
+    fakes_storage.setup_fake_storage()
+
+    fakes_firestore.patch_google_firestore()
+    fakes_redis.patch_redis_client()
+    fakes_storage.patch_google_storage()
 
     import firebase_admin
 
-    firebase_admin.initialize_app = lambda *args, **kwargs: None
-    firebase_admin.get_app = lambda *args, **kwargs: object()
+    fa = cast(Any, firebase_admin)
 
-    return fake_firestore, fake_redis, get_mock_firestore, get_fake_redis
+    def _init_noop(*args: Any, **kwargs: Any) -> None:
+        return None
+
+    def _get_app(*args: Any, **kwargs: Any) -> object:
+        return object()
+
+    fa.initialize_app = _init_noop
+    fa.get_app = _get_app
+
+    return fake_firestore, fake_redis, fakes_firestore.get_mock_firestore, fakes_redis.get_fake_redis
 
 
-def relink_imported_service_singletons(fake_firestore, fake_redis, get_mock_firestore, get_fake_redis) -> None:
+def relink_imported_service_singletons(
+    fake_firestore: Any,
+    fake_redis: Any,
+    get_mock_firestore: Any,
+    get_fake_redis: Any,
+) -> None:
     import database._client as db_client
     import database.redis_db as redis_db
 
@@ -496,10 +519,11 @@ def relink_imported_service_singletons(fake_firestore, fake_redis, get_mock_fire
     old_r = redis_db.r
     db_client.db = fake_firestore
     redis_db.r = fake_redis
-    for module in list(sys.modules.values()):
+    for module in cast(Iterable[Any], sys.modules.values()):
         if module is None:
             continue
-        for attr_name, attr_value in list(vars(module).items()):
+        module_attrs = cast(dict[str, Any], vars(module))
+        for attr_name, attr_value in list(module_attrs.items()):
             try:
                 if attr_value is old_db:
                     setattr(module, attr_name, get_mock_firestore())
@@ -568,7 +592,7 @@ def is_audited_public_path(path: str) -> bool:
     return False
 
 
-def public_contract_routes(app) -> list[APIRoute]:
+def public_contract_routes(app: Any) -> list[APIRoute]:
     return [
         route
         for route in app.routes
@@ -621,13 +645,14 @@ def _normalize_bearer_security(schema: dict[str, Any]) -> None:
 
 def _rewrite_refs(value: Any, ref_map: dict[str, str]) -> None:
     if isinstance(value, dict):
-        ref = value.get('$ref')
+        value_dict = cast(dict[str, Any], value)
+        ref = value_dict.get('$ref')
         if ref in ref_map:
-            value['$ref'] = ref_map[ref]
-        for child in value.values():
+            value_dict['$ref'] = ref_map[ref]
+        for child in value_dict.values():
             _rewrite_refs(child, ref_map)
     elif isinstance(value, list):
-        for child in value:
+        for child in cast(list[Any], value):
             _rewrite_refs(child, ref_map)
 
 
@@ -653,7 +678,7 @@ def _normalize_component_names(schema: dict[str, Any]) -> None:
         _rewrite_refs(schema, ref_map)
 
 
-def build_public_openapi(app) -> dict[str, Any]:
+def build_public_openapi(app: Any) -> dict[str, Any]:
     routes = public_contract_routes(app)
     schema = get_openapi(
         title=OPENAPI_TITLE,
@@ -688,7 +713,7 @@ def assert_unique_operation_ids(schema: dict[str, Any]) -> None:
                 duplicates.append(f'{operation_id}: {previous_method} {previous_path} and {method.upper()} {path}')
             operation_ids[operation_id] = (method.upper(), path)
     if missing or duplicates:
-        details = []
+        details: list[str] = []
         if missing:
             details.append('missing operationId: ' + ', '.join(missing))
         if duplicates:
@@ -696,7 +721,7 @@ def assert_unique_operation_ids(schema: dict[str, Any]) -> None:
         raise OpenAPIContractError('\n'.join(details))
 
 
-def assert_route_inventory(app, schema: dict[str, Any]) -> None:
+def assert_route_inventory(app: Any, schema: dict[str, Any]) -> None:
     audited_routes = [
         route for route in app.routes if isinstance(route, APIRoute) and is_audited_public_path(route.path)
     ]
@@ -709,7 +734,7 @@ def assert_route_inventory(app, schema: dict[str, Any]) -> None:
     stale_allowlist = sorted(route for route in allowlisted if route not in set(iter_route_keys(app.routes)))
 
     if missing or extra or stale_allowlist:
-        parts = []
+        parts: list[str] = []
         if missing:
             parts.append('public routes missing from OpenAPI: ' + ', '.join(f'{m} {p}' for m, p in missing))
         if extra:
@@ -721,7 +746,7 @@ def assert_route_inventory(app, schema: dict[str, Any]) -> None:
         raise OpenAPIContractError('\n'.join(parts))
 
 
-def validate_contract(app, schema: dict[str, Any]) -> None:
+def validate_contract(app: Any, schema: dict[str, Any]) -> None:
     if schema.get('openapi') != '3.1.0':
         raise OpenAPIContractError(f"expected OpenAPI 3.1.0, got {schema.get('openapi')!r}")
     assert_unique_operation_ids(schema)

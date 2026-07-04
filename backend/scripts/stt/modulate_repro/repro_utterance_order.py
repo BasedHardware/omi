@@ -29,9 +29,9 @@ import json
 import os
 import struct
 import sys
-import time
 import urllib.parse
 from pathlib import Path
+from typing import Any, Dict, List, Tuple, Union
 
 import websockets
 
@@ -46,7 +46,7 @@ EXPECTED_UTTERANCE_ORDER = [
 ]
 
 
-def read_wav_pcm(wav_path):
+def read_wav_pcm(wav_path: Path) -> Tuple[int, bytes]:
     """Read WAV file and return (sample_rate, pcm_bytes)."""
     with open(wav_path, 'rb') as f:
         riff = f.read(4)
@@ -75,7 +75,7 @@ def read_wav_pcm(wav_path):
     raise ValueError(f'No data chunk found in {wav_path}')
 
 
-def match_utterance(text):
+def match_utterance(text: str) -> Union[int, str]:
     """Match utterance text to expected order index."""
     text_lower = text.lower()
     for i, expected in enumerate(EXPECTED_UTTERANCE_ORDER):
@@ -84,9 +84,9 @@ def match_utterance(text):
     return '?'
 
 
-async def run_once(pcm_data, sample_rate, api_key, run_id):
+async def run_once(pcm_data: bytes, sample_rate: int, api_key: str, run_id: int) -> List[Dict[str, Any]]:
     """Send audio to Modulate and collect utterances."""
-    params = {
+    params: Dict[str, str] = {
         'api_key': api_key,
         'speaker_diarization': 'true',
         'partial_results': 'true',
@@ -99,10 +99,10 @@ async def run_once(pcm_data, sample_rate, api_key, run_id):
 
     ws = await websockets.connect(uri, ping_timeout=30, ping_interval=10, max_size=None)
 
-    utterances = []
+    utterances: List[Dict[str, Any]] = []
     done = asyncio.Event()
 
-    async def recv():
+    async def recv() -> None:
         try:
             async for raw in ws:
                 msg = json.loads(raw)
@@ -155,7 +155,7 @@ async def run_once(pcm_data, sample_rate, api_key, run_id):
     return utterances
 
 
-async def main():
+async def main() -> None:
     parser = argparse.ArgumentParser(description='Modulate utterance order repro')
     parser.add_argument('--wav', type=str, default=str(DEFAULT_WAV), help='Path to test WAV')
     parser.add_argument('--api-key', type=str, default=os.getenv('MODULATE_API_KEY', ''))
@@ -187,13 +187,13 @@ async def main():
         print(f'  {i + 1}. "{text}..."')
     print()
 
-    all_orders = []
+    all_orders: List[List[Union[int, str]]] = []
 
     for r in range(args.runs):
         print(f'Run {r + 1}/{args.runs}...', end=' ', flush=True)
         utterances = await run_once(pcm_data, sample_rate, args.api_key, r + 1)
 
-        order = []
+        order: List[Union[int, str]] = []
         for u in utterances:
             idx = match_utterance(u['text'])
             order.append(idx)
