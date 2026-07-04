@@ -1,9 +1,11 @@
 from scripts.sync_firebase_google_provider_secret import (
     build_provider_patch,
+    firebase_auth_redirect_uri,
     parse_args,
     provider_resource_name,
     provider_url,
     redact_value,
+    safe_http_error_message,
 )
 
 
@@ -15,15 +17,15 @@ def test_redact_value_keeps_prefix_and_suffix_only():
     assert "secret-value" not in redacted
 
 
-def test_build_provider_patch_includes_secret_without_logging_contract_fields():
+def test_build_provider_patch_does_not_change_enabled_state():
     patch = build_provider_patch("based-hardware", "google.com", "client-id", "client-secret")
 
     assert patch == {
         "name": "projects/based-hardware/defaultSupportedIdpConfigs/google.com",
-        "enabled": True,
         "clientId": "client-id",
         "clientSecret": "client-secret",
     }
+    assert "enabled" not in patch
 
 
 def test_provider_helpers_encode_provider_for_url_but_not_resource_name():
@@ -44,3 +46,40 @@ def test_cli_defaults_to_dry_run_and_secret_validation():
     assert config.validate_google_secret is True
     assert config.client_id_secret == "GOOGLE_CLIENT_ID"
     assert config.client_secret_secret == "GOOGLE_CLIENT_SECRET"
+    assert config.auth_domain is None
+
+
+def test_cli_accepts_explicit_auth_domain_for_non_default_projects():
+    config = parse_args(["--project", "staging-project", "--auth-domain", "auth.example.com"])
+
+    assert config.project == "staging-project"
+    assert config.auth_domain == "auth.example.com"
+
+
+def test_firebase_auth_redirect_uri_uses_project_config_subdomain():
+    redirect_uri = firebase_auth_redirect_uri(
+        "fallback-project",
+        {"client": {"firebaseSubdomain": "based-hardware"}},
+    )
+
+    assert redirect_uri == "https://based-hardware.firebaseapp.com/__/auth/handler"
+
+
+def test_firebase_auth_redirect_uri_allows_explicit_auth_domain():
+    redirect_uri = firebase_auth_redirect_uri(
+        "fallback-project",
+        {"client": {"firebaseSubdomain": "based-hardware"}},
+        "https://auth.example.com/",
+    )
+
+    assert redirect_uri == "https://auth.example.com/__/auth/handler"
+
+
+def test_safe_http_error_message_does_not_echo_secret_values():
+    message = safe_http_error_message(
+        '{"error":{"message":"bad client_secret=raw-secret-value and refresh_token:raw-token"}}'
+    )
+
+    assert "raw-secret-value" not in message
+    assert "raw-token" not in message
+    assert "client_secret=***" in message
