@@ -23,7 +23,7 @@ from tabulate import tabulate
 
 load_dotenv('../../.dev.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + (os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or '')
-firebase_admin.initialize_app()
+cast(Any, firebase_admin).initialize_app()
 
 from models.transcript_segment import TranscriptSegment
 from utils.stt.streaming import process_audio_dg
@@ -46,7 +46,7 @@ def execute_groq(file_path: str) -> str:
     split_files: List[str] = []
     if file_size / 1024 / 1024 > 25:
         # split file
-        aseg = AudioSegment.from_wav(file_path)
+        aseg = cast(Any, AudioSegment).from_wav(file_path)
         # split every 10 minutes
         split_duration = 10 * 60 * 1000
         for i in range(0, len(aseg), split_duration):
@@ -72,7 +72,7 @@ def execute_groq(file_path: str) -> str:
 
 
 async def _execute_single(file_path: str) -> None:
-    aseg = AudioSegment.from_wav(file_path)
+    aseg = cast(Any, AudioSegment).from_wav(file_path)
     duration: float = aseg.duration_seconds
     memory_id = file_path.split('/')[-1].split('.')[0]
 
@@ -134,7 +134,7 @@ def batched(iterable: Any, n: int) -> Any:
     """
     it = iter(iterable)
     while True:
-        batch = list(islice(it, n))
+        batch: List[Any] = list(islice(it, n))
         if not batch:
             break
         yield batch
@@ -207,7 +207,9 @@ def compute_wer() -> None:
         reference_text: Any = regex_fix(result.get(reference_model, ''))
         if isinstance(reference_text, list):
             # If reference_text is a list of segments
-            reference_text = ' '.join([str(segment.get('text', '')) for segment in reference_text]).strip().lower()
+            reference_text = (
+                ' '.join([str(segment.get('text', '')) for segment in cast(List[Any], reference_text)]).strip().lower()
+            )
         else:
             # If reference_text is a single string
             reference_text = str(reference_text).strip().lower()
@@ -229,7 +231,11 @@ def compute_wer() -> None:
             else:
                 if isinstance(segments, list):
                     # Assemble the model's transcript from segments
-                    model_text = ' '.join([str(segment.get('text', '')) for segment in segments]).strip().lower()
+                    model_text = (
+                        ' '.join([str(segment.get('text', '')) for segment in cast(List[Any], segments)])
+                        .strip()
+                        .lower()
+                    )
                 else:
                     # If segments is a single string
                     model_text = str(segments).strip().lower()
@@ -401,7 +407,7 @@ def generate_diarizations() -> None:
 from pyannote.metrics.diarization import DiarizationErrorRate  # type: ignore[reportMissingImports]
 from pyannote.core import Annotation, Segment  # type: ignore[reportMissingImports]
 
-der_metric: Any = DiarizationErrorRate()
+der_metric = cast(Any, DiarizationErrorRate())
 
 
 def compute_der() -> None:
@@ -414,7 +420,7 @@ def compute_der() -> None:
     excluded_model = 'whisper-large-v3'  # Model to exclude from analysis
 
     # Initialize DER metric
-    local_der_metric: Any = DiarizationErrorRate()
+    local_der_metric = cast(Any, DiarizationErrorRate())
 
     # Check if the directory exists
     if not os.path.isdir(dir_path):
@@ -450,7 +456,7 @@ def compute_der() -> None:
 
         # Load reference segments for the current memory_id
         ref_segments = diarization[memory_id]
-        ref_annotation: Any = Annotation()
+        ref_annotation = cast(Any, Annotation())
         for seg in ref_segments:
             speaker, start, end = seg['speaker'], seg['start'], seg['end']
             ref_annotation[Segment(start, end)] = speaker
@@ -469,7 +475,7 @@ def compute_der() -> None:
             if model == excluded_model:
                 continue  # Skip the excluded model
 
-            hyp_annotation: Any = Annotation()
+            hyp_annotation = cast(Any, Annotation())
             for seg in segments:
                 speaker, start, end = seg['speaker'], seg['start'], seg['end']
                 # Optional: Normalize speaker labels if necessary
@@ -484,7 +490,7 @@ def compute_der() -> None:
                 hyp_annotation[Segment(start, end)] = speaker
 
             # Compute DER between reference and hypothesis
-            der: float = local_der_metric(ref_annotation, hyp_annotation)
+            der = cast(float, local_der_metric(ref_annotation, hyp_annotation))
 
             # Store the result
             der_results.append([memory_id, model, f"{der:.2%}"])

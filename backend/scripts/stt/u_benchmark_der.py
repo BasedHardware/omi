@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 from dotenv import load_dotenv
 
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 AUDIO_DIR = Path('/tmp/stt_benchmark_der')
 RESULTS_DIR = Path('/tmp/stt_benchmark_results')
 
-CONVERSATIONS = [
+CONVERSATIONS: List[Dict[str, Any]] = [
     {
         'id': 'conv_2spk_en',
         'description': '2-speaker English conversation',
@@ -176,11 +176,11 @@ CONVERSATIONS = [
 ]
 
 
-async def generate_turn_audio(voice: str, text: str, output_path: Path):
-    import edge_tts
+async def generate_turn_audio(voice: str, text: str, output_path: Path) -> None:
+    import edge_tts  # type: ignore[reportMissingImports]
 
     mp3_path = output_path.with_suffix('.mp3')
-    communicate = edge_tts.Communicate(text, voice)
+    communicate = cast(Any, edge_tts).Communicate(text, voice)
     await communicate.save(str(mp3_path))
     subprocess.run(
         ['ffmpeg', '-y', '-i', str(mp3_path), '-ar', '16000', '-ac', '1', '-sample_fmt', 's16', str(output_path)],
@@ -210,15 +210,15 @@ def concatenate_wavs(wav_paths: List[Path], output: Path):
     list_file.unlink(missing_ok=True)
 
 
-async def prepare_conversations():
+async def prepare_conversations() -> None:
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     print(f'Generating {len(CONVERSATIONS)} multi-speaker conversations...\n')
 
-    manifest = []
+    manifest: List[Dict[str, Any]] = []
     for conv in CONVERSATIONS:
         print(f"  [{conv['id']}] {conv['description']}")
-        turn_wavs = []
-        ground_truth = []
+        turn_wavs: List[Path] = []
+        ground_truth: List[Dict[str, Any]] = []
         cursor_ms = 0
 
         for i, turn in enumerate(conv['turns']):
@@ -266,22 +266,22 @@ async def prepare_conversations():
     print(f'\nManifest saved: {manifest_path} ({len(manifest)} conversations)')
 
 
-def build_annotation(segments: list, label_prefix: str = 'SPEAKER'):
-    from pyannote.core import Annotation, Segment
+def build_annotation(segments: List[Dict[str, Any]], label_prefix: str = 'SPEAKER') -> Any:
+    from pyannote.core import Annotation, Segment  # type: ignore[reportMissingImports]
 
-    ann = Annotation()
+    ann = cast(Any, Annotation)()
     for seg in segments:
         start = seg['start_ms'] / 1000.0
         end = seg['end_ms'] / 1000.0
         speaker = f"{label_prefix}_{seg['speaker']:02d}"
-        ann[Segment(start, end)] = speaker
+        ann[cast(Any, Segment)(start, end)] = speaker
     return ann
 
 
-def build_hypothesis_from_words(words: list) -> 'Annotation':
-    from pyannote.core import Annotation, Segment
+def build_hypothesis_from_words(words: List[Dict[str, Any]]) -> Any:
+    from pyannote.core import Annotation, Segment  # type: ignore[reportMissingImports]
 
-    ann = Annotation()
+    ann = cast(Any, Annotation)()
     if not words:
         return ann
 
@@ -294,32 +294,32 @@ def build_hypothesis_from_words(words: list) -> 'Annotation':
         if sp == current_speaker:
             seg_end = w['timestamp'][1]
         else:
-            ann[Segment(seg_start, seg_end)] = current_speaker
+            ann[cast(Any, Segment)(seg_start, seg_end)] = current_speaker
             current_speaker = sp
             seg_start = w['timestamp'][0]
             seg_end = w['timestamp'][1]
-    ann[Segment(seg_start, seg_end)] = current_speaker
+    ann[cast(Any, Segment)(seg_start, seg_end)] = current_speaker
     return ann
 
 
-def build_hypothesis_from_utterances(utterances: list) -> 'Annotation':
-    from pyannote.core import Annotation, Segment
+def build_hypothesis_from_utterances(utterances: List[Dict[str, Any]]) -> Any:
+    from pyannote.core import Annotation, Segment  # type: ignore[reportMissingImports]
 
-    ann = Annotation()
+    ann = cast(Any, Annotation)()
     for utt in utterances:
         start = utt['timestamp'][0]
         end = utt['timestamp'][1]
         speaker = utt.get('speaker', 'SPEAKER_00')
         if start < end:
-            ann[Segment(start, end)] = speaker
+            ann[cast(Any, Segment)(start, end)] = speaker
     return ann
 
 
-def compute_der(reference: 'Annotation', hypothesis: 'Annotation') -> dict:
-    from pyannote.metrics.diarization import DiarizationErrorRate
+def compute_der(reference: Any, hypothesis: Any) -> Dict[str, Any]:
+    from pyannote.metrics.diarization import DiarizationErrorRate  # type: ignore[reportMissingImports]
 
-    metric = DiarizationErrorRate(collar=0.25)
-    detail = metric(reference, hypothesis, detailed=True)
+    metric = cast(Any, DiarizationErrorRate)(collar=0.25)
+    detail = cast(Dict[str, float], metric(reference, hypothesis, detailed=True))
     total = max(detail.get('total', 1), 1e-6)
     return {
         'der': round(detail.get('diarization error rate', 1.0), 4),
@@ -330,8 +330,7 @@ def compute_der(reference: 'Annotation', hypothesis: 'Annotation') -> dict:
     }
 
 
-def run_der_benchmark(manifest: list):
-    from pyannote.metrics.diarization import DiarizationErrorRate
+def run_der_benchmark(manifest: List[Dict[str, Any]]) -> None:
     from tabulate import tabulate
     from utils.stt.pre_recorded import (
         deepgram_prerecorded_from_bytes,
@@ -341,7 +340,7 @@ def run_der_benchmark(manifest: list):
 
     print(f'\n=== Diarization Error Rate Benchmark ({len(manifest)} conversations) ===\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for conv in manifest:
         wav_path = AUDIO_DIR / conv['wav']
         wav_bytes = wav_path.read_bytes()
@@ -350,14 +349,14 @@ def run_der_benchmark(manifest: list):
 
         print(f"  [{conv['id']}] {conv['description']} ({conv['num_speakers']} speakers, {conv['duration_s']:.1f}s)")
 
-        row = {
+        row: Dict[str, Any] = {
             'id': conv['id'],
             'speakers': conv['num_speakers'],
             'duration_s': conv['duration_s'],
             'turns': len(gt),
         }
 
-        providers = [
+        providers: List[Tuple[str, Any]] = [
             ('deepgram', deepgram_prerecorded_from_bytes),
             ('modulate', modulate_prerecorded_from_bytes),
         ]
@@ -367,7 +366,7 @@ def run_der_benchmark(manifest: list):
         for provider_name, fn in providers:
             try:
                 t0 = time.monotonic()
-                words = fn(wav_bytes, sample_rate=16000, diarize=True)
+                words = cast(List[Dict[str, Any]], fn(wav_bytes, sample_rate=16000, diarize=True))
                 elapsed = time.monotonic() - t0
 
                 if provider_name == 'modulate':
@@ -398,9 +397,9 @@ def run_der_benchmark(manifest: list):
 
     print(f'\n{"=" * 130}')
     has_parakeet = any('parakeet_der' in r for r in results)
-    table = []
+    table: List[List[Any]] = []
     for r in results:
-        row = [
+        tbl_row: List[Any] = [
             r['id'],
             r['speakers'],
             f"{r['duration_s']:.1f}s",
@@ -411,13 +410,13 @@ def run_der_benchmark(manifest: list):
             f"{r.get('modulate_speakers', '?')}/{r['speakers']}",
         ]
         if has_parakeet:
-            row.extend(
+            tbl_row.extend(
                 [
                     f"{r.get('parakeet_der', 1):.1%}",
                     f"{r.get('parakeet_speakers', '?')}/{r['speakers']}",
                 ]
             )
-        table.append(row)
+        table.append(tbl_row)
     headers = ['Conv', 'Spk', 'Dur', 'Turns', 'DG DER', 'DG Spk', 'Mod DER', 'Mod Spk']
     if has_parakeet:
         headers.extend(['PK DER', 'PK Spk'])
@@ -447,7 +446,7 @@ def run_der_benchmark(manifest: list):
     print(f'\nResults saved to: {output_path}')
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description='DER benchmark')
     parser.add_argument('--prepare', action='store_true', help='Generate multi-speaker audio')
     parser.add_argument('--compare', action='store_true', help='Run DER comparison')
@@ -461,7 +460,7 @@ def main():
             print('ERROR: Run --prepare first')
             sys.exit(1)
         with open(manifest_path) as f:
-            manifest = json.load(f)
+            manifest = cast(List[Dict[str, Any]], json.load(f))
         run_der_benchmark(manifest)
     else:
         parser.print_help()
