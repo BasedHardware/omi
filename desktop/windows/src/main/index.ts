@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
 import { join } from 'path'
+import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
@@ -46,6 +47,41 @@ if (!process.env.OMI_PERF_LOG) {
   process.env.OMI_PERF_LOG = join(app.getPath('userData'), 'perf.jsonl')
 }
 perfMark('app:start')
+
+// --- Global crash observability --------------------------------------------
+// The main process previously had no top-level error handling: an unhandled
+// exception or rejection could terminate (or silently wedge) the app with
+// nothing recorded, and renderer/GPU/utility crashes went unnoticed. Record
+// fatal events to a crash log under userData so field failures are diagnosable,
+// and keep the app usable on a renderer crash by reloading rather than leaving
+// a blank window. Handlers are best-effort and must never throw themselves.
+const crashLogPath = join(app.getPath('userData'), 'crash.log')
+function logFatal(kind: string, detail: unknown): void {
+  const body = detail instanceof Error ? (detail.stack ?? detail.message) : String(detail)
+  try {
+    appendFileSync(crashLogPath, `${new Date().toISOString()} [${kind}] ${body}\n`)
+  } catch {
+    /* best-effort; never throw from a crash handler */
+  }
+  console.error(`[fatal] ${kind}:`, detail)
+}
+process.on('uncaughtException', (err) => logFatal('uncaughtException', err))
+process.on('unhandledRejection', (reason) => logFatal('unhandledRejection', reason))
+app.on('render-process-gone', (_e, wc, details) => {
+  logFatal('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
+  // Reload the crashed renderer instead of leaving a white window — unless it
+  // exited cleanly (intentional teardown).
+  if (details.reason !== 'clean-exit' && !wc.isDestroyed()) {
+    try {
+      wc.reload()
+    } catch {
+      /* window may be mid-teardown */
+    }
+  }
+})
+app.on('child-process-gone', (_e, details) =>
+  logFatal('child-process-gone', `type=${details.type} reason=${details.reason}`)
+)
 
 // Opt-in sandbox isolation. By default Electron derives userData from the
 // product name ("omi-windows"), which is the real user's data + signed-in
