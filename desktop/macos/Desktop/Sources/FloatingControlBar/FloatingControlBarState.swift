@@ -163,6 +163,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceListening: Bool = false
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
+    /// Transient inline hint shown in the bar (e.g. "Hold longer to record") after a
+    /// too-short PTT tap. Non-empty keeps the bar in its voice-UI size for ~2s.
+    @Published var pttHintText: String = ""
     @Published var isVoiceResponseActive: Bool = false {
         didSet {
             if isVoiceResponseActive {

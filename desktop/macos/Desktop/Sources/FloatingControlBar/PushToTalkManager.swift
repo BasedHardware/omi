@@ -289,6 +289,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
+    barState?.pttHintText = ""  // clear any lingering too-short hint from a prior tap
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -411,6 +412,7 @@ class PushToTalkManager: ObservableObject {
     batchAudioBuffer = Data()
     batchAudioLock.unlock()
     isCurrentSessionFollowUp = false
+    barState?.pttHintText = ""
     // Abandoned session (cancel / silent turn) — drop its tracer unsent so it
     // doesn't leak into the next PTT turn. No trace is written for these.
     activeTracer = nil
@@ -690,7 +692,14 @@ class PushToTalkManager: ObservableObject {
         RealtimeHubController.shared.cancelTurn()
         AnalyticsManager.shared.floatingBarPTTEnded(
           mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
-        updateBarState()  // clears the listening UI (no "…")
+        // Too short to have captured anything (fast tap / capture not ready) — hint
+        // the user to hold longer instead of clearing silently. A longer hub turn
+        // that simply had no speech keeps the quiet reset.
+        if totalSec < Self.minTurnAudioSeconds {
+          finishTooShortPTTTurnWithHint(reason: "hub, \(String(format: "%.2f", totalSec))s")
+        } else {
+          updateBarState()  // clears the listening UI (no "…")
+        }
         return
       }
       // Real speech — commit. The hub speaks the reply and dispatches tools
@@ -746,7 +755,14 @@ class PushToTalkManager: ObservableObject {
         )
         AnalyticsManager.shared.floatingBarPTTEnded(
           mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
-        stopListening()
+        // A too-short turn means the release beat capture (or the user tapped
+        // instead of holding). Give visible feedback instead of a silent clear;
+        // longer holds that were merely quiet keep the quiet reset.
+        if totalSec < Self.minTurnAudioSeconds {
+          finishTooShortPTTTurnWithHint(reason: "\(isOmniSTT ? "omni" : "batch"), \(String(format: "%.2f", totalSec))s")
+        } else {
+          stopListening()
+        }
         return
       }
     }
@@ -804,8 +820,9 @@ class PushToTalkManager: ObservableObject {
       stopAudioTranscription()
 
       guard !audioData.isEmpty else {
-        log("PushToTalkManager: batch mode — no audio recorded")
-        sendTranscript()
+        // Backstop: the silence gate above normally catches an empty turn first, but
+        // if a turn ever reaches here with no audio, hint rather than send nothing.
+        finishTooShortPTTTurnWithHint(reason: "batch, empty buffer")
         return
       }
 
@@ -864,6 +881,29 @@ class PushToTalkManager: ObservableObject {
       }
       liveFinalizationTimeout = timeout
       DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
+    }
+  }
+
+  /// A PTT turn that ended too short to have captured usable audio — typically a
+  /// press+release faster than capture spins up (or a tap instead of a hold). This
+  /// happens in every mode (hub / omni / batch), so it is shared across their
+  /// discard paths. Surface a hint and reset the bar after a beat instead of
+  /// clearing it silently, so the user knows to hold the key longer. Callers have
+  /// already logged the discard and reported analytics.
+  private func finishTooShortPTTTurnWithHint(reason: String) {
+    log("PushToTalkManager: too-short PTT turn (\(reason)) — showing hold-longer hint")
+    activeTracer = nil
+    barState?.pttHintText = "Hold longer to record"
+    updateBarState()  // keeps/expands the bar to its voice size so the hint shows
+
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: 2_000_000_000)
+      guard let self else { return }
+      // Only reset if the hint is still on screen — a newer turn may have replaced it.
+      if self.barState?.pttHintText == "Hold longer to record" {
+        self.barState?.pttHintText = ""
+        self.stopListening()  // collapses the bar (pttHintText now empty)
+      }
     }
   }
 
@@ -1428,7 +1468,10 @@ class PushToTalkManager: ObservableObject {
   private func updateBarState(skipResize: Bool = false) {
     guard let barState = barState else { return }
     let wasListening = barState.isVoiceListening
-    let isShowingVoiceUI = (state == .listening || state == .lockedListening)
+    // A pending too-short hint keeps the bar in its voice-UI size/position so the
+    // inline "hold longer" text is visible (and correctly sized) for its brief window.
+    let isShowingVoiceUI =
+      (state == .listening || state == .lockedListening) || !barState.pttHintText.isEmpty
     barState.isVoiceListening = isShowingVoiceUI
     barState.isVoiceLocked = (state == .lockedListening)
     barState.isVoiceFollowUp = isCurrentSessionFollowUp && isShowingVoiceUI

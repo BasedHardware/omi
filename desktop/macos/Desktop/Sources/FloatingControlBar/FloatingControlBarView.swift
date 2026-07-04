@@ -968,7 +968,15 @@ struct FloatingControlBarView: View {
     private var controlBarView: some View {
         let allowsHoverExpansion = isHovering && !state.isVoiceResponseGlowActive
         return Group {
-            if state.isVoiceListening && !state.isVoiceFollowUp {
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT hint takes precedence over every other bar state
+                // (incl. follow-up turns) for its brief window.
+                voiceListeningView
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .frame(height: 42)
+                    .transition(.opacity)
+            } else if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -1177,20 +1185,30 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 7) {
-            // Playful realtime mic waveform (replaces the old pulsing red dot)
-            VoiceWaveformBars(isActive: state.isVoiceListening)
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT tap: inline hint instead of the live waveform.
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
+                Text(state.pttHintText)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+            } else {
+                // Playful realtime mic waveform (replaces the old pulsing red dot)
+                VoiceWaveformBars(isActive: state.isVoiceListening)
 
-            Image(systemName: "mic.fill")
-                .scaledFont(size: 12, weight: .semibold)
-                .foregroundColor(.white)
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
 
-            if state.isVoiceLocked {
-                Image(systemName: "lock.fill")
-                    .scaledFont(size: 10, weight: .bold)
-                    .foregroundColor(.orange)
-                    .frame(width: 18, height: 18)
-                    .background(Color.orange.opacity(0.2))
-                    .cornerRadius(4)
+                if state.isVoiceLocked {
+                    Image(systemName: "lock.fill")
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundColor(.orange)
+                        .frame(width: 18, height: 18)
+                        .background(Color.orange.opacity(0.2))
+                        .cornerRadius(4)
+                }
             }
         }
     }
