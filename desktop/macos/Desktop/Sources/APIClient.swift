@@ -1247,11 +1247,9 @@ struct Event: Codable, Identifiable, Equatable {
   }
 }
 
-/// Translation from backend
-struct TranscriptTranslation: Codable {
-  let lang: String
-  let text: String
-}
+/// Schema authority: OmiAPI.Translation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO, so this is a thin alias.
+typealias TranscriptTranslation = OmiAPI.Translation
 
 struct TranscriptSegment: Codable, Identifiable {
   let id: String
