@@ -4539,6 +4539,24 @@
         "title": "Conversation",
         "type": "object"
       },
+      "ConversationActionItemsDeleteResponse": {
+        "properties": {
+          "deleted_count": {
+            "title": "Deleted Count",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "deleted_count"
+        ],
+        "title": "ConversationActionItemsDeleteResponse",
+        "type": "object"
+      },
       "ConversationActionItemsResponse": {
         "properties": {
           "action_items": {
@@ -13073,6 +13091,21 @@
         "title": "SpeechProfileUploadResponse",
         "type": "object"
       },
+      "StatusResponse": {
+        "description": "Canonical ack response for `{'status': str}` endpoints (deletes, mutations, bulk ops).\n\nPrefer this over hand-built `{'status': 'ok'}` dicts. Domain-specific status\nresponses (e.g. `IntegrationNotificationResponse`) may stay in their domain\nmodule, but generic acks should use this.",
+        "properties": {
+          "status": {
+            "description": "Human-readable status message, e.g. \"ok\".",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "StatusResponse",
+        "type": "object"
+      },
       "StoreMeetingRequest": {
         "description": "Request to store/update a calendar meeting",
         "properties": {
@@ -17400,7 +17433,14 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "401": {
@@ -23750,7 +23790,14 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "401": {
@@ -23921,7 +23968,14 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationActionItemsDeleteResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "401": {
@@ -35766,7 +35820,14 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "401": {
@@ -40357,7 +40418,14 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "401": {
