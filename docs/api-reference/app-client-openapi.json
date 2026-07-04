@@ -22388,15 +22388,6 @@
           },
           {
             "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
             "name": "X-App-Platform",
             "required": false,
             "schema": {
@@ -22406,19 +22397,44 @@
           },
           {
             "in": "header",
-            "name": "X-Device-Id-Hash",
+            "name": "X-App-Version",
             "required": false,
             "schema": {
-              "title": "X-Device-Id-Hash",
+              "title": "X-App-Version",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Version",
+            "name": "X-App-Build",
             "required": false,
             "schema": {
-              "title": "X-App-Version",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
               "type": "string"
             }
           }
