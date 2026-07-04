@@ -152,6 +152,16 @@ final class WhatsAppInboxStore: ObservableObject {
     if let result = try? await WhatsAppReaderService.shared.newMessages(afterZPK: lastSeenZPK, limit: 1) {
       lastSeenZPK = max(lastSeenZPK, result.maxZPK)
     }
+    // A persisted auto-reply chat does NOT get setAutoReply's immediate reply on launch,
+    // so a message that arrived while Omi was closed (or before permission was granted)
+    // would sit unanswered until the contact's NEXT new message — which looks like
+    // "auto-reply doesn't work". Reply now to any still-unanswered message in an opted-in
+    // chat. Safe: once replied, the chat's last message is outbound so `awaitingReply`
+    // flips false and this won't re-fire on the next launch; a failed send stays pending
+    // and is retried next launch.
+    for chat in chats where autoReplyChats.contains(chat.chatID) && chat.awaitingReply {
+      scheduleAutoReply(chat)
+    }
   }
 
   /// Debounced change handler: cheaply check for messages newer than the

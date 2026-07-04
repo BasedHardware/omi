@@ -463,9 +463,14 @@ actor WhatsAppReaderService {
 
       if !isGroup {
         // 1:1: resolve the counterparty phone (the session JID) to a Contacts name.
+        // `personRef` is what the backend resolves to a Person to ground the reply. Prefer
+        // the dialable phone (unique) over the handle/name: for `@lid` privacy chats the
+        // handle isn't a phone and the display name can be ambiguous (multiple contacts
+        // share a name), which makes the drafter return `ambiguous` and auto-reply skip.
+        let dialable = phoneByChat[chatID]
         if let handle = latest.handle ?? Self.handle(fromJID: chatID) {
           title = await resolver.displayName(for: handle) ?? groupName ?? Self.prettyHandle(handle)
-          personRef = handle
+          personRef = dialable ?? handle
           // Prefer the saved Contacts photo; else WhatsApp's own profile pic, looked
           // up by the person's @lid (1:1 pics aren't keyed by phone JID).
           // Contacts photo first, but only if it actually decodes — some AddressBook
@@ -479,7 +484,7 @@ actor WhatsAppReaderService {
           if avatar == nil { avatar = Self.profileThumb(for: chatID, in: thumbMap) }
         } else {
           title = groupName ?? "Unknown"
-          personRef = title
+          personRef = dialable ?? title
         }
       } else {
         title = groupName ?? "Group Chat"
