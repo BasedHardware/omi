@@ -122,6 +122,8 @@ pytest tests/unit/test_developer_auth_context_static.py -v
 pytest tests/unit/test_mcp_auth_context_static.py -v
 pytest tests/unit/test_mcp_api_key_auth_context.py -v
 pytest tests/unit/test_mcp_api_key_scope_readiness.py -v
+pytest tests/unit/test_mcp_oauth_template.py -v
+pytest tests/unit/test_sync_firebase_google_provider_secret.py -v
 pytest tests/unit/test_short_term_lifecycle_worker.py -v
 pytest tests/unit/test_short_term_lifecycle_firestore_store.py -v
 pytest tests/unit/test_memory_contracts.py -v
