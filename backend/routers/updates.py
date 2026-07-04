@@ -393,6 +393,8 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
 
     resolved.sort(key=lambda entry: entry["release"].get("published_at", ""), reverse=True)
     return resolved
+
+
 def _release_entry_to_whats_new(entry: Dict) -> Dict:
     """Map a live-release entry (from _get_live_desktop_releases) to a JSON What's New item."""
     release = entry["release"]
@@ -661,12 +663,17 @@ async def get_desktop_whats_new(
     since_build (the caller's installed build number) is given, only newer releases are returned.
     Returns 200 with an empty items list when nothing is newer, so the client can show "up to date".
     """
-    entries = await _get_live_desktop_releases(platform)
-    return {
-        "platform": platform,
-        "channel": channel,
-        "items": _filter_whats_new(entries, channel, since_build, limit),
-    }
+    try:
+        entries = await _get_live_desktop_releases(platform)
+        return {
+            "platform": platform,
+            "channel": channel,
+            "items": _filter_whats_new(entries, channel, since_build, limit),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating what's new feed: {str(e)}")
 
 
 @router.get("/v2/desktop/download/latest")

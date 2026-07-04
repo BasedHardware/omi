@@ -18,6 +18,9 @@ os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import pytest
+from fastapi import HTTPException
+
 import routers.updates as updates
 
 
@@ -119,3 +122,13 @@ def test_endpoint_empty_upstream_is_200_empty():
     with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[]):
         result = _call()
     assert result == {"platform": "macos", "channel": "stable", "items": []}
+
+
+def test_endpoint_wraps_unexpected_error_as_500():
+    # _get_live_desktop_releases returns [] on upstream failure; if an unexpected error still
+    # escapes it, the endpoint answers 500 rather than a raw 500 traceback, matching the
+    # appcast sibling's try/except contract.
+    with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
+        with pytest.raises(HTTPException) as exc:
+            _call()
+    assert exc.value.status_code == 500
