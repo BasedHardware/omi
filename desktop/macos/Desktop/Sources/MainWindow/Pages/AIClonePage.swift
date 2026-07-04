@@ -33,8 +33,10 @@ struct AIClonePage: View {
   @State private var trainingHandles: Set<String> = []
   /// Last training error per contact id, shown inline on that row.
   @State private var trainingErrors: [String: String] = [:]
-  /// Non-nil while the "Preview Chat" sheet is open for a trained contact.
+  /// Non-nil while the chat sheet is open for a trained contact.
   @State private var chatTarget: AICloneChatTarget?
+  /// Automation-requested chat open that arrived before contacts finished loading.
+  @State private var pendingAutomationChatId: String?
   /// Per-contact backtest UI state (progress while running, result when done).
   @State private var backtestStates: [String: AICloneBacktestUIState] = [:]
   /// Non-nil while the backtest-results detail sheet is open.
@@ -78,11 +80,26 @@ struct AIClonePage: View {
     .background(OmiColors.backgroundPrimary)
     .task(id: reloadToken) { await load() }
     .onDisappear { sendMode.stopListening() }
+    .onReceive(NotificationCenter.default.publisher(for: .aiCloneOpenChatRequested)) { note in
+      guard let id = note.userInfo?["contactId"] as? String else { return }
+      openChatViaAutomation(id)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .aiCloneCloseChatRequested)) { _ in
+      chatTarget = nil
+    }
+    .onChange(of: chatTarget?.id) {
+      // Authoritative presentation signal: the sheet's own onDisappear is unreliable on
+      // macOS (sheet hosts get cached), so lifecycle state is owned here.
+      AICloneChatAutomation.shared.activeContactId = chatTarget?.contact.id
+      if chatTarget == nil {
+        AICloneChatAutomation.shared.liveSnapshot = nil
+      }
+    }
     .sheet(isPresented: $showSentLog) {
       AICloneSentLogSheet()
     }
     .sheet(item: $chatTarget) { target in
-      AIClonePreviewChatSheet(contact: target.contact, persona: target.persona)
+      AICloneChatSheet(contact: target.contact, persona: target.persona)
     }
     .sheet(item: $backtestDetail) { detail in
       AICloneBacktestSheet(contact: detail.contact, result: detail.result)
@@ -576,6 +593,22 @@ struct AIClonePage: View {
     state = .loaded
     refreshActiveContacts()
     sendMode.startListening()
+    if let pending = pendingAutomationChatId {
+      pendingAutomationChatId = nil
+      openChatViaAutomation(pending)
+    }
+  }
+
+  /// Open the chat sheet for a bridge-requested contact; parked until contacts load when
+  /// the request lands mid-load (e.g. right after a navigate to this page).
+  private func openChatViaAutomation(_ contactId: String) {
+    if let contact = contacts.first(where: { $0.id == contactId }),
+      let persona = personas[contact.id]
+    {
+      chatTarget = AICloneChatTarget(contact: contact, persona: persona)
+    } else if state == .loading {
+      pendingAutomationChatId = contactId
+    }
   }
 
   /// Push the current trained contacts (contact + persona) into the send-mode coordinator so
@@ -641,7 +674,7 @@ struct AIClonePage: View {
   }
 
   /// Fetch this contact's history, branching by platform. `fileprivate` so
-  /// `AIClonePreviewChatSheet` in this file can reuse the same loading logic.
+  /// `AICloneChatSheet` in this file can reuse the same loading logic.
   fileprivate static func loadMessages(
     for contact: ImportedContact, limit: Int = 500
   ) async throws -> [ImportedMessage] {
@@ -1065,9 +1098,9 @@ private struct AICloneContactRow: View {
 
         backtestControl
 
-        // Manual sanity-check tool: chat against the persona.
+        // Live conversation + practice chat against the persona.
         Button(action: onPreviewChat) {
-          Text("Preview Chat")
+          Text("Chat")
             .scaledFont(size: 13, weight: .semibold)
             .foregroundColor(OmiColors.backgroundPrimary)
             .padding(.horizontal, 18)
@@ -1219,14 +1252,618 @@ private struct AICloneContactRow: View {
   }
 }
 
-// MARK: - Preview Chat
+// MARK: - Chat sheet (Live conversation + Practice)
 
-/// Identifies which trained contact the preview-chat sheet is for.
+/// Identifies which trained contact the chat sheet is for.
 private struct AICloneChatTarget: Identifiable {
   let contact: ImportedContact
   let persona: ContactPersona
   var id: String { contact.id }
 }
+
+/// Chat sheet with two tabs: **Live** — the real conversation with this contact (recent
+/// history, new messages as they arrive, clone-suggested replies you can edit and send,
+/// and a composer for your own messages) — and **Practice**, the original simulator where
+/// you type as the contact and see how the clone would reply as you.
+private struct AICloneChatSheet: View {
+  let contact: ImportedContact
+  let persona: ContactPersona
+
+  @Environment(\.dismiss) private var dismiss
+  @State private var mode: Mode = .live
+
+  enum Mode: String, CaseIterable {
+    case live = "Live"
+    case practice = "Practice"
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      header
+      Divider().overlay(OmiColors.border)
+      // Both tabs stay mounted so switching never drops transcript state or pauses the
+      // live poll; only the visible one receives interaction.
+      ZStack {
+        AICloneLiveChatView(contact: contact, persona: persona)
+          .opacity(mode == .live ? 1 : 0)
+          .allowsHitTesting(mode == .live)
+        AIClonePracticeChatView(contact: contact, persona: persona)
+          .opacity(mode == .practice ? 1 : 0)
+          .allowsHitTesting(mode == .practice)
+      }
+    }
+    .frame(width: 520, height: 660)
+    .background(OmiColors.backgroundPrimary)
+    .task {
+      // Build the retrieval index so replies get dynamic few-shot examples from the
+      // real history (no-op if already built for this contact).
+      if let messages = try? await AIClonePage.loadMessages(for: contact, limit: 1500) {
+        await AICloneRetrievalService.shared.ensureIndex(
+          contactId: contact.id, messages: messages)
+      }
+    }
+  }
+
+  private var header: some View {
+    HStack(alignment: .center, spacing: 12) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text(contact.displayName)
+          .scaledFont(size: 16, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(
+          mode == .live
+            ? "Your real conversation — the clone drafts replies you approve and send"
+            : "Type as \(contact.displayName) to see how the clone would reply as you"
+        )
+        .scaledFont(size: 12, weight: .regular)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Spacer()
+
+      Picker("", selection: $mode) {
+        ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+      }
+      .pickerStyle(.segmented)
+      .labelsHidden()
+      .frame(width: 170)
+
+      Button(action: { dismiss() }) {
+        Image(systemName: "xmark")
+          .font(.system(size: 13, weight: .semibold))
+          .foregroundColor(OmiColors.textSecondary)
+          .padding(8)
+          .background(Circle().fill(OmiColors.backgroundSecondary))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(16)
+  }
+}
+
+// MARK: - Live conversation tab
+
+/// One rendered message in the live transcript. `pending` marks an optimistic local echo
+/// (dispatched but not yet observed back in the platform's message store).
+private struct AICloneLiveMessage: Identifiable, Equatable {
+  let id: String
+  let isFromMe: Bool
+  let text: String
+  let date: Date
+  var pending = false
+}
+
+/// The real conversation with this contact: recent history, live-updating while the sheet
+/// is open (3s poll of the platform store), clone-suggested replies for the latest incoming
+/// message, and a composer to send your own messages for real.
+private struct AICloneLiveChatView: View {
+  let contact: ImportedContact
+  let persona: ContactPersona
+
+  private enum SuggestionState: Equatable {
+    case idle
+    case generating
+    case ready
+    case failed(String)
+  }
+
+  @State private var messages: [AICloneLiveMessage] = []
+  /// Keys of every message ever fetched (wider than what's displayed) so poll ticks
+  /// re-observing old history never duplicate bubbles.
+  @State private var seenKeys: Set<String> = []
+  @State private var isLoading = true
+  @State private var loadError: String?
+
+  @State private var suggestionState: SuggestionState = .idle
+  @State private var suggestionText = ""
+  @State private var isSendingSuggestion = false
+
+  @State private var draft = ""
+  @State private var isSendingOwn = false
+  @State private var sendError: String?
+  @FocusState private var inputFocused: Bool
+
+  var body: some View {
+    VStack(spacing: 0) {
+      transcript
+      Divider().overlay(OmiColors.border)
+      suggestionSection
+      inputBar
+    }
+    .onAppear {
+      inputFocused = true
+      // The page's onChange may not have run yet when the sheet content first appears.
+      AICloneChatAutomation.shared.activeContactId = contact.id
+      publishAutomationSnapshot()
+    }
+    .onChange(of: messages.count) { publishAutomationSnapshot() }
+    .onChange(of: suggestionState) { publishAutomationSnapshot() }
+    .onChange(of: isLoading) { publishAutomationSnapshot() }
+    .onReceive(NotificationCenter.default.publisher(for: .aiCloneChatSuggestRequested)) { _ in
+      guard isPresented else { return }
+      suggest()
+    }
+    .task { await runLiveLoop() }
+  }
+
+  /// Whether this view is the currently-presented chat sheet. False once dismissed, even
+  /// if macOS keeps the sheet host (and this view's subscriptions) cached for reuse.
+  private var isPresented: Bool {
+    AICloneChatAutomation.shared.activeContactId == contact.id
+  }
+
+  /// Mirror the live tab's state into the automation mailbox so bridge harness actions can
+  /// verify the real UI headlessly (local bridge is non-prod only).
+  private func publishAutomationSnapshot() {
+    guard isPresented else { return }
+    let suggestionLabel: String
+    switch suggestionState {
+    case .idle: suggestionLabel = "idle"
+    case .generating: suggestionLabel = "generating"
+    case .ready: suggestionLabel = "ready"
+    case .failed(let message): suggestionLabel = "failed: \(message)"
+    }
+    AICloneChatAutomation.shared.liveSnapshot = [
+      "open": "true",
+      "contactId": contact.id,
+      "isLoading": isLoading ? "true" : "false",
+      "loadError": loadError ?? "",
+      "messageCount": String(messages.count),
+      "lastMessages": messages.suffix(5)
+        .map { "\($0.isFromMe ? "me" : "them"): \($0.text)" }.joined(separator: "\n"),
+      "suggestionState": suggestionLabel,
+      "suggestionText": suggestionText,
+    ]
+  }
+
+  // MARK: Transcript
+
+  private var transcript: some View {
+    ScrollViewReader { proxy in
+      ScrollView {
+        LazyVStack(spacing: 8) {
+          if isLoading {
+            HStack(spacing: 8) {
+              ProgressView().scaleEffect(0.6).tint(.white)
+              Text("Loading conversation…")
+                .scaledFont(size: 13, weight: .regular)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+            .padding(.top, 40)
+          } else if let loadError {
+            Text(loadError)
+              .scaledFont(size: 12, weight: .regular)
+              .foregroundColor(OmiColors.warning)
+              .padding(.top, 40)
+          } else if messages.isEmpty {
+            Text("No messages with \(contact.displayName) yet.")
+              .scaledFont(size: 13, weight: .regular)
+              .foregroundColor(OmiColors.textTertiary)
+              .padding(.top, 40)
+          }
+
+          ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+            VStack(spacing: 8) {
+              if showsTimestamp(at: index) {
+                Text(message.date.formatted(date: .abbreviated, time: .shortened))
+                  .scaledFont(size: 10, weight: .medium)
+                  .foregroundColor(OmiColors.textQuaternary)
+                  .padding(.top, 6)
+              }
+              liveBubble(message)
+            }
+            .id(message.id)
+          }
+
+          if let sendError {
+            Text(sendError)
+              .scaledFont(size: 12, weight: .regular)
+              .foregroundColor(OmiColors.warning)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+        }
+        .padding(16)
+      }
+      .onChange(of: messages.count) { scrollToBottom(proxy) }
+      .onAppear { scrollToBottom(proxy, animated: false) }
+    }
+  }
+
+  /// Show a timestamp above the first message and whenever >1h passed since the previous.
+  private func showsTimestamp(at index: Int) -> Bool {
+    guard index > 0 else { return true }
+    return messages[index].date.timeIntervalSince(messages[index - 1].date) > 3600
+  }
+
+  private func liveBubble(_ message: AICloneLiveMessage) -> some View {
+    HStack(alignment: .bottom, spacing: 6) {
+      if message.isFromMe { Spacer(minLength: 60) }
+
+      Text(message.text)
+        .scaledFont(size: 14, weight: .regular)
+        .foregroundColor(message.isFromMe ? OmiColors.backgroundPrimary : OmiColors.textPrimary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(message.isFromMe ? OmiColors.textPrimary : OmiColors.backgroundSecondary)
+        )
+        .opacity(message.pending ? 0.6 : 1)
+        .textSelection(.enabled)
+
+      if message.pending {
+        Text("Sending…")
+          .scaledFont(size: 10, weight: .regular)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+
+      if !message.isFromMe { Spacer(minLength: 60) }
+    }
+    .frame(maxWidth: .infinity, alignment: message.isFromMe ? .trailing : .leading)
+  }
+
+  private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
+    guard let last = messages.last else { return }
+    if animated {
+      withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
+    } else {
+      proxy.scrollTo(last.id, anchor: .bottom)
+    }
+  }
+
+  // MARK: Suggestion section (the clone's draft for the latest incoming message)
+
+  @ViewBuilder
+  private var suggestionSection: some View {
+    switch suggestionState {
+    case .idle:
+      HStack {
+        Button(action: suggest) {
+          HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+              .font(.system(size: 11, weight: .semibold))
+            Text("Suggest reply")
+              .scaledFont(size: 12, weight: .semibold)
+          }
+          .foregroundColor(hasIncoming ? OmiColors.textPrimary : OmiColors.textQuaternary)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 7)
+          .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasIncoming)
+        .help("Have the clone draft a reply to \(contact.displayName)'s latest message")
+
+        Spacer()
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 10)
+
+    case .generating:
+      HStack(spacing: 8) {
+        ProgressView().scaleEffect(0.55).tint(.white)
+        Text("Clone is drafting a reply…")
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.textTertiary)
+        Spacer()
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 10)
+
+    case .ready:
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 6) {
+          Image(systemName: "sparkles")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(OmiColors.textTertiary)
+          Text("CLONE SUGGESTS — EDIT BEFORE SENDING")
+            .scaledFont(size: 9, weight: .semibold)
+            .foregroundColor(OmiColors.textQuaternary)
+          Spacer()
+        }
+
+        TextField("Reply", text: $suggestionText, axis: .vertical)
+          .textFieldStyle(.plain)
+          .scaledFont(size: 13, weight: .regular)
+          .foregroundColor(OmiColors.textPrimary)
+          .lineLimit(1...5)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 8)
+          .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundTertiary))
+
+        HStack(spacing: 8) {
+          Spacer()
+          Button(action: { suggestionState = .idle }) {
+            Text("Dismiss")
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textSecondary)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 6)
+              .background(RoundedRectangle(cornerRadius: 7).stroke(OmiColors.border, lineWidth: 1))
+          }
+          .buttonStyle(.plain)
+
+          Button(action: suggest) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.clockwise")
+                .font(.system(size: 10, weight: .semibold))
+              Text("Redo")
+                .scaledFont(size: 12, weight: .semibold)
+            }
+            .foregroundColor(OmiColors.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).stroke(OmiColors.border, lineWidth: 1))
+          }
+          .buttonStyle(.plain)
+
+          Button(action: sendSuggestion) {
+            HStack(spacing: 4) {
+              if isSendingSuggestion {
+                ProgressView().scaleEffect(0.45).tint(OmiColors.backgroundPrimary)
+              } else {
+                Image(systemName: "paperplane.fill")
+                  .font(.system(size: 10, weight: .semibold))
+              }
+              Text("Send")
+                .scaledFont(size: 12, weight: .semibold)
+            }
+            .foregroundColor(OmiColors.backgroundPrimary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).fill(OmiColors.textPrimary))
+          }
+          .buttonStyle(.plain)
+          .disabled(
+            isSendingSuggestion
+              || suggestionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+      }
+      .padding(12)
+      .background(
+        RoundedRectangle(cornerRadius: 10, style: .continuous).fill(OmiColors.backgroundSecondary)
+      )
+      .padding(.horizontal, 16)
+      .padding(.top, 10)
+
+    case .failed(let message):
+      HStack(spacing: 8) {
+        Text(message)
+          .scaledFont(size: 12, weight: .regular)
+          .foregroundColor(OmiColors.warning)
+          .lineLimit(2)
+        Spacer()
+        Button(action: suggest) {
+          Text("Retry")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).stroke(OmiColors.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 10)
+    }
+  }
+
+  private var hasIncoming: Bool { messages.contains { !$0.isFromMe } }
+
+  // MARK: Composer (your own real message)
+
+  private var inputBar: some View {
+    HStack(spacing: 10) {
+      TextField("Message \(contact.displayName)…", text: $draft, axis: .vertical)
+        .textFieldStyle(.plain)
+        .scaledFont(size: 14, weight: .regular)
+        .foregroundColor(OmiColors.textPrimary)
+        .lineLimit(1...4)
+        .focused($inputFocused)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+        )
+        .onSubmit { sendOwn() }
+
+      Button(action: sendOwn) {
+        Image(systemName: "arrow.up")
+          .font(.system(size: 15, weight: .bold))
+          .foregroundColor(OmiColors.backgroundPrimary)
+          .frame(width: 36, height: 36)
+          .background(Circle().fill(canSendOwn ? OmiColors.textPrimary : OmiColors.textQuaternary))
+      }
+      .buttonStyle(.plain)
+      .disabled(!canSendOwn)
+      .help("Sends for real to \(contact.displayName)")
+    }
+    .padding(16)
+  }
+
+  private var canSendOwn: Bool {
+    !isSendingOwn && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  // MARK: Live loop (initial load + poll)
+
+  private func runLiveLoop() async {
+    await loadInitial()
+    // Also stop when this sheet is no longer the presented one — .task cancellation is
+    // not guaranteed on macOS when the dismissed sheet host is cached for reuse.
+    while !Task.isCancelled, isPresented {
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      await refresh()
+    }
+  }
+
+  private func loadInitial() async {
+    do {
+      let history = try await AIClonePage.loadMessages(for: contact, limit: 200)
+      let ordered = history.sorted { $0.date < $1.date }
+      var loaded: [AICloneLiveMessage] = []
+      for message in ordered {
+        guard let entry = register(message) else { continue }
+        loaded.append(entry)
+      }
+      // Track keys for the full fetch window but only render the recent tail.
+      messages = Array(loaded.suffix(60))
+      isLoading = false
+    } catch {
+      loadError = error.localizedDescription
+      isLoading = false
+    }
+  }
+
+  /// Poll tick: append any messages not seen yet. A from-me arrival that matches an
+  /// optimistic pending bubble replaces it (the real store echo has the authoritative date).
+  private func refresh() async {
+    guard let history = try? await AIClonePage.loadMessages(for: contact, limit: 50) else {
+      return
+    }
+    var appendedIncoming = false
+    for message in history.sorted(by: { $0.date < $1.date }) {
+      guard let entry = register(message) else { continue }
+      if entry.isFromMe,
+        let pendingIdx = messages.firstIndex(where: { $0.pending && $0.text == entry.text })
+      {
+        messages.remove(at: pendingIdx)
+      }
+      messages.append(entry)
+      if !entry.isFromMe { appendedIncoming = true }
+    }
+    // A new incoming message while the sheet is open → auto-draft a suggestion, but never
+    // stomp a draft the user may already be editing.
+    if appendedIncoming, suggestionState == .idle {
+      suggest()
+    }
+  }
+
+  /// Dedupe gate: returns a renderable entry only the first time a message is observed.
+  private func register(_ message: ImportedMessage) -> AICloneLiveMessage? {
+    let key =
+      "\(Int(message.date.timeIntervalSince1970))|\(message.isFromMe ? 1 : 0)|\(message.text)"
+    guard !seenKeys.contains(key) else { return nil }
+    seenKeys.insert(key)
+    return AICloneLiveMessage(
+      id: key, isFromMe: message.isFromMe, text: message.text, date: message.date)
+  }
+
+  // MARK: Actions
+
+  /// Ask the clone for a reply to the latest incoming burst, with the real conversation
+  /// tail as context.
+  private func suggest() {
+    guard suggestionState != .generating else { return }
+    let turns = messages.filter { !$0.pending }.map { (isFromMe: $0.isFromMe, text: $0.text) }
+    guard let burst = AICloneLiveChat.latestIncomingBurst(in: turns) else { return }
+    suggestionState = .generating
+    sendError = nil
+    Task {
+      do {
+        let reply = try await AIClonePersonaService.shared.respond(
+          as: persona, to: burst.incoming, context: burst.context)
+        suggestionText = reply
+        suggestionState = .ready
+      } catch {
+        suggestionState = .failed(error.localizedDescription)
+      }
+    }
+  }
+
+  private func sendSuggestion() {
+    let text = suggestionText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty, !isSendingSuggestion else { return }
+    isSendingSuggestion = true
+    sendError = nil
+    Task {
+      do {
+        // Multi-bubble suggestions go out as separate messages, like a real burst.
+        try await AICloneSendModeService.shared.sendBubbles(
+          contactId: contact.id, displayName: contact.displayName, text: text, mode: .manual)
+        for bubble in AICloneReplyPresentation.bubbles(from: text) {
+          appendOptimistic(text: bubble)
+        }
+        suggestionText = ""
+        suggestionState = .idle
+      } catch {
+        sendError = error.localizedDescription
+      }
+      isSendingSuggestion = false
+    }
+  }
+
+  private func sendOwn() {
+    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty, !isSendingOwn else { return }
+    isSendingOwn = true
+    sendError = nil
+    Task {
+      do {
+        try await AICloneSendModeService.shared.send(
+          contactId: contact.id, displayName: contact.displayName, text: text, mode: .manual)
+        appendOptimistic(text: text)
+        draft = ""
+      } catch {
+        sendError = error.localizedDescription
+      }
+      isSendingOwn = false
+    }
+  }
+
+  /// Local echo shown immediately after a successful dispatch; the next poll tick swaps it
+  /// for the real store entry.
+  private func appendOptimistic(text: String) {
+    messages.append(
+      AICloneLiveMessage(
+        id: "local-\(UUID().uuidString)", isFromMe: true, text: text, date: Date(),
+        pending: true))
+  }
+}
+
+/// Pure helpers for the live chat, kept off the view for unit testing.
+enum AICloneLiveChat {
+  /// The most recent run of consecutive incoming bubbles — joined newline-style like the
+  /// multi-bubble bursts `respond()` is trained on — plus up to 8 turns of preceding
+  /// context, shaped for `respond(as:to:context:)`. Nil when the thread has no incoming
+  /// messages at all.
+  static func latestIncomingBurst(
+    in turns: [(isFromMe: Bool, text: String)]
+  ) -> (incoming: String, context: [ConversationTurn])? {
+    guard let last = turns.lastIndex(where: { !$0.isFromMe }) else { return nil }
+    var start = last
+    while start > 0, !turns[start - 1].isFromMe { start -= 1 }
+    let incoming = turns[start...last].map(\.text).joined(separator: "\n")
+    let context = turns[..<start].suffix(8).map {
+      ConversationTurn(isFromMe: $0.isFromMe, text: $0.text)
+    }
+    return (incoming, Array(context))
+  }
+}
+
+// MARK: - Practice tab (simulator)
 
 /// A single turn in the preview transcript. `incoming` = a message you type *as the
 /// contact*; `reply` = the persona's predicted response *as you*.
@@ -1239,11 +1876,10 @@ private struct AIClonePreviewMessage: Identifiable {
 
 /// Minimal manual chat tool: type a message as the contact, see how the persona (you)
 /// would reply. In-memory only — nothing is persisted.
-private struct AIClonePreviewChatSheet: View {
+private struct AIClonePracticeChatView: View {
   let contact: ImportedContact
   let persona: ContactPersona
 
-  @Environment(\.dismiss) private var dismiss
   @State private var draft = ""
   @State private var messages: [AIClonePreviewMessage] = []
   @State private var isResponding = false
@@ -1260,51 +1896,10 @@ private struct AIClonePreviewChatSheet: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      sheetHeader
-      Divider().overlay(OmiColors.border)
       transcript
       Divider().overlay(OmiColors.border)
       inputBar
     }
-    .frame(width: 460, height: 560)
-    .background(OmiColors.backgroundPrimary)
-    .onAppear { inputFocused = true }
-    .task {
-      // Build the retrieval index so replies get dynamic few-shot examples from the
-      // real history (no-op if already built for this contact).
-      if let messages = try? await AIClonePage.loadMessages(for: contact, limit: 1500) {
-        await AICloneRetrievalService.shared.ensureIndex(
-          contactId: contact.id, messages: messages)
-      }
-    }
-  }
-
-  // MARK: Header
-
-  private var sheetHeader: some View {
-    HStack(alignment: .top, spacing: 12) {
-      VStack(alignment: .leading, spacing: 3) {
-        Text("Preview Chat")
-          .scaledFont(size: 16, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Text("Type as if you were \(contact.displayName) — Omi predicts how you'd reply")
-          .scaledFont(size: 12, weight: .regular)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      Spacer()
-
-      Button(action: { dismiss() }) {
-        Image(systemName: "xmark")
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
-          .padding(8)
-          .background(Circle().fill(OmiColors.backgroundSecondary))
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(16)
   }
 
   // MARK: Transcript

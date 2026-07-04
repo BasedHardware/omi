@@ -702,6 +702,13 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to expand the transcript drawer.
   static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
     "desktopAutomationShowConversationTranscriptRequested")
+  /// Posted by the automation bridge to open the AI Clone chat sheet for a trained contact
+  /// (userInfo: ["contactId": String]).
+  static let aiCloneOpenChatRequested = Notification.Name("aiCloneOpenChatRequested")
+  /// Posted by the automation bridge to close the AI Clone chat sheet.
+  static let aiCloneCloseChatRequested = Notification.Name("aiCloneCloseChatRequested")
+  /// Posted by the automation bridge to trigger "Suggest reply" in the open live chat tab.
+  static let aiCloneChatSuggestRequested = Notification.Name("aiCloneChatSuggestRequested")
   /// Posted by the local desktop automation bridge to open an export connector sheet
   /// (userInfo: ["destination": rawValue]) — for headless e2e inspection.
   static let desktopAutomationOpenExportRequested = Notification.Name(

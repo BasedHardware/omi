@@ -97,6 +97,50 @@ final class AICloneArchitectureTests: XCTestCase {
     XCTAssertEqual(AICloneReplyPresentation.bubbles(from: "a\n\n  \nb"), ["a", "b"])
   }
 
+  // MARK: - Live chat: latest incoming burst
+
+  func testLatestIncomingBurstJoinsConsecutiveIncomingAndTakesContext() {
+    let turns: [(isFromMe: Bool, text: String)] = [
+      (true, "yo"),
+      (false, "hey"),
+      (true, "what's up"),
+      (false, "did you see the game"),
+      (false, "insane ending"),
+    ]
+    let burst = AICloneLiveChat.latestIncomingBurst(in: turns)
+    XCTAssertEqual(burst?.incoming, "did you see the game\ninsane ending")
+    XCTAssertEqual(burst?.context.map(\.text), ["yo", "hey", "what's up"])
+    XCTAssertEqual(burst?.context.map(\.isFromMe), [true, false, true])
+  }
+
+  func testLatestIncomingBurstIgnoresTrailingFromMeMessages() {
+    // My messages after the last incoming burst: the burst still targets that incoming.
+    let turns: [(isFromMe: Bool, text: String)] = [
+      (false, "you free tmrw"),
+      (true, "let me check"),
+    ]
+    let burst = AICloneLiveChat.latestIncomingBurst(in: turns)
+    XCTAssertEqual(burst?.incoming, "you free tmrw")
+    XCTAssertEqual(burst?.context.count, 0)
+  }
+
+  func testLatestIncomingBurstNilWithoutIncoming() {
+    XCTAssertNil(AICloneLiveChat.latestIncomingBurst(in: [(true, "hello?"), (true, "u there")]))
+    XCTAssertNil(AICloneLiveChat.latestIncomingBurst(in: []))
+  }
+
+  func testLatestIncomingBurstCapsContextAtEightTurns() {
+    var turns: [(isFromMe: Bool, text: String)] = []
+    for i in 0..<20 {
+      turns.append((i % 2 == 1, "turn \(i)"))
+    }
+    turns.append((false, "newest"))
+    let burst = AICloneLiveChat.latestIncomingBurst(in: turns)
+    XCTAssertEqual(burst?.incoming, "newest")
+    XCTAssertEqual(burst?.context.count, 8)
+    XCTAssertEqual(burst?.context.last?.text, "turn 19")
+  }
+
   // MARK: - Pair extraction (session gap)
 
   func testBuildPairsSkipsRepliesAcrossLongGaps() {
