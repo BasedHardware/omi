@@ -133,3 +133,21 @@ def test_helper_finds_exact_match():
     ]
     assert fw._find_release_by_version(releases, "Omi_CV1", (3, 0, 10))["tag_name"] == "Omi_CV1_v3.0.10"
     assert fw._find_release_by_version(releases, "Omi_CV1", (9, 9, 9)) is None
+
+
+def test_duplicate_version_returns_newest_published_deterministically():
+    older = _release(
+        "Omi_CV1_v3.0.15",
+        "3.0.15",
+        [{"name": "Omi_CV1_OTA_v3.0.15.zip", "browser_download_url": "https://x/OLD.zip"}],
+        published_at="2026-01-01T00:00:00Z",
+    )
+    newer = _release(
+        "Omi_CV1_v3.0.15",
+        "3.0.15",
+        [{"name": "Omi_CV1_OTA_v3.0.15.zip", "browser_download_url": "https://x/NEW.zip"}],
+        published_at="2026-03-01T00:00:00Z",
+    )
+    # Raw list order older-first; the newest-published must win regardless.
+    with patch.object(fw, "get_omi_github_releases", AsyncMock(return_value=[older, newer])):
+        assert _call(version="3.0.15")["zip_url"] == "https://x/NEW.zip"

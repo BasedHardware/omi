@@ -157,10 +157,14 @@ def _find_release_by_version(
 ) -> Optional[Dict]:
     """Return the release whose release_firmware_version equals the target, or None.
 
-    Reuses _find_candidate_releases (current=None) so the same draft/prerelease/tag/parseable
-    validation applies, then matches the exact requested version.
+    Reuses _find_candidate_releases (current=None) for the device-prefix / draft / prerelease / tag
+    filtering, sorts newest-published first (matching get_stable/get_latest) so the result is
+    deterministic if two releases ever advertise the same version, then matches the exact target. An
+    unparseable stored version simply won't equal the (already-validated) target, so it is skipped.
     """
-    for release in _find_candidate_releases(releases, release_prefix):
+    candidates = _find_candidate_releases(releases, release_prefix)
+    candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
+    for release in candidates:
         kv = extract_key_value_pairs(release.get("body"))
         if _parse_firmware_version(kv.get("release_firmware_version")) == target_firmware_tuple:
             return release
