@@ -94,9 +94,9 @@ def _reset_fixture(db: firestore.Client) -> None:
 def _write_fixture(db: firestore.Client, case: ProofCase) -> None:
     _reset_fixture(db)
     if case.write_control_doc:
-        db.document(CONTROL_PATH).set(_control_doc(**(case.control_overrides or {})))
-    db.document(GLOBAL_READ_GATE_PATH).set(_global_gate(**(case.global_gate_overrides or {})))
-    db.document(WRITE_CONVERGENCE_GATE_PATH).set(_write_gate(**(case.write_gate_overrides or {})))
+        db.document(CONTROL_PATH).set(_control_doc(**(case.control_overrides or {})))  # type: ignore[reportUnknownMemberType]  # firestore set
+    db.document(GLOBAL_READ_GATE_PATH).set(_global_gate(**(case.global_gate_overrides or {})))  # type: ignore[reportUnknownMemberType]  # firestore set
+    db.document(WRITE_CONVERGENCE_GATE_PATH).set(_write_gate(**(case.write_gate_overrides or {})))  # type: ignore[reportUnknownMemberType]  # firestore set
 
 
 def _assert_case(db: firestore.Client, case: ProofCase) -> None:

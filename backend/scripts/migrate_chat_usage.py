@@ -19,10 +19,10 @@ Usage:
 
 import argparse
 import sys
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from calendar import monthrange
+from typing import Any, Dict, List
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -43,7 +43,9 @@ def _count_user_messages_this_month(uid: str, month_start: datetime, month_end: 
     return count_agg[0][0].value if count_agg else 0
 
 
-def _process_user(uid: str, month_start: datetime, month_end: datetime, fixed_now: datetime, apply: bool) -> dict:
+def _process_user(
+    uid: str, month_start: datetime, month_end: datetime, fixed_now: datetime, apply: bool
+) -> Dict[str, Any]:
     """Process a single user: compare actual messages vs tracked llm_usage."""
     try:
         actual_count = _count_user_messages_this_month(uid, month_start, month_end)
@@ -83,7 +85,7 @@ def _process_user(uid: str, month_start: datetime, month_end: datetime, fixed_no
         }
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description='Migrate current-month chat usage to llm_usage collection')
     parser.add_argument('--apply', action='store_true', help='Actually write to Firestore (default is dry-run)')
     parser.add_argument('--workers', type=int, default=10, help='Number of parallel workers (default 10)')
@@ -102,7 +104,7 @@ def main():
     uids = get_users_uid()
     print(f'Found {len(uids)} users')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = [executor.submit(_process_user, uid, month_start, month_end, now, args.apply) for uid in uids]
         for i, future in enumerate(futures):

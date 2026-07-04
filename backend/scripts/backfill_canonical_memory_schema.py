@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from typing import Any, Dict, cast
 
 from database._client import db
 from database.memory_collections import MemoryCollections
@@ -11,7 +12,7 @@ from utils.memory.memory_system import list_canonical_cohort_uids
 
 logger = logging.getLogger(__name__)
 
-DEFAULTS = {
+DEFAULTS: Dict[str, Any] = {
     "corroboration_count": 0,
     "kg_extracted": False,
     "arguments": {},
@@ -22,8 +23,9 @@ def backfill_user(uid: str, *, dry_run: bool = True) -> int:
     items_ref = db.collection(MemoryCollections(uid=uid).memory_items)
     updated = 0
     for snapshot in items_ref.stream():
-        data = snapshot.to_dict() or {}
-        patch = {key: value for key, value in DEFAULTS.items() if key not in data}
+        raw: object = snapshot.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        patch: Dict[str, Any] = {key: value for key, value in DEFAULTS.items() if key not in data}
         if not patch:
             continue
         updated += 1

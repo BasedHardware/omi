@@ -21,10 +21,16 @@ Usage:
 import argparse
 import logging
 import sys
+from typing import Any, cast
 
 import firebase_admin
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+
+# firebase_admin ships partial/py.typed stubs that surface as partially-unknown
+# member types; the SDK boundary is treated as Any (mirrors database/_client.py).
+fa: Any = cast(Any, firebase_admin)
+fs: Any = cast(Any, firestore)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -34,7 +40,7 @@ PAID_PLANS = {'unlimited', 'architect', 'pro'}
 
 def read_uids(filepath: str) -> list[str]:
     """Read UIDs from a file, one per line. Ignores blank lines and # comments."""
-    uids = []
+    uids: list[str] = []
     with open(filepath) as f:
         for line in f:
             line = line.strip()
@@ -43,24 +49,25 @@ def read_uids(filepath: str) -> list[str]:
     return uids
 
 
-def get_subscription_plan(db, uid: str) -> str | None:
+def get_subscription_plan(db: Any, uid: str) -> str | None:
     """Read the user's subscription plan from Firestore."""
     doc = db.collection('users').document(uid).get(['subscription'])
     if not doc.exists:
         return None
-    data = doc.to_dict()
-    sub = data.get('subscription', {})
-    return sub.get('plan')
+    data = cast(dict[str, Any], doc.to_dict() or {})
+    sub = cast(dict[str, Any], data.get('subscription', {}) or {})
+    plan = sub.get('plan')
+    return plan if isinstance(plan, str) else None
 
 
-def count_locked(db, uid: str, collection_name: str) -> int:
+def count_locked(db: Any, uid: str, collection_name: str) -> int:
     """Count documents with is_locked=True in a user's subcollection."""
     ref = db.collection('users').document(uid).collection(collection_name)
     query = ref.where(filter=FieldFilter('is_locked', '==', True))
     return sum(1 for _ in query.stream())
 
 
-def unlock_collection(db, uid: str, collection_name: str) -> int:
+def unlock_collection(db: Any, uid: str, collection_name: str) -> int:
     """Unlock all documents with is_locked=True. Returns count unlocked."""
     ref = db.collection('users').document(uid).collection(collection_name)
     query = ref.where(filter=FieldFilter('is_locked', '==', True))
@@ -80,7 +87,7 @@ def unlock_collection(db, uid: str, collection_name: str) -> int:
     return count
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description='Unlock conversations/memories/action_items incorrectly locked by sync soft cap bug (PR #5878)'
     )
@@ -96,13 +103,13 @@ def main():
     logger.info('Loaded %d UIDs from %s', len(uids), args.uids_file)
     logger.info('Mode: %s', 'EXECUTE' if args.execute else 'DRY-RUN')
 
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app()
-    db = firestore.client()
+    if not fa._apps:
+        fa.initialize_app()
+    db: Any = fs.client()
 
     collections = ['conversations', 'memories', 'action_items']
     total_unlocked = 0
-    skipped_uids = []
+    skipped_uids: list[tuple[str, str | None]] = []
 
     for uid in uids:
         plan = get_subscription_plan(db, uid)

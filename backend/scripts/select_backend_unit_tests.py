@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Dict, List, Set, Tuple, cast
+
 import argparse
 import fnmatch
 import json
@@ -224,19 +226,25 @@ def path_matches(path: str, pattern: str) -> bool:
     return PurePosixPath(path).match(pattern)
 
 
-def load_workflow_contracts() -> list[dict]:
+def load_workflow_contracts() -> List[Dict[str, Any]]:
     if not WORKFLOW_CONTRACTS_PATH.exists():
         return []
-    return list(json.loads(WORKFLOW_CONTRACTS_PATH.read_text()).get('workflows', []))
+    data: object = json.loads(WORKFLOW_CONTRACTS_PATH.read_text())
+    if not isinstance(data, dict):
+        return []
+    typed_data: Dict[str, Any] = cast(Dict[str, Any], data)
+    workflows_raw: Any = typed_data.get('workflows', [])
+    return cast(List[Dict[str, Any]], workflows_raw) if isinstance(workflows_raw, list) else []
 
 
-def workflow_contract_tests_for_path(path: str, all_tests: list[str]) -> set[str]:
-    selected: set[str] = set()
+def workflow_contract_tests_for_path(path: str, all_tests: List[str]) -> Set[str]:
+    selected: Set[str] = set()
     for workflow in load_workflow_contracts():
-        sources = tuple(workflow.get('sources') or ())
+        sources: Tuple[str, ...] = tuple(workflow.get('sources') or ())
         if not any(path_matches(path, source) for source in sources):
             continue
-        selected.update(test for test in workflow.get('tests') or () if test in all_tests)
+        tests_raw = workflow.get('tests') or ()
+        selected.update(test for test in tests_raw if test in all_tests)
     return selected
 
 
