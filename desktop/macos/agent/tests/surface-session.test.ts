@@ -115,6 +115,37 @@ describe("surface_conversations", () => {
     expect(resolved.agentSessionId).toBe("ses_legacy_1");
   });
 
+  it("imports legacy sessions with distinct conversationId from agentSessionId", () => {
+    importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      },
+      () => 1,
+    );
+    const row = store.getRow(
+      `SELECT conversation_id, agent_session_id FROM surface_conversations
+       WHERE owner_id = ? AND external_ref_id = ?`,
+      ["owner-a", "default"],
+    );
+    expect(String(row.agent_session_id)).toBe("ses_legacy_1");
+    expect(String(row.conversation_id)).not.toBe("ses_legacy_1");
+    expect(String(row.conversation_id)).toMatch(/^conv_/);
+  });
+
+  it("owner B does not reuse owner A conversation for the same surface", () => {
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const ownerA = resolveSurfaceSession(store, { ownerId: "owner-a", surfaceRef }, () => 1);
+    const ownerB = resolveSurfaceSession(store, { ownerId: "owner-b", surfaceRef }, () => 2);
+    expect(ownerA.conversationId).not.toBe(ownerB.conversationId);
+    expect(ownerA.agentSessionId).not.toBe(ownerB.agentSessionId);
+  });
+
   it("clearOwnerState invalidates active bindings without deleting surface rows", () => {
     const registry = new AdapterRegistry();
     const kernel = new AgentRuntimeKernel({ store, registry });

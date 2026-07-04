@@ -126,12 +126,13 @@ export function importLegacyMainChatSessions(
           defaultAdapterId: "acp",
         }).sessionId;
 
+    const conversationId = generateAgentId("conversation");
     store.insertSurfaceConversation({
       ownerId: input.ownerId,
       surfaceKind: surfaceRef.surfaceKind,
       externalRefKind: surfaceRef.externalRefKind,
       externalRefId: surfaceRef.externalRefId,
-      conversationId: agentSession,
+      conversationId,
       agentSessionId,
       createdAtMs: now,
       lastActiveAtMs: now,

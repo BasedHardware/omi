@@ -478,6 +478,28 @@ class GauntletRunner:
         if self.markers["spawn"] not in status_blob and not list_tools:
             self.fail(f"status query missing spawn marker {self.markers['spawn']}")
 
+        # Step 6 — owner-switch isolation (kernel unit test; live sign-out/sign-in E2E is manual)
+        owner_ok, owner_detail = run_owner_switch_kernel_check()
+        self.record_step(
+            "06-owner-switch-kernel",
+            "owner-switch surface isolation (kernel)",
+            user_text="(kernel vitest: owner B does not reuse owner A conversation)",
+            action_response={"ok": owner_ok, "detail": owner_detail},
+            snapshot_detail={},
+            traces=[],
+            extra={
+                "owner_switch_note": (
+                    "Live sign-out/sign-in E2E is not automated here; kernel surface_conversations "
+                    "owner isolation is verified via surface-session.test.ts."
+                ),
+            },
+        )
+        if not owner_ok:
+            self.fail(f"owner-switch kernel check failed: {owner_detail}")
+
+        manifest["owner_switch_note"] = (
+            "Step 06 runs kernel owner-isolation vitest; full auth swap E2E remains manual."
+        )
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
         manifest["steps"] = self.steps
         manifest["failures"] = self.failures
@@ -492,6 +514,23 @@ class GauntletRunner:
 
         print(f"Gauntlet passed. evidence: {self.run_dir}")
         return 0
+
+
+def run_owner_switch_kernel_check() -> tuple[bool, str]:
+    """Kernel-level owner isolation (full auth E2E deferred — see manifest owner_switch_note)."""
+    agent_dir = DESKTOP_DIR / "agent"
+    if not (agent_dir / "package.json").is_file():
+        return False, "agent package missing"
+    result = subprocess.run(
+        ["npm", "test", "--", "--run", "tests/surface-session.test.ts", "-t", "owner B does not reuse"],
+        cwd=agent_dir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False, result.stdout
+    return True, "kernel surface_conversations isolates owners per surface"
 
 
 def self_check() -> int:
@@ -520,7 +559,11 @@ def self_check() -> int:
     if "clearOwnerState()" not in source:
         print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
         return 1
-    print("self-check passed")
+    owner_ok, owner_detail = run_owner_switch_kernel_check()
+    if not owner_ok:
+        print(f"self-check failed: owner-switch kernel check: {owner_detail}", file=sys.stderr)
+        return 1
+    print("self-check passed (owner-switch: kernel unit test; live auth swap still manual)")
     return 0
 
 

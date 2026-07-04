@@ -4,26 +4,15 @@ import SwiftUI
 
 // MARK: - Onboarding Chat Persistence
 
-/// Persists onboarding state across app restarts (e.g. screen recording permission requires restart).
-/// Messages are stored on the backend via the normal chat save path — only the ACP session ID
-/// and a mid-onboarding flag are kept in UserDefaults for restart recovery.
+/// Persists onboarding UI progress across app restarts (e.g. screen recording permission requires restart).
+/// Messages are stored on the backend via the normal chat save path. Session identity is resolved
+/// by the kernel via `surface_conversations` for the onboarding surface.
 enum OnboardingChatPersistence {
-  private static let sessionIdKey = "onboardingACPSessionId"
   private static let midOnboardingKey = "onboardingMidOnboarding"
   private static let explorationTextKey = "onboardingExplorationText"
   private static let explorationCompletedKey = "onboardingExplorationCompleted"
   private static let toolCompletedKey = "onboardingToolCompleted"
   private static let goalCompletedKey = "onboardingGoalCompleted"
-
-  /// Save the ACP session ID for resume after restart
-  static func saveSessionId(_ sessionId: String) {
-    UserDefaults.standard.set(sessionId, forKey: sessionIdKey)
-  }
-
-  /// Load the saved ACP session ID
-  static func loadSessionId() -> String? {
-    UserDefaults.standard.string(forKey: sessionIdKey)
-  }
 
   /// Mark that onboarding is in progress (for restart detection)
   static func saveMidOnboarding() {
@@ -80,7 +69,8 @@ enum OnboardingChatPersistence {
 
   /// Clear all persisted onboarding data
   static func clear() {
-    UserDefaults.standard.removeObject(forKey: sessionIdKey)
+    // Legacy onboarding ACP session id (pre-kernel surface_conversations)
+    UserDefaults.standard.removeObject(forKey: "onboardingACPSessionId")
     UserDefaults.standard.removeObject(forKey: midOnboardingKey)
     UserDefaults.standard.removeObject(forKey: explorationTextKey)
     UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
@@ -634,13 +624,12 @@ struct OnboardingChatView: View {
       email: email
     )
 
-    // Mark as onboarding so ACP session ID gets persisted for restart recovery
+    // Mark as onboarding so analytics and prompts use onboarding mode
     chatProvider.isOnboarding = true
 
     // Check if we're resuming after a mid-onboarding restart (e.g. screen recording permission)
     if OnboardingChatPersistence.isMidOnboarding {
-      let savedSessionId = OnboardingChatPersistence.loadSessionId()
-      log("OnboardingChatView: Resuming mid-onboarding, ACP session: \(savedSessionId ?? "none")")
+      log("OnboardingChatView: Resuming mid-onboarding (kernel owns session identity)")
 
       // If complete_onboarding was already called before restart, show the button immediately
       if OnboardingChatPersistence.isToolCompleted {

@@ -3,8 +3,7 @@ import Combine
 
 /// Per-task chat state with its own bridge process and message history.
 /// Each task chat is fully independent — no shared state with the sidebar chat.
-/// Uses canonical Omi sessions for continuity and preserves legacy ACP IDs only
-/// for transitional adapter-native resume compatibility.
+/// Session identity is owned by the kernel (`surface_conversations` for `task_chat`).
 @MainActor
 class TaskChatState: ObservableObject {
     let taskId: String
@@ -23,19 +22,8 @@ class TaskChatState: ObservableObject {
     private var agentBridge: AgentBridge?
     private var bridgeStarted = false
 
-    /// Harness mode of the currently active bridge, set when the bridge starts.
-    /// Used to decide whether adapter-native IDs are valid for legacy resume.
-    private var currentHarness: String?
-
     /// Workspace path for file-system tools
     let workspacePath: String
-
-    /// Adapter-native ACP session used only for legacy resume/adoption.
-    /// Canonical Omi runtime sessions are tracked separately in currentOmiSessionId.
-    @Published var legacyAcpSessionId: String?
-    @Published var currentOmiSessionId: String?
-
-    /// Closure to build system prompt from ChatProvider's cached data
     var systemPromptBuilder: (() -> String)?
 
     /// Auth callbacks for ACP mode
@@ -82,10 +70,6 @@ class TaskChatState: ObservableObject {
 
             messages = records.map { $0.toChatMessage() }
 
-            if let legacyAcpSessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
-                self.legacyAcpSessionId = legacyAcpSessionId
-            }
-
             surfaceCurrentRuntimeFailureIfNeeded()
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
         } catch {
@@ -96,10 +80,9 @@ class TaskChatState: ObservableObject {
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
         let taskId = self.taskId
-        let legacyAcpSessionId = self.legacyAcpSessionId
         Task.detached {
             do {
-                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: legacyAcpSessionId)
+                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId)
             } catch {
                 logError("TaskChatState[\(taskId)]: Failed to persist message \(message.id)", error: error)
             }
@@ -154,17 +137,6 @@ class TaskChatState: ObservableObject {
             try await bridge.start()
             agentBridge = bridge
             bridgeStarted = true
-            currentHarness = harness
-
-            // Legacy resume IDs are only valid for the ACP/pi-mono adapters that
-            // created them. Hermes and OpenClaw advertise native resume but would
-            // adopt a foreign session ID, causing session/resume on the wrong
-            // backend before falling back or failing. Clear it on adapter switch.
-            let supportsLegacyResume = (harness == "acp" || harness == "piMono")
-            if !supportsLegacyResume, legacyAcpSessionId != nil {
-                log("TaskChatState[\(taskId)]: clearing legacy resume ID for harness \(harness)")
-                legacyAcpSessionId = nil
-            }
 
             log("TaskChatState[\(taskId)]: agent bridge started")
             return true
@@ -295,24 +267,6 @@ class TaskChatState: ObservableObject {
                 onAuthRequired: onAuthRequired ?? { _, _ in },
                 onAuthSuccess: onAuthSuccess ?? { }
             )
-
-            // Store canonical and adapter-native IDs separately. The persisted
-            // acpSessionId column remains a legacy adapter binding only.
-            currentOmiSessionId = queryResult.omiSessionId
-            if let adapterSessionId = queryResult.adapterSessionId {
-                // Only persist adapter-native IDs for adapters that support the
-                // legacy resume protocol (ACP/pi-mono). Hermes/OpenClaw native IDs
-                // are not interchangeable — storing them would pollute the resume
-                // field and cause a different backend to attempt resuming the
-                // wrong session after an adapter switch.
-                let supportsLegacyResume = (currentHarness == "acp" || currentHarness == "piMono")
-                if supportsLegacyResume {
-                    legacyAcpSessionId = adapterSessionId
-                } else if legacyAcpSessionId != nil {
-                    log("TaskChatState[\(taskId)]: not persisting adapter ID \(adapterSessionId) for non-legacy harness \(currentHarness ?? "?")")
-                    legacyAcpSessionId = nil
-                }
-            }
 
             // Flush remaining streaming buffers
             streamingFlushWorkItem?.cancel()

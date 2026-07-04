@@ -1174,7 +1174,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Tear down the agent bridge on sign-out. The pi-mono subprocess
         // bakes OMI_API_KEY (Firebase ID token) at spawn and holds an
-        // in-memory `piSessions` map keyed only by sessionKey ("main"). When
+        // in-memory `piSessions` map keyed only by legacy harness scope ("main"). When
         // the user signs out + back in with a different account, the next
         // message would otherwise reuse the previous user's session and the
         // omi-account proxy returns 402 against the old token. Stopping the
@@ -4278,11 +4278,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     toolCalls: toolNames.isEmpty ? nil : toolNames,
                     model: effectiveRequestModel
                 )
-            }
-
-            // Persist the ACP session ID during onboarding so we can resume after app restart
-            if isOnboarding, let adapterSessionId = queryResult.adapterSessionId, !adapterSessionId.isEmpty {
-                OnboardingChatPersistence.saveSessionId(adapterSessionId)
             }
 
             // Analytics: track query completion

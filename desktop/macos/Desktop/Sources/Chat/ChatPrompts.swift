@@ -930,7 +930,6 @@ struct ChatPrompts {
         ],
         "task_chat_messages": [
             "taskId": "FK to action_items.backendId — which task this message belongs to",
-            "acpSessionId": "ACP session ID for conversation continuity across restarts",
             "messageId": "Stable UUID for this message (dedup key)",
             "sender": "user | ai",
             "messageText": "Plain text content of the message",

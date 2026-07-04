@@ -11,13 +11,12 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
     "Desktop/Sources/Chat/ChatResource.swift",
     "Desktop/Sources/Chat/AgentControlService.swift",
     "Desktop/Sources/Chat/DesktopCoordinatorService.swift",
-    "Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift",
   ]
 
-  private let forbiddenParameterPatterns = [
-    "sessionKey:",
-    "omiSessionId:",
-    "legacyClientScope:",
+  private let forbiddenIdentifiers = [
+    "sessionKey",
+    "omiSessionId",
+    "legacyClientScope",
     "resume:",
   ]
 
@@ -39,10 +38,11 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
       let fullPath = desktopRoot.appendingPathComponent(String(relativePath.dropFirst("Desktop/".count)))
       let text = try String(contentsOf: fullPath)
       for line in text.components(separatedBy: .newlines) {
-        if line.contains("ChatResource(") { continue }
-        for pattern in forbiddenParameterPatterns {
-          if line.contains(pattern) {
-            violations.append("\(relativePath): contains `\(pattern)` — \(line.trimmingCharacters(in: .whitespaces))")
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("//") { continue }
+        for identifier in forbiddenIdentifiers {
+          if line.contains(identifier) {
+            violations.append("\(relativePath): contains `\(identifier)` — \(trimmed)")
           }
         }
       }

@@ -116,6 +116,82 @@ struct ChatResource: Identifiable, Equatable {
       state: State(artifactLifecycleState: artifact.lifecycleState)
     )
   }
+
+  static func encodeResourcesForPersistence(_ resources: [ChatResource]) -> String? {
+    guard !resources.isEmpty else { return nil }
+    let encoded = resources.map { resource -> [String: Any] in
+      var dict: [String: Any] = [
+        "id": resource.id,
+        "origin": resource.origin == .generatedArtifact ? "generatedArtifact" : "userAttachment",
+        "title": resource.title,
+        "state": persistenceStateString(resource.state),
+      ]
+      if let subtitle = resource.subtitle { dict["subtitle"] = subtitle }
+      if let mimeType = resource.mimeType { dict["mimeType"] = mimeType }
+      if let thumbnailURL = resource.thumbnailURL { dict["thumbnailURL"] = thumbnailURL }
+      if let uri = resource.uri { dict["uri"] = uri }
+      if let artifactId = resource.artifactId { dict["artifactId"] = artifactId }
+      if let omiSessionId = resource.omiSessionId { dict["omiSessionId"] = omiSessionId }
+      if let runId = resource.runId { dict["runId"] = runId }
+      return dict
+    }
+    guard let data = try? JSONSerialization.data(withJSONObject: encoded),
+          let json = String(data: data, encoding: .utf8) else { return nil }
+    return json
+  }
+
+  static func decodeResourcesFromPersistence(_ json: String) -> [ChatResource] {
+    guard let data = json.data(using: .utf8),
+          let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+    return array.compactMap { dict in
+      guard let id = dict["id"] as? String,
+            let title = dict["title"] as? String
+      else { return nil }
+      let origin = (dict["origin"] as? String) == "generatedArtifact"
+        ? ChatResourceOrigin.generatedArtifact
+        : ChatResourceOrigin.userAttachment
+      return ChatResource(
+        id: id,
+        origin: origin,
+        title: title,
+        subtitle: dict["subtitle"] as? String,
+        mimeType: dict["mimeType"] as? String,
+        thumbnailURL: dict["thumbnailURL"] as? String,
+        imageData: nil,
+        uri: dict["uri"] as? String,
+        artifactId: dict["artifactId"] as? String,
+        omiSessionId: dict["omiSessionId"] as? String,
+        runId: dict["runId"] as? String,
+        state: persistenceState(from: dict["state"] as? String)
+      )
+    }
+  }
+
+  private static func persistenceStateString(_ state: State) -> String {
+    switch state {
+    case .uploading: return "uploading"
+    case .ready: return "ready"
+    case .failed(let message): return "failed:\(message)"
+    case .retained: return "retained"
+    case .opened: return "opened"
+    case .dismissed: return "dismissed"
+    }
+  }
+
+  private static func persistenceState(from raw: String?) -> State {
+    guard let raw else { return .ready }
+    switch raw {
+    case "uploading": return .uploading
+    case "retained": return .retained
+    case "opened": return .opened
+    case "dismissed": return .dismissed
+    default:
+      if raw.hasPrefix("failed:") {
+        return .failed(String(raw.dropFirst("failed:".count)))
+      }
+      return .ready
+    }
+  }
 }
 
 extension ChatResource.State {
