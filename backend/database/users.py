@@ -1487,6 +1487,26 @@ def get_integration(uid: str, app_key: str) -> Optional[dict]:
     return None
 
 
+def get_integrations(uid: str) -> dict:
+    """
+    Get all integration connections for a user.
+
+    Args:
+        uid: User ID
+
+    Returns:
+        Dictionary with app_key as keys and connection details as values
+    """
+    user_ref = db.collection('users').document(uid)
+    integrations_ref = user_ref.collection('integrations')
+
+    integrations = {}
+    for doc in integrations_ref.stream():
+        integrations[doc.id] = doc.to_dict()
+
+    return integrations
+
+
 def set_integration(uid: str, app_key: str, data: dict) -> None:
     """
     Save or update an integration connection.

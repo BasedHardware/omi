@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 import os
 import secrets
@@ -197,6 +197,40 @@ class IntegrationResponse(BaseModel):
 # *****************************
 # ********** ROUTES ***********
 # *****************************
+
+
+class IntegrationSummary(BaseModel):
+    """One integration connection, status only (no secrets)."""
+
+    app_key: str = Field(description="Integration app key")
+    connected: bool = Field(description="Whether the integration is connected")
+    last_synced: Optional[str] = Field(default=None, description="ISO timestamp of the last sync, if recorded")
+
+
+class IntegrationsListResponse(BaseModel):
+    """All of the current user's integration connections."""
+
+    integrations: List[IntegrationSummary] = Field(default_factory=list)
+
+
+@router.get("/v1/integrations", response_model=IntegrationsListResponse, tags=['integrations'])
+def list_integrations(uid: str = Depends(auth.get_current_user_uid)):
+    """List all of the current user's integration connections (status only, no secrets)."""
+    raw = users_db.get_integrations(uid)
+    summaries = []
+    for app_key, data in raw.items():
+        data = data or {}
+        last_synced = data.get('last_synced')
+        if last_synced is not None and not isinstance(last_synced, str):
+            last_synced = last_synced.isoformat() if hasattr(last_synced, 'isoformat') else str(last_synced)
+        summaries.append(
+            IntegrationSummary(
+                app_key=app_key,
+                connected=bool(data.get('connected')),
+                last_synced=last_synced,
+            )
+        )
+    return IntegrationsListResponse(integrations=summaries)
 
 
 @router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])
