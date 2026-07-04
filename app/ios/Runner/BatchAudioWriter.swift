@@ -14,36 +14,24 @@ import Foundation
 /// packet it returns `true`, and the manager skips the Dart forward — so the Flutter
 /// engine does no per-packet work (the iOS battery win).
 ///
-/// Durability: frames are written to a `.bin.part` file with periodic `fsync`, and
-/// the file is atomically renamed to `.bin` only once finalized (rotation / silence
-/// gap / stop) so a half-written file is never ingested. A stale `.bin.part` left by
-/// a crashed process is recovered (promoted to `.bin`) on the next writer start. A
-/// free-space guard stops writing (and flags Flutter) rather than failing hard.
-final class BatchAudioWriter {
-    static let shared = BatchAudioWriter()
-    private init() {}
+/// File mechanics (durability, .part promotion, recovery) live in `BaseBatchAudioWriter`;
+/// this class owns the notification-driven policy: config matching, mute/cut prefs,
+/// per-device frame extraction, silence-gap finalize and wall-clock rotation.
+final class OmiBatchAudioWriter: BaseBatchAudioWriter {
+    static let shared = OmiBatchAudioWriter()
+    private init() {
+        super.init(tag: "BatchWriter", queueLabel: "com.omi.batchAudioWriter")
+    }
 
-    private let queue = DispatchQueue(label: "com.omi.batchAudioWriter")
-
-    // Active-file state (only touched on `queue`).
-    private var fileHandle: FileHandle?
-    private var currentURL: URL?
-    private var currentStartSec: Int64 = 0
-    private var currentBytes: Int64 = 0
-    private var currentFrames: Int64 = 0
+    // Policy state. `lastFrameMs` is queue-confined; the two flags below are only
+    // touched on the BLE callback thread (same as before the base extraction).
     private var lastFrameMs: Int64 = 0
-    private var lastFsyncMs: Int64 = 0
-    private var storageFull = false
-    private var recovered = false
     private var wasEnabled = false
     private var diagLoggedMatch = false
 
     private let maxFileBytes: Int64 = 32 * 1024 * 1024 // ~32 MB per file
     private let maxFileSeconds: Int64 = 900 // 15 min per file
     private let gapMs: Int64 = 30_000 // start a new file after this silence gap
-    private let fsyncIntervalMs: Int64 = 2_000
-    private let minFreeBytes: Int64 = 200 * 1024 * 1024 // stop below 200 MB free
-    private let partSuffix = "part"
 
     private struct Config {
         let deviceId: String
@@ -64,7 +52,7 @@ final class BatchAudioWriter {
             // enabled->disabled edge — never schedule per-packet work on the BLE hot path.
             if wasEnabled {
                 wasEnabled = false
-                queue.async { self.closeCurrentLocked("disabled") }
+                stop("disabled")
             }
             return false
         }
@@ -88,7 +76,7 @@ final class BatchAudioWriter {
         // Manual "New recording": finalize the current file now; this packet opens a fresh one.
         if d.bool(forKey: "flutter.batchCutRequested") {
             d.set(false, forKey: "flutter.batchCutRequested")
-            queue.async { self.closeCurrentLocked("manual") }
+            stop("manual")
         }
 
         let frames = transformFrames(deviceType: config.deviceType, value: value)
@@ -100,16 +88,11 @@ final class BatchAudioWriter {
         return true
     }
 
-    /// Finalize the current file (e.g. on disconnect or app teardown).
-    func stop(_ reason: String) {
-        queue.async { self.closeCurrentLocked(reason) }
-    }
-
     // MARK: - Writing (on `queue`)
 
     /// Keep the open file's gap timer fresh while muted so unmute resumes it.
     private func touchKeepAlive() {
-        if fileHandle != nil {
+        if isOpen {
             lastFrameMs = Int64(Date().timeIntervalSince1970 * 1000)
         }
     }
@@ -117,136 +100,37 @@ final class BatchAudioWriter {
     private func writeFrames(_ frames: [Data], config: Config) {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
-        if fileHandle != nil, lastFrameMs > 0, nowMs - lastFrameMs > gapMs {
+        // Gap finalize: a pause longer than gapMs starts a new file (so the
+        // backend places resumed audio as a separate conversation).
+        if isOpen, lastFrameMs > 0, nowMs - lastFrameMs > gapMs {
             closeCurrentLocked("gap")
         }
-        if fileHandle != nil, currentBytes >= maxFileBytes || (nowMs / 1000 - currentStartSec) >= maxFileSeconds {
+        // Rotation: bound file size/duration (between packets, never mid-packet).
+        if isOpen, currentBytes >= maxFileBytes || (nowMs / 1000 - currentStartSec) >= maxFileSeconds {
             closeCurrentLocked("rotate")
         }
 
-        ensureOpen(config: config, nowMs: nowMs)
-        guard let fh = fileHandle else { return } // storage full or open failed — drop packet
-
-        do {
-            for frame in frames {
-                var len = UInt32(frame.count).littleEndian
-                let header = Data(bytes: &len, count: 4)
-                try fh.write(contentsOf: header)
-                try fh.write(contentsOf: frame)
-                currentBytes += Int64(4 + frame.count)
-                currentFrames += 1
+        if !isOpen {
+            let startSec = nowMs / 1000
+            let frameSize = config.codec == "opus_fs320" ? 320 : 160
+            // Tag the device segment as `omibatch` so the Dart scanner can tell batch
+            // recordings apart from offline-sync WAL flushes, which share this directory
+            // and the same audio_*.bin naming. The backend ignores this segment; keep it
+            // in sync with Dart's `batchRecordingDevice`.
+            let name = "audio_omibatch_\(config.codec)_\(config.sampleRate)_1_fs\(frameSize)_\(startSec).bin.\(partSuffix)"
+            guard openLocked(dirPath: config.dir, fileName: name, startSec: startSec, nowMs: nowMs) else {
+                return // storage full or open failed — drop packet
             }
-        } catch {
-            NSLog("[BatchWriter] write failed: \(error)")
-            closeCurrentLocked("write_error")
-            return
         }
+
+        guard writeFramesLocked(frames) else { return }
 
         lastFrameMs = nowMs
-        if nowMs - lastFsyncMs >= fsyncIntervalMs {
-            try? fh.synchronize()
-            lastFsyncMs = nowMs
-        }
+        maybeFsyncLocked(nowMs: nowMs)
     }
 
-    private func ensureOpen(config: Config, nowMs: Int64) {
-        if fileHandle != nil { return }
-
-        let dir = URL(fileURLWithPath: config.dir, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        if !recovered {
-            recovered = true
-            recoverStalePartFiles(dir)
-        }
-
-        if freeBytes(at: dir) < minFreeBytes {
-            if !storageFull {
-                NSLog("[BatchWriter] storage low — pausing batch capture")
-                setStorageFullFlag(true)
-                storageFull = true
-            }
-            return
-        }
-        if storageFull {
-            storageFull = false
-            setStorageFullFlag(false)
-        }
-
-        let startSec = nowMs / 1000
-        let frameSize = config.codec == "opus_fs320" ? 320 : 160
-        // Tag the device segment as `omibatch` so the Dart scanner can tell batch
-        // recordings apart from offline-sync WAL flushes, which share this directory
-        // and the same audio_*.bin naming. The backend ignores this segment; keep it
-        // in sync with Dart's `batchRecordingDevice`.
-        let name = "audio_omibatch_\(config.codec)_\(config.sampleRate)_1_fs\(frameSize)_\(startSec).bin.\(partSuffix)"
-        let url = dir.appendingPathComponent(name)
-
-        if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(atPath: url.path, contents: nil)
-        }
-        guard let fh = try? FileHandle(forWritingTo: url) else {
-            NSLog("[BatchWriter] open failed for \(name)")
-            return
-        }
-        let end = (try? fh.seekToEnd()) ?? 0
-        fileHandle = fh
-        currentURL = url
-        currentStartSec = startSec
-        currentBytes = Int64(end)
-        currentFrames = 0
-        lastFsyncMs = nowMs
-        NSLog("[BatchWriter] opened \(name)")
-    }
-
-    private func closeCurrentLocked(_ reason: String) {
-        guard let fh = fileHandle else { return }
-        try? fh.synchronize()
-        try? fh.close()
-        if let part = currentURL {
-            if currentBytes > 0 {
-                let finalURL = part.deletingPathExtension() // strip ".part" -> "....bin"
-                try? FileManager.default.removeItem(at: finalURL)
-                do {
-                    try FileManager.default.moveItem(at: part, to: finalURL)
-                    NSLog("[BatchWriter] finalized \(finalURL.lastPathComponent) (\(currentFrames) frames, \(currentBytes) bytes, reason=\(reason))")
-                    let finalizedName = finalURL.lastPathComponent
-                    DispatchQueue.main.async {
-                        OmiBleManager.shared.flutterApi?.onBatchRecordingFinalized(fileName: finalizedName) { _ in }
-                    }
-                } catch {
-                    NSLog("[BatchWriter] finalize failed: \(error)")
-                }
-            } else {
-                try? FileManager.default.removeItem(at: part)
-            }
-        }
-        fileHandle = nil
-        currentURL = nil
-        currentStartSec = 0
-        currentBytes = 0
-        currentFrames = 0
+    override func onClosedLocked() {
         lastFrameMs = 0
-    }
-
-    // MARK: - Crash recovery
-
-    private func recoverStalePartFiles(_ dir: URL) {
-        guard let items = try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: [.fileSizeKey]
-        ) else { return }
-        for url in items {
-            let name = url.lastPathComponent
-            guard name.hasPrefix("audio_"), name.hasSuffix(".bin.\(partSuffix)") else { continue }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            if size > 0 {
-                let finalURL = url.deletingPathExtension()
-                try? FileManager.default.moveItem(at: url, to: finalURL)
-                NSLog("[BatchWriter] recovered stale batch file -> \(finalURL.lastPathComponent)")
-            } else {
-                try? FileManager.default.removeItem(at: url)
-            }
-        }
     }
 
     // MARK: - Frame extraction (mirrors Android transformFrames)
@@ -270,7 +154,7 @@ final class BatchAudioWriter {
         }
     }
 
-    // MARK: - Config + helpers
+    // MARK: - Config
 
     private func loadConfig() -> Config? {
         let d = UserDefaults.standard
@@ -291,17 +175,5 @@ final class BatchAudioWriter {
             deviceType: (json["deviceType"] as? String) ?? "omi",
             dir: dir
         )
-    }
-
-    private func freeBytes(at dir: URL) -> Int64 {
-        if let vals = try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
-            let cap = vals.volumeAvailableCapacityForImportantUsage {
-            return cap
-        }
-        return Int64.max
-    }
-
-    private func setStorageFullFlag(_ full: Bool) {
-        UserDefaults.standard.set(full, forKey: "flutter.batchStorageFull")
     }
 }
