@@ -26,7 +26,7 @@ from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
-from database.webhook_health import record_dev_webhook_success
+from database.webhook_health import record_dev_webhook_success, get_dev_webhook_health
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -425,6 +425,42 @@ def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get
     enable_user_webhook_db(uid, wtype)
     record_dev_webhook_success(uid, wtype.value)
     return {'status': 'ok'}
+
+
+@router.get('/v1/users/developer/webhook/{wtype}/health', tags=['v1'])
+def get_user_webhook_health_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
+    """Delivery health for a developer webhook: failure count, last success/failure timestamps
+    (unix seconds), last HTTP status, last error, and whether it was auto-disabled after sustained
+    failures. Fields are zeroed / false / null when nothing has been recorded yet."""
+
+    def _as_int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+
+    health = get_dev_webhook_health(uid, wtype)
+    if not health:
+        return {
+            'type': wtype.value,
+            'has_data': False,
+            'failure_count': 0,
+            'last_success_at': None,
+            'last_failure_at': None,
+            'last_status': None,
+            'last_error': None,
+            'disabled': False,
+        }
+    return {
+        'type': wtype.value,
+        'has_data': True,
+        'failure_count': _as_int(health.get('failure_count')) or 0,
+        'last_success_at': _as_int(health.get('last_success_at')),
+        'last_failure_at': _as_int(health.get('last_failure_at')),
+        'last_status': _as_int(health.get('last_status')),
+        'last_error': health.get('last_error') or None,
+        'disabled': health.get('disabled') == '1',
+    }
 
 
 @router.get('/v1/users/developer/webhooks/status', tags=['v1'], response_model=UserWebhooksStatusResponse)

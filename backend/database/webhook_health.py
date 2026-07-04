@@ -419,3 +419,20 @@ def record_dev_webhook_success(uid: str, wtype: object):
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
         logger.warning(f'record_dev_webhook_success redis error uid={uid} type={wtype}: {e}')
+
+
+def get_dev_webhook_health(uid: str, wtype) -> Optional[dict]:
+    """Health telemetry for a user's developer webhook of a given type, or None when nothing recorded.
+
+    Fail-open: any Redis error returns None so a degraded Redis never breaks the read. The key and the
+    type stringify mirror record_dev_webhook_success/record_dev_webhook_failure so reads and writes align.
+    """
+    try:
+        wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+        key = f'dev_webhook_health:{uid}:{wtype_str}'
+        data = r.hgetall(key)
+        if not data:
+            return None
+        return {k.decode(): v.decode() for k, v in data.items()}
+    except Exception:
+        return None
