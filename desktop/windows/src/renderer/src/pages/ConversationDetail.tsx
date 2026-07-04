@@ -159,6 +159,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   useEffect(() => {
     if (!id) return
     const isLocal = id.startsWith('local-') || id.startsWith('chat-')
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     setError(null)
     setDisplay(null)
     load(id, isLocal)

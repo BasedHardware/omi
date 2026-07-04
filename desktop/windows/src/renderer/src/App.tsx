@@ -78,6 +78,7 @@ function AppShellInner(): React.JSX.Element {
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
+        // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
         onPick={recorder.pickScreen}
       />
       {/* Background screen capture for Rewind (runs while the app is open). */}

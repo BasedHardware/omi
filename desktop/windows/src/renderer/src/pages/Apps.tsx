@@ -119,6 +119,7 @@ export function Apps(): React.JSX.Element {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     void load()
   }, [])
 

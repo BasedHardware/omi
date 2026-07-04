@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
@@ -31,7 +31,7 @@ export function Memories(): React.JSX.Element {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
-  const stopRef = useState({ stop: false })[0]
+  const stopRef = useRef({ stop: false }).current
 
   const closeCompose = (): void => {
     setComposing(false)

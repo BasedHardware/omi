@@ -142,6 +142,7 @@ export function Conversations(): React.JSX.Element {
 
   useEffect(() => {
     if (conversationsCache.loaded) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     void loadAll()
   }, [loadAll])
 

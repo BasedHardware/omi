@@ -237,6 +237,7 @@ export function Home(): React.JSX.Element {
   // widgets up. Resets to centered if the thread is ever cleared.
   useEffect(() => {
     if (!started) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
       setSplit(false)
       setShowThread(false)
       return
