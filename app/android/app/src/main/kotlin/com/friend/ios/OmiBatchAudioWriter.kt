@@ -70,6 +70,7 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG)
             return
         }
         wasEnabled = true
+        if (config.deviceType == "limitless") return // LimitlessFlashDrainEngine owns that device
         if (!config.deviceId.equals(address, ignoreCase = true)) return
         if (!matches(config, serviceUuid, characteristicUuid)) return
 

@@ -57,6 +57,7 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             return false
         }
         wasEnabled = true
+        guard config.deviceType != "limitless" else { return false } // LimitlessFlashDrainEngine owns that device
         guard config.deviceId.lowercased() == peripheralUuid.lowercased() else { return false }
         guard config.serviceUuid == serviceUuid.lowercased(),
             config.characteristicUuid == characteristicUuid.lowercased() else { return false }
