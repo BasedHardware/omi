@@ -4,45 +4,12 @@ enum PhoneCallDirection { incoming, outgoing }
 
 enum PhoneCallState { idle, connecting, ringing, active, ended, failed }
 
-class VerifiedPhoneNumber {
-  final String id;
-  final String phoneNumber;
-  final String? friendlyName;
-  final String verifiedAt;
-  final bool isPrimary;
-
-  VerifiedPhoneNumber({
-    required this.id,
-    required this.phoneNumber,
-    this.friendlyName,
-    required this.verifiedAt,
-    required this.isPrimary,
-  });
-
-  factory VerifiedPhoneNumber.fromJson(Map<String, dynamic> json) {
-    return VerifiedPhoneNumber.fromGenerated(wire.GeneratedPhoneNumberResponse.fromJson(json));
-  }
-
-  factory VerifiedPhoneNumber.fromGenerated(wire.GeneratedPhoneNumberResponse generated) {
-    return VerifiedPhoneNumber(
-      id: generated.id,
-      phoneNumber: generated.phoneNumber,
-      friendlyName: generated.friendlyName,
-      verifiedAt: generated.verifiedAt,
-      isPrimary: generated.isPrimary,
-    );
-  }
-
-  wire.GeneratedPhoneNumberResponse toGenerated() {
-    return wire.GeneratedPhoneNumberResponse(
-      id: id,
-      phoneNumber: phoneNumber,
-      friendlyName: friendlyName,
-      verifiedAt: verifiedAt,
-      isPrimary: isPrimary,
-    );
-  }
-}
+// Phase 4 SSOT: VerifiedPhoneNumber was a pure 1:1 field-mapping wrapper around
+// GeneratedPhoneNumberResponse (identical fields + fromJson + toJson). Replaced
+// with a typedef. PhoneCallToken and PhoneCallError stay hand-written: PhoneCallToken
+// derives a computed expiresAt, PhoneCallError parses a Twilio event map — neither is
+// a thin wrapper.
+typedef VerifiedPhoneNumber = wire.GeneratedPhoneNumberResponse;
 
 class PhoneCallToken {
   final String accessToken;

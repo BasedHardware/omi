@@ -58,7 +58,7 @@ Future<List<VerifiedPhoneNumber>> getVerifiedPhoneNumbers() async {
   if (response == null) return [];
   if (response.statusCode == 200) {
     final generated = wire.GeneratedPhoneNumbersResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return generated.numbers.map(VerifiedPhoneNumber.fromGenerated).toList();
+    return generated.numbers.toList();
   }
   return [];
 }
