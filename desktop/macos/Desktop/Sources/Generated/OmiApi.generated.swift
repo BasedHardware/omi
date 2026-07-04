@@ -3526,7 +3526,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([String: [TranscriptSegment]].self, from: data)
   }
 
-  public static func setConversationVisibilityV1ConversationsConversationIdVisibilityPatch(client: OmiApiClient, conversationId: String, value: ConversationVisibility) async throws -> OmiAnyCodable {
+  public static func setConversationVisibilityV1ConversationsConversationIdVisibilityPatch(client: OmiApiClient, conversationId: String, value: String) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/visibility"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL

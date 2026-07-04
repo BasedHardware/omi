@@ -488,7 +488,7 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
                     required = bool(p.get('required', False))
                     ptype, _ = _swift_type(p.get('schema', {}), required=True)
                     ptype = _resolve_type(ptype, emitted)
-                    if ptype == 'OmiAnyCodable':
+                    if ptype not in ('String', 'Int', 'Double', 'Bool'):
                         ptype = 'String'
                     if location == 'path':
                         path_params.append((pname, ptype))
