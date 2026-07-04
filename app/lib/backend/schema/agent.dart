@@ -1,3 +1,10 @@
+// Phase 4.1 SKIPPED — not a pure 1:1 wrapper, so not typedef'd here.
+// GeneratedAgentVmInfo (gen/agent_wire.g.dart) only carries `hasVm` + `status`, but
+// this class also reads/emits `ip` + `auth_token` (VM provisioning fields the
+// generated type omits), exposes a `fromJsonBody` convenience factory, and merges the
+// extra keys in `toJson`. Typedefing would silently drop those wire fields. To make
+// this a typedef candidate, regenerate the wire model to include ip/auth_token.
+
 import 'dart:convert';
 
 import 'package:omi/backend/schema/gen/agent_wire.g.dart' as wire;

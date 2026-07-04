@@ -1,3 +1,10 @@
+// Phase 4.1 SKIPPED — not a pure 1:1 wrapper, so not typedef'd here.
+// GeneratedGeolocation (gen/conversation_wire.g.dart) only carries latitude, longitude,
+// googlePlaceId, address, locationType. This class additionally holds
+// id/altitude/accuracy/time, treats latitude/longitude as nullable (the generated type
+// requires them), and throws a StateError from toGenerated() when lat/lon are absent.
+// Typedefing would drop the extra fields and change nullability + the throw contract.
+
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
 class Geolocation {
