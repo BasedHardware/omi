@@ -73,7 +73,11 @@ function isRetryableQueryException(
   error: unknown,
   isRecoverableError?: RecoverableErrorPredicate
 ): boolean {
-  return isRecoverableError?.(error) ?? false;
+  try {
+    return isRecoverableError?.(error) ?? false;
+  } catch {
+    return false;
+  }
 }
 
 interface ActiveRequestContext {
