@@ -562,10 +562,15 @@ def to_json_expr(field: Field) -> str:
     if typ.list_item:
         item = typ.list_item
         if item.ref_schema:
-            if typ.nullable:
-                return f'{name}?.map((value) => value.toJson()).toList()'
-            return f'{name}.map((value) => value.toJson()).toList()'
-        return name
+            mapper = '(value) => value.toJson()'
+        elif item.is_date_time:
+            # DateTime is not JSON-native; encode each element as an ISO-8601 string.
+            mapper = '(value) => value.toUtc().toIso8601String()'
+        else:
+            # Primitives, maps, and dynamic values are JSON-native and pass through unchanged.
+            return name
+        access = f'{name}?' if typ.nullable else name
+        return f'{access}.map({mapper}).toList()'
     if typ.ref_schema:
         return f'{name}?.toJson()' if typ.nullable else f'{name}.toJson()'
     if typ.is_date_time:
