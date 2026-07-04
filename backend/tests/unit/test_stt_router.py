@@ -21,7 +21,7 @@ import asyncio
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import routers.stt as stt_router
@@ -149,14 +149,53 @@ def test_rejects_oversized_body_via_content_length(monkeypatch):
     assert fake.calls == []
 
 
-def test_rejects_oversized_chunked_body_via_bounded_read(monkeypatch):
-    # No Content-Length header — the pre-checks can't fire, so this pins the
-    # bounded-read enforcement (RAM never exceeds cap + 1 bytes).
+def test_rejects_oversized_chunked_body(monkeypatch):
+    # No Content-Length header — starlette still populates file.size for
+    # every multipart part, so the size pre-check rejects before any read.
     fake = _FakeSttClient()
     client = _make_client(monkeypatch, fake)
     monkeypatch.setattr(stt_router, '_MAX_UPLOAD_BYTES', 10)
     response = _chunked_upload(client, content=b'x' * 32)
     assert response.status_code == 413
+    assert fake.calls == []
+
+
+class _NoSizeUpload:
+    """UploadFile stand-in whose size is unavailable — pins the bounded read
+    as the defense-in-depth enforcement should a starlette upgrade ever stop
+    populating multipart part sizes.
+    """
+
+    filename = 'audio.wav'
+    content_type = 'audio/wav'
+    size = None
+
+    def __init__(self, payload: bytes):
+        self._payload = payload
+        self.read_sizes = []
+
+    async def read(self, size=-1):
+        self.read_sizes.append(size)
+        if size is None or size < 0:
+            return self._payload
+        return self._payload[:size]
+
+
+class _BareRequest:
+    headers = {}
+
+
+async def test_bounded_read_enforces_cap_when_size_unavailable(monkeypatch):
+    fake = _FakeSttClient()
+    monkeypatch.setattr(stt_router, 'get_stt_proxy_client', lambda: fake)
+    monkeypatch.setattr(stt_router, '_MAX_UPLOAD_BYTES', 10)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', _PARAKEET_URL)
+
+    upload = _NoSizeUpload(b'x' * 32)
+    with pytest.raises(HTTPException) as exc_info:
+        await stt_router.stt_transcribe(request=_BareRequest(), file=upload, diarize=True, uid=_UID)
+    assert exc_info.value.status_code == 413
+    assert upload.read_sizes == [11]  # cap + 1 — resident RAM never exceeds this
     assert fake.calls == []
 
 
@@ -177,7 +216,11 @@ def test_chunked_body_within_cap_succeeds(monkeypatch):
         (None, 'audio.wav'),
         ('my clip (1).wav', 'my_clip__1_.wav'),
         ('recording.m4a', 'recording.m4a'),
-        ('a' * 100 + '.wav', 'a' * 64),
+        # Truncation preserves a short extension...
+        ('a' * 100 + '.wav', 'a' * 60 + '.wav'),
+        # ...but not an overlong one, and no-extension names truncate flat.
+        ('b' * 70 + '.' + 'e' * 20, ('b' * 70 + '.' + 'e' * 20)[:64]),
+        ('a' * 100, 'a' * 64),
     ],
 )
 def test_safe_upstream_filename(raw, expected):
