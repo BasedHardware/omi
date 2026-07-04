@@ -128,6 +128,28 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("does not mark unexpected execution exceptions retryable by default", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.failNextExecutionError = new Error("validation failed");
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const outcome = await facade.handleQuery({
+      ...v1Query({ id: "request-nonretryable", prompt: "fail" }),
+      protocolVersion: 2,
+      requestId: "request-nonretryable",
+      clientId: "client-nonretryable",
+      adapterId: "fake",
+    });
+
+    expect(outcome).toMatchObject({ ok: false, retryable: false, message: "validation failed" });
+    store.close();
+  });
+
   it("selects the sole running request for unscoped tool-call correlation", () => {
     expect(
       selectUnscopedToolCallCorrelation([

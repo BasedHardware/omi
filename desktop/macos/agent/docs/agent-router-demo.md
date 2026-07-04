@@ -41,12 +41,14 @@ export OMI_HERMES_ADAPTER_COMMAND="hermes acp"
 export OMI_CODEX_ADAPTER_COMMAND="codex acp"           # mock is fine for the demo
 ```
 
-To demo "not connected" for one agent, just leave its var unset and its binary off PATH.
+To demo "not connected" for one agent, leave its var unset and make sure its
+binary is absent from every detector search path (not just PATH — also
+`~/.hermes/…`, `~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`).
 
 Launch a named test bundle (never the prod app):
 
 ```bash
-cd desktop/macos && OMI_APP_NAME="omi-agent-router" OMI_SKIP_TUNNEL=1 ./run.sh
+cd .. && OMI_APP_NAME="omi-agent-router" OMI_SKIP_TUNNEL=1 ./run.sh
 ```
 
 ### Spoken script (run in order)

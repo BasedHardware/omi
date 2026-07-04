@@ -59,7 +59,7 @@ export function asRoutableAgentId(id: string | undefined): RoutableAgentId | und
 const TASK_TYPE_PATTERNS: Array<{ type: TaskType; re: RegExp }> = [
   { type: "code_edit", re: /\b(edit|refactor|fix|implement|debug|rename|write (a |the )?(test|function|code|class))\b/i },
   { type: "research", re: /\b(research|investigate|compare|look up|find out|explain|summari[sz]e|what is|how does|why)\b/i },
-  { type: "quick_command", re: /\b(run|deploy|build|install|start|stop|restart|launch|open) \b/i },
+  { type: "quick_command", re: /\b(run|deploy|build|install|start|stop|restart|launch|open)\b/i },
 ];
 
 export function inferTaskType(prompt: string): TaskType {

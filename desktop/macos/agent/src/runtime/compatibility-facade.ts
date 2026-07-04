@@ -69,6 +69,13 @@ export type QueryOutcome =
   | { ok: true }
   | { ok: false; failure?: RuntimeFailure; message: string; retryable: boolean };
 
+function isRetryableQueryException(
+  error: unknown,
+  isRecoverableError?: RecoverableErrorPredicate
+): boolean {
+  return isRecoverableError?.(error) ?? false;
+}
+
 interface ActiveRequestContext {
   protocolVersion?: ProtocolVersion;
   requestId: string;
@@ -277,7 +284,11 @@ export class JsonlCompatibilityFacade {
         const errorMessage: ErrorMessage = { type: "error", message: messageText };
         this.send(this.withCorrelation(errorMessage, context));
       }
-      return { ok: false, message: messageText, retryable: true };
+      return {
+        ok: false,
+        message: messageText,
+        retryable: isRetryableQueryException(error, this.isRecoverableError),
+      };
     } finally {
       this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {

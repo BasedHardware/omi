@@ -33,6 +33,8 @@ describe("dispatch-routing — snapshot & guards", () => {
     expect(inferTaskType("refactor this function")).toBe("code_edit");
     expect(inferTaskType("research the tradeoffs")).toBe("research");
     expect(inferTaskType("deploy the app")).toBe("quick_command");
+    expect(inferTaskType("build")).toBe("quick_command");
+    expect(inferTaskType("deploy")).toBe("quick_command");
     expect(inferTaskType("hello there")).toBe("general");
   });
 });

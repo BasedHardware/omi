@@ -3,9 +3,10 @@
 //
 // Exercises the four Track-1 cases against a simulated availability snapshot
 // and a simulated failing primary, printing the routing decision + fallback
-// trail for each — the same logic the live PTT flow uses.
+// trail for each — same routing shape as live PTT, with a simplified harness.
 
 import { resolveAgent, AGENT_DISPLAY_NAMES } from "../dist/runtime/agent-router.js";
+import { DispatchAttemptError, isDispatchRetryable } from "../dist/runtime/dispatch-routing.js";
 import { executeWithFallback } from "../dist/runtime/agent-fallback.js";
 
 function show(title, plan) {
@@ -43,7 +44,8 @@ const result = await executeWithFallback(plan.order, {
     if (agent === plan.order[0]) throw new Error(`${agent} timed out`);
     return `completed by ${agent}`;
   },
-  isRetryable: () => true,
+  isRetryable: (error) =>
+    error instanceof DispatchAttemptError ? error.retryable : isDispatchRetryable(error),
   log: (m) => console.log(`  log      : ${m}`),
 });
 console.log(`  result   : ${result.ok ? `✓ ${result.value}` : "✗ all agents failed"}`);
