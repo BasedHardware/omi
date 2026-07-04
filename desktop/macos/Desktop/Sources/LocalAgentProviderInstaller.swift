@@ -12,8 +12,9 @@ import Foundation
 ///
 /// Flow: setup_agent_provider tool → `beginInstall` (tool result returns
 /// immediately) → NSAlert consent gate on the main actor → `Process` off the
-/// main actor (`/bin/bash -c`, no login shell, no TTY, 10-minute cap,
-/// process-tree kill) → verification via `LocalAgentProviderDetector` → a
+/// main actor (`/bin/bash -c`, no login shell, no TTY, minimal allowlisted
+/// environment, 10-minute cap, process-tree kill) → verification via
+/// `LocalAgentProviderDetector` → a
 /// floating-bar notification with the outcome → hub session re-warm so voice
 /// picks up the freshly installed provider.
 @MainActor
@@ -105,17 +106,16 @@ final class LocalAgentProviderInstaller {
   /// Run the code-owned unattended install command. `/bin/bash -c` only —
   /// never a login shell — with pipe stdio, so there is no TTY and nothing
   /// interactive can hang forever; the timeout tears down the whole tree.
+  /// The subprocess gets a minimal allowlisted environment
+  /// (`installEnvironment`), never the app environment wholesale.
   nonisolated private static func runInstallProcess(
     for provider: AgentPillsManager.DirectedProvider
   ) -> ProviderInstallOutcome {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/bash")
     process.arguments = ["-c", provider.unattendedInstallCommand]
-
-    var environment = ProcessInfo.processInfo.environment
-    environment["PATH"] = installPATH(
-      existingPath: environment["PATH"], homeDirectory: NSHomeDirectory())
-    process.environment = environment
+    process.environment = installEnvironment(
+      base: ProcessInfo.processInfo.environment, homeDirectory: NSHomeDirectory())
 
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
@@ -181,6 +181,38 @@ final class LocalAgentProviderInstaller {
       guard process.isRunning else { return }
       kill(isGroupLeader ? -pid : pid, SIGKILL)
     }
+  }
+
+  /// Keys copied from the app environment into the install subprocess — the
+  /// entire allowlist besides the always-set HOME and PATH. Every addition
+  /// here crosses the third-party-installer boundary: keep it minimal, and
+  /// the allowlist test must be edited consciously to match.
+  nonisolated static let installEnvironmentAllowlistKeys = [
+    "TMPDIR", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE",
+  ]
+
+  /// Environment for the install subprocess: a minimal allowlist built from
+  /// scratch, never the app environment wholesale. The command executes
+  /// third-party downloaded code (curl-piped installers, npm lifecycle
+  /// scripts), so app/API/session credentials and provider tokens must not
+  /// cross this boundary — only what installers legitimately need: PATH
+  /// (rebuilt via `installPATH`), HOME, and locale/temp/user identity vars.
+  /// Proxy/CA vars (`HTTP(S)_PROXY`, `NODE_EXTRA_CA_CERTS`, …) are
+  /// deliberately excluded too — proxy URLs can embed credentials; proxied
+  /// setups should install the provider manually.
+  nonisolated static func installEnvironment(
+    base: [String: String],
+    homeDirectory: String,
+    fileManager: FileManager = .default
+  ) -> [String: String] {
+    var environment: [String: String] = [:]
+    for key in installEnvironmentAllowlistKeys {
+      if let value = base[key] { environment[key] = value }
+    }
+    environment["HOME"] = homeDirectory
+    environment["PATH"] = installPATH(
+      existingPath: base["PATH"], homeDirectory: homeDirectory, fileManager: fileManager)
+    return environment
   }
 
   /// PATH for the install subprocess: the app's PATH first, then the

@@ -58,6 +58,65 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
     XCTAssertFalse(elements.contains(""))
   }
 
+  func testInstallEnvironmentIsAnAllowlistNeverWholesaleInheritance() {
+    let base = [
+      // One entry per allowlisted key, so every key's pass-through is pinned.
+      "PATH": "/usr/bin:/opt/homebrew/bin",
+      "HOME": "/Users/other",
+      "TMPDIR": "/var/folders/xx/T/",
+      "USER": "test",
+      "LOGNAME": "test",
+      "SHELL": "/bin/zsh",
+      "LANG": "en_US.UTF-8",
+      "LC_ALL": "en_US.UTF-8",
+      "LC_CTYPE": "UTF-8",
+      // Credentials/tokens that must NOT cross the install boundary — the
+      // install command runs third-party downloaded code.
+      "OMI_API_KEY": "secret",
+      "OMI_DESKTOP_API_URL": "https://example.com",
+      "ANTHROPIC_API_KEY": "secret",
+      "OPENAI_API_KEY": "secret",
+      "AWS_SECRET_ACCESS_KEY": "secret",
+      "GITHUB_TOKEN": "secret",
+      // Tempting-but-dangerous vars a future dev might reach for:
+      // NODE_OPTIONS/npm_config_* inject code into npm runs, SSH_AUTH_SOCK
+      // exposes the user's agent, proxy URLs embed credentials.
+      "NODE_OPTIONS": "--require /tmp/evil.js",
+      "npm_config_registry": "https://registry.evil.example",
+      "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
+      "HTTPS_PROXY": "http://user:secret@proxy.example:8080",
+    ]
+    let environment = LocalAgentProviderInstaller.installEnvironment(
+      base: base, homeDirectory: "/Users/test")
+
+    // Exactly the allowlist survives — nothing else leaks through.
+    XCTAssertEqual(
+      Set(environment.keys),
+      ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE"])
+    // HOME is the app's real home dir, PATH is the rebuilt install PATH.
+    XCTAssertEqual(environment["HOME"], "/Users/test")
+    XCTAssertEqual(
+      environment["PATH"],
+      LocalAgentProviderInstaller.installPATH(
+        existingPath: "/usr/bin:/opt/homebrew/bin", homeDirectory: "/Users/test"))
+  }
+
+  func testInstallEnvironmentWorksFromAnEmptyBase() {
+    let environment = LocalAgentProviderInstaller.installEnvironment(
+      base: [:], homeDirectory: "/Users/test")
+    XCTAssertEqual(environment["HOME"], "/Users/test")
+    XCTAssertNotNil(environment["PATH"])
+    XCTAssertNil(environment["TMPDIR"])
+  }
+
+  func testInstallEnvironmentAllowlistGrowthRequiresAConsciousTestEdit() {
+    // The allowlist IS the security boundary: every addition crosses into
+    // third-party installer code, so growing it must fail a test.
+    XCTAssertEqual(
+      LocalAgentProviderInstaller.installEnvironmentAllowlistKeys,
+      ["TMPDIR", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE"])
+  }
+
   // MARK: - Source contract: NSAlert gate + Process, never an agent
 
   func testInstallerGatesOnNativeDialogAndRunsProcessDirectly() throws {
@@ -77,6 +136,14 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
     XCTAssertTrue(source.contains(#"["-c", provider.unattendedInstallCommand]"#))
     XCTAssertFalse(source.contains("AgentPillsManager.shared.spawn"))
     XCTAssertFalse(source.contains("ChatProvider"))
+
+    // The subprocess environment is built through the allowlist — the app
+    // environment appears exactly once, as the filter input, and is never
+    // assigned wholesale.
+    XCTAssertTrue(source.contains("process.environment = installEnvironment("))
+    XCTAssertEqual(
+      source.components(separatedBy: "ProcessInfo.processInfo.environment").count - 1, 1,
+      "the app environment must appear once, as installEnvironment's base argument")
 
     // Timeout tears the whole process tree down.
     XCTAssertTrue(source.contains("installTimeoutSeconds: TimeInterval = 600"))
