@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Dict, List, Tuple
 
 from utils.executors import postprocess_executor, run_blocking
 
@@ -11,10 +11,10 @@ import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
-from utils.llm.external_integrations import generate_comprehensive_daily_summary  # type: ignore[reportUnknownVariableType]  # generate_comprehensive_daily_summary returns partially-unknown dict (unenrolled)
+from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.subscription import is_trial_paywalled
-from utils.webhooks import day_summary_webhook  # type: ignore[reportUnknownVariableType]  # day_summary_webhook uid param untyped (unenrolled)
+from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
 
@@ -167,10 +167,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
         return
 
-    summary_data = cast(
-        Dict[str, Any],
-        generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc),
-    )
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
 
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)

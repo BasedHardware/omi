@@ -15,9 +15,9 @@ from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
-from utils.stt.pre_recorded import postprocess_words, prerecorded  # type: ignore[reportUnknownVariableType]  # stt.pre_recorded partially typed
+from utils.stt.pre_recorded import postprocess_words, prerecorded
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
-from utils.stt.vad import vad_is_empty  # type: ignore[reportUnknownVariableType]  # stt.vad partially typed
+from utils.stt.vad import vad_is_empty
 import logging
 
 logger = logging.getLogger(__name__)

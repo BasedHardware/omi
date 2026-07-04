@@ -6,17 +6,17 @@ Detects and links conversations to Google Calendar events when they overlap in t
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 
 import database.users as users_db
 from models.conversation import CalendarEventLink
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.retrieval.tools.calendar_tools import (
-    get_google_calendar_events,  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
-    get_google_calendar_event,  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
-    update_google_calendar_event,  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
+    get_google_calendar_events,
+    get_google_calendar_event,
+    update_google_calendar_event,
 )
-from utils.retrieval.tools.google_utils import refresh_google_token  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
+from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.executors import run_blocking, db_executor
 
 logger = logging.getLogger(__name__)
@@ -63,14 +63,11 @@ async def get_overlapping_calendar_event(
 
     events: List[Dict[str, Any]] = []
     try:
-        events = cast(
-            List[Dict[str, Any]],
-            await get_google_calendar_events(
-                access_token=str(access_token),
-                time_min=search_start,
-                time_max=search_end,
-                max_results=20,
-            ),
+        events = await get_google_calendar_events(
+            access_token=str(access_token),
+            time_min=search_start,
+            time_max=search_end,
+            max_results=20,
         )
     except Exception as e:
         error_msg = str(e)
@@ -78,14 +75,11 @@ async def get_overlapping_calendar_event(
             new_token: Optional[str] = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    events = cast(
-                        List[Dict[str, Any]],
-                        await get_google_calendar_events(
-                            access_token=new_token,
-                            time_min=search_start,
-                            time_max=search_end,
-                            max_results=20,
-                        ),
+                    events = await get_google_calendar_events(
+                        access_token=new_token,
+                        time_min=search_start,
+                        time_max=search_end,
+                        max_results=20,
                     )
                 except Exception:
                     return None
@@ -176,7 +170,7 @@ async def write_conversation_link_to_calendar_event(
     conversation_link = f"https://h.omi.me/conversations/{conversation_id}"
 
     async def _write(token: str) -> None:
-        existing = cast(Dict[str, Any], await get_google_calendar_event(token, event_id))
+        existing = await get_google_calendar_event(token, event_id)
         current_description = str(existing.get('description', '') or '')
         if conversation_link in current_description:
             return

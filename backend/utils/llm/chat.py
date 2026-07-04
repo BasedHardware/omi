@@ -1,8 +1,7 @@
 import json
-import os
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
@@ -17,7 +16,6 @@ from models.chat import Message, MessageSender, PageContext
 from models.conversation_enums import CategoryEnum
 from models.conversation_metadata import ConversationMetadata
 from models.conversation_photo import ConversationPhoto
-from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.byok import has_byok_keys
@@ -29,6 +27,11 @@ from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _content_str(response: Any) -> str:
+    """Extract string content from an LLM response (langchain content is typed as a union)."""
+    return cast(str, response.content)
 
 
 def normalize_filter(value: str) -> str:
@@ -78,7 +81,7 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 """
     prompt = prompt.strip()
     with track_usage(uid, Features.CHAT):
-        return get_llm('chat_responses').invoke(prompt).content
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 # *********************************************
@@ -119,7 +122,7 @@ def requires_context(question: str) -> bool:
         record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
 
     with_parser = get_llm('chat_extraction').with_structured_output(RequiresContext)
-    response: RequiresContext = with_parser.invoke(prompt)
+    response = cast(RequiresContext, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -183,7 +186,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     Is this asking about the Omi/Friend app product itself?
     '''.replace('    ', '').strip()
     with_parser = get_llm('chat_extraction').with_structured_output(IsAnOmiQuestion)
-    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    response = cast(IsAnOmiQuestion, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -213,7 +216,7 @@ def retrieve_is_file_question(question: str) -> bool:
     '''
 
     with_parser = get_llm('chat_extraction').with_structured_output(IsFileQuestion)
-    response: IsFileQuestion = with_parser.invoke(prompt)
+    response = cast(IsFileQuestion, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -237,7 +240,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     # print(prompt)
     # print(get_llm('chat_extraction').invoke(prompt).content)
     with_parser = get_llm('chat_extraction').with_structured_output(DatesContext)
-    response: DatesContext = with_parser.invoke(prompt)
+    response = cast(DatesContext, with_parser.invoke(prompt))
     return response.dates_range
 
 
@@ -246,7 +249,10 @@ class SummaryOutput(BaseModel):
 
 
 def chunk_extraction(
-    segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None, user_name: str = None
+    segments: List[TranscriptSegment],
+    topics: List[str],
+    people: Optional[List[Person]] = None,
+    user_name: Optional[str] = None,
 ) -> str:
     content = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
     prompt = f'''
@@ -262,7 +268,7 @@ def chunk_extraction(
     Topics: {topics}
     '''
     with_parser = get_llm('chat_extraction').with_structured_output(SummaryOutput)
-    response: SummaryOutput = with_parser.invoke(prompt)
+    response = cast(SummaryOutput, with_parser.invoke(prompt))
     return response.summary
 
 
@@ -294,12 +300,14 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return get_llm('chat_responses').invoke(prompt).content
+    return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]) -> str:
+def answer_simple_message_stream(
+    uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks: List[Any] = []
+) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -325,12 +333,12 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return get_llm('chat_extraction').invoke(prompt).content
+    return _content_str(get_llm('chat_extraction').invoke(prompt))
 
 
-def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
+def answer_omi_question_stream(messages: List[Message], context: str, callbacks: List[Any]) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    return _content_str(get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_qa_rag_prompt(
@@ -342,7 +350,7 @@ def _get_qa_rag_prompt(
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
 ) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    _user_name, memories_str = get_prompt_memories(uid)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
@@ -432,6 +440,8 @@ CURRENT_DATETIME_PLACEHOLDER = "(see <current_datetime> in the latest user messa
 def get_user_timezone(uid: str) -> str:
     """Resolve the user's timezone, falling back to UTC when missing/invalid."""
     tz = notification_db.get_user_time_zone(uid)
+    if tz is None:
+        return "UTC"
     try:
         ZoneInfo(tz)
         return tz
@@ -464,10 +474,10 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
     )
 
 
-def _get_agentic_qa_prompt(
+def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by retrieval/agentic.py
     uid: str,
     app: Optional[App] = None,
-    messages: List[Message] = None,
+    messages: Optional[List[Message]] = None,
     context: Optional[PageContext] = None,
     tz: Optional[str] = None,
 ) -> str:
@@ -503,7 +513,7 @@ def _get_agentic_qa_prompt(
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
-        return app.persona_prompt or app.chat_prompt
+        return app.persona_prompt or app.chat_prompt or ''
 
     # Plugin-specific instructions for regular apps
     plugin_info = ""
@@ -535,7 +545,7 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
     user_goals = goals_db.get_user_goals(uid)
     goal_section = ""
     if user_goals:
-        goals_lines = []
+        goals_lines: List[str] = []
         for g in user_goals:
             g_title = g.get('title', '')
             g_current = g.get('current_value', 0)

@@ -2,8 +2,6 @@
 Tools for answering questions about the Omi/Friend product.
 """
 
-from typing import Any, Dict, cast
-
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.app_integrations import get_github_docs_content
 import logging
@@ -46,7 +44,7 @@ def get_omi_product_info_tool(query: str) -> str:
     # soft with an "Error: ..." string like the other retrieval tools instead of letting the
     # exception escape into the agent loop.
     try:
-        context = cast(Dict[str, Any], get_github_docs_content())
+        context = get_github_docs_content()
     except Exception as e:
         logger.warning(f"get_omi_product_info_tool - failed to fetch product docs: {e}")
         return (

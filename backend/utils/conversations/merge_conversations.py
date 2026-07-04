@@ -27,7 +27,7 @@ from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.other.storage import (
     delete_conversation_audio_files,
-    list_audio_chunks,  # type: ignore[reportUnknownVariableType]  # storage.list_audio_chunks partially typed
+    list_audio_chunks,
     _get_storage_client,  # type: ignore[reportPrivateUsage]  # no public equivalent available
     private_cloud_sync_bucket,
 )
@@ -423,7 +423,7 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)  # type: ignore[reportUnknownMemberType]  # storage client untyped
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
 
     for conv in conversations:
@@ -431,15 +431,15 @@ def _copy_audio_chunks_for_merge(
 
         # List and copy chunks for this conversation
         try:
-            chunks: List[Dict[str, Any]] = cast(List[Dict[str, Any]], list_audio_chunks(uid, conv_id))
+            chunks: List[Dict[str, Any]] = list_audio_chunks(uid, conv_id)
             for chunk in chunks:
                 has_chunks = True
 
                 # Preserve original filename (handles both single and batch blob naming)
                 original_filename = str(chunk['path']).split('/')[-1]
                 new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
-                source_blob = bucket.blob(chunk['path'])  # type: ignore[reportUnknownMemberType]  # storage client untyped
-                bucket.copy_blob(source_blob, bucket, new_path)  # type: ignore[reportUnknownMemberType]  # storage client untyped
+                source_blob = bucket.blob(chunk['path'])
+                bucket.copy_blob(source_blob, bucket, new_path)
 
         except Exception as e:
             logger.error(f"Error copying chunks for {conv_id}: {e}")

@@ -41,7 +41,7 @@ from models.transcript_segment import TranscriptSegment
 from models.app import App
 from models.other import Person
 
-from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -63,7 +63,7 @@ from utils.conversations.calendar_linking import (
     write_conversation_link_to_calendar_event,
 )
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
-from utils.retrieval.tools.calendar_tools import get_google_calendar_event  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.retrieval.tools.calendar_tools import get_google_calendar_event
 from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import get_google_maps_location
 import logging
@@ -129,7 +129,7 @@ def process_in_progress_conversation(
     request: Optional[ProcessConversationRequest] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
-    conversation = cast(Optional[Dict[str, Any]], retrieve_in_progress_conversation(uid))
+    conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
     redis_db.remove_in_progress_conversation_id(uid)
@@ -414,7 +414,7 @@ async def link_calendar_event(
 
     # Fetch the event from Google Calendar
     try:
-        event = cast(Dict[str, Any], await get_google_calendar_event(access_token, request.event_id))
+        event = await get_google_calendar_event(access_token, request.event_id)
     except Exception as e:
         error_msg = str(e)
         # Try to refresh token if authentication failed
@@ -422,7 +422,7 @@ async def link_calendar_event(
             new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    event = cast(Dict[str, Any], await get_google_calendar_event(new_token, request.event_id))
+                    event = await get_google_calendar_event(new_token, request.event_id)
                 except Exception as retry_error:
                     raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
             else:

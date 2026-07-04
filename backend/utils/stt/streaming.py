@@ -387,8 +387,8 @@ async def process_audio_dg(
         logger.warning('Deepgram error (close-reason capture): %s', error)
         safe_conn.set_close_reason(reason)
 
-    dg_connection.on(LiveTranscriptionEvents.Close, on_dg_close)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
-    dg_connection.on(LiveTranscriptionEvents.Error, on_dg_error)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
+    dg_connection.on(LiveTranscriptionEvents.Close, on_dg_close)
+    dg_connection.on(LiveTranscriptionEvents.Error, on_dg_error)
 
     return safe_conn
 
@@ -481,8 +481,8 @@ def connect_to_deepgram(
 ) -> Optional[Any]:
     try:
         dg_connection: Any = _deepgram_client_for_request().listen.websocket.v("1")
-        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
-        dg_connection.on(LiveTranscriptionEvents.Error, on_error)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
+        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+        dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
         def on_open(self: Any, open: Any, **kwargs: Any) -> None:
             logger.info("Connection Open")
@@ -502,12 +502,12 @@ def connect_to_deepgram(
         def on_unhandled(self: Any, unhandled: Any, **kwargs: Any) -> None:
             logger.error(f"Unhandled Websocket Message: {unhandled}")
 
-        dg_connection.on(LiveTranscriptionEvents.Open, on_open)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
-        dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
-        dg_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
-        dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
-        dg_connection.on(LiveTranscriptionEvents.Close, on_close)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
-        dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)  # type: ignore[reportAttributeAccessIssue,reportArgumentType]  # deepgram SDK client union; .on() only exists on WS variants
+        dg_connection.on(LiveTranscriptionEvents.Open, on_open)
+        dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+        dg_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)
+        dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
+        dg_connection.on(LiveTranscriptionEvents.Close, on_close)
+        dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
         options = LiveOptions(
             punctuate=True,
             no_delay=True,
@@ -531,7 +531,7 @@ def connect_to_deepgram(
         if keywords:
             options = _dg_keywords_set(options, keywords)
 
-        result: Any = dg_connection.start(options)  # type: ignore[reportAttributeAccessIssue]  # deepgram SDK client union; .start() only exists on WS variants
+        result: Any = dg_connection.start(options)
         logger.info(f'Deepgram connection started: {result}')
         if not result:
             logger.error('Deepgram connection start() returned False — connection not established')
@@ -1029,14 +1029,17 @@ class ParakeetStreamingSocket(STTSocket):
         data: Dict[str, Any] = cast(Dict[str, Any], loaded)
 
         out: List[Dict[str, Any]] = []
-        for s in data.get('segments', []) or []:
+        segments_raw: object = data.get('segments', [])
+        segments: List[object] = cast(List[object], segments_raw) if isinstance(segments_raw, list) else []
+        for s in segments:
             if not isinstance(s, dict):
                 continue
-            text = (s.get('text') or '').strip()
+            seg: Dict[str, Any] = cast(Dict[str, Any], s)
+            text = (seg.get('text') or '').strip()
             if not text:
                 continue
-            rel_start = float(s.get('start', 0.0))
-            rel_end = float(s.get('end', rel_start))
+            rel_start = float(seg.get('start', 0.0))
+            rel_end = float(seg.get('end', rel_start))
             speaker = await self._assign_speaker(self._slice_pcm(pcm, rel_start, rel_end))
             out.append(
                 {

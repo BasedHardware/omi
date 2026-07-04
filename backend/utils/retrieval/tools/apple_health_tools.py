@@ -5,11 +5,10 @@ Unlike Whoop which uses OAuth and live API calls, Apple Health data is synced
 from the device to our backend and stored in Firestore.
 """
 
-import contextvars
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple, cast
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
@@ -24,14 +23,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Import the context variable from agentic module
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
-
-def get_apple_health_data(uid: str, data_type: str = None) -> Optional[dict]:
+def get_apple_health_data(uid: str, data_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Retrieve stored Apple Health data for a user.
 
@@ -46,7 +39,7 @@ def get_apple_health_data(uid: str, data_type: str = None) -> Optional[dict]:
     if not integration:
         return None
 
-    health_data = integration.get('health_data', {})
+    health_data: Dict[str, Any] = integration.get('health_data', {})
 
     if data_type:
         return health_data.get(data_type)
@@ -55,8 +48,8 @@ def get_apple_health_data(uid: str, data_type: str = None) -> Optional[dict]:
 
 
 def prepare_apple_health_access(
-    config: Optional[dict],
-) -> tuple[Optional[str], Optional[dict], Optional[str]]:
+    config: Optional[Dict[str, Any]],
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[str]]:
     """
     Prepare access for Apple Health tools.
 
@@ -66,6 +59,7 @@ def prepare_apple_health_access(
     uid, uid_err = resolve_config_uid(config)
     if uid_err:
         return None, None, uid_err
+    assert uid is not None
 
     integration, int_err = get_integration_checked(
         uid,
@@ -82,7 +76,7 @@ def prepare_apple_health_access(
 
 @tool
 def get_apple_health_steps_tool(
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve step count data from the user's Apple Health.
@@ -98,13 +92,14 @@ def get_apple_health_steps_tool(
     Returns:
         Formatted step count data with daily breakdown, averages and totals.
     """
-    uid, integration, err = prepare_apple_health_access(config)
+    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert integration is not None
 
     try:
-        health_data = integration.get('health_data', {})
-        steps_data = health_data.get('steps', {})
+        health_data: Dict[str, Any] = integration.get('health_data', {})
+        steps_data: Dict[str, Any] = health_data.get('steps', {})
 
         if not steps_data:
             return "No step data found. Make sure Apple Health is synced from your iPhone."
@@ -112,7 +107,7 @@ def get_apple_health_steps_tool(
         total_steps = steps_data.get('total', 0)
         avg_per_day = steps_data.get('average_per_day', 0)
         period_days = steps_data.get('period_days', 7)
-        daily_steps = steps_data.get('daily', [])
+        daily_steps: List[Dict[str, Any]] = steps_data.get('daily', [])
 
         # Get last sync time
         last_synced = integration.get('last_synced')
@@ -149,7 +144,7 @@ def get_apple_health_steps_tool(
 
 @tool
 def get_apple_health_sleep_tool(
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve sleep data from the user's Apple Health.
@@ -168,21 +163,20 @@ def get_apple_health_sleep_tool(
     Returns:
         Formatted sleep data with daily breakdown, total hours and session details.
     """
-    uid, integration, err = prepare_apple_health_access(config)
+    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert integration is not None
 
     try:
-        health_data = integration.get('health_data', {})
-        sleep_data = health_data.get('sleep', {})
+        health_data: Dict[str, Any] = integration.get('health_data', {})
+        sleep_data: Dict[str, Any] = health_data.get('sleep', {})
 
         if not sleep_data:
             return "No sleep data found. Make sure Apple Health is synced from your iPhone."
 
         total_sleep_hours = sleep_data.get('total_sleep_hours', 0)
-        total_in_bed_hours = sleep_data.get('total_in_bed_hours', 0)
-        sessions_count = sleep_data.get('sessions_count', 0)
-        daily_sleep = sleep_data.get('daily', [])
+        daily_sleep: List[Dict[str, Any]] = sleep_data.get('daily', [])
 
         result = f"Apple Health Sleep Data:\n\n"
         result += f"Total Sleep: {total_sleep_hours:.1f} hours\n"
@@ -216,7 +210,7 @@ def get_apple_health_sleep_tool(
 
 @tool
 def get_apple_health_heart_rate_tool(
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve heart rate data from the user's Apple Health.
@@ -233,13 +227,14 @@ def get_apple_health_heart_rate_tool(
     Returns:
         Formatted heart rate data with average, min, and max values.
     """
-    uid, integration, err = prepare_apple_health_access(config)
+    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert integration is not None
 
     try:
-        health_data = integration.get('health_data', {})
-        heart_data = health_data.get('heart_rate', {})
+        health_data: Dict[str, Any] = integration.get('health_data', {})
+        heart_data: Dict[str, Any] = health_data.get('heart_rate', {})
 
         if not heart_data:
             return "No heart rate data found. Make sure Apple Health is synced from your iPhone and you have heart rate data from Apple Watch."
@@ -275,7 +270,7 @@ def get_apple_health_heart_rate_tool(
 
 @tool
 def get_apple_health_workouts_tool(
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve workout data from the user's Apple Health.
@@ -293,13 +288,15 @@ def get_apple_health_workouts_tool(
     Returns:
         Formatted workout data with activity types, duration, and calories.
     """
-    uid, integration, err = prepare_apple_health_access(config)
+    uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert uid is not None
+    assert integration is not None
 
     try:
-        health_data = integration.get('health_data', {})
-        workouts = health_data.get('workouts', [])
+        health_data: Dict[str, Any] = integration.get('health_data', {})
+        workouts: List[Dict[str, Any]] = health_data.get('workouts', [])
 
         if not workouts:
             return "No workout data found. Make sure Apple Health is synced from your iPhone."
@@ -307,7 +304,7 @@ def get_apple_health_workouts_tool(
         # Get user timezone
         user_tz_str = notification_db.get_user_time_zone(uid)
         try:
-            user_tz = ZoneInfo(user_tz_str)
+            user_tz = ZoneInfo(user_tz_str or 'UTC')
         except Exception:
             user_tz = timezone.utc
 
@@ -355,7 +352,7 @@ def get_apple_health_workouts_tool(
 
 @tool
 def get_apple_health_summary_tool(
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve a comprehensive health summary from the user's Apple Health.
@@ -372,12 +369,13 @@ def get_apple_health_summary_tool(
     Returns:
         Comprehensive health summary with all available Apple Health data.
     """
-    uid, integration, err = prepare_apple_health_access(config)
+    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert integration is not None
 
     try:
-        health_data = integration.get('health_data', {})
+        health_data: Dict[str, Any] = integration.get('health_data', {})
 
         if not health_data:
             return "No health data found. Make sure Apple Health is synced from your iPhone."
@@ -386,12 +384,12 @@ def get_apple_health_summary_tool(
         result = f"Apple Health Summary (Last {period_days} days):\n\n"
 
         # Steps with daily breakdown
-        steps = health_data.get('steps', {})
+        steps: Dict[str, Any] = health_data.get('steps', {})
         if steps:
             result += f"STEPS\n"
             result += f"  Total: {steps.get('total', 0):,}\n"
             result += f"  Daily Average: {steps.get('average_per_day', 0):,.0f}\n"
-            daily_steps = steps.get('daily', [])
+            daily_steps: List[Dict[str, Any]] = steps.get('daily', [])
             if daily_steps:
                 result += "  Daily:\n"
                 sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
@@ -400,14 +398,14 @@ def get_apple_health_summary_tool(
             result += "\n"
 
         # Active Energy with daily breakdown
-        active_energy = health_data.get('active_energy', {})
+        active_energy: Dict[str, Any] = health_data.get('active_energy', {})
         if active_energy:
             total_cal = active_energy.get('total', 0)
             avg_cal = active_energy.get('average_per_day', 0)
             result += f"ACTIVE ENERGY\n"
             result += f"  Total: {total_cal:,.0f} kcal\n"
             result += f"  Daily Average: {avg_cal:,.0f} kcal\n"
-            daily_energy = active_energy.get('daily', [])
+            daily_energy: List[Dict[str, Any]] = active_energy.get('daily', [])
             if daily_energy:
                 result += "  Daily:\n"
                 sorted_days = sorted(daily_energy, key=lambda x: x.get('date', ''), reverse=True)
@@ -416,11 +414,11 @@ def get_apple_health_summary_tool(
             result += "\n"
 
         # Sleep with daily breakdown
-        sleep = health_data.get('sleep', {})
+        sleep: Dict[str, Any] = health_data.get('sleep', {})
         if sleep:
             result += f"SLEEP\n"
             result += f"  Total Hours: {sleep.get('total_sleep_hours', 0):.1f}\n"
-            daily_sleep = sleep.get('daily', [])
+            daily_sleep: List[Dict[str, Any]] = sleep.get('daily', [])
             if daily_sleep:
                 result += "  Daily:\n"
                 sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
@@ -429,7 +427,7 @@ def get_apple_health_summary_tool(
             result += "\n"
 
         # Heart Rate
-        heart_rate = health_data.get('heart_rate', {})
+        heart_rate: Dict[str, Any] = health_data.get('heart_rate', {})
         if heart_rate:
             result += f"HEART RATE\n"
             if heart_rate.get('average'):
@@ -441,12 +439,12 @@ def get_apple_health_summary_tool(
             result += "\n"
 
         # Workouts
-        workouts = health_data.get('workouts', [])
+        workouts: List[Dict[str, Any]] = health_data.get('workouts', [])
         if workouts:
             result += f"WORKOUTS\n"
             result += f"  Total Workouts: {len(workouts)}\n"
             # Summarize workout types
-            types = {}
+            types: Dict[str, int] = {}
             for w in workouts:
                 t = w.get('type', 'Unknown')
                 types[t] = types.get(t, 0) + 1

@@ -13,7 +13,7 @@ from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed
 
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
-from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher  # type: ignore[reportUnknownVariableType]  # connect_to_trigger_pusher uses untyped `callable` parameter
+from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
 # `callable` builtin as a parameter annotation; cast to the proper signature.

@@ -111,10 +111,13 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
     chat_tools_raw: object = update_dict.get('chat_tools') or app_dict.get('chat_tools') or []
     chat_tools: List[Any] = list(cast(List[Any], chat_tools_raw)) if isinstance(chat_tools_raw, list) else []
     for tool in chat_tools:
-        ep: object = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-        if ep and ep not in seen_urls:
-            endpoints_to_check.append(('chat tool', str(ep), 'HEAD', False))
-            seen_urls.add(str(ep))
+        if isinstance(tool, dict):
+            ep_raw: Any = cast(Dict[str, Any], tool).get('endpoint', '')
+        else:
+            ep_raw = getattr(tool, 'endpoint', '')
+        if ep_raw and str(ep_raw) not in seen_urls:
+            endpoints_to_check.append(('chat tool', str(ep_raw), 'HEAD', False))
+            seen_urls.add(str(ep_raw))
     if not endpoints_to_check:
         raise HTTPException(
             status_code=400,
@@ -346,6 +349,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         apps.append(App(**app_dict))
     if include_reviews:
         apps.sort(key=weighted_rating, reverse=True)
+    return apps
 
 
 def get_available_app_by_id(app_id: str, uid: str | None) -> Dict[str, Any] | None:
@@ -509,20 +513,20 @@ def get_app_money_made_amount(app_id: str) -> float:
     return amount
 
 
-def get_app_usage_history(app_id: str) -> list:
+def get_app_usage_history(app_id: str) -> List[Dict[str, Any]]:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
         return cached_usage
     usage = get_app_usage_history_db(app_id)
     usage = [UsageHistoryItem(**x) for x in usage]
     # return usage by date grouped count
-    by_date = defaultdict(int)
+    by_date: 'defaultdict[Any, int]' = defaultdict(int)
     for item in usage:
         date = item.timestamp.date()
         if date > datetime(2024, 11, 1, tzinfo=timezone.utc).date():
             by_date[date] += 1
 
-    data = [{'date': k, 'count': v} for k, v in by_date.items()]
+    data: List[Dict[str, Any]] = [{'date': k, 'count': v} for k, v in by_date.items()]
     data = sorted(data, key=lambda x: x['date'])
     set_app_usage_history_cache(app_id, data)
     return data
@@ -537,13 +541,13 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
-    type4 = len(list(filter(lambda x: x.type == UsageHistoryType.transcript_processed_external_integration, usage)))
+    _type4 = len(list(filter(lambda x: x.type == UsageHistoryType.transcript_processed_external_integration, usage)))
 
     # tbd based on current prod stats
     t1multiplier = 0.02
     t2multiplier = 0.01
     t3multiplier = 0.005
-    t4multiplier = 0.00001  # This is for transcript processed triggered for every segment, so it should be very low
+    _t4multiplier = 0.00001  # This is for transcript processed triggered for every segment, so it should be very low
 
     money = {
         'money': round((type1 * t1multiplier) + (type2 * t2multiplier) + (type3 * t3multiplier), 2),
@@ -585,7 +589,7 @@ def upsert_app_payment_link(
 
     # create recurring payment link
     if payment_plan == 'monthly_recurring':
-        stripe_acc_id = get_stripe_connect_account_id(uid)
+        stripe_acc_id: str = get_stripe_connect_account_id(uid) or ''
 
         # product
         if not app.payment_product_id:
@@ -602,7 +606,7 @@ def upsert_app_payment_link(
         app.payment_link = payment_link.url
 
     # updates
-    update_app_in_db(app.dict())
+    update_app_in_db(app.model_dump())
     return app
 
 

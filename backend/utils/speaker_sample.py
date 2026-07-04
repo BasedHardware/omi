@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from utils.executors import sync_executor, run_blocking
 from utils.other.storage import delete_speech_profile_blob, download_speech_profile_bytes
-from utils.stt.pre_recorded import prerecorded_from_bytes as deepgram_prerecorded_from_bytes  # type: ignore[reportUnknownVariableType]  # sibling util returns partially-unknown union; cast to Any at call site
+from utils.stt.pre_recorded import prerecorded_from_bytes as deepgram_prerecorded_from_bytes
 from utils.text_utils import compute_text_containment
 
 MIN_WORDS = 5

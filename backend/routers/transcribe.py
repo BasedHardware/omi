@@ -78,7 +78,7 @@ from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
 from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
-from utils.conversations.process_conversation import retrieve_in_progress_conversation  # type: ignore[reportUnknownVariableType]  # uid param partially typed
+from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
@@ -979,7 +979,7 @@ async def _stream_handler(
     # Process existing conversations
     async def _prepare_in_progess_conversations() -> Optional[str]:
 
-        if existing_conversation := cast(Optional[Dict[str, Any]], retrieve_in_progress_conversation(uid)):
+        if existing_conversation := retrieve_in_progress_conversation(uid):
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             action = decide_existing_conversation_action(
@@ -1789,7 +1789,7 @@ async def _stream_handler(
 
                 # Onboarding: pass segments to handler for answer detection
                 if onboarding_handler and not onboarding_handler.completed:
-                    onboarding_handler.on_segments_received([s.model_dump() for s in transcript_segments])  # type: ignore[reportUnknownMemberType]  # OnboardingHandler.on_segments_received accepts List[dict[Unknown, Unknown]]
+                    onboarding_handler.on_segments_received([s.model_dump() for s in transcript_segments])
 
                 if translation_enabled:
                     await translate(updated_segments, conversation.id, removed_ids=removed_ids)

@@ -96,7 +96,7 @@ async def x_oauth_callback(
             logger.info(f'x callback: fetch_me failed (non-fatal): {e}')
         x_connector._store_tokens(uid, token_resp, handle=handle, x_user_id=x_user_id)  # type: ignore[reportPrivateUsage,reportUnknownMemberType]  # x_connector._store_tokens is a private SDK boundary taking a bare Dict
         # First ingest in the background so the browser redirect is instant.
-        start_background_task(x_connector.sync_x_for_user(uid), name=f'x_initial_sync_{uid}')  # type: ignore[reportUnknownMemberType]  # x_connector.sync_x_for_user returns bare Dict
+        start_background_task(x_connector.sync_x_for_user(uid), name=f'x_initial_sync_{uid}')
         return _redirect_html(f'{deep_link}?status=success', True, 'X connected')
     except Exception as e:
         logger.error(f'x callback failed for uid={uid}: {e}')

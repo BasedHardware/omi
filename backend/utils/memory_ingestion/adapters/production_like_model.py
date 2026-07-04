@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import re
-from typing import Iterable, Literal, Any, Callable, cast
+from typing import Iterable, Literal, Any, Callable, TypedDict, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI
@@ -52,16 +52,16 @@ def _model_dump(obj: Any) -> Any:
         return [_model_dump(v) for v in items]
     if hasattr(obj, "model_dump"):
         try:
-            return cast(Any, obj).model_dump(mode="json")
+            return obj.model_dump(mode="json")
         except Exception:
             try:
-                return cast(Any, obj).model_dump()
+                return obj.model_dump()
             except Exception:
                 pass
     if hasattr(obj, "content") and obj.__class__.__name__.endswith("Message"):
         return str(getattr(obj, "content", ""))
     if hasattr(obj, "__dict__"):
-        attrs: dict[str, object] = cast(dict[str, object], vars(cast(Any, obj)))
+        attrs: dict[str, object] = vars(obj)
         return {str(k): _model_dump(v) for k, v in attrs.items() if not k.startswith("_")}
     return str(obj)
 
@@ -102,7 +102,7 @@ class HighRecallProductionLikeMemories(BaseModel):
 
 
 # Build a Literal type from TYPED_PREDICATES so Pydantic validates at parse time.
-_PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]  # type: ignore[misc]
+_PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]
 
 
 class TypedProductionLikeMemory(ProductionLikeMemory):
@@ -117,7 +117,7 @@ class TypedProductionLikeMemory(ProductionLikeMemory):
             "Leave null only when the subject is truly ambiguous."
         ),
     )
-    predicate: _PredicateLiteral | None = Field(
+    predicate: str | None = Field(
         default=None,
         description=(
             "EXACTLY ONE predicate from the fixed vocabulary. "
@@ -790,7 +790,13 @@ def _language_instruction(language: str | None) -> str:
     return "Write all extracted memories/learnings in English."
 
 
-def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) -> dict:
+class _CalibrationResult(TypedDict):
+    confidence: str
+    uncertainty_reasons: list[str]
+    sensitivity: SensitivityClassification
+
+
+def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) -> _CalibrationResult:
     text = memory.content.casefold()
     confidence = "medium"
     uncertainty_reasons: list[str] = []
@@ -896,7 +902,7 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         "uncertainty_reasons": sorted(set(uncertainty_reasons)),
         "sensitivity": SensitivityClassification(
             level=sensitivity_level,
-            categories=categories,
+            categories=cast(Any, categories),
             auto_store_allowed=not review_required,
             review_required=review_required,
         ),
