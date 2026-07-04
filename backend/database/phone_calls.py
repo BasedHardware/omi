@@ -131,6 +131,37 @@ def get_primary_phone_number(uid: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def set_primary_phone_number(uid: str, phone_number_id: str) -> bool:
+    """Make one verified number the user's primary outbound caller ID.
+
+    Sets is_primary=True on the chosen number and False on all others in a single batch. Returns
+    False if the id does not belong to the user. is_primary is unencrypted, so this touches only
+    that flag and never the encrypted phone_number field.
+    """
+    numbers = get_phone_numbers(uid)
+    if not any(n.get('id') == phone_number_id for n in numbers):
+        return False
+    col = db.collection('users').document(uid).collection(phone_numbers_collection)
+    batch = db.batch()
+    for n in numbers:
+        batch.update(col.document(n['id']), {'is_primary': n['id'] == phone_number_id})
+    batch.commit()
+    return True
+
+
+def rename_phone_number(uid: str, phone_number_id: str, friendly_name: str) -> bool:
+    """Rename a verified number's friendly_name label.
+
+    Returns False if the number does not exist. friendly_name is unencrypted, so this is a targeted
+    field update that leaves the encrypted phone_number untouched.
+    """
+    phone_ref = db.collection('users').document(uid).collection(phone_numbers_collection).document(phone_number_id)
+    if not phone_ref.get().exists:
+        return False
+    phone_ref.update({'friendly_name': friendly_name})
+    return True
+
+
 # ************************************************
 # ********** PENDING VERIFICATIONS ***************
 # ************************************************

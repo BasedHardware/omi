@@ -101,6 +101,10 @@ class TokenResponse(BaseModel):
     identity: str
 
 
+class RenamePhoneNumberRequest(BaseModel):
+    friendly_name: str = Field(..., min_length=1, max_length=100)
+
+
 # ************************************************
 # ************ PHONE NUMBER ENDPOINTS ************
 # ************************************************
@@ -219,6 +223,28 @@ def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_curren
 
     phone_calls_db.delete_phone_number(uid, phone_number_id)
     return {'success': True}
+
+
+@router.post("/v1/phone/numbers/{phone_number_id}/primary", response_model=PhoneNumberResponse, tags=['phone-calls'])
+def make_phone_number_primary(phone_number_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Set a verified number as the user's primary outbound caller ID."""
+    check_call_access(uid)
+    if not phone_calls_db.set_primary_phone_number(uid, phone_number_id):
+        raise HTTPException(status_code=404, detail="Phone number not found")
+    return phone_calls_db.get_phone_number(uid, phone_number_id)
+
+
+@router.patch("/v1/phone/numbers/{phone_number_id}", response_model=PhoneNumberResponse, tags=['phone-calls'])
+def rename_phone_number(
+    phone_number_id: str,
+    request: RenamePhoneNumberRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Rename a verified phone number's friendly_name label."""
+    check_call_access(uid)
+    if not phone_calls_db.rename_phone_number(uid, phone_number_id, request.friendly_name.strip()):
+        raise HTTPException(status_code=404, detail="Phone number not found")
+    return phone_calls_db.get_phone_number(uid, phone_number_id)
 
 
 # ************************************************
