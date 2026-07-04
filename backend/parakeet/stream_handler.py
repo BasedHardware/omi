@@ -24,15 +24,15 @@ import numpy as np
 import torch  # type: ignore[reportMissingImports]
 from langdetect import detect as langdetect_detect  # type: ignore[reportUnknownVariableType]  # langdetect ships no py.typed marker
 from langdetect.lang_detect_exception import LangDetectException
-from speaker_math import cosine_distance  # type: ignore[reportUnknownVariableType]  # parakeet subproject not enrolled
+from speaker_math import cosine_distance
 import transcribe as _transcribe_mod
 
 try:
-    from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig  # type: ignore[reportMissingImports]
-    from nemo.collections.asr.parts.utils.rnnt_utils import batched_hyps_to_hypotheses  # type: ignore[reportMissingImports]
+    from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig  # type: ignore[reportMissingImports,reportUnknownVariableType]
+    from nemo.collections.asr.parts.utils.rnnt_utils import batched_hyps_to_hypotheses  # type: ignore[reportMissingImports,reportUnknownVariableType]
     from nemo.collections.asr.parts.utils.streaming_utils import (  # type: ignore[reportMissingImports]
-        ContextSize,
-        StreamingBatchedAudioBuffer,
+        ContextSize,  # type: ignore[reportUnknownVariableType]
+        StreamingBatchedAudioBuffer,  # type: ignore[reportUnknownVariableType]
     )
     from omegaconf import open_dict  # type: ignore[reportMissingImports]
 except ImportError:
@@ -41,13 +41,24 @@ except ImportError:
     ContextSize = None
     StreamingBatchedAudioBuffer = None
     open_dict = None
-from transcribe import (  # type: ignore[reportPrivateUsage]  # parakeet subproject private symbols
+# NeMo streaming helpers come from optional, untyped imports. Type-erase to Any
+# so downstream call sites are not flagged as Unknown/Optional-call boundaries.
+_RNNTDecodingConfig: Any = cast(Any, RNNTDecodingConfig)
+_batched_hyps_to_hypotheses: Any = cast(Any, batched_hyps_to_hypotheses)
+_ContextSize: Any = cast(Any, ContextSize)
+_StreamingBatchedAudioBuffer: Any = cast(Any, StreamingBatchedAudioBuffer)
+_open_dict: Any = cast(Any, open_dict)
+# parakeet/transcribe is not enrolled in strict mode; its private/untyped
+# symbols are imported with explicit type erasure to Any below.
+from transcribe import (
     transcribe_file,
-    _stream_model as _asr_model,
+    _stream_model as _asr_model_raw,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]
     INFERENCE_MODE as _INFERENCE_MODE,
     has_builtin_embedding,
     wav_bytes_to_waveform,
 )
+
+_asr_model: Any = cast(Any, _asr_model_raw)
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +93,7 @@ def _cfg_get(cfg: Any, path: str, default: Any = None) -> Any:
         if cur is None:
             return default
         if isinstance(cur, dict):
-            cur = cur.get(part, default)
+            cur = cast(Dict[Any, Any], cur).get(part, default)
         else:
             cur = getattr(cur, part, default)
     return cur
@@ -92,9 +103,12 @@ def _cfg_set(cfg: Any, path: str, value: Any) -> None:
     cur: Any = cfg
     parts = path.split(".")
     for part in parts[:-1]:
-        cur = cur[part] if isinstance(cur, dict) else getattr(cur, part)
+        if isinstance(cur, dict):
+            cur = cast(Dict[Any, Any], cur)[part]
+        else:
+            cur = getattr(cur, part)
     if isinstance(cur, dict):
-        cur[parts[-1]] = value
+        cast(Dict[Any, Any], cur)[parts[-1]] = value
     else:
         setattr(cur, parts[-1], value)
 
@@ -158,9 +172,9 @@ class _NemoRNNTStreamingDecoder:
         self._text: str = ""
         # NeMo streaming helpers captured at construction time. Typed as Any
         # because they originate from optional, untyped NeMo imports.
-        self._batched_hyps_to_hypotheses: Any = batched_hyps_to_hypotheses
-        self._ContextSize: Any = ContextSize
-        self._StreamingBatchedAudioBuffer: Any = StreamingBatchedAudioBuffer
+        self._batched_hyps_to_hypotheses: Any = _batched_hyps_to_hypotheses
+        self._ContextSize: Any = _ContextSize
+        self._StreamingBatchedAudioBuffer: Any = _StreamingBatchedAudioBuffer
         self._encoder_frame2audio_samples: int = 0
         self._buffer: Any = None
         self._context_samples: Any = None
@@ -179,9 +193,9 @@ class _NemoRNNTStreamingDecoder:
         if RNNTDecodingConfig is None:
             raise RuntimeError("NeMo RNNT streaming utilities not installed")
 
-        self._batched_hyps_to_hypotheses = batched_hyps_to_hypotheses
-        self._ContextSize = ContextSize
-        self._StreamingBatchedAudioBuffer = StreamingBatchedAudioBuffer
+        self._batched_hyps_to_hypotheses = _batched_hyps_to_hypotheses
+        self._ContextSize = _ContextSize
+        self._StreamingBatchedAudioBuffer = _StreamingBatchedAudioBuffer
 
         model: Any = self._model
 
@@ -191,9 +205,9 @@ class _NemoRNNTStreamingDecoder:
 
             decoding_cfg = copy.deepcopy(_cfg_get(getattr(model, "cfg", None), "decoding", None))
             if decoding_cfg is None:
-                decoding_cfg = RNNTDecodingConfig()  # type: ignore[reportOptionalCall]  # guarded above
+                decoding_cfg = _RNNTDecodingConfig()
 
-            with open_dict(decoding_cfg):  # type: ignore[reportOptionalCall]  # guarded by RNNTDecodingConfig check
+            with _open_dict(decoding_cfg):
                 _cfg_set(decoding_cfg, "strategy", "greedy_batch")
                 _cfg_set(decoding_cfg, "greedy.loop_labels", True)
                 _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
@@ -226,12 +240,12 @@ class _NemoRNNTStreamingDecoder:
         )
         self._encoder_frame2audio_samples = features_frame2audio_samples * encoder_subsampling_factor
 
-        context_encoder_frames = ContextSize(  # type: ignore[reportOptionalCall]  # guarded above
+        context_encoder_frames = _ContextSize(
             left=int(self._left_context_seconds * features_per_sec / encoder_subsampling_factor),
             chunk=int(self._chunk_seconds * features_per_sec / encoder_subsampling_factor),
             right=int(self._right_context_seconds * features_per_sec / encoder_subsampling_factor),
         )
-        self._context_samples = ContextSize(  # type: ignore[reportOptionalCall]  # guarded above
+        self._context_samples = _ContextSize(
             left=context_encoder_frames.left * encoder_subsampling_factor * features_frame2audio_samples,
             chunk=context_encoder_frames.chunk * encoder_subsampling_factor * features_frame2audio_samples,
             right=context_encoder_frames.right * encoder_subsampling_factor * features_frame2audio_samples,
@@ -251,7 +265,7 @@ class _NemoRNNTStreamingDecoder:
         self._device = getattr(model, "device", None)
         if self._device is None:
             self._device = next(model.parameters()).device
-        self._buffer = StreamingBatchedAudioBuffer(  # type: ignore[reportOptionalCall]  # guarded above
+        self._buffer = _StreamingBatchedAudioBuffer(
             batch_size=1,
             context_samples=self._context_samples,
             dtype=_torch.float32,
@@ -314,10 +328,10 @@ class _NemoRNNTStreamingDecoder:
                 multi_biasing_ids=None,
             )
             if isinstance(decode_result, tuple):
-                chunk_batched_hyps = decode_result[0]
+                chunk_batched_hyps: Any = cast(Any, decode_result[0])
                 self._state = decode_result[1]
             else:
-                chunk_batched_hyps = decode_result
+                chunk_batched_hyps = cast(Any, decode_result)
                 self._state = None
 
             if self._current_batched_hyps is None:

@@ -43,9 +43,9 @@ from __future__ import annotations
 
 import argparse
 import ast
-import os
 import sys
 from collections.abc import Iterator
+from typing import Any, List, cast
 from pathlib import Path
 
 MUTATING_ATTRS = frozenset({"pop", "update", "setdefault", "clear", "__setitem__", "popitem"})
@@ -83,19 +83,19 @@ def _iter_module_level_stmts(body: list[ast.stmt]) -> Iterator[ast.stmt]:
         for field in ("body", "orelse", "finalbody"):
             inner = getattr(node, field, None)
             if isinstance(inner, list):
-                yield from _iter_module_level_stmts(inner)
+                yield from _iter_module_level_stmts(cast(List[ast.stmt], inner))
         handlers = getattr(node, "handlers", None)
         if isinstance(handlers, list):
-            for handler in handlers:
+            for handler in cast(List[Any], handlers):
                 hbody = getattr(handler, "body", None)
                 if isinstance(hbody, list):
-                    yield from _iter_module_level_stmts(hbody)
+                    yield from _iter_module_level_stmts(cast(List[ast.stmt], hbody))
         cases = getattr(node, "cases", None)  # ast.Match (3.10+)
         if isinstance(cases, list):
-            for case in cases:
+            for case in cast(List[Any], cases):
                 cbody = getattr(case, "body", None)
                 if isinstance(cbody, list):
-                    yield from _iter_module_level_stmts(cbody)
+                    yield from _iter_module_level_stmts(cast(List[ast.stmt], cbody))
 
 
 def _check_sys_modules_write(node: ast.stmt) -> int | None:

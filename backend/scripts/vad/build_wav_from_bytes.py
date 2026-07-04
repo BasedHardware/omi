@@ -1,7 +1,7 @@
 import wave
 
 
-def rebuild_wav_from_bytes(file_path, output_wav):
+def rebuild_wav_from_bytes(file_path: str, output_wav: str) -> None:
     with open(file_path, 'r') as f:
         audio_hex_strings = f.readlines()
 

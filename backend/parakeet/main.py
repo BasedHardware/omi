@@ -25,8 +25,8 @@ from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
 from transcribe import (
     transcribe_file,
-    transcribe_file_v2,  # type: ignore[reportUnknownVariableType]  # upstream transcribe partially typed
-    set_gpu_worker,  # type: ignore[reportUnknownVariableType]  # upstream transcribe partially typed
+    transcribe_file_v2,
+    set_gpu_worker,
     INFERENCE_MODE,
     _transcribe_from_gpu_result,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]  # upstream transcribe partially typed
 )
@@ -204,9 +204,9 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            return JSONResponse(content=cast(Dict[str, Any], _transcribe_from_gpu_result(result)))
+            return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
-            result = cast(Dict[str, Any], await loop.run_in_executor(_diarize_pool, transcribe_file, file_path))
+            result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
             return result
     except QueueFullError:
         status = "error"
