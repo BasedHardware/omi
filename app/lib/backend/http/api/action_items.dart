@@ -31,15 +31,14 @@ Future<ActionItemsResponse> getActionItems({
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
 
-  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return const ActionItemsResponse(actionItems: [], hasMore: false);
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    final generated = wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
-    return ActionItemsResponse.fromGenerated(generated);
+    return wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], hasMore: false);
+    return const ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
 
@@ -69,8 +68,7 @@ Future<ActionItemWithMetadata?> createActionItem({
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    final generated = wire.GeneratedActionItemResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
-    return ActionItemWithMetadata.fromGenerated(generated);
+    return wire.GeneratedActionItemResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('createActionItem error ${response.statusCode}');
     return null;
@@ -134,8 +132,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    final generated = wire.GeneratedActionItemResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
-    return ActionItemWithMetadata.fromGenerated(generated);
+    return wire.GeneratedActionItemResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('updateActionItem error ${response.statusCode}');
     return null;
@@ -267,8 +264,7 @@ Future<PendingSyncResponse?> getPendingSyncItems({String platform = 'apple_remin
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    final generated = wire.GeneratedPendingSyncResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
-    return PendingSyncResponse.fromGenerated(generated);
+    return wire.GeneratedPendingSyncResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('getPendingSyncItems error ${response.statusCode}');
     return null;

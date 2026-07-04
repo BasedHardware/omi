@@ -621,15 +621,14 @@ Future<ActionItemsResponse> getActionItems({
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
 
-  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return const ActionItemsResponse(actionItems: [], hasMore: false);
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    final generated = action_items_wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
-    return ActionItemsResponse.fromGenerated(generated);
+    return action_items_wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], hasMore: false);
+    return const ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
 
