@@ -143,9 +143,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
   Widget _buildDeviceTransferUI() {
     final isFlashPage = widget.wal.storage == WalStorage.flashPage;
-    final storageLabel = isFlashPage
-        ? context.l10n.storageLocationLimitlessPendant
-        : context.l10n.storageLocationSdCard;
+    final storageLabel =
+        isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
     final storageColor = isFlashPage ? Colors.teal : Colors.deepPurpleAccent;
 
@@ -182,10 +181,10 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Text(
                     dateTimeFormat('H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                      color: Colors.grey.shade400,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                    ),
+                          color: Colors.grey.shade400,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   // Storage notice
@@ -351,10 +350,10 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Text(
                     dateTimeFormat('H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                      color: Colors.grey.shade400,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                    ),
+                          color: Colors.grey.shade400,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   // Privacy notice

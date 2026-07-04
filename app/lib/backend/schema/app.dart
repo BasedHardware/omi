@@ -458,8 +458,8 @@ class App {
       externalIntegration: legacyJson['external_integration'] is Map<String, dynamic>
           ? ExternalIntegration.fromJson(legacyJson['external_integration'] as Map<String, dynamic>)
           : generated.externalIntegration == null
-          ? null
-          : ExternalIntegration.fromGenerated(generated.externalIntegration!),
+              ? null
+              : ExternalIntegration.fromGenerated(generated.externalIntegration!),
       ratingAvg: generated.ratingAvg,
       ratingCount: generated.ratingCount,
       capabilities: generated.capabilities.toSet(),
@@ -487,9 +487,8 @@ class App {
       isPopular: generated.isPopular ?? false,
       chatTools: (generated.chatTools ?? const []).map(ChatTool.fromGenerated).toList(),
       createdAt: generated.createdAt,
-      updatedAt: legacyJson['updated_at'] != null
-          ? DateTime.parse(legacyJson['updated_at'].toString()).toLocal()
-          : null,
+      updatedAt:
+          legacyJson['updated_at'] != null ? DateTime.parse(legacyJson['updated_at'].toString()).toLocal() : null,
       score: generated.score,
       official: generated.official ?? false,
       sourceCodeUrl: generated.sourceCodeUrl,
