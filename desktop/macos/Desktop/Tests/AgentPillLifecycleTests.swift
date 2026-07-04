@@ -956,12 +956,14 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testCanonicalPillLifecycleQueuesFollowUpsAndCancelsActiveDismissals() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("private var pendingFollowUpsByPill: [UUID: [String]] = [:]"))
-    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pill.id, default: []].append(prompt)"))
+    XCTAssertTrue(source.contains("private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]"))
+    XCTAssertTrue(source.contains("private struct PendingAgentFollowUp"))
+    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))"))
     XCTAssertTrue(source.contains("Queued follow-up until the agent starts"))
     XCTAssertTrue(source.contains("Queued follow-up until the current run stops"))
     XCTAssertTrue(source.contains("let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []"))
-    XCTAssertTrue(source.contains("self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: \"\\n\\n\"))"))
+    XCTAssertTrue(source.contains("text: queuedFollowUps.map(\\.text).joined(separator: \"\\n\\n\")"))
+    XCTAssertTrue(source.contains("attachments: queuedFollowUps.flatMap(\\.attachments)"))
     XCTAssertTrue(source.contains("switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill)"))
     XCTAssertTrue(source.contains("case .cancelled:\n                        return"))
     XCTAssertTrue(source.contains("private enum ActiveRunCancellationResult"))

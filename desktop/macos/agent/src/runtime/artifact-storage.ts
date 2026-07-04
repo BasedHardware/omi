@@ -110,7 +110,7 @@ export class OmiArtifactStorage {
 
   discoverRunArtifacts(
     scope: ArtifactStorageScope,
-    existingArtifacts: readonly AdapterArtifactReference[] = []
+    existingArtifacts: readonly Pick<AdapterArtifactReference, "uri">[] = []
   ): AdapterArtifactReference[] {
     const directory = this.directoryFor(scope);
     if (!existsSync(directory)) {
@@ -120,7 +120,7 @@ export class OmiArtifactStorage {
     const existingUris = new Set(existingArtifacts.map((artifact) => artifact.uri));
     const discovered: AdapterArtifactReference[] = [];
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (!entry.isFile() || entry.name === "manifest.json") {
+      if (entry.name === "manifest.json" || (!entry.isFile() && !entry.isDirectory())) {
         continue;
       }
       const path = join(directory, entry.name);
@@ -130,13 +130,13 @@ export class OmiArtifactStorage {
       }
       const stat = statSync(path);
       discovered.push({
-        kind: kindForFileName(entry.name),
+        kind: entry.isDirectory() ? "directory" : kindForFileName(entry.name),
         role: "result",
         uri,
         displayName: entry.name,
-        mimeType: mimeTypeForFileName(entry.name),
-        contentHash: fileHash(path),
-        sizeBytes: stat.size,
+        mimeType: entry.isDirectory() ? "inode/directory" : mimeTypeForFileName(entry.name),
+        contentHash: entry.isDirectory() ? null : fileHash(path),
+        sizeBytes: entry.isDirectory() ? null : stat.size,
         metadata: {
           omiManaged: true,
           managedPath: path,
@@ -148,12 +148,10 @@ export class OmiArtifactStorage {
   }
 
   directoryFor(scope: ArtifactStorageScope): string {
-    const date = new Date().toISOString().slice(0, 10);
     return join(
       this.rootDir,
       sanitizePathComponent(scope.ownerId || "local"),
-      date,
-      sanitizePathComponent(scope.runId)
+      sanitizePathComponent(scope.sessionId)
     );
   }
 

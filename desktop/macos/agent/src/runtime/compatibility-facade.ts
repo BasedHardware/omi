@@ -14,8 +14,9 @@ import type {
   WarmupSessionConfig,
 } from "../protocol.js";
 import { requestIdFor } from "../protocol.js";
+import { serializeArtifact } from "./artifact-serialization.js";
 import type { RuntimeFailure } from "./failures.js";
-import type { AgentArtifact, AgentEvent, RunMode } from "./types.js";
+import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 
 export type CompatibilitySend = (message: OutboundMessage) => void;
@@ -700,34 +701,6 @@ export class JsonlCompatibilityFacade {
   }
 }
 
-function serializeArtifact(artifact: AgentArtifact): Record<string, unknown> {
-  return {
-    artifactId: artifact.artifactId,
-    omiSessionId: artifact.sessionId,
-    runId: artifact.runId,
-    attemptId: artifact.attemptId,
-    kind: artifact.kind,
-    role: artifact.role,
-    uri: artifact.uri,
-    displayName: artifact.displayName,
-    mimeType: artifact.mimeType,
-    contentHash: artifact.contentHash,
-    sizeBytes: artifact.sizeBytes,
-    lifecycleState: artifact.lifecycleState,
-    lifecycleUpdatedAtMs: artifact.lifecycleUpdatedAtMs,
-    metadata: parseJsonObject(artifact.metadataJson),
-    createdAtMs: artifact.createdAtMs,
-  };
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
-}
 
 function failureFromResultJson(resultJson: string | null): RuntimeFailure | undefined {
   if (!resultJson) return undefined;

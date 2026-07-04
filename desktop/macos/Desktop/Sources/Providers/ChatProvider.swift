@@ -3497,7 +3497,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 "mime_type": att.mimeType,
             ]
             if let thumb = att.thumbnailURL { dict["thumbnail"] = thumb }
-            if let localFileURL = att.localFileURL { dict["local_path"] = localFileURL.path }
             return dict
         }
         let root: [String: Any] = ["attachments": items]
@@ -4725,7 +4724,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 continue
             }
             let idsMatch = normalizedToolUseId != nil && blockToolUseId == normalizedToolUseId
-            let namesMatch = blockName == toolName
+            let namesMatch = Self.normalizedToolNameHead(blockName) == Self.normalizedToolNameHead(toolName)
             guard idsMatch || (normalizedToolUseId == nil && namesMatch) else {
                 continue
             }
@@ -4743,7 +4742,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private func localFileResources(fromToolName name: String, texts: [String]) -> [ChatResource] {
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedName = Self.normalizedToolNameHead(name)
         guard ["write", "edit", "multiedit"].contains(normalizedName) else { return [] }
         return localFileURLs(from: texts.joined(separator: "\n")).map { url in
             let mimeType = mimeType(forLocalFile: url)
@@ -4765,7 +4764,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private func localFileURLs(from output: String) -> [URL] {
-        let pattern = #"(?:"file://)?(/Users/[^\n"`]+)"#
+        let pattern = #"(?:"file://)?(/[^\n"`]+)"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let nsRange = NSRange(output.startIndex..<output.endIndex, in: output)
         var urls: [URL] = []
@@ -4786,6 +4785,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             urls.append(url)
         }
         return urls
+    }
+
+    private static func normalizedToolNameHead(_ name: String) -> String {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.split(separator: ":", maxSplits: 1).first.map(String.init) ?? normalized
     }
 
     private func mimeType(forLocalFile url: URL) -> String {

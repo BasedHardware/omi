@@ -121,7 +121,7 @@ final class AgentPillsManager: ObservableObject {
 
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
-    private var pendingFollowUpsByPill: [UUID: [String]] = [:]
+    private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
 
     /// Shared agent-noun pattern used by negation guard, intent detection, and
     /// task extraction. Kept word-boundary-free so callers can embed it inside
@@ -148,6 +148,11 @@ final class AgentPillsManager: ObservableObject {
     struct FloatingAgentHandoff: Equatable {
         let originalRequest: String
         let agentTask: String
+    }
+
+    private struct PendingAgentFollowUp {
+        let text: String
+        let attachments: [ChatAttachment]
     }
 
     /// Combined router result. Title/ack are pre-computed alongside the route
@@ -725,7 +730,11 @@ final class AgentPillsManager: ObservableObject {
                 )
                 let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                 if !queuedFollowUps.isEmpty {
-                    self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                    self.continueAgent(
+                        from: pill,
+                        text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                        attachments: queuedFollowUps.flatMap(\.attachments)
+                    )
                     return
                 }
                 await self.pollCanonicalRun(for: pill)
@@ -774,7 +783,7 @@ final class AgentPillsManager: ObservableObject {
             prompt = text
         }
         guard let sessionId = pill.canonicalSessionId else {
-            pendingFollowUpsByPill[pill.id, default: []].append(prompt)
+            pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
             pill.latestActivity = "Queued follow-up until the agent starts…"
             pill.markContentChanged()
             return
@@ -801,14 +810,18 @@ final class AgentPillsManager: ObservableObject {
                     case .cancelled:
                         return
                     case .failed:
-                        pendingFollowUpsByPill[pill.id, default: []].append(prompt)
+                        pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
                         pill.latestActivity = "Queued follow-up until the current run stops…"
                         pill.markContentChanged()
                         await self.pollCanonicalRun(for: pill)
                         guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                         let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                         if !queuedFollowUps.isEmpty {
-                            self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                            self.continueAgent(
+                                from: pill,
+                                text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                                attachments: queuedFollowUps.flatMap(\.attachments)
+                            )
                         }
                         return
                     }

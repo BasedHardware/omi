@@ -2218,10 +2218,6 @@ actor RewindDatabase {
             """)
         }
 
-        migrator.registerMigration("addTaskChatMessageResources") { db in
-            try db.execute(sql: "ALTER TABLE task_chat_messages ADD COLUMN resourcesJson TEXT")
-        }
-
         migrator.registerMigration("addActionItemRecurrence") { db in
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceRule TEXT")
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
@@ -2316,6 +2312,10 @@ actor RewindDatabase {
                 t.add(column: "primaryCaptureDevice", .text)
                 t.add(column: "captureDeviceIdsJson", .text)
             }
+        }
+
+        migrator.registerMigration("addTaskChatMessageResources") { db in
+            try db.execute(sql: "ALTER TABLE task_chat_messages ADD COLUMN resourcesJson TEXT")
         }
 
         try migrator.migrate(queue)

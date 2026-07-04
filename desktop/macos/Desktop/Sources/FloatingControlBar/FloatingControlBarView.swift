@@ -1947,16 +1947,25 @@ private struct AgentMainChatView: View {
 
     private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
         var urls: [URL] = []
+        let lock = NSLock()
         let group = DispatchGroup()
         for provider in providers {
             guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { continue }
             group.enter()
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 defer { group.leave() }
+                let loadedURL: URL?
                 if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
-                    urls.append(url)
+                    loadedURL = url
                 } else if let url = item as? URL {
-                    urls.append(url)
+                    loadedURL = url
+                } else {
+                    loadedURL = nil
+                }
+                if let loadedURL {
+                    lock.lock()
+                    urls.append(loadedURL)
+                    lock.unlock()
                 }
             }
         }

@@ -833,7 +833,7 @@ export class AgentRuntimeKernel {
       session: accepted.session,
       run: finalRun,
       attempt,
-      artifacts: [],
+      artifacts: this.readArtifacts({ runId: accepted.run.runId, limit: 50 }),
       adapterSessionId: null,
       terminalStatus: finalRun.status === "cancelled" ? "cancelled" : "failed",
       text: finalRun.finalText ?? "",
@@ -1887,6 +1887,7 @@ export class AgentRuntimeKernel {
         updatedAtMs: Date.now(),
       });
       const emittedArtifacts = result.artifacts ?? [];
+      const existingArtifacts = this.readArtifacts({ sessionId: session.sessionId, limit: 500 });
       const artifacts = [
         ...emittedArtifacts,
         ...(this.artifactStorage?.discoverRunArtifacts({
@@ -1894,7 +1895,7 @@ export class AgentRuntimeKernel {
           sessionId: session.sessionId,
           runId,
           attemptId: attempt.attemptId,
-        }, emittedArtifacts) ?? []),
+        }, [...emittedArtifacts, ...existingArtifacts]) ?? []),
       ];
       for (const rawArtifact of artifacts) {
         const artifact = this.artifactStorage?.normalizeArtifact(rawArtifact, {
