@@ -300,8 +300,15 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let pillSource = try sourceFile("FloatingControlBar/AgentPill.swift")
 
-    XCTAssertTrue(chatSource.contains("func recordVoiceTurn(userText: String, assistantText: String)"))
-    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn(userText: userText, assistantText: reply)"))
+    XCTAssertTrue(
+      chatSource.contains(
+        "func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil)"
+      ))
+    // Completed turn is recorded via the manager with the (corrected) user text, the
+    // reply, and the early-bubble id captured for THIS turn (see instant-show feature).
+    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn("))
+    XCTAssertTrue(
+      hubSource.contains("userText: userText, assistantText: reply, earlyUserMessageId: capturedEarlyId)"))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
     XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
@@ -357,7 +364,10 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
 
-    XCTAssertTrue(managerSource.contains("recordVoiceAgentHandoff(userText: String, agentTitle: String, agentBrief: String)"))
+    XCTAssertTrue(managerSource.contains("func recordVoiceAgentHandoff("))
+    XCTAssertTrue(
+      managerSource.contains(
+        "userText: String, agentTitle: String, agentBrief: String, earlyUserMessageId: String? = nil"))
     XCTAssertTrue(managerSource.contains("Started background agent"))
     XCTAssertTrue(managerSource.contains("logLabel: \"voice_agent_handoff\""))
     XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceAgentHandoff("))
