@@ -18,6 +18,7 @@ import Foundation
 class BaseBatchAudioWriter {
     let queue: DispatchQueue
     private let tag: String
+    private let recoveryPrefix: String
 
     // Active-file state (only touched on `queue`).
     private var fileHandle: FileHandle?
@@ -33,9 +34,10 @@ class BaseBatchAudioWriter {
     private let minFreeBytes: Int64 = 200 * 1024 * 1024 // stop below 200 MB free
     let partSuffix = "part"
 
-    init(tag: String, queueLabel: String) {
+    init(tag: String, queueLabel: String, recoveryPrefix: String) {
         self.tag = tag
         self.queue = DispatchQueue(label: queueLabel)
+        self.recoveryPrefix = recoveryPrefix
     }
 
     /// Whether a part file is currently open (only meaningful on `queue`).
@@ -186,7 +188,7 @@ class BaseBatchAudioWriter {
         ) else { return }
         for url in items {
             let name = url.lastPathComponent
-            guard name.hasPrefix("audio_"), name.hasSuffix(".bin.\(partSuffix)") else { continue }
+            guard name.hasPrefix(recoveryPrefix), name.hasSuffix(".bin.\(partSuffix)") else { continue }
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             if size > 0 {
                 let finalURL = url.deletingPathExtension()

@@ -20,7 +20,7 @@ import Foundation
 final class OmiBatchAudioWriter: BaseBatchAudioWriter {
     static let shared = OmiBatchAudioWriter()
     private init() {
-        super.init(tag: "BatchWriter", queueLabel: "com.omi.batchAudioWriter")
+        super.init(tag: "BatchWriter", queueLabel: "com.omi.batchAudioWriter", recoveryPrefix: "audio_omibatch_")
     }
 
     // Policy state. `lastFrameMs` is queue-confined; the two flags below are only

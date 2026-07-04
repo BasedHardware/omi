@@ -27,7 +27,7 @@ import java.util.Locale
  * this class owns the notification-driven policy: config matching, mute/cut prefs,
  * per-device frame extraction, silence-gap finalize and wall-clock rotation.
  */
-class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG) {
+class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG, "audio_omibatch_") {
     companion object {
         private const val TAG = "OmiBle.BatchWriter"
         private const val MAX_FILE_BYTES = 32L * 1024 * 1024 // ~32 MB per file

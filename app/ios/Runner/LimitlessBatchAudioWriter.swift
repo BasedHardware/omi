@@ -31,7 +31,11 @@ final class LimitlessBatchAudioWriter: BaseBatchAudioWriter {
     private var lastPageTimestampMs: Int64 = 0
 
     init() {
-        super.init(tag: "LimitlessWriter", queueLabel: "com.omi.limitlessBatchWriter")
+        super.init(
+            tag: "LimitlessWriter",
+            queueLabel: "com.omi.limitlessBatchWriter",
+            recoveryPrefix: "audio_\(LimitlessBatchAudioWriter.deviceMarker)_"
+        )
     }
 
     /// Append the opus frames extracted from one flash page. `pageTimestampMs` is the
@@ -68,7 +72,7 @@ final class LimitlessBatchAudioWriter: BaseBatchAudioWriter {
         // wall-clock, mirroring the Dart connector's validity gate.
         let ts = pageTimestampMs > minValidTsMs ? pageTimestampMs : nowMs
 
-        if isOpen, lastPageTimestampMs > 0, ts - lastPageTimestampMs > sessionGapMs {
+        if isOpen, lastPageTimestampMs > 0, abs(ts - lastPageTimestampMs) > sessionGapMs {
             closeCurrentLocked("session_gap")
         }
         if isOpen, currentFrames >= maxAudioSeconds * framesPerSecond {

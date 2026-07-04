@@ -1,6 +1,7 @@
 package com.friend.ios
 
 import android.content.Context
+import kotlin.math.abs
 
 /**
  * Batch (offline) capture sink for the Limitless pendant. Unlike [OmiBatchAudioWriter]
@@ -23,7 +24,7 @@ import android.content.Context
  * BEFORE ACKing pages to the pendant — an ACK deletes the pendant's copy, so bytes
  * must be durable on phone storage first. [append] itself only fsyncs periodically.
  */
-class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG) {
+class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG, "audio_${DEVICE_MARKER}_") {
     companion object {
         private const val TAG = "OmiBle.LimitlessWriter"
         const val DEVICE_MARKER = "omibatchlimitless"
@@ -49,7 +50,7 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
         val ts = if (pageTimestampMs > MIN_VALID_TS_MS) pageTimestampMs else now
 
         synchronized(lock) {
-            if (isOpenLocked && lastPageTimestampMs > 0 && ts - lastPageTimestampMs > SESSION_GAP_MS) {
+            if (isOpenLocked && lastPageTimestampMs > 0 && abs(ts - lastPageTimestampMs) > SESSION_GAP_MS) {
                 closeCurrentLocked("session_gap")
             }
             if (isOpenLocked && currentFrames >= MAX_AUDIO_SECONDS * FRAMES_PER_SECOND) {

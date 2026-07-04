@@ -21,7 +21,11 @@ import java.io.RandomAccessFile
  * Implementations: [OmiBatchAudioWriter] (BLE-notification-driven, wall-clock files)
  * and [LimitlessBatchAudioWriter] (flash-drain-driven, pendant-timestamped files).
  */
-abstract class BaseBatchAudioWriter(protected val context: Context, private val tag: String) {
+abstract class BaseBatchAudioWriter(
+    protected val context: Context,
+    private val tag: String,
+    private val recoveryPrefix: String,
+) {
     companion object {
         const val FLUTTER_PREFS = "FlutterSharedPreferences"
         const val PART_SUFFIX = ".part" // active (still-being-written) files end .bin.part
@@ -199,7 +203,7 @@ abstract class BaseBatchAudioWriter(protected val context: Context, private val 
     private fun recoverStalePartFiles(dir: File) {
         try {
             val parts = dir.listFiles { f ->
-                f.isFile && f.name.startsWith("audio_") && f.name.endsWith(".bin$PART_SUFFIX")
+                f.isFile && f.name.startsWith(recoveryPrefix) && f.name.endsWith(".bin$PART_SUFFIX")
             } ?: return
             for (p in parts) {
                 if (p.length() > 0L) {
