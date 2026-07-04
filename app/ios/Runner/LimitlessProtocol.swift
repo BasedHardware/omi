@@ -257,6 +257,7 @@ enum LimitlessProtocol {
     }
 
     /// Mirror of `_hasAudioSubfields`: any 0x12 subfield inside a 0x1a wrapper.
+    /// Anomalies return TRUE (treated as audio) so a failed extraction is never ACKed away.
     static func hasAudioSubfields(_ flashPageData: Data) -> Bool {
         var pos = 0
         if pos < flashPageData.count, flashPageData[pos] == 0x08 {
@@ -268,7 +269,7 @@ enum LimitlessProtocol {
             pos = decodeVarint(flashPageData, pos).1
         }
 
-        while pos < flashPageData.count - 2 {
+        while pos >= 0, pos < flashPageData.count - 2 {
             if flashPageData[pos] == 0x1a {
                 pos += 1
                 let (wrapperLength, afterLen) = decodeVarint(flashPageData, pos)
@@ -276,22 +277,47 @@ enum LimitlessProtocol {
                 guard wrapperLength >= 0, wrapperLength <= Int64(flashPageData.count - pos) else { break }
                 let wrapperEnd = pos + Int(wrapperLength)
 
-                while pos < wrapperEnd - 1 {
+                while pos >= 0, pos < wrapperEnd - 1 {
                     let marker = Int(flashPageData[pos])
                     if marker == 0x12 { return true }
                     let wireType = marker & 0x07
                     pos += 1
-                    if wireType == 0 {
+                    switch wireType {
+                    case 0:
                         pos = decodeVarint(flashPageData, pos).1
-                    } else if wireType == 2 {
+                    case 2:
                         let (length, next) = decodeVarint(flashPageData, pos)
-                        guard length >= 0, length <= Int64(flashPageData.count) else { return false }
-                        pos = next + Int(length)
+                        if length < 0 || Int64(next) + length > Int64(wrapperEnd) {
+                            pos = wrapperEnd
+                        } else {
+                            pos = next + Int(length)
+                        }
+                    case 1:
+                        pos += 8
+                    case 5:
+                        pos += 4
+                    default:
+                        return true
                     }
                 }
                 pos = wrapperEnd
             } else {
+                let wireType = Int(flashPageData[pos]) & 0x07
                 pos += 1
+                switch wireType {
+                case 0:
+                    pos = decodeVarint(flashPageData, pos).1
+                case 2:
+                    let (length, next) = decodeVarint(flashPageData, pos)
+                    if length < 0 || Int64(next) + length > Int64(flashPageData.count) { return false }
+                    pos = next + Int(length)
+                case 1:
+                    pos += 8
+                case 5:
+                    pos += 4
+                default:
+                    return true
+                }
             }
         }
         return false

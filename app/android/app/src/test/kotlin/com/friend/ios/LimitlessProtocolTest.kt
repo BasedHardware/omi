@@ -126,6 +126,15 @@ class LimitlessProtocolTest {
     @Test
     fun audioPageZeroFrames() = assertFixture("audio_page_zero_frames.json")
 
+    @Test(timeout = 10_000)
+    fun overflowVarintLength() = assertFixture("overflow_varint_length.json")
+
+    @Test(timeout = 10_000)
+    fun fixed64FieldsPage() = assertFixture("fixed64_fields_page.json")
+
+    @Test(timeout = 10_000)
+    fun unknownWiretypePage() = assertFixture("unknown_wiretype_page.json")
+
     @Test
     fun encoderVectors() {
         val fixture = loadFixture("encoders.json")

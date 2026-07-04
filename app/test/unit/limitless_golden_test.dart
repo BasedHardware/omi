@@ -513,6 +513,62 @@ void main() {
       bleWrapper(15, 0, 1, [...intField(1, 85), ...bytesField(5, statusStruct)]),
     ];
 
+    final packetsI = [
+      bleWrapper(
+        18,
+        0,
+        1,
+        pendantMessage(storageBufferBytes(
+          session: 7,
+          seq: 8,
+          index: 107,
+          page: [
+            ...intField(1, timestampMs + 11200),
+            0x1a, 0xfa, 0xff, 0xff, 0xff, 0x1f, // wrapper length varint 2^33-6: truncating to Int32 goes negative
+            0x00, 0x00, 0x00, 0x00,
+          ],
+        )),
+      ),
+    ];
+
+    final packetsJ = [
+      bleWrapper(
+        19,
+        0,
+        1,
+        pendantMessage(storageBufferBytes(
+          session: 7,
+          seq: 9,
+          index: 108,
+          page: flashPageBytes(timestampMs + 12800, [
+            bytesField(3, [
+              0x09, 0x0a, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // fixed64 field before the audio subfield
+              ...bytesField(2, bytesField(1, invalidRuntFrame)),
+            ]),
+          ]),
+        )),
+      ),
+    ];
+
+    final packetsK = [
+      bleWrapper(
+        20,
+        0,
+        1,
+        pendantMessage(storageBufferBytes(
+          session: 7,
+          seq: 10,
+          index: 109,
+          page: flashPageBytes(timestampMs + 14400, [
+            bytesField(3, [
+              0x0b, 0x0a, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // unknown wire type (3) before the audio subfield
+              ...bytesField(2, bytesField(1, invalidRuntFrame)),
+            ]),
+          ]),
+        )),
+      ),
+    ];
+
     Future<List<Map<String, dynamic>>> drive(List<List<int>> packets) async {
       final start = emittedPages.length;
       for (final packet in packets) {
@@ -562,6 +618,17 @@ void main() {
 
     final pagesH = await drive(packetsH);
     expect(pagesH, isEmpty, reason: 'an audio page yielding zero valid frames must never surface (no ACK past it)');
+
+    final pagesI = await drive(packetsI);
+    expect(pagesI.length, 1, reason: 'an oversized wrapper length must exit the walk and surface as diagnostic');
+    expect(pagesI[0]['index'], 107);
+    expect(pagesI[0]['opus_frames'], isEmpty);
+
+    final pagesJ = await drive(packetsJ);
+    expect(pagesJ, isEmpty, reason: 'fixed64 fields must be skipped when classifying — this page has audio subfields');
+
+    final pagesK = await drive(packetsK);
+    expect(pagesK, isEmpty, reason: 'unknown wire types classify as audio — never ACK a page we cannot parse');
 
     await connection.acknowledgeProcessedData(12345);
     expect(transport.writes.length, 4);
@@ -642,6 +709,24 @@ void main() {
         pagesH,
         mirrorStorageStateForPackets(packetsH),
       ),
+      'overflow_varint_length.json': caseFixture(
+        'overflow_varint_length',
+        packetsI,
+        pagesI,
+        mirrorStorageStateForPackets(packetsI),
+      ),
+      'fixed64_fields_page.json': caseFixture(
+        'fixed64_fields_page',
+        packetsJ,
+        pagesJ,
+        mirrorStorageStateForPackets(packetsJ),
+      ),
+      'unknown_wiretype_page.json': caseFixture(
+        'unknown_wiretype_page',
+        packetsK,
+        pagesK,
+        mirrorStorageStateForPackets(packetsK),
+      ),
     };
 
     for (final name in [
@@ -652,6 +737,9 @@ void main() {
       'invalid_toc_interleaved.json',
       'truncated_trailing_field.json',
       'audio_page_zero_frames.json',
+      'overflow_varint_length.json',
+      'fixed64_fields_page.json',
+      'unknown_wiretype_page.json',
     ]) {
       expect(cases[name]!['expectedStorageState'], isNull,
           reason: '$name must not accidentally parse as a device-status packet');

@@ -129,9 +129,9 @@ object LimitlessProtocol {
                 } else if (wireType == 2) {
                     val (length, next) = decodeVarint(data, pos)
                     pos = next
-                    // Dart parity: a past-the-end length only faults the packet when it is
-                    // the payload field; other fields just end the walk, keeping what parsed.
-                    if (pos + length > data.size) {
+                    // Dart parity: a past-the-end (or overflowed-negative) length only faults
+                    // the packet when it is the payload field; other fields just end the walk.
+                    if (length < 0 || pos + length > data.size) {
                         if (fieldNum == 4) return null
                         break
                     }
@@ -164,7 +164,7 @@ object LimitlessProtocol {
                 if (wireType == 2) {
                     val (length, next) = decodeVarint(payload, pos)
                     pos = next
-                    if (pos + length > payload.size) break
+                    if (length < 0 || pos + length > payload.size) break
                     if (fieldNum == 2) {
                         parseStorageBuffer(payload.copyOfRange(pos, pos + length.toInt()))?.let { pages.add(it) }
                     }
@@ -205,7 +205,7 @@ object LimitlessProtocol {
                 } else if (wireType == 2) {
                     val (length, next) = decodeVarint(storageData, pos)
                     pos = next
-                    if (pos + length > storageData.size) break
+                    if (length < 0 || pos + length > storageData.size) break
                     if (fieldNum == 6) flashPageData = storageData.copyOfRange(pos, pos + length.toInt())
                     pos += length.toInt()
                 } else {
@@ -261,8 +261,8 @@ object LimitlessProtocol {
                     pos++
                     val (wrapperLength, afterLen) = decodeVarint(flashPageData, pos)
                     pos = afterLen
+                    if (wrapperLength < 0 || pos + wrapperLength > flashPageData.size) break
                     val wrapperEnd = pos + wrapperLength.toInt()
-                    if (wrapperEnd > flashPageData.size) break
 
                     while (pos < wrapperEnd - 1) {
                         val marker = flashPageData[pos].toInt() and 0xFF
@@ -276,11 +276,11 @@ object LimitlessProtocol {
                             pos++
                             val (audioLength, afterAudioLen) = decodeVarint(flashPageData, pos)
                             pos = afterAudioLen
-                            val audioEnd = pos + audioLength.toInt()
-                            if (audioEnd > flashPageData.size) {
+                            if (audioLength < 0 || pos + audioLength > flashPageData.size) {
                                 pos = wrapperEnd
                                 break
                             }
+                            val audioEnd = pos + audioLength.toInt()
                             extractOpusRecursive(flashPageData, pos, audioEnd, frames)
                             pos = audioEnd
                             continue
@@ -292,7 +292,8 @@ object LimitlessProtocol {
                             pos = decodeVarint(flashPageData, pos).second
                         } else if (wireType == 2) {
                             val (length, next) = decodeVarint(flashPageData, pos)
-                            pos = next + length.toInt()
+                            if (length < 0 || next + length > wrapperEnd) break
+                            pos = (next + length).toInt()
                         }
                     }
                     pos = wrapperEnd
@@ -315,8 +316,9 @@ object LimitlessProtocol {
             if (wireType == 2) {
                 val (length, next) = decodeVarint(data, pos)
                 pos = next
+                if (length < 0 || pos + length > end) break
                 val len = length.toInt()
-                if (len > 0 && pos + len <= end) {
+                if (len > 0) {
                     val fieldData = data.copyOfRange(pos, pos + len)
                     if (len in 10..200 && isValidOpusToc(fieldData[0])) {
                         frames.add(fieldData)
@@ -333,7 +335,8 @@ object LimitlessProtocol {
         }
     }
 
-    /** Mirror of `_hasAudioSubfields`: any 0x12 subfield inside a 0x1a wrapper. */
+    /** Mirror of `_hasAudioSubfields`: any 0x12 subfield inside a 0x1a wrapper.
+     *  Anomalies return TRUE (treated as audio) so a failed extraction is never ACKed away. */
     fun hasAudioSubfields(flashPageData: ByteArray): Boolean {
         try {
             var pos = 0
@@ -351,27 +354,48 @@ object LimitlessProtocol {
                     pos++
                     val (wrapperLength, afterLen) = decodeVarint(flashPageData, pos)
                     pos = afterLen
+                    if (wrapperLength < 0 || pos + wrapperLength > flashPageData.size) break
                     val wrapperEnd = pos + wrapperLength.toInt()
-                    if (wrapperEnd > flashPageData.size) break
 
                     while (pos < wrapperEnd - 1) {
                         val marker = flashPageData[pos].toInt() and 0xFF
                         if (marker == 0x12) return true
                         val wireType = marker and 0x07
                         pos++
-                        if (wireType == 0) {
-                            pos = decodeVarint(flashPageData, pos).second
-                        } else if (wireType == 2) {
-                            val (length, next) = decodeVarint(flashPageData, pos)
-                            pos = next + length.toInt()
+                        when (wireType) {
+                            0 -> pos = decodeVarint(flashPageData, pos).second
+                            2 -> {
+                                val (length, next) = decodeVarint(flashPageData, pos)
+                                if (length < 0 || next + length > wrapperEnd) {
+                                    pos = wrapperEnd
+                                } else {
+                                    pos = (next + length).toInt()
+                                }
+                            }
+                            1 -> pos += 8
+                            5 -> pos += 4
+                            else -> return true
                         }
                     }
                     pos = wrapperEnd
                 } else {
+                    val wireType = flashPageData[pos].toInt() and 0x07
                     pos++
+                    when (wireType) {
+                        0 -> pos = decodeVarint(flashPageData, pos).second
+                        2 -> {
+                            val (length, next) = decodeVarint(flashPageData, pos)
+                            if (length < 0 || next + length > flashPageData.size) return false
+                            pos = (next + length).toInt()
+                        }
+                        1 -> pos += 8
+                        5 -> pos += 4
+                        else -> return true
+                    }
                 }
             }
         } catch (_: Exception) {
+            return true
         }
         return false
     }
