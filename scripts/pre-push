@@ -379,6 +379,23 @@ check_backend_typecheck_if_needed() {
     'backend/database/memory_non_active_routes.py' \
     'backend/database/product_memory_items.py' \
     'backend/database/short_term_memories.py' \
+    'backend/database/action_items.py' \
+    'backend/database/apps.py' \
+    'backend/database/knowledge_graph.py' \
+    'backend/database/mcp_api_key.py' \
+    'backend/database/user_usage.py' \
+    'backend/database/memory_compatibility_projection.py' \
+    'backend/database/memory_ledger.py' \
+    'backend/database/memory_apply_store.py' \
+    'backend/database/review_queue.py' \
+    'backend/database/memory_vector_repair_pinecone_adapter.py' \
+    'backend/database/memory_vector_repair_outbox_worker.py' \
+    'backend/database/redis_db.py' \
+    'backend/database/mcp_oauth.py' \
+    'backend/database/chat.py' \
+    'backend/database/users.py' \
+    'backend/database/conversations.py' \
+    'backend/database/memories.py' \
     'backend/routers/knowledge_graph.py' \
     'backend/routers/memory_admin.py' \
     'backend/routers/memories.py' \
