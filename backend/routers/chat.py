@@ -40,6 +40,8 @@ from models.chat import (
     ResponseMessage,
     MessageConversation,
     FileChat,
+    RateMessageRequest,
+    ShareChatMessagesRequest,
 )
 from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
@@ -1187,11 +1189,11 @@ def create_initial_message(
 @router.patch('/v2/messages/{message_id}/rating', tags=['chat'], response_model=ChatRatingResponse)
 def rate_message(
     message_id: str,
-    data: dict,
+    data: RateMessageRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
-    rating = data.get('rating')
+    rating = data.rating
 
     # Update rating on the message document
     chat_db.update_message_rating(uid, message_id, rating)
@@ -1227,11 +1229,11 @@ def rate_message(
 
 @router.post('/v2/messages/share', tags=['chat'], response_model=ShareChatMessagesResponse)
 def share_chat_messages(
-    data: dict,
+    data: ShareChatMessagesRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create a shareable link for chat messages."""
-    message_ids = data.get('message_ids', [])
+    message_ids = data.message_ids
     if not message_ids:
         raise HTTPException(status_code=400, detail='No message IDs provided')
 

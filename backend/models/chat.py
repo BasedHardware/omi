@@ -215,6 +215,14 @@ class SendMessageRequest(BaseModel):
     context: Optional[PageContext] = None
 
 
+class RateMessageRequest(BaseModel):
+    rating: Optional[int] = None
+
+
+class ShareChatMessagesRequest(BaseModel):
+    message_ids: list[str] = []
+
+
 class ChatSession(BaseModel):
     id: str
     message_ids: Optional[List[str]] = []

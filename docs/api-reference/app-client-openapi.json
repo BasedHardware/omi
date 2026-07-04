@@ -11566,6 +11566,23 @@
         "title": "PublicFairUseCaseStatusResponse",
         "type": "object"
       },
+      "RateMessageRequest": {
+        "properties": {
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          }
+        },
+        "title": "RateMessageRequest",
+        "type": "object"
+      },
       "RebuildResponse": {
         "properties": {
           "edges_count": {
@@ -12260,6 +12277,20 @@
           "token"
         ],
         "title": "ShareActionItemsResponse",
+        "type": "object"
+      },
+      "ShareChatMessagesRequest": {
+        "properties": {
+          "message_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Message Ids",
+            "type": "array"
+          }
+        },
+        "title": "ShareChatMessagesRequest",
         "type": "object"
       },
       "ShareChatMessagesResponse": {
@@ -42996,9 +43027,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/ShareChatMessagesRequest"
               }
             }
           },
@@ -43142,9 +43171,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/RateMessageRequest"
               }
             }
           },
