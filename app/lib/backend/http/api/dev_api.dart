@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/dev_api_key.dart';
-import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 class DevApi {
@@ -13,10 +12,7 @@ class DevApi {
 
     if (response != null && response.statusCode == 200) {
       final List<dynamic> body = jsonDecode(response.body);
-      return body
-          .map((dynamic item) => wire.GeneratedDevApiKey.fromJson(item as Map<String, dynamic>))
-          .map(DevApiKey.fromGenerated)
-          .toList();
+      return body.map((dynamic item) => DevApiKey.fromJson(item as Map<String, dynamic>)).toList();
     } else {
       throw Exception('Failed to load API keys: ${response?.body}');
     }
@@ -31,8 +27,7 @@ class DevApi {
     final response = await makeApiCall(url: '$_baseUrl/keys', headers: {}, body: jsonEncode(body), method: 'POST');
 
     if (response != null && response.statusCode == 200) {
-      final generated = wire.GeneratedDevApiKeyCreated.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-      return DevApiKeyCreated.fromGenerated(generated);
+      return DevApiKeyCreated.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     } else {
       throw Exception('Failed to create API key: ${response?.body}');
     }
