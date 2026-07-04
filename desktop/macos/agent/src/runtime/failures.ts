@@ -82,12 +82,12 @@ export function failureFromProcessExit(input: {
     // branch keeps the public contract uniform across both
     // paths and pins the bug to a single string.
     return normalizeRuntimeFailure({
-      code: classified.code ?? "adapter_process_exited",
-      userMessage: classified.userMessage ?? `${input.adapterId} process failed: ${technicalMessage}`,
       source: "adapter_process",
       adapterId: input.adapterId,
       technicalMessage,
       ...classified,
+      code: classified.code ?? "adapter_process_exited",
+      userMessage: classified.userMessage ?? `${input.adapterId} process failed: ${technicalMessage}`,
     });
   }
   const provider = providerFromDiagnostic(diagnostic);
