@@ -393,6 +393,41 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
 
     resolved.sort(key=lambda entry: entry["release"].get("published_at", ""), reverse=True)
     return resolved
+def _release_entry_to_whats_new(entry: Dict) -> Dict:
+    """Map a live-release entry (from _get_live_desktop_releases) to a JSON What's New item."""
+    release = entry["release"]
+    version_info = entry["version_info"]
+    kv = entry["metadata"]
+    return {
+        "version": version_info["version"],
+        "build": version_info["build"],
+        "date": release.get("published_at"),
+        "mandatory": kv.get("mandatory", "false").lower() == "true",
+        "channel": entry["channel"],
+        "changes": _parse_changelog_to_changes(kv.get("changelog", []), release.get("body", "")),
+    }
+
+
+def _filter_whats_new(entries: List[Dict], channel: str, since_build: Optional[int], limit: int) -> List[Dict]:
+    """Filter/shape live-release entries (already newest-first) for the What's New feed.
+
+    A stable client sees only stable releases; a beta client sees beta and stable. When since_build
+    is given, only releases with a strictly greater build are kept (builds are globally monotonic).
+    """
+    items: List[Dict] = []
+    for entry in entries:
+        if channel == "stable" and entry["channel"] != "stable":
+            continue
+        if since_build is not None:
+            try:
+                if int(entry["version_info"]["build"]) <= since_build:
+                    continue
+            except (TypeError, ValueError):
+                continue
+        items.append(_release_entry_to_whats_new(entry))
+        if len(items) >= limit:
+            break
+    return items
 
 
 def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "") -> str:
@@ -611,6 +646,27 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", pattern
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating appcast: {str(e)}")
+
+
+@router.get("/v2/desktop/whats-new")
+async def get_desktop_whats_new(
+    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
+    channel: str = Query(default="stable", pattern="^(beta|stable)$"),
+    since_build: Optional[int] = Query(default=None, ge=0),
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """Recent live desktop release changelogs as JSON, for an in-app "What's New" screen.
+
+    channel=stable returns only stable releases; channel=beta also includes beta releases. When
+    since_build (the caller's installed build number) is given, only newer releases are returned.
+    Returns 200 with an empty items list when nothing is newer, so the client can show "up to date".
+    """
+    entries = await _get_live_desktop_releases(platform)
+    return {
+        "platform": platform,
+        "channel": channel,
+        "items": _filter_whats_new(entries, channel, since_build, limit),
+    }
 
 
 @router.get("/v2/desktop/download/latest")
