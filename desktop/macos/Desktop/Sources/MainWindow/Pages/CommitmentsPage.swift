@@ -184,7 +184,7 @@ struct CommitmentsPage: View {
         .font(.system(size: 36))
         .foregroundColor(OmiColors.textTertiary)
 
-      if CommitmentService.isAnalysisEnabled {
+      if store.isAnalysisEnabled {
         Text("No commitments yet")
           .font(.headline)
           .foregroundColor(OmiColors.textSecondary)

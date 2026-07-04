@@ -12,8 +12,23 @@ class CommitmentsStore: ObservableObject {
   @Published var missedCommitments: [CommitmentRecord] = []
   @Published var isLoading = false
   @Published var error: String?
+  @Published var isAnalysisEnabled = false
 
-  private init() {}
+  private var observation: NSObjectProtocol?
+
+  private init() {
+    isAnalysisEnabled = UserDefaults.standard.bool(forKey: commitmentsAnalysisEnabledKey)
+    observation = NotificationCenter.default.addObserver(
+      forName: UserDefaults.didChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      let newValue = UserDefaults.standard.bool(forKey: commitmentsAnalysisEnabledKey)
+      if self?.isAnalysisEnabled != newValue {
+        self?.isAnalysisEnabled = newValue
+      }
+    }
+  }
 
   // MARK: - Load
 
