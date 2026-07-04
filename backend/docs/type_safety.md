@@ -135,6 +135,15 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `routers/integrations.py`
   - `routers/notifications.py`
   - `routers/oauth.py`
+  - `routers/chat.py`
+  - `routers/conversations.py`
+  - `routers/developer.py`
+  - `routers/mcp.py`
+  - `routers/mcp_sse.py`
+  - `routers/payment.py`
+  - `routers/pusher.py`
+  - `routers/sync.py`
+  - `routers/users.py`
   - `utils/conversations/memories.py`
   - `utils/llm/__init__.py`
   - `utils/llm/clients.py`

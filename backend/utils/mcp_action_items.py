@@ -12,7 +12,7 @@ imports the other (routers must never import from other routers).
 import hashlib
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import database.action_items as action_items_db
 from database.vector_db import (
@@ -124,10 +124,10 @@ def _reload(uid: str, action_item_id: str) -> dict:
 
 def create_action_item(
     uid: str,
-    description: str,
+    description: Optional[str],
     due_at: Union[str, datetime, None] = None,
     completed: bool = False,
-) -> dict:
+) -> Dict[str, Any]:
     """Create a task and return its cleaned MCP shape. Content-idempotent on
     (uid, normalized description)."""
     text = _normalize_description(description)
@@ -155,7 +155,7 @@ def create_action_item(
     return clean_action_item(item)
 
 
-def set_completed(uid: str, action_item_id: str, completed: bool = True) -> dict:
+def set_completed(uid: str, action_item_id: str, completed: bool = True) -> Dict[str, Any]:
     """Mark a task complete or reopen it."""
     _require_unlocked(uid, action_item_id)
     if not action_items_db.mark_action_item_completed(uid, action_item_id, completed=completed):
@@ -168,7 +168,7 @@ def update_action_item(
     action_item_id: str,
     description: Optional[str] = None,
     due_at: Union[str, datetime, None] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Update a task's description and/or due date.
 
     Only the fields provided are changed. Clearing a due date is not supported in
@@ -220,7 +220,7 @@ def delete_action_item(uid: str, action_item_id: str) -> None:
         )
 
 
-def search_action_items(uid: str, query: str, limit: int = 10) -> List[dict]:
+def search_action_items(uid: str, query: Optional[str], limit: int = 10) -> List[Dict[str, Any]]:
     """Semantic search over the user's tasks, returned in relevance order."""
     if not query or not query.strip():
         raise ValueError("query is required")

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from config.memory_rollout import MemoryRolloutCapabilities
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
@@ -96,7 +96,7 @@ def build_mcp_default_memory_write_context(auth: McpVerifiedAuth) -> ProductAuth
 
 @dataclass(frozen=True)
 class McpMemorySearchResult:
-    memories: list[dict]
+    memories: List[Dict[str, Any]]
     read_decision: MemoryReadDecision
     fallback_reason: Optional[str] = None
 
@@ -107,7 +107,7 @@ class McpMemorySearchResult:
 
 @dataclass(frozen=True)
 class McpMemoryListResult:
-    memories: list[dict]
+    memories: List[Dict[str, Any]]
     read_decision: MemoryReadDecision
     fallback_reason: Optional[str] = None
 
@@ -188,7 +188,7 @@ def parse_mcp_datetime(value: Optional[str], field_name: str) -> Optional[dateti
         raise ValueError(f"Invalid {field_name} format: '{value}'. Expected ISO 8601.") from e
 
 
-def parse_mcp_int(value, field_name: str, *, default: int, minimum: int, maximum: int) -> int:
+def parse_mcp_int(value: Any, field_name: str, *, default: int, minimum: int, maximum: int) -> int:
     if value is None:
         parsed = default
     else:
@@ -199,7 +199,7 @@ def parse_mcp_int(value, field_name: str, *, default: int, minimum: int, maximum
     return max(minimum, min(parsed, maximum))
 
 
-def parse_optional_mcp_bool(value, field_name: str) -> Optional[bool]:
+def parse_optional_mcp_bool(value: Any, field_name: str) -> Optional[bool]:
     if value is None:
         return None
     if isinstance(value, bool):
@@ -213,7 +213,7 @@ def parse_optional_mcp_bool(value, field_name: str) -> Optional[bool]:
     raise ValueError(f"Invalid {field_name}: expected boolean.")
 
 
-def parse_mcp_bool(value, field_name: str, *, default: bool) -> bool:
+def parse_mcp_bool(value: Any, field_name: str, *, default: bool) -> bool:
     if value is None:
         return default
     parsed = parse_optional_mcp_bool(value, field_name)
@@ -308,7 +308,7 @@ def filter_and_sort_memories(
 
 
 def collect_filtered_memories(
-    fetch_batch: Callable[[int, int], list[dict]],
+    fetch_batch: Callable[[int, int], List[Dict[str, Any]]],
     *,
     limit: int,
     offset: int,
@@ -318,9 +318,9 @@ def collect_filtered_memories(
     include_sensitive: bool = True,
     updated_after: Optional[datetime] = None,
     sort: str = 'scoring_desc',
-    categories: Optional[list[str]] = None,
+    categories: Optional[List[str]] = None,
     max_scan: int = 5000,
-) -> dict:
+) -> Dict[str, Any]:
     target_count = offset + limit + 1
     requires_global_sort = sort in {'created_desc', 'updated_desc', 'manual_first'}
     requires_sparse_scan = (
@@ -333,7 +333,7 @@ def collect_filtered_memories(
     )
     batch_size = min(500, max(100, limit * 3))
     scanned_count = 0
-    candidates: list[dict] = []
+    candidates: List[Dict[str, Any]] = []
 
     while scanned_count < max_scan:
         batch_limit = min(batch_size, max_scan - scanned_count)
@@ -396,11 +396,11 @@ def search_default_mcp_memories(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     rollout_capabilities: Optional[MemoryRolloutCapabilities],
     app_has_default_memory_grant: bool = True,
     now: Optional[datetime] = None,
-) -> Optional[list[dict]]:
+) -> Optional[List[Dict[str, Any]]]:
     """Search default-visible memory product memory for the MCP memory-search caller.
 
     This is an explicit caller adapter for `/v1/mcp/memories/search`: callers must
@@ -464,11 +464,11 @@ def list_default_mcp_memories(
     uid: str,
     limit: int,
     offset: int,
-    db_client,
+    db_client: Any,
     rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
-    categories: Optional[list[str]] = None,
+    categories: Optional[List[str]] = None,
     reviewed: Optional[bool] = None,
     manually_added: Optional[bool] = None,
     now: Optional[datetime] = None,
@@ -491,7 +491,7 @@ def list_default_mcp_memories(
 
     normalized_categories = {str(category) for category in categories or [] if str(category)}
 
-    def _mcp_list_filter(memory: dict) -> bool:
+    def _mcp_list_filter(memory: Dict[str, Any]) -> bool:
         if normalized_categories and memory['category'] not in normalized_categories:
             return False
         if reviewed is not None and memory['reviewed'] != reviewed:
@@ -521,7 +521,7 @@ def search_default_mcp_memories_vector(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
     rollout_decision: Optional[DefaultReadRolloutDecision] = None,

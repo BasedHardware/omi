@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -13,11 +13,8 @@ import database.conversations as conversations_db
 import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
-import database.users as users_db
 from database._client import db
-from database.vector_db import upsert_memory_vectors_batch
 
-from models.folder import Folder
 from utils.client_device import resolve_client_device_from_request
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
@@ -33,7 +30,7 @@ from models.conversation_enums import (
 )
 from models.geolocation import Geolocation
 from models.structured import Structured
-from utils.conversations.render import populate_speaker_names, populate_folder_names
+from utils.conversations.render import populate_speaker_names, populate_folder_names  # type: ignore[reportUnknownVariableType]  # render helpers accept untyped Dict
 from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
@@ -49,7 +46,7 @@ from dependencies import (
     get_uid_with_goals_write,
 )
 from utils.apps import update_personas_async
-from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.endpoints import with_rate_limit, get_current_user_uid  # type: ignore[reportUnknownVariableType]  # with_rate_limit/auth deps defined without annotations
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
@@ -58,7 +55,7 @@ from utils.conversations.location import get_google_maps_location
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb  # type: ignore[reportPrivateUsage]  # cross-module canonical adapter helper
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
@@ -141,13 +138,13 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 # ******************************************************
 
 
-def _coerce_required_memory_id(value) -> str:
+def _coerce_required_memory_id(value: Any) -> str:
     if not value and value != 0:
         raise ValueError('id is required')
     return str(value)
 
 
-def _coerce_optional_memory_datetime(value) -> Optional[datetime]:
+def _coerce_optional_memory_datetime(value: Any) -> Optional[datetime]:
     if value in [None, '']:
         return None
     if isinstance(value, datetime):
@@ -182,17 +179,20 @@ class DeveloperMemory(BaseModel):
     scoring: Optional[str] = None
 
     @field_validator('id', mode='before')
-    def coerce_id(cls, value):
+    @classmethod
+    def coerce_id(cls, value: Any) -> Any:
         return _coerce_required_memory_id(value)
 
     @field_validator('content', mode='before')
-    def coerce_content(cls, value):
+    @classmethod
+    def coerce_content(cls, value: Any) -> Any:
         if value is None:
             return ''
         return str(value)
 
     @field_validator('category', mode='before')
-    def coerce_category(cls, value):
+    @classmethod
+    def coerce_category(cls, value: Any) -> Any:
         if isinstance(value, MemoryCategory):
             return value
         try:
@@ -201,21 +201,25 @@ class DeveloperMemory(BaseModel):
             return MemoryCategory.interesting
 
     @field_validator('visibility', mode='before')
-    def coerce_visibility(cls, value):
+    @classmethod
+    def coerce_visibility(cls, value: Any) -> Any:
         return value if value in ['public', 'private'] else 'private'
 
     @field_validator('tags', mode='before')
-    def coerce_tags(cls, value):
+    @classmethod
+    def coerce_tags(cls, value: Any) -> Any:
         if not isinstance(value, list):
             return []
-        return [str(tag) for tag in value if tag is not None]
+        return [str(tag) for tag in cast(List[Any], value) if tag is not None]
 
     @field_validator('created_at', 'updated_at', mode='before')
-    def coerce_datetime(cls, value):
+    @classmethod
+    def coerce_datetime(cls, value: Any) -> Any:
         return _coerce_optional_memory_datetime(value)
 
     @field_validator('manually_added', 'reviewed', 'edited', mode='before')
-    def coerce_bool(cls, value):
+    @classmethod
+    def coerce_bool(cls, value: Any) -> Any:
         if isinstance(value, bool):
             return value
         if value in [None, '']:
@@ -225,7 +229,8 @@ class DeveloperMemory(BaseModel):
         return bool(value)
 
     @field_validator('user_review', mode='before')
-    def coerce_optional_bool(cls, value):
+    @classmethod
+    def coerce_optional_bool(cls, value: Any) -> Any:
         if value in [None, '']:
             return None
         if isinstance(value, bool):
@@ -235,7 +240,8 @@ class DeveloperMemory(BaseModel):
         return bool(value)
 
     @field_validator('scoring', mode='before')
-    def coerce_scoring(cls, value):
+    @classmethod
+    def coerce_scoring(cls, value: Any) -> Any:
         if value is None:
             return None
         return str(value)
@@ -289,7 +295,7 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
-):
+) -> List[DeveloperMemory]:
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
@@ -325,19 +331,22 @@ def get_memories(
         # Over-fetch raw pages and let collect_filtered_memories apply category
         # filtering during the scan, so categories=manual&limit=25 always returns
         # up to 25 matching rows instead of filtering a single unfiltered page.
-        filtered = collect_filtered_memories(
-            lambda batch_offset, batch_limit: [
+        def _fetch_batch(batch_offset: int, batch_limit: int) -> List[Dict[str, Any]]:
+            return [
                 m.model_dump(mode='json')
                 for m in memorydb_list_with_locked_preview(
                     MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
                 )
-            ],
+            ]
+
+        filtered = collect_filtered_memories(
+            _fetch_batch,
             limit=limit,
             offset=offset,
             categories=[c.value for c in category_list] if category_list else None,
             sort='scoring_desc',
         )
-        memories = filtered['memories']
+        memories: List[Dict[str, Any]] = filtered['memories']
         return [CleanerMemory.model_validate(memory) for memory in memories]
     memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
     memory_result = search_memory_default_developer_memories(
@@ -370,9 +379,9 @@ def get_memories(
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
     # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
     # hardening already applied to GET /v3/memories.
-    valid_memories = []
+    valid_memories: List[DeveloperMemory] = []
     for memory in memories:
-        if not isinstance(memory, dict) or not memory.get('id'):
+        if not memory.get('id'):
             logger.warning('Skipping malformed memory in Developer API memory list')
             continue
         if memory.get('is_locked', False):
@@ -429,7 +438,7 @@ def search_memories_vector(
     memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
         matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
-        items = []
+        items: List[Dict[str, Any]] = []
         for match in matches:
             memory = match.memory
             items.append(
@@ -544,7 +553,7 @@ def create_memory(
             require_canonical_promotion=True,
         )
         if memory.visibility == 'public':
-            postprocess_executor.submit(update_personas_async, uid)
+            postprocess_executor.submit(update_personas_async, uid)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit untyped
         return DeveloperMemory(
             id=memory_db.id,
             content=memory_db.content,
@@ -574,7 +583,7 @@ def create_memory(
         require_canonical_promotion=True,
     )
     if memory.visibility == 'public':
-        postprocess_executor.submit(update_personas_async, uid)
+        postprocess_executor.submit(update_personas_async, uid)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit untyped
     return DeveloperMemory(
         id=memory_db.id,
         content=memory_db.content,
@@ -619,7 +628,7 @@ def create_memories_batch(
     if len(request.memories) > 25:
         raise HTTPException(status_code=422, detail="Maximum 25 memories per batch request")
 
-    memory_dbs = []
+    memory_dbs: List[MemoryDB] = []
     has_public = False
 
     for mem_req in request.memories:
@@ -648,7 +657,7 @@ def create_memories_batch(
         require_canonical_promotion=True,
     )
     if has_public:
-        postprocess_executor.submit(update_personas_async, uid)
+        postprocess_executor.submit(update_personas_async, uid)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit untyped
 
     created_memories = [
         DeveloperMemory(
@@ -771,8 +780,6 @@ def update_memory(
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
-    old_visibility = memory.get('visibility')
-
     if request.content is not None:
         memories_db.edit_memory(uid, memory_id, request.content.strip())
 
@@ -781,7 +788,7 @@ def update_memory(
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
         memories_db.change_memory_visibility(uid, memory_id, request.visibility)
 
-    update_data = {}
+    update_data: Dict[str, Any] = {}
     if request.tags is not None:
         update_data['tags'] = request.tags
     if request.category is not None:
@@ -856,7 +863,7 @@ def get_action_items(
     end_date: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-):
+) -> List[ActionItemResponse]:
     """
     Get action items with optional filters. Locked action items are excluded.
 
@@ -884,9 +891,9 @@ def get_action_items(
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
     # field like description/completed) doesn't fail the whole page with a 500. Mirrors the hardening
     # already applied to GET /v1/dev/user/memories.
-    valid_action_items = []
+    valid_action_items: List[ActionItemResponse] = []
     for item in action_items:
-        if not isinstance(item, dict) or not item.get('id'):
+        if not item.get('id'):
             logger.warning('Skipping malformed action item in Developer API action-item list')
             continue
         if item.get('is_locked', False):
@@ -970,7 +977,7 @@ def create_action_items_batch(
         raise HTTPException(status_code=422, detail="Maximum 50 action items per batch request")
 
     # Prepare action items data
-    action_items_data = []
+    action_items_data: List[Dict[str, Any]] = []
     for item in request.action_items:
         if not item.description or len(item.description.strip()) == 0:
             raise HTTPException(status_code=422, detail="All action items must have non-empty descriptions")
@@ -991,12 +998,13 @@ def create_action_items_batch(
 
     # Send FCM messages for items with due dates
     for idx, item in enumerate(created_items_list):
-        if idx < len(request.action_items) and request.action_items[idx].due_at:
+        req_item = request.action_items[idx] if idx < len(request.action_items) else None
+        if req_item is not None and req_item.due_at:
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=item['id'],
-                description=request.action_items[idx].description.strip(),
-                due_at=request.action_items[idx].due_at.isoformat(),
+                description=req_item.description.strip(),
+                due_at=req_item.due_at.isoformat(),
             )
 
     # Convert to response objects
@@ -1056,7 +1064,7 @@ def update_action_item(
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     # Build update data from non-None fields
-    update_data = {}
+    update_data: Dict[str, Any] = {}
     if request.description is not None:
         update_data['description'] = request.description.strip()
     if request.completed is not None:
@@ -1300,7 +1308,7 @@ def get_conversations(
     folder_id: Optional[str] = Query(default=None, min_length=1),
     starred: Optional[bool] = None,
     uid: str = Depends(get_uid_with_conversations_read),
-):
+) -> List[Conversation]:
     """
     Get conversations with optional transcript inclusion.
 
@@ -1344,9 +1352,9 @@ def get_conversations(
 
     # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
     # with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
-    valid_conversations = []
+    valid_conversations: List[Conversation] = []
     for conv in unlocked_conversations:
-        if not isinstance(conv, dict) or not conv.get('id'):
+        if not conv.get('id'):
             logger.warning('Skipping malformed conversation in Developer API conversation list')
             continue
         try:
@@ -1484,8 +1492,9 @@ def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
     return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
 
 
-def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
-    external_data = conversation.get('external_data') or {}
+def _is_stale_from_segments_claim(conversation: Dict[str, Any], client_session_id: str, now: datetime) -> bool:
+    raw_external = conversation.get('external_data')
+    external_data: Dict[str, Any] = cast(Dict[str, Any], raw_external) if isinstance(raw_external, dict) else {}
     if external_data.get('from_segments_client_session_id') != client_session_id:
         return False
     if conversation.get('status') != ConversationStatus.processing.value:
@@ -1498,10 +1507,9 @@ def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, no
     return now - claimed_at > FROM_SEGMENTS_CLAIM_STALE_AFTER
 
 
-def _conversation_response_from_data(conversation: dict) -> ConversationResponse:
-    status = conversation.get('status') or 'completed'
-    if hasattr(status, 'value'):
-        status = status.value
+def _conversation_response_from_data(conversation: Dict[str, Any]) -> ConversationResponse:
+    raw_status: Any = conversation.get('status') or 'completed'
+    status = raw_status.value if hasattr(raw_status, 'value') else raw_status
     return ConversationResponse(
         id=conversation['id'],
         status=status,
@@ -1535,7 +1543,7 @@ def _create_conversation_from_segments(
             raise HTTPException(status_code=422, detail=f"Segment {idx}: text cannot be empty")
 
     # Convert DevTranscriptSegment to TranscriptSegment
-    transcript_segments = []
+    transcript_segments: List[TranscriptSegment] = []
     for seg in request.transcript_segments:
         transcript_segments.append(
             TranscriptSegment(
@@ -1629,7 +1637,7 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.dict()):
+        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.model_dump()):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1666,7 +1674,7 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.dict())
+        conversations_db.upsert_conversation(uid, conversation.model_dump())
 
     return ConversationResponse(
         id=conversation.id,
@@ -1880,12 +1888,14 @@ class UpdateGoalRequest(BaseModel):
     unit: Optional[str] = Field(default=None, description="New unit label")
 
 
-def _serialize_goal_datetimes(goal: dict) -> dict:
+def _serialize_goal_datetimes(goal: Dict[str, Any]) -> Dict[str, Any]:
     """Convert datetime objects to ISO strings for JSON serialization."""
-    if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
-        goal['created_at'] = goal['created_at'].isoformat()
-    if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
-        goal['updated_at'] = goal['updated_at'].isoformat()
+    raw_created: Any = goal.get('created_at') if 'created_at' in goal else None
+    if hasattr(raw_created, 'isoformat'):
+        goal['created_at'] = raw_created.isoformat()
+    raw_updated: Any = goal.get('updated_at') if 'updated_at' in goal else None
+    if hasattr(raw_updated, 'isoformat'):
+        goal['updated_at'] = raw_updated.isoformat()
     return goal
 
 
@@ -1894,7 +1904,7 @@ def get_goals(
     uid: str = Depends(get_uid_with_goals_read),
     limit: int = 10,
     include_inactive: bool = False,
-):
+) -> List[Dict[str, Any]]:
     """
     Get user goals.
 
@@ -1913,7 +1923,7 @@ def get_goals(
 def get_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_read),
-):
+) -> Dict[str, Any]:
     """
     Get a single goal by ID.
 
@@ -1932,7 +1942,7 @@ def get_goal(
 def create_goal(
     request: CreateGoalRequest,
     uid: str = Depends(get_uid_with_goals_write),
-):
+) -> Dict[str, Any]:
     """
     Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.
 
@@ -1967,7 +1977,7 @@ def update_goal(
     goal_id: str,
     request: UpdateGoalRequest,
     uid: str = Depends(get_uid_with_goals_write),
-):
+) -> Dict[str, Any]:
     """
     Update a goal.
 
@@ -2005,7 +2015,7 @@ def update_goal_progress(
     goal_id: str,
     current_value: float = Query(..., description="New progress value"),
     uid: str = Depends(get_uid_with_goals_write),
-):
+) -> Dict[str, Any]:
     """
     Update the progress value of a goal.
 
@@ -2025,7 +2035,7 @@ def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
     uid: str = Depends(get_uid_with_goals_read),
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Get progress history for a goal.
 

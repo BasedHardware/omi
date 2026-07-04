@@ -93,7 +93,7 @@ def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def redact_conversation_for_list(conv: Dict) -> Dict:
+def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     if not conv.get('is_locked', False):
         return conv

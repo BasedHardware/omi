@@ -1,3 +1,4 @@
+import shutil
 import asyncio
 import binascii
 import json
@@ -6,7 +7,7 @@ import uuid
 import re
 import base64
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, cast
 from pathlib import Path
 
 from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
@@ -24,10 +25,8 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import StreamingResponse
-from multipart.multipart import shutil
 
 import database.chat as chat_db
-import database.conversations as conversations_db
 import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
@@ -36,31 +35,31 @@ from models.chat import (
     Message,
     SendMessageRequest,
     MessageSender,
+    MessageType,
     ResponseMessage,
     MessageConversation,
     FileChat,
 )
-from utils.apps import get_available_app_by_id
-from utils.conversation_helpers import extract_memory_ids
+from utils.apps import get_available_app_by_id  # type: ignore[reportUnknownVariableType]  # apps module untyped
+from utils.conversation_helpers import extract_memory_ids  # type: ignore[reportUnknownVariableType]  # conversation_helpers untyped
 from utils.chat import (
     acquire_chat_session,
     initial_message_util,
-    process_voice_message_segment,
     process_voice_message_segment_stream,
     resolve_voice_message_language,
     transcribe_voice_message_segment,
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
-from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
-from utils.llm.goals import extract_and_update_goal_progress
+from utils.stt.streaming import process_audio_dg, get_stt_service_for_language  # type: ignore[reportUnknownVariableType]  # stt.streaming untyped
+from utils.llm.goals import extract_and_update_goal_progress  # type: ignore[reportUnknownVariableType]  # llm.goals untyped
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
-from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
+from utils.retrieval.graph import execute_chat_stream  # type: ignore[reportUnknownVariableType]  # retrieval.graph untyped
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
@@ -86,12 +85,27 @@ _WS_IDLE_TIMEOUT_S = 60
 _MAX_PCM_BODY_BYTES = 200_000_000
 
 
+def _rate_limited_uid(policy: str) -> Any:
+    """Typed wrapper for the untyped endpoints.with_rate_limit dependency factory."""
+    return Depends(auth.with_rate_limit(auth.get_current_user_uid, policy))  # type: ignore[reportUnknownMemberType]  # endpoints module untyped
+
+
+def _current_uid() -> Any:
+    """Typed wrapper for the untyped endpoints.get_current_user_uid dependency."""
+    return Depends(auth.get_current_user_uid)
+
+
+def _current_uid_ws_listen() -> Any:
+    """Typed wrapper for the untyped endpoints.get_current_user_uid_ws_listen dependency."""
+    return Depends(auth.get_current_user_uid_ws_listen)
+
+
 def _parse_context_keywords(raw: Optional[str]) -> List[str]:
     if not raw:
         return []
 
-    keywords = []
-    seen = set()
+    keywords: List[str] = []
+    seen: set[str] = set()
     for item in raw.split(','):
         keyword = item.strip()
         if len(keyword) < 2 or len(keyword) > 80:
@@ -106,9 +120,9 @@ def _parse_context_keywords(raw: Optional[str]) -> List[str]:
     return keywords
 
 
-def filter_messages(messages, app_id):
+def filter_messages(messages: List[Message], app_id: Optional[str]) -> List[Message]:
     logger.info(f'filter_messages {len(messages)} {app_id}')
-    collected = []
+    collected: List[Message] = []
     for message in messages:
         if message.sender == MessageSender.ai and message.plugin_id != app_id:
             break
@@ -118,7 +132,7 @@ def filter_messages(messages, app_id):
 
 
 def _build_quota_exceeded_reply(
-    uid: str, data: SendMessageRequest, compat_app_id: Optional[str], detail: dict
+    uid: str, data: SendMessageRequest, compat_app_id: Optional[str], detail: Dict[str, Any]
 ) -> ResponseMessage:
     """Persist the user's question + a canned AI reply and return it.
 
@@ -133,11 +147,11 @@ def _build_quota_exceeded_reply(
         id=str(uuid.uuid4()),
         text=data.text,
         created_at=now,
-        sender='human',
-        type='text',
+        sender=MessageSender.human,
+        type=MessageType.text,
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, user_msg.dict())
+    chat_db.add_message(uid, user_msg.model_dump())
 
     plan = detail.get('plan') or 'Free'
     unit = detail.get('unit')
@@ -166,12 +180,12 @@ def _build_quota_exceeded_reply(
         id=str(uuid.uuid4()),
         text=canned,
         created_at=datetime.now(timezone.utc),
-        sender='ai',
-        type='text',
+        sender=MessageSender.ai,
+        type=MessageType.text,
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, ai_msg.dict())
-    return ResponseMessage(**ai_msg.dict(), ask_for_nps=False)
+    chat_db.add_message(uid, ai_msg.model_dump())
+    return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
 def _record_chat_quota_question_safe(
@@ -182,7 +196,7 @@ def _record_chat_quota_question_safe(
     message_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
     platform: Optional[str] = None,
-):
+) -> None:
     try:
         llm_usage_db.record_chat_quota_question(
             uid,
@@ -201,7 +215,7 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
+    uid: str = _rate_limited_uid("chat:send_message"),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # Hard cap: Free by question count, Architect by cost_usd. Operator enters
@@ -216,7 +230,7 @@ def send_message(
     except HTTPException as exc:
         if exc.status_code != 402 or not isinstance(exc.detail, dict):
             raise
-        if exc.detail.get('error') != 'quota_exceeded':
+        if exc.detail.get('error') != 'quota_exceeded':  # type: ignore[reportUnknownMemberType]  # HTTPException.detail typed as Any
             raise
         _compat_id = app_id or plugin_id
         if _compat_id in ['null', '']:
@@ -243,14 +257,14 @@ def send_message(
         id=str(uuid.uuid4()),
         text=data.text,
         created_at=datetime.now(timezone.utc),
-        sender='human',
-        type='text',
+        sender=MessageSender.human,
+        type=MessageType.text,
         app_id=compat_app_id,
     )
     # Ensure chat session exists when files are attached
     if data.file_ids and not chat_session:
-        chat_session = acquire_chat_session(uid, compat_app_id)
-        chat_session = ChatSession(**chat_session) if isinstance(chat_session, dict) else chat_session
+        acquired = acquire_chat_session(uid, compat_app_id)
+        chat_session = ChatSession(**acquired) if acquired else None
 
     if data.file_ids is not None and chat_session:
         new_file_ids = chat_session.retrieve_new_file(data.file_ids)
@@ -260,14 +274,13 @@ def send_message(
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             files = chat_db.get_chat_files(uid, new_file_ids)
-            files = [FileChat(**f) if f else None for f in files]
-            message.files = files
+            message.files = [FileChat(**f) for f in files if f]
 
     if chat_session:
         message.chat_session_id = chat_session.id
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
     _record_chat_quota_question_safe(
         uid,
         idempotency_key=f'v2_messages:{message.id}',
@@ -279,18 +292,18 @@ def send_message(
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
-        llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
+        llm_executor.submit(extract_and_update_goal_progress, uid, data.text)  # type: ignore[reportUnknownMemberType,reportUnknownArgumentType]  # extract_and_update_goal_progress untyped
 
-    app = get_available_app_by_id(compat_app_id, uid)
-    app = App(**app) if app else None
+    app_dict = cast(Optional[Dict[str, Any]], get_available_app_by_id(compat_app_id, uid)) if compat_app_id else None
+    app = App(**app_dict) if app_dict else None
 
     app_id_from_app = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
 
-    def process_message(response: str, callback_data: dict):
-        memories = callback_data.get('memories_found', [])
-        ask_for_nps = callback_data.get('ask_for_nps', False)
+    def process_message(response: str, callback_data: Dict[str, Any]) -> Tuple[Message, bool]:
+        memories_raw: Any = callback_data.get('memories_found', [])
+        ask_for_nps: bool = bool(callback_data.get('ask_for_nps', False))
         langsmith_run_id = callback_data.get('langsmith_run_id')
         prompt_name = callback_data.get('prompt_name')
         prompt_commit = callback_data.get('prompt_commit')
@@ -300,6 +313,7 @@ def send_message(
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
         if len(cited_conversation_idxs) > 0:
             response = re.sub(r'\[\d+\]', '', response)
+        memories: List[Any] = list(cast(List[Any], memories_raw)) if isinstance(memories_raw, list) else []
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
         memories_id = extract_memory_ids(memories) if memories else []
@@ -308,9 +322,9 @@ def send_message(
             id=str(uuid.uuid4()),
             text=response,
             created_at=datetime.now(timezone.utc),
-            sender='ai',
+            sender=MessageSender.ai,
             app_id=app_id_from_app,
-            type='text',
+            type=MessageType.text,
             memories_id=memories_id,
             chart_data=chart_data,
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
@@ -321,15 +335,15 @@ def send_message(
             ai_message.chat_session_id = chat_session.id
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.dict())
+        chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
         return ai_message, ask_for_nps
 
-    async def generate_stream():
-        callback_data = {}
+    async def generate_stream() -> AsyncGenerator[str, None]:
+        callback_data: Dict[str, Any] = {}
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
         try:
@@ -349,7 +363,7 @@ def send_message(
                     response = callback_data.get('answer')
                     if response:
                         ai_message, ask_for_nps = process_message(response, callback_data)
-                        ai_message_dict = ai_message.dict()
+                        ai_message_dict = ai_message.model_dump()
                         response_message = ResponseMessage(**ai_message_dict)
                         response_message.ask_for_nps = ask_for_nps
                         encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
@@ -363,28 +377,28 @@ def send_message(
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    message, msg_doc_id = chat_db.get_message(uid, message_id)
-    if message is None:
+def report_message(message_id: str, uid: str = _current_uid()) -> Dict[str, str]:  # type: ignore[reportRedeclaration]  # v1 compat duplicate route handler
+    result = chat_db.get_message(uid, message_id)
+    if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
-    if message.sender != 'ai':
+    message, msg_doc_id = result
+    if message.sender != MessageSender.ai:
         raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
         raise HTTPException(status_code=400, detail='Message already reported')
-    chat_db.report_message(uid, msg_doc_id)
-    return {'message': 'Message reported'}
+    return chat_db.report_message(uid, msg_doc_id)
 
 
 @router.delete('/v2/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
+def clear_chat_messages(  # type: ignore[reportRedeclaration]  # v1 compat duplicate route handler
+    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = _current_uid()
+) -> Any:
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session: Optional[Dict[str, Any]] = chat_db.get_chat_session(uid, app_id=compat_app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
@@ -408,27 +422,25 @@ def clear_chat_messages(
 
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(
+def create_initial_message(  # type: ignore[reportRedeclaration]  # v1 compat duplicate route handler
     app_id: Optional[str] = None,
     plugin_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
+    uid: str = _rate_limited_uid("chat:initial"),
 ):
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
 
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
-def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
+def get_messages(plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = _current_uid()) -> List[Any]:
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session: Optional[Dict[str, Any]] = chat_db.get_chat_session(uid, app_id=compat_app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    messages = chat_db.get_messages(
+    messages: List[Dict[str, Any]] = chat_db.get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
     logger.info(f'get_messages {len(messages)} {compat_app_id}')
@@ -449,38 +461,39 @@ def get_messages(
 def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
+    uid: str = _rate_limited_uid("voice:message"),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
-):
+) -> StreamingResponse:
     enforce_chat_quota(uid, platform=x_app_platform)
 
     # wav
-    paths = retrieve_file_paths(files, uid)
+    paths: List[str] = cast(List[str], retrieve_file_paths(files, uid))
     if len(paths) == 0:
         raise HTTPException(status_code=400, detail='Paths is invalid')
 
-    wav_paths = decode_files_to_wav(paths)
+    wav_paths: List[str] = cast(List[str], decode_files_to_wav(paths))
     if len(wav_paths) == 0:
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
     # Daily budget check (first file only — matches actual DG usage)
-    first_wav = list(wav_paths)[0]
+    first_wav: str = list(wav_paths)[0]
     duration_ms = read_wav_duration_ms(first_wav)
     if duration_ms is not None:
-        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+        allowed, _, _ = try_consume_budget(uid, duration_ms)
         if not allowed:
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
     resolved_language = resolve_voice_message_language(uid, language)
 
     # process
-    async def generate_stream():
+    async def generate_stream() -> AsyncGenerator[str, None]:
         quota_recorded = False
         async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
             if not quota_recorded and chunk.startswith('message: '):
                 payload = chunk.removeprefix('message: ').strip()
                 try:
-                    message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
+                    loaded: object = json.loads(base64.b64decode(payload).decode('utf-8'))
+                    message_data: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
                     await run_blocking(
                         db_executor,
                         _record_chat_quota_question_safe,
@@ -502,9 +515,9 @@ def create_voice_message_stream(
 @router.post("/v2/voice-message/transcribe")
 async def transcribe_voice_message(
     request: Request,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
+    uid: str = _rate_limited_uid("voice:transcribe"),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
-):
+) -> Dict[str, Any]:
     """Transcribe audio and return the transcript text.
 
     Accepts two content types:
@@ -551,7 +564,7 @@ async def transcribe_voice_message(
 
         # Daily budget check
         duration_ms = compute_pcm_duration_ms(len(audio_bytes), sample_rate, channels)
-        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+        allowed, _, _ = try_consume_budget(uid, duration_ms)
         if not allowed:
             del audio_bytes
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
@@ -575,7 +588,7 @@ async def transcribe_voice_message(
         finally:
             del audio_bytes
 
-        response = {"transcript": transcript or ""}
+        response: Dict[str, Any] = {"transcript": transcript or ""}
         if detected_language:
             response["language"] = detected_language
         return response
@@ -584,15 +597,15 @@ async def transcribe_voice_message(
     form = await request.form()
     files = form.getlist("files")
     language = form.get("language")
-    upload_files = [f for f in files if hasattr(f, 'file')]
+    upload_files: List[UploadFile] = [f for f in files if isinstance(f, UploadFile)]
     if not upload_files:
         raise HTTPException(status_code=400, detail='No files provided')
 
-    wav_paths = []
-    other_file_paths = []
+    wav_paths: List[str] = []
+    other_file_paths: List[str] = []
 
     # Process all files in a single loop
-    def _save_wav(path, file_obj):
+    def _save_wav(path: str, file_obj: Any) -> None:
         with open(path, "wb") as buffer:
             shutil.copyfileobj(file_obj, buffer)
 
@@ -607,13 +620,13 @@ async def transcribe_voice_message(
             wav_paths.append(temp_path)
         else:
             # For other files, collect paths for later conversion
-            path = retrieve_file_paths([file], uid)
+            path = cast(List[str], retrieve_file_paths([file], uid))
             if path:
                 other_file_paths.extend(path)
 
     # Convert other files to WAV if needed
     if other_file_paths:
-        converted_wav_paths = decode_files_to_wav(other_file_paths)
+        converted_wav_paths: List[str] = cast(List[str], decode_files_to_wav(other_file_paths))
         if converted_wav_paths:
             wav_paths.extend(converted_wav_paths)
 
@@ -625,7 +638,7 @@ async def transcribe_voice_message(
             total_duration_ms += dur
 
     if total_duration_ms > 0:
-        allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
+        allowed, _, _ = try_consume_budget(uid, total_duration_ms)
         if not allowed:
             for p in wav_paths:
                 if p.startswith(f"/tmp/{uid}_"):
@@ -636,19 +649,20 @@ async def transcribe_voice_message(
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
     # Process all WAV files and collect transcripts
-    transcripts = []
-    detected_languages = []
-    resolved_language = resolve_voice_message_language(uid, language)
+    transcripts: List[str] = []
+    detected_languages: List[str] = []
+    resolved_language = resolve_voice_message_language(uid, language if isinstance(language, str) else None)
     is_multi = resolved_language == 'multi'
+    detected_language: Optional[str] = None
     for wav_path in wav_paths:
         try:
-            transcript, detected_language = await run_blocking(
+            transcript, seg_language = await run_blocking(
                 sync_executor, transcribe_voice_message_segment, wav_path, uid, language=resolved_language
             )
             if transcript:
                 transcripts.append(transcript)
-            if is_multi and detected_language:
-                detected_languages.append(detected_language)
+            if is_multi and seg_language:
+                detected_languages.append(seg_language)
         except Exception as e:
             logger.error(f"Error transcribing {wav_path}: {e}")
             # Cleanup all remaining temp files before raising
@@ -656,7 +670,7 @@ async def transcribe_voice_message(
                 if p.startswith(f"/tmp/{uid}_"):
                     try:
                         Path(p).unlink()
-                    except:
+                    except Exception:
                         pass
             raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
         finally:
@@ -664,7 +678,7 @@ async def transcribe_voice_message(
             if wav_path.startswith(f"/tmp/{uid}_"):
                 try:
                     Path(wav_path).unlink()
-                except:
+                except Exception:
                     pass
 
     if is_multi:
@@ -702,14 +716,14 @@ async def transcribe_voice_message(
 @router.websocket("/v2/voice-message/transcribe-stream")
 async def transcribe_voice_message_stream(
     websocket: WebSocket,
-    uid: str = Depends(auth.get_current_user_uid_ws_listen),
+    uid: str = _current_uid_ws_listen(),
     language: str = 'en',
     sample_rate: int = 16000,
     codec: str = 'linear16',
     channels: int = 1,
     keywords: Optional[str] = None,
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
-):
+) -> None:
     """WebSocket endpoint for PTT live mode transcription-only streaming.
 
     Receives binary PCM audio chunks, streams them to Deepgram, and returns
@@ -753,7 +767,7 @@ async def transcribe_voice_message_stream(
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
     try:
         max_requests, window = get_effective_limit('voice:transcribe_stream')
-        allowed, remaining, retry_after = await run_blocking(
+        allowed, _, retry_after = await run_blocking(
             critical_executor, check_rate_limit, uid, 'voice:transcribe_stream', max_requests, window
         )
         if not allowed:
@@ -765,9 +779,9 @@ async def transcribe_voice_message_stream(
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
     # Daily budget check — reject if already exhausted before opening DG connection
-    budget_remaining_ms = None  # None = fail-open (no enforcement)
+    budget_remaining_ms: Optional[int] = None  # None = fail-open (no enforcement)
     try:
-        has_budget, used_ms, remaining_ms = check_budget(uid)
+        has_budget, _, remaining_ms = check_budget(uid)
         if not has_budget:
             await websocket.close(code=1008, reason='Daily transcription budget exhausted')
             return
@@ -776,8 +790,8 @@ async def transcribe_voice_message_stream(
         pass  # Fail-open
 
     websocket_active = True
-    dg_socket = None
-    sender_task = None
+    dg_socket: Any = None
+    sender_task: Optional[asyncio.Task[None]] = None
     stt_audio_buffer = bytearray()
     total_audio_bytes = 0  # Track cumulative bytes for budget recording
     # 30ms flush threshold for Deepgram streaming quality (16-bit PCM = 2 bytes per sample per channel)
@@ -794,12 +808,12 @@ async def transcribe_voice_message_stream(
     # Deepgram's on_message callback runs in a thread — bridge to async via
     # loop.call_soon_threadsafe so asyncio.Queue wakeups are reliable.
     _SENTINEL = object()
-    segment_queue = asyncio.Queue()
+    segment_queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    def stream_transcript(segments):
+    def stream_transcript(segments: List[Dict[str, Any]]) -> None:
         loop.call_soon_threadsafe(segment_queue.put_nowait, segments)
 
-    async def segment_sender():
+    async def segment_sender() -> None:
         """Forward segments from the thread-safe queue to the WebSocket."""
         nonlocal websocket_active
         while websocket_active:
@@ -959,12 +973,12 @@ async def transcribe_voice_message_stream(
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(
+def upload_file_chat(  # type: ignore[reportRedeclaration]  # v1 compat duplicate route handler
     files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
-):
-    thumbs_name = []
-    files_chat = []
+    uid: str = _rate_limited_uid("file:upload"),
+) -> List[Dict[str, Any]]:
+    thumbs_name: List[str] = []
+    files_chat: List[FileChat] = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -973,9 +987,9 @@ def upload_file_chat(
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            result = FileChatTool.upload(temp_file)
+            result: Dict[str, Any] = cast(Dict[str, Any], FileChatTool.upload(temp_file))  # type: ignore[reportUnknownMemberType]  # FileChatTool.upload untyped
 
-            thumb_name = result.get("thumbnail_name", "")
+            thumb_name: str = result.get("thumbnail_name", "")
             if thumb_name != "":
                 thumbs_name.append(thumb_name)
 
@@ -993,23 +1007,23 @@ def upload_file_chat(
                 temp_file.unlink()
 
     if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+        thumbs_path: Dict[str, Any] = cast(Dict[str, Any], storage.upload_multi_chat_files(thumbs_name, uid))  # type: ignore[reportUnknownMemberType]  # storage.upload_multi_chat_files untyped
         for fc in files_chat:
             if not fc.is_image():
                 continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            thumb_path: str = thumbs_path.get(fc.thumb_name or "", "")
             fc.thumbnail = thumb_path
             # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
+            thumb_file = Path(fc.thumb_name or "")
             if thumb_file.exists():
                 thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict: List[Dict[str, Any]] = [fc.dict() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response: List[Dict[str, Any]] = [fc.dict() for fc in files_chat]
 
     return response
 
@@ -1018,12 +1032,12 @@ def upload_file_chat(
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(
+def upload_file_chat(  # noqa: F811  — v1 compat duplicate of v2 route
     files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
-):
-    thumbs_name = []
-    files_chat = []
+    uid: str = _rate_limited_uid("file:upload"),
+) -> List[Dict[str, Any]]:
+    thumbs_name: List[str] = []
+    files_chat: List[FileChat] = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -1032,9 +1046,9 @@ def upload_file_chat(
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            result = FileChatTool.upload(temp_file)
+            result: Dict[str, Any] = cast(Dict[str, Any], FileChatTool.upload(temp_file))  # type: ignore[reportUnknownMemberType]  # FileChatTool.upload untyped
 
-            thumb_name = result.get("thumbnail_name", "")
+            thumb_name: str = result.get("thumbnail_name", "")
             if thumb_name != "":
                 thumbs_name.append(thumb_name)
 
@@ -1052,49 +1066,51 @@ def upload_file_chat(
                 temp_file.unlink()
 
     if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+        thumbs_path: Dict[str, Any] = cast(Dict[str, Any], storage.upload_multi_chat_files(thumbs_name, uid))  # type: ignore[reportUnknownMemberType]  # storage.upload_multi_chat_files untyped
         for fc in files_chat:
             if not fc.is_image():
                 continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            thumb_path: str = thumbs_path.get(fc.thumb_name or "", "")
             fc.thumbnail = thumb_path
             # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
+            thumb_file = Path(fc.thumb_name or "")
             thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict: List[Dict[str, Any]] = [fc.dict() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response: List[Dict[str, Any]] = [fc.dict() for fc in files_chat]
 
     return response
 
 
 @router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    message, msg_doc_id = chat_db.get_message(uid, message_id)
-    if message is None:
+def report_message(  # noqa: F811  — v1 compat duplicate of v2 route
+    message_id: str, uid: str = _current_uid()
+) -> Dict[str, str]:
+    result = chat_db.get_message(uid, message_id)
+    if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
-    if message.sender != 'ai':
+    message, msg_doc_id = result
+    if message.sender != MessageSender.ai:
         raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
         raise HTTPException(status_code=400, detail='Message already reported')
-    chat_db.report_message(uid, msg_doc_id)
-    return {'message': 'Message reported'}
+    return chat_db.report_message(uid, msg_doc_id)
 
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
+def clear_chat_messages(  # noqa: F811  — v1 compat duplicate of v2 route
+    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = _current_uid()
+) -> Any:
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    chat_session: Optional[Dict[str, Any]] = chat_db.get_chat_session(uid, app_id=compat_app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
@@ -1118,11 +1134,11 @@ def clear_chat_messages(
 
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(
+def create_initial_message(  # noqa: F811  — v1 compat duplicate of v2 route
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
-):
+    uid: str = _rate_limited_uid("chat:initial"),
+) -> Any:
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
 
@@ -1133,11 +1149,14 @@ def create_initial_message(
 @router.patch('/v2/messages/{message_id}/rating', tags=['chat'])
 def rate_message(
     message_id: str,
-    data: dict,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+    data: Dict[str, Any],
+    uid: str = _current_uid(),
+) -> Dict[str, str]:
     """Rate a chat message (thumbs up/down). Used by desktop client."""
-    rating = data.get('rating')
+    rating_raw: Any = data.get('rating')
+    rating: Optional[int] = (
+        int(rating_raw) if isinstance(rating_raw, (int, float)) and not isinstance(rating_raw, bool) else None
+    )
 
     # Update rating on the message document
     chat_db.update_message_rating(uid, message_id, rating)
@@ -1151,14 +1170,14 @@ def rate_message(
         message_result = chat_db.get_message(uid, message_id)
         if message_result:
             message, _ = message_result
-            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
+            langsmith_run_id: Any = getattr(message, 'langsmith_run_id', None)
             if not langsmith_run_id and isinstance(message, dict):
-                langsmith_run_id = message.get('langsmith_run_id')
+                langsmith_run_id = cast(Any, message.get('langsmith_run_id'))  # type: ignore[reportUnknownMemberType]  # defensive dict fallback; message is always Message
 
             if langsmith_run_id:
                 score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
                 submit_langsmith_feedback(
-                    run_id=langsmith_run_id,
+                    run_id=str(langsmith_run_id),
                     score=score,
                     key="chat_message_rating",
                 )
@@ -1173,11 +1192,14 @@ def rate_message(
 
 @router.post('/v2/messages/share', tags=['chat'])
 def share_chat_messages(
-    data: dict,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+    data: Dict[str, Any],
+    uid: str = _current_uid(),
+) -> Dict[str, str]:
     """Create a shareable link for chat messages."""
-    message_ids = data.get('message_ids', [])
+    message_ids_raw: Any = data.get('message_ids', [])
+    message_ids: List[str] = (
+        [str(mid) for mid in cast(List[Any], message_ids_raw)] if isinstance(message_ids_raw, list) else []
+    )
     if not message_ids:
         raise HTTPException(status_code=400, detail='No message IDs provided')
 
@@ -1197,16 +1219,19 @@ def share_chat_messages(
 
 
 @router.get('/v2/messages/shared/{token}', tags=['chat'])
-def get_shared_chat_messages(token: str):
+def get_shared_chat_messages(token: str) -> Dict[str, Any]:
     """Public endpoint — get shared chat messages (no auth required)."""
     share_data = get_chat_share(token)
     if not share_data:
         raise HTTPException(status_code=404, detail='Share link expired or not found')
 
     sender_uid = share_data['uid']
-    message_ids = share_data['message_ids']
+    message_ids_raw: Any = share_data['message_ids']
+    message_ids: List[str] = (
+        [str(mid) for mid in cast(List[Any], message_ids_raw)] if isinstance(message_ids_raw, list) else []
+    )
 
-    messages = []
+    messages: List[Dict[str, Any]] = []
     for mid in message_ids:
         msg_result = chat_db.get_message(sender_uid, mid)
         if msg_result:
