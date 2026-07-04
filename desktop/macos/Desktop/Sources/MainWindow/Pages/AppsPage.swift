@@ -497,6 +497,7 @@ struct AppsPage: View {
             )
         }
         .menuStyle(.borderlessButton)
+        .tint(OmiColors.textPrimary)
         .fixedSize()
     }
 
