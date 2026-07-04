@@ -487,7 +487,7 @@
         "type": "object"
       },
       "AdviceResponse": {
-        "description": "Response model for AI-generated advice.",
+        "description": "Response model for AI-generated goal advice.",
         "properties": {
           "advice": {
             "title": "Advice",
@@ -5328,7 +5328,7 @@
             "type": "number"
           },
           "goal_type": {
-            "$ref": "#/components/schemas/GoalType",
+            "$ref": "#/components/schemas/routers__developer__GoalType",
             "default": "scale",
             "description": "Type of goal metric: boolean, scale, or numeric"
           },
@@ -8216,7 +8216,7 @@
             "type": "number"
           },
           "goal_type": {
-            "$ref": "#/components/schemas/routers__goals__GoalType",
+            "$ref": "#/components/schemas/GoalType",
             "default": "scale",
             "description": "Type of goal metric"
           },
@@ -8429,6 +8429,7 @@
         "type": "object"
       },
       "GoalType": {
+        "description": "Types of goals supported.",
         "enum": [
           "boolean",
           "scale",
@@ -16434,6 +16435,15 @@
         "title": "CreateActionItemRequest",
         "type": "object"
       },
+      "routers__developer__GoalType": {
+        "enum": [
+          "boolean",
+          "scale",
+          "numeric"
+        ],
+        "title": "GoalType",
+        "type": "string"
+      },
       "routers__developer__UpdateActionItemRequest": {
         "properties": {
           "completed": {
@@ -16478,16 +16488,6 @@
         },
         "title": "UpdateActionItemRequest",
         "type": "object"
-      },
-      "routers__goals__GoalType": {
-        "description": "Types of goals supported.",
-        "enum": [
-          "boolean",
-          "scale",
-          "numeric"
-        ],
-        "title": "GoalType",
-        "type": "string"
       },
       "routers__memories__BatchMemoriesRequest": {
         "properties": {
@@ -27902,8 +27902,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/GoalHistoryEntryResponse"
                   },
                   "title": "Response Listgoalhistory",
                   "type": "array"

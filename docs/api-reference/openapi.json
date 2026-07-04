@@ -1592,6 +1592,31 @@
         "title": "Geolocation",
         "type": "object"
       },
+      "GoalHistoryEntryResponse": {
+        "description": "Response model for a goal progress history entry.",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "value",
+          "recorded_at"
+        ],
+        "title": "GoalHistoryEntryResponse",
+        "type": "object"
+      },
       "GoalType": {
         "enum": [
           "boolean",
@@ -3221,8 +3246,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/GoalHistoryEntryResponse"
                   },
                   "title": "Response Listgoalhistory",
                   "type": "array"

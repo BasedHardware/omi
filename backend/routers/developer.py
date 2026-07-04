@@ -18,6 +18,7 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
+from models.goal import GoalHistoryEntryResponse
 from utils.client_device import resolve_client_device_from_request
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
@@ -2159,7 +2160,12 @@ def update_goal_progress(
     return _serialize_goal_datetimes(updated_goal)
 
 
-@router.get("/v1/dev/user/goals/{goal_id}/history", tags=["Goals"], operation_id="listGoalHistory")
+@router.get(
+    "/v1/dev/user/goals/{goal_id}/history",
+    tags=["Goals"],
+    operation_id="listGoalHistory",
+    response_model=List[GoalHistoryEntryResponse],
+)
 def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
