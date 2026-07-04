@@ -144,6 +144,22 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `routers/pusher.py`
   - `routers/sync.py`
   - `routers/users.py`
+  - `utils/__init__.py`
+  - `utils/audio.py`
+  - `utils/consolidation/__init__.py`
+  - `utils/dev_api_keys.py`
+  - `utils/env_loader.py`
+  - `utils/imports/__init__.py`
+  - `utils/mcp_api_keys.py`
+  - `utils/mcp_scopes.py`
+  - `utils/mentor_notifications.py`
+  - `utils/metrics.py`
+  - `utils/rate_limit_config.py`
+  - `utils/scopes.py`
+  - `utils/stt/socket.py`
+  - `utils/sync/__init__.py`
+  - `utils/users.py`
+  - `utils/wrapped/__init__.py`
   - `utils/conversations/memories.py`
   - `utils/llm/__init__.py`
   - `utils/llm/clients.py`

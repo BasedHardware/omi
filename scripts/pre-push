@@ -448,6 +448,22 @@ check_backend_typecheck_if_needed() {
     'backend/routers/pusher.py' \
     'backend/routers/sync.py' \
     'backend/routers/users.py' \
+    'backend/utils/__init__.py' \
+    'backend/utils/audio.py' \
+    'backend/utils/consolidation/__init__.py' \
+    'backend/utils/dev_api_keys.py' \
+    'backend/utils/env_loader.py' \
+    'backend/utils/imports/__init__.py' \
+    'backend/utils/mcp_api_keys.py' \
+    'backend/utils/mcp_scopes.py' \
+    'backend/utils/mentor_notifications.py' \
+    'backend/utils/metrics.py' \
+    'backend/utils/rate_limit_config.py' \
+    'backend/utils/scopes.py' \
+    'backend/utils/stt/socket.py' \
+    'backend/utils/sync/__init__.py' \
+    'backend/utils/users.py' \
+    'backend/utils/wrapped/__init__.py' \
     'backend/utils/conversations/memories.py' \
     'backend/utils/llm/__init__.py' \
     'backend/utils/llm/clients.py' \
