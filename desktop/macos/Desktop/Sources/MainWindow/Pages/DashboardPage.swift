@@ -224,6 +224,8 @@ struct DashboardPage: View {
     @State private var selectedImportConnector: ImportConnector?
     @State private var selectedExportDestination: MemoryExportDestination?
     @State private var isShowingAppsPopup = false
+    @State private var appsPopupAcceptsInput = false
+    @State private var homeConnectSheetAcceptsInput = false
     @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
     @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
@@ -563,58 +565,62 @@ struct DashboardPage: View {
         panelHeight: CGFloat,
         panelTop: CGFloat
     ) -> some View {
-        if isShowingAppsPopup {
-            Color.black.opacity(0.16)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isShowingAppsPopup = false
-                }
-                .transition(.opacity)
-                .zIndex(2)
+        ZStack {
+            if isShowingAppsPopup {
+                Color.black.opacity(0.16)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissAppsPopup()
+                    }
+                    .transition(.opacity)
+                    .zIndex(2)
 
-            let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
+                let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
 
-            AppsPage(
-                appProvider: appProvider,
-                appState: appState,
-                initialSection: appsPopupInitialSection,
-                onDismiss: {
-                    isShowingAppsPopup = false
-                },
-                onSelectApp: { app in
-                    openAppFromAppsPopup(app)
-                },
-                onSelectConnector: { connector in
-                    openImportConnectorFromAppsPopup(connector)
-                },
-                onSelectDestination: { destination in
-                    openExportDestinationFromAppsPopup(destination)
-                }
-            )
-            .id(appsPopupPresentationID)
-            .frame(width: popupSize.width, height: popupSize.height)
-            .background(OmiColors.backgroundPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
-                    .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
-            .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
-            .transition(.scale(scale: 0.95).combined(with: .opacity))
-            .accessibilityAddTraits(.isModal)
-            .zIndex(3)
-
-            // Only the topmost modal owns Esc; the connect sheet takes over
-            // while it is presented (including the brief crossfade overlap).
-            if !homeConnectSheetIsPresented {
-                OverlayModalEscapeCatcher {
-                    isShowingAppsPopup = false
-                }
+                AppsPage(
+                    appProvider: appProvider,
+                    appState: appState,
+                    initialSection: appsPopupInitialSection,
+                    onDismiss: {
+                        dismissAppsPopup()
+                    },
+                    onSelectApp: { app in
+                        openAppFromAppsPopup(app)
+                    },
+                    onSelectConnector: { connector in
+                        openImportConnectorFromAppsPopup(connector)
+                    },
+                    onSelectDestination: { destination in
+                        openExportDestinationFromAppsPopup(destination)
+                    }
+                )
+                .id(appsPopupPresentationID)
+                .frame(width: popupSize.width, height: popupSize.height)
+                .background(OmiColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
+                        .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
+                .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
+                .accessibilityAddTraits(.isModal)
                 .zIndex(3)
+
+                // Only the topmost modal owns Esc; the connect sheet takes over
+                // while it is presented (including the brief crossfade overlap).
+                if appsPopupAcceptsInput && !homeConnectSheetIsPresented {
+                    OverlayModalEscapeCatcher {
+                        dismissAppsPopup()
+                    }
+                    .zIndex(3)
+                }
             }
         }
+        .allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)
+        .zIndex(2)
     }
 
     @ViewBuilder
@@ -624,37 +630,43 @@ struct DashboardPage: View {
         panelHeight: CGFloat,
         panelTop: CGFloat
     ) -> some View {
-        if homeConnectSheetIsPresented {
-            Color.black.opacity(0.22)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    dismissHomeConnectSheet()
+        ZStack {
+            if homeConnectSheetIsPresented {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissHomeConnectSheet()
+                    }
+                    .transition(.opacity)
+                    .zIndex(4)
+
+                let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+                homeConnectSheetContent()
+                    .frame(width: sheetSize.width, height: sheetSize.height)
+                    .background(OmiColors.backgroundPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
+                            .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
+                    .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .accessibilityAddTraits(.isModal)
+                    .zIndex(5)
+
+                if homeConnectSheetAcceptsInput {
+                    OverlayModalEscapeCatcher {
+                        dismissHomeConnectSheet()
+                    }
+                    .zIndex(5)
                 }
-                .transition(.opacity)
-                .zIndex(4)
-
-            let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
-
-            homeConnectSheetContent()
-                .frame(width: sheetSize.width, height: sheetSize.height)
-                .background(OmiColors.backgroundPrimary)
-                .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
-                        .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
-                .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
-                .transition(.scale(scale: 0.96).combined(with: .opacity))
-                .accessibilityAddTraits(.isModal)
-                .zIndex(5)
-
-            OverlayModalEscapeCatcher {
-                dismissHomeConnectSheet()
             }
-            .zIndex(5)
         }
+        .allowsHitTesting(homeConnectSheetAcceptsInput)
+        .zIndex(4)
     }
 
     private func homeConnectSheetSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
@@ -955,21 +967,27 @@ struct DashboardPage: View {
         appProvider.clearFilters()
         appsPopupInitialSection = initialSection
         appsPopupPresentationID = UUID()
+        appsPopupAcceptsInput = true
         isShowingAppsPopup = true
     }
 
-    private func openAppFromAppsPopup(_ app: OmiApp) {
+    private func dismissAppsPopup() {
+        appsPopupAcceptsInput = false
         isShowingAppsPopup = false
+    }
+
+    private func openAppFromAppsPopup(_ app: OmiApp) {
+        dismissAppsPopup()
         presentCatalogApp(app)
     }
 
     private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
-        isShowingAppsPopup = false
+        dismissAppsPopup()
         presentImportConnector(connector)
     }
 
     private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
-        isShowingAppsPopup = false
+        dismissAppsPopup()
         presentExportDestination(destination)
     }
 
@@ -984,24 +1002,28 @@ struct DashboardPage: View {
     }
 
     private func presentCatalogApp(_ app: OmiApp) {
+        homeConnectSheetAcceptsInput = true
         selectedImportConnector = nil
         selectedExportDestination = nil
         selectedCatalogApp = app
     }
 
     private func presentImportConnector(_ connector: ImportConnector) {
+        homeConnectSheetAcceptsInput = true
         selectedCatalogApp = nil
         selectedExportDestination = nil
         selectedImportConnector = connector
     }
 
     private func presentExportDestination(_ destination: MemoryExportDestination) {
+        homeConnectSheetAcceptsInput = true
         selectedCatalogApp = nil
         selectedImportConnector = nil
         selectedExportDestination = destination
     }
 
     private func dismissHomeConnectSheet() {
+        homeConnectSheetAcceptsInput = false
         selectedCatalogApp = nil
         selectedImportConnector = nil
         selectedExportDestination = nil

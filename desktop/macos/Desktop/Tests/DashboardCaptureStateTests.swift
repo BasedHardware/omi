@@ -50,6 +50,7 @@ final class DashboardCaptureStateTests: XCTestCase {
 
     func testHomeMoreUsesAppsPopup() throws {
         let source = try dashboardSource()
+        let normalizedSource = normalizedWhitespace(source)
         let popupMethod = try methodBody(named: "openAppsPopup", in: source)
         let appSelectionMethod = try methodBody(named: "openAppFromAppsPopup", in: source)
         let importSelectionMethod = try methodBody(named: "openImportConnectorFromAppsPopup", in: source)
@@ -60,18 +61,18 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(source.contains("@State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports"))
         XCTAssertTrue(source.contains("@State private var appsPopupPresentationID = UUID()"))
         XCTAssertTrue(source.contains("private func appsPopupOverlay("))
-        XCTAssertTrue(source.contains("AppsPage(\n                appProvider: appProvider,\n                appState: appState,"))
+        XCTAssertTrue(normalizedSource.contains("AppsPage( appProvider: appProvider, appState: appState,"))
         XCTAssertTrue(source.contains("initialSection: appsPopupInitialSection"))
-        XCTAssertTrue(source.contains("onSelectApp: { app in\n                    openAppFromAppsPopup(app)\n                }"))
-        XCTAssertTrue(source.contains("onSelectConnector: { connector in\n                    openImportConnectorFromAppsPopup(connector)\n                }"))
-        XCTAssertTrue(source.contains("onSelectDestination: { destination in\n                    openExportDestinationFromAppsPopup(destination)\n                }"))
+        XCTAssertTrue(normalizedSource.contains("onSelectApp: { app in openAppFromAppsPopup(app) }"))
+        XCTAssertTrue(normalizedSource.contains("onSelectConnector: { connector in openImportConnectorFromAppsPopup(connector) }"))
+        XCTAssertTrue(normalizedSource.contains("onSelectDestination: { destination in openExportDestinationFromAppsPopup(destination) }"))
         XCTAssertTrue(source.contains(".id(appsPopupPresentationID)"))
-        XCTAssertTrue(source.contains("onDismiss: {\n                    isShowingAppsPopup = false"))
+        XCTAssertTrue(normalizedSource.contains("onDismiss: { dismissAppsPopup()"))
         XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
         XCTAssertTrue(source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
-        XCTAssertTrue(source.contains(".onTapGesture {\n                    isShowingAppsPopup = false"))
+        XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissAppsPopup()"))
         XCTAssertTrue(
-            source.contains("OverlayModalEscapeCatcher {\n                    isShowingAppsPopup = false"))
+            normalizedSource.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
         XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .imports)"))
         XCTAssertTrue(source.contains("HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .exports)"))
         XCTAssertFalse(source.contains("@State private var dashboardContentSize"))
@@ -84,18 +85,20 @@ final class DashboardCaptureStateTests: XCTestCase {
         )
         XCTAssertTrue(popupMethod.contains("appsPopupInitialSection = initialSection"))
         XCTAssertTrue(popupMethod.contains("appsPopupPresentationID = UUID()"))
+        XCTAssertTrue(popupMethod.contains("appsPopupAcceptsInput = true"))
         XCTAssertTrue(popupMethod.contains("isShowingAppsPopup = true"))
         XCTAssertFalse(popupMethod.contains("navigate(to: .apps)"))
-        XCTAssertTrue(appSelectionMethod.contains("isShowingAppsPopup = false"))
+        XCTAssertTrue(appSelectionMethod.contains("dismissAppsPopup()"))
         XCTAssertTrue(appSelectionMethod.contains("presentCatalogApp(app)"))
-        XCTAssertTrue(importSelectionMethod.contains("isShowingAppsPopup = false"))
+        XCTAssertTrue(importSelectionMethod.contains("dismissAppsPopup()"))
         XCTAssertTrue(importSelectionMethod.contains("presentImportConnector(connector)"))
-        XCTAssertTrue(exportSelectionMethod.contains("isShowingAppsPopup = false"))
+        XCTAssertTrue(exportSelectionMethod.contains("dismissAppsPopup()"))
         XCTAssertTrue(exportSelectionMethod.contains("presentExportDestination(destination)"))
     }
 
     func testHomeConnectSheetsUseHomeScopedPresentation() throws {
         let source = try dashboardSource()
+        let normalizedSource = normalizedWhitespace(source)
 
         XCTAssertTrue(source.contains("private var homeConnectSheetIsPresented: Bool"))
         XCTAssertTrue(source.contains("private var legacySelectedCatalogApp: Binding<OmiApp?>"))
@@ -104,9 +107,27 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(source.contains("homeConnectSheetOverlay(\n                    contentWidth: proxy.size.width"))
         XCTAssertTrue(source.contains("let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)"))
         XCTAssertTrue(source.contains(".position(x: contentWidth / 2, y: panelTop + panelHeight / 2)"))
-        XCTAssertTrue(source.contains(".onTapGesture {\n                    dismissHomeConnectSheet()"))
+        XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissHomeConnectSheet()"))
         XCTAssertFalse(source.contains("homeConnectSheetHasKeyboardFocus"))
         XCTAssertTrue(source.contains("private func dismissHomeConnectSheet()"))
+    }
+
+    func testHomeOverlaysStopHitTestingWhenDismissStarts() throws {
+        let source = try dashboardSource()
+        let popupDismissMethod = try methodBody(named: "dismissAppsPopup", in: source)
+        let connectDismissMethod = try methodBody(named: "dismissHomeConnectSheet", in: source)
+
+        XCTAssertTrue(source.contains("@State private var appsPopupAcceptsInput = false"))
+        XCTAssertTrue(source.contains("@State private var homeConnectSheetAcceptsInput = false"))
+        XCTAssertTrue(source.contains(".allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)"))
+        XCTAssertTrue(source.contains("if appsPopupAcceptsInput && !homeConnectSheetIsPresented"))
+        XCTAssertTrue(source.contains(".allowsHitTesting(homeConnectSheetAcceptsInput)"))
+        XCTAssertTrue(source.contains("if homeConnectSheetAcceptsInput"))
+        XCTAssertTrue(popupDismissMethod.contains("appsPopupAcceptsInput = false"))
+        XCTAssertTrue(popupDismissMethod.contains("isShowingAppsPopup = false"))
+        XCTAssertTrue(connectDismissMethod.contains("homeConnectSheetAcceptsInput = false"))
+        XCTAssertTrue(connectDismissMethod.contains("selectedImportConnector = nil"))
+        XCTAssertTrue(connectDismissMethod.contains("selectedExportDestination = nil"))
     }
 
     func testMemoryExportStatusThrottleUpdatesAfterStatusesLoad() throws {
@@ -191,6 +212,7 @@ final class DashboardCaptureStateTests: XCTestCase {
     func testHomeOverlaysBehaveLikeModals() throws {
         let dashboard = try dashboardSource()
         let apps = try appsSource()
+        let normalizedDashboard = normalizedWhitespace(dashboard)
 
         // Esc must dismiss the topmost overlay. Custom ZStack overlays are not
         // NSWindow sheets, so Esc comes from the shared catcher's window-scoped
@@ -200,13 +222,12 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(apps.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
         XCTAssertTrue(apps.contains("event.window === window"))
         XCTAssertTrue(
-            dashboard.contains(
-                "if !homeConnectSheetIsPresented {\n                OverlayModalEscapeCatcher {\n                    isShowingAppsPopup = false"
-            ),
+            dashboard.contains("if appsPopupAcceptsInput && !homeConnectSheetIsPresented"),
             "The apps popup owns Esc only while the connect sheet is not presented"
         )
+        XCTAssertTrue(normalizedDashboard.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
         XCTAssertTrue(
-            dashboard.contains("OverlayModalEscapeCatcher {\n                dismissHomeConnectSheet()"))
+            normalizedDashboard.contains("OverlayModalEscapeCatcher { dismissHomeConnectSheet()"))
         XCTAssertFalse(
             dashboard.contains(".onExitCommand"),
             "Home overlays must not rely on onExitCommand — it requires focus the overlays never receive"
@@ -263,5 +284,9 @@ final class DashboardCaptureStateTests: XCTestCase {
         let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))
         let bodyRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
         return String(source[bodyRange])
+    }
+
+    private func normalizedWhitespace(_ source: String) -> String {
+        source.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
 }
