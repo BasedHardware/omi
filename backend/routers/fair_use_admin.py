@@ -4,16 +4,16 @@ import hashlib
 import hmac
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 import database.fair_use as fair_use_db
 from database._client import db
 from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
 from utils.fair_use import (
-    get_rolling_speech_ms,
-    get_dg_budget_status,
+    get_rolling_speech_ms,  # type: ignore[reportUnknownVariableType]  # returns bare dict, narrowed at call site
+    get_dg_budget_status,  # type: ignore[reportUnknownVariableType]  # returns bare dict, narrowed at call site
     invalidate_enforcement_cache,
     FAIR_USE_ENABLED,
     FAIR_USE_DAILY_SPEECH_MS,
@@ -62,7 +62,7 @@ def get_user_fair_use_detail(uid: str, admin_id: str = Depends(_verify_admin_key
     """Get detailed fair-use state and events for a specific user."""
     state = fair_use_db.get_fair_use_state(uid)
     events = fair_use_db.get_fair_use_events(uid, limit=50)
-    speech = get_rolling_speech_ms(uid)
+    speech = cast(Dict[str, Any], get_rolling_speech_ms(uid))
 
     return {
         'uid': uid,
@@ -99,7 +99,7 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
     if stage not in valid_stages:
         raise HTTPException(status_code=400, detail=f'Invalid stage. Must be one of: {valid_stages}')
 
-    updates = {'stage': stage}
+    updates: Dict[str, Any] = {'stage': stage}
     if stage == 'none':
         updates['throttle_until'] = None
         updates['restrict_until'] = None
@@ -178,7 +178,7 @@ def get_public_case_status(case_ref: str):
 def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     """User-facing endpoint: see your own fair-use status and speech usage."""
     state = fair_use_db.get_fair_use_state(uid)
-    speech = get_rolling_speech_ms(uid)
+    speech = cast(Dict[str, Any], get_rolling_speech_ms(uid))
 
     stage = state.get('stage', 'none')
     case_ref = state.get('last_case_ref', '')
@@ -188,7 +188,7 @@ def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     weekly_ms = speech.get('weekly_ms', 0)
 
     # DG budget (only meaningful for restrict stage, but always returned for frontend simplicity)
-    dg_budget = get_dg_budget_status(uid)
+    dg_budget = cast(Dict[str, Any], get_dg_budget_status(uid))
 
     return {
         'stage': stage,

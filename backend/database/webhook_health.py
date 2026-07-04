@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
 from database._client import db
 from database.redis_db import r
@@ -23,7 +23,7 @@ _cache_lock = threading.Lock()
 _disabled_cache: dict[str, tuple[bool, float, int]] = {}  # (value, timestamp, generation)
 
 
-def _evict_oldest(d: dict):
+def _evict_oldest(d: Dict[str, Any]) -> None:
     """Drop the oldest 20% of entries by timestamp. Caller must hold _cache_lock."""
     n = len(d) // 5
     if n < 1:
@@ -249,19 +249,19 @@ def is_app_webhook_disabled(app_id: str) -> bool:
         return False
 
 
-def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optional[dict]:
+def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get health state for an app's webhook endpoint(s). Returns None if no data."""
     try:
         if endpoint:
             key = f'app_webhook_health:{app_id}:{endpoint}'
-            data = r.hgetall(key)
+            data = cast(Dict[bytes, bytes], r.hgetall(key))
             if not data:
                 return None
             return {k.decode(): v.decode() for k, v in data.items()}
-        result = {}
+        result: Dict[str, Any] = {}
         for ep in _ALL_ENDPOINTS:
             key = f'app_webhook_health:{app_id}:{ep}'
-            data = r.hgetall(key)
+            data = cast(Dict[bytes, bytes], r.hgetall(key))
             if data:
                 result[ep] = {k.decode(): v.decode() for k, v in data.items()}
         return result if result else None
@@ -373,9 +373,9 @@ def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: 
     return count == _DEV_FAILURE_THRESHOLD
 
 
-def record_dev_webhook_failure(uid: str, wtype: str, status_code: int, error: str) -> bool:
+def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error: str) -> bool:
     """Record a developer webhook failure. Returns True if threshold exceeded (should disable)."""
-    wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+    wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
     try:
         key = f'dev_webhook_health:{uid}:{wtype_str}'
         now_ts = int(time.time())
@@ -399,10 +399,10 @@ def record_dev_webhook_failure(uid: str, wtype: str, status_code: int, error: st
             return False
 
 
-def record_dev_webhook_success(uid: str, wtype: str):
+def record_dev_webhook_success(uid: str, wtype: object):
     """Record a successful developer webhook delivery. Resets failure state."""
     try:
-        wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+        wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
         key = f'dev_webhook_health:{uid}:{wtype_str}'
         now_ts = int(time.time())
         r.hset(

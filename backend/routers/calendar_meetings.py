@@ -22,7 +22,9 @@ class StoreMeetingRequest(BaseModel):
     end_time: datetime = Field(description="Meeting end time")
     platform: Optional[str] = Field(default=None, description="Platform: 'Zoom', 'Teams', 'Google Meet', etc.")
     meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
-    participants: List[MeetingParticipant] = Field(default_factory=list, description="Meeting participants")
+    participants: List[MeetingParticipant] = Field(
+        default_factory=list[MeetingParticipant], description="Meeting participants"
+    )
     notes: Optional[str] = Field(default=None, description="Meeting notes/description")
 
 
@@ -59,7 +61,7 @@ def store_calendar_meeting(
         calendar_source=request.calendar_source,
     )
 
-    meeting_dict = meeting_context.dict()
+    meeting_dict = meeting_context.model_dump()
     meeting_dict['end_time'] = request.end_time
 
     # Check if meeting already exists (by calendar_event_id + calendar_source)

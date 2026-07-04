@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Dict, Any, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 from pydantic import BaseModel, Field
 import os
 import secrets
 import ast
 from datetime import datetime, timedelta, timezone
 import httpx
+from urllib.parse import quote
 
 import database.users as users_db
 import database.redis_db as redis_db
@@ -74,7 +75,7 @@ def render_oauth_response(
     config = OAUTH_CONFIGS.get(app_key, {'name': app_key.title()})
 
     if success:
-        context = {
+        context: Dict[str, Any] = {
             'request': request,
             'title': f"{config['name']} Auth",
             'icon': '✓',
@@ -91,12 +92,12 @@ def render_oauth_response(
             'server_error': 'An error occurred during authentication.',
         }
 
-        context = {
+        context: Dict[str, Any] = {
             'request': request,
             'title': f"{config['name']} Auth Error",
             'icon': '❌',
             'message': f"{'Security' if error_type == 'invalid_state' else 'Configuration' if error_type == 'config_error' else 'Authentication'} Error",
-            'description': error_messages.get(error_type, 'An error occurred.'),
+            'description': error_messages.get(error_type or '', 'An error occurred.'),
             'redirect_url': f'omi://{app_key}/callback?error={error_type or "unknown"}',
             'show_spinner': False,
         }
@@ -285,7 +286,6 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         base_url = base_url.rstrip('/')
         redirect_uri = f'{base_url}/v2/integrations/asana/callback'
         scopes = 'tasks:read tasks:write workspaces:read projects:read users:read'
-        from urllib.parse import quote
 
         auth_url = f'https://app.asana.com/-/oauth_authorize?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&state={state_token}&scope={quote(scopes)}'
 
@@ -297,7 +297,6 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         base_url = base_url.rstrip('/')
         redirect_uri = f'{base_url}/v2/integrations/google-tasks/callback'
         scope = 'https://www.googleapis.com/auth/tasks'
-        from urllib.parse import quote
 
         auth_url = f'https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&scope={quote(scope)}&access_type=offline&prompt=consent&state={state_token}'
 
@@ -308,7 +307,6 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
 
         base_url = base_url.rstrip('/')
         redirect_uri = f'{base_url}/v2/integrations/clickup/callback'
-        from urllib.parse import quote
 
         auth_url = (
             f'https://app.clickup.com/api?client_id={client_id}&redirect_uri={quote(redirect_uri)}&state={state_token}'
@@ -325,7 +323,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
 # *****************************
 
 
-def _build_refresh_request(app_key: str, refresh_token: str) -> dict:
+def _build_refresh_request(app_key: str, refresh_token: str) -> Dict[str, Any]:
     name = OAUTH_CONFIGS.get(app_key, {'name': app_key}).get('name', app_key)
     if app_key == 'google_tasks':
         client_id = os.getenv('GOOGLE_TASKS_CLIENT_ID')
@@ -363,8 +361,8 @@ def _build_refresh_request(app_key: str, refresh_token: str) -> dict:
 
 
 async def refresh_oauth_token(
-    uid: str, app_key: str, integration: dict, client: Optional[httpx.AsyncClient] = None
-) -> dict:
+    uid: str, app_key: str, integration: Dict[str, Any], client: Optional[httpx.AsyncClient] = None
+) -> Dict[str, Any]:
     name = OAUTH_CONFIGS.get(app_key, {'name': app_key}).get('name', app_key)
     refresh_token = integration.get('refresh_token')
     if not refresh_token:
@@ -432,10 +430,10 @@ async def refresh_oauth_token(
 async def ensure_valid_oauth_token(
     uid: str,
     app_key: str,
-    integration: dict,
+    integration: Dict[str, Any],
     refresh_if_missing_expires_at: bool = False,
     client: Optional[httpx.AsyncClient] = None,
-) -> dict:
+) -> Dict[str, Any]:
     supports_refresh = app_key in ['google_tasks', 'asana']
     if not supports_refresh:
         return integration
@@ -463,9 +461,9 @@ async def ensure_valid_oauth_token(
 async def perform_request_with_token_retry(
     uid: str,
     app_key: str,
-    integration: dict,
-    request_fn,
-):
+    integration: Dict[str, Any],
+    request_fn: Callable[[httpx.AsyncClient, str], Awaitable[httpx.Response]],
+) -> Tuple[httpx.Response, Dict[str, Any], Optional[Exception]]:
     client = get_http_client()
     access_token = integration.get('access_token') or ''
     response = await request_fn(client, access_token)
@@ -489,12 +487,12 @@ async def perform_request_with_token_retry(
 async def _create_task_internal(
     uid: str,
     app_key: str,
-    integration: dict,
+    integration: Dict[str, Any],
     title: str,
     description: Optional[str] = None,
     due_date: Optional[datetime] = None,
     client: Optional[httpx.AsyncClient] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """
     Internal function to create task in external service.
     Used by both API endpoint and auto-sync.
@@ -539,7 +537,7 @@ async def _create_task_internal(
         client = client or get_http_client()
 
         if app_key == 'todoist':
-            body = {'content': title, 'priority': 2}
+            body: Dict[str, Any] = {'content': title, 'priority': 2}
             if description:
                 body['description'] = description
             if due_date:
@@ -552,7 +550,7 @@ async def _create_task_internal(
             )
 
             if response.status_code in [200, 201]:
-                task_data = response.json()
+                task_data: Dict[str, Any] = response.json()
                 return {"success": True, "external_task_id": str(task_data.get('id'))}
             else:
                 if response.status_code == 401:
@@ -572,7 +570,7 @@ async def _create_task_internal(
             if not workspace_gid:
                 return {"success": False, "error": "No workspace configured", "error_code": "no_workspace"}
 
-            task_data = {'name': title, 'workspace': workspace_gid}
+            task_data: Dict[str, Any] = {'name': title, 'workspace': workspace_gid}
             if description:
                 task_data['notes'] = description
             if due_date:
@@ -589,7 +587,7 @@ async def _create_task_internal(
             )
 
             if response.status_code in [200, 201]:
-                result = response.json()
+                result: Dict[str, Any] = response.json()
                 return {"success": True, "external_task_id": result.get('data', {}).get('gid')}
             else:
                 return {
@@ -603,7 +601,7 @@ async def _create_task_internal(
             if not list_id:
                 return {"success": False, "error": "No task list configured", "error_code": "no_list"}
 
-            task_data = {'title': title}
+            task_data: Dict[str, Any] = {'title': title}
             if description:
                 task_data['notes'] = description
             if due_date:
@@ -616,7 +614,7 @@ async def _create_task_internal(
             )
 
             if response.status_code in [200, 201]:
-                result = response.json()
+                result: Dict[str, Any] = response.json()
                 return {"success": True, "external_task_id": result.get('id')}
             else:
                 return {
@@ -630,7 +628,7 @@ async def _create_task_internal(
             if not list_id:
                 return {"success": False, "error": "No list configured", "error_code": "no_list"}
 
-            task_data = {'name': title}
+            task_data: Dict[str, Any] = {'name': title}
             if description:
                 task_data['description'] = description
             if due_date:
@@ -643,7 +641,7 @@ async def _create_task_internal(
             )
 
             if response.status_code in [200, 201]:
-                result = response.json()
+                result: Dict[str, Any] = response.json()
                 return {"success": True, "external_task_id": result.get('id')}
             else:
                 return {
@@ -746,7 +744,7 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
 
     try:
 
-        async def _request(client, token):
+        async def _request(client: httpx.AsyncClient, token: str) -> httpx.Response:
             return await client.get(
                 'https://app.asana.com/api/1.0/workspaces',
                 headers={'Authorization': f'Bearer {token}'},
@@ -757,7 +755,7 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
             raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
 
         if response.status_code == 200:
-            result = response.json()
+            result: Dict[str, Any] = response.json()
             return {'workspaces': result.get('data', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana workspaces")
@@ -786,7 +784,7 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
 
     try:
 
-        async def _request(client, token):
+        async def _request(client: httpx.AsyncClient, token: str) -> httpx.Response:
             return await client.get(
                 f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
                 headers={'Authorization': f'Bearer {token}'},
@@ -797,7 +795,7 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
             raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
 
         if response.status_code == 200:
-            result = response.json()
+            result: Dict[str, Any] = response.json()
             return {'projects': result.get('data', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana projects")
@@ -826,7 +824,7 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
 
     try:
 
-        async def _request(client, token):
+        async def _request(client: httpx.AsyncClient, token: str) -> httpx.Response:
             return await client.get(
                 'https://api.clickup.com/api/v2/team',
                 headers={'Authorization': token},
@@ -837,7 +835,7 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
             raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
 
         if response.status_code == 200:
-            result = response.json()
+            result: Dict[str, Any] = response.json()
             return {'teams': result.get('teams', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp teams")
@@ -866,7 +864,7 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
 
     try:
 
-        async def _request(client, token):
+        async def _request(client: httpx.AsyncClient, token: str) -> httpx.Response:
             return await client.get(
                 f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false',
                 headers={'Authorization': token},
@@ -877,7 +875,7 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
 
         if response.status_code == 200:
-            result = response.json()
+            result: Dict[str, Any] = response.json()
             return {'spaces': result.get('spaces', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp spaces")
@@ -906,7 +904,7 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
 
     try:
 
-        async def _request(client, token):
+        async def _request(client: httpx.AsyncClient, token: str) -> httpx.Response:
             return await client.get(
                 f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false',
                 headers={'Authorization': token},
@@ -917,7 +915,7 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
 
         if response.status_code == 200:
-            result = response.json()
+            result: Dict[str, Any] = response.json()
             return {'lists': result.get('lists', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp lists")
@@ -1093,7 +1091,7 @@ async def asana_oauth_callback(
     client_secret = os.getenv('ASANA_CLIENT_SECRET')
     base_url = os.getenv('BASE_API_URL')
 
-    if not all([client_id, client_secret, base_url]):
+    if not client_id or not client_secret or not base_url:
         return render_oauth_response(request, 'asana', success=False, error_type='config_error')
 
     # Normalize base_url: remove trailing slash to prevent redirect URI mismatches
@@ -1146,7 +1144,7 @@ async def google_tasks_oauth_callback(
     client_secret = os.getenv('GOOGLE_TASKS_CLIENT_SECRET')
     base_url = os.getenv('BASE_API_URL')
 
-    if not all([client_id, client_secret, base_url]):
+    if not client_id or not client_secret or not base_url:
         return render_oauth_response(request, 'google_tasks', success=False, error_type='config_error')
 
     # Normalize base_url: remove trailing slash to prevent redirect URI mismatches
@@ -1218,7 +1216,7 @@ async def clickup_oauth_callback(
     return await handle_oauth_callback(request, 'clickup', code, state, config)
 
 
-@router.on_event("shutdown")
+@router.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_http_client():
     """Cleanup HTTP client on app shutdown."""
     await close_http_client()

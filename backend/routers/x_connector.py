@@ -14,14 +14,14 @@ themselves without the backend needing to know which is calling.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from utils import x_connector
-from utils.executors import start_background_task
+from utils.executors import start_background_task  # type: ignore[reportUnknownVariableType]  # start_background_task takes an untyped coro param
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -84,19 +84,19 @@ async def x_oauth_callback(
     uid = st['uid']
     deep_link = st.get('success_redirect_url') or DEFAULT_DEEP_LINK
     try:
-        token_resp = await x_connector.exchange_code(code, st['verifier'])
+        token_resp = cast(Dict[str, Any], await x_connector.exchange_code(code, st['verifier']))  # type: ignore[reportUnknownMemberType]  # x_connector.exchange_code returns bare Dict
         # Resolve the account so we can store the handle for status + RapidAPI fallback.
-        handle = None
-        x_user_id = None
+        handle: Optional[str] = None
+        x_user_id: Optional[str] = None
         try:
-            me = await x_connector.fetch_me(token_resp['access_token'])
+            me = cast(Dict[str, Any], await x_connector.fetch_me(token_resp['access_token']))  # type: ignore[reportUnknownMemberType]  # x_connector.fetch_me returns bare Dict
             handle = me.get('username')
             x_user_id = str(me.get('id')) if me.get('id') else None
         except Exception as e:
             logger.info(f'x callback: fetch_me failed (non-fatal): {e}')
-        x_connector._store_tokens(uid, token_resp, handle=handle, x_user_id=x_user_id)
+        x_connector._store_tokens(uid, token_resp, handle=handle, x_user_id=x_user_id)  # type: ignore[reportPrivateUsage,reportUnknownMemberType]  # x_connector._store_tokens is a private SDK boundary taking a bare Dict
         # First ingest in the background so the browser redirect is instant.
-        start_background_task(x_connector.sync_x_for_user(uid), name=f'x_initial_sync_{uid}')
+        start_background_task(x_connector.sync_x_for_user(uid), name=f'x_initial_sync_{uid}')  # type: ignore[reportUnknownMemberType]  # x_connector.sync_x_for_user returns bare Dict
         return _redirect_html(f'{deep_link}?status=success', True, 'X connected')
     except Exception as e:
         logger.error(f'x callback failed for uid={uid}: {e}')
@@ -104,13 +104,13 @@ async def x_oauth_callback(
 
 
 @router.get('/v1/x/connection-status', tags=['x'])
-def x_connection_status(uid: str = Depends(auth.get_current_user_uid)):
-    return x_connector.connection_status(uid)
+def x_connection_status(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+    return cast(Dict[str, Any], x_connector.connection_status(uid))  # type: ignore[reportUnknownMemberType]  # x_connector.connection_status returns bare Dict
 
 
 @router.post('/v1/x/sync', tags=['x'])
-async def x_sync(uid: str = Depends(auth.get_current_user_uid)):
-    return await x_connector.sync_x_for_user(uid)
+async def x_sync(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+    return cast(Dict[str, Any], await x_connector.sync_x_for_user(uid))  # type: ignore[reportUnknownMemberType]  # x_connector.sync_x_for_user returns bare Dict
 
 
 @router.post('/v1/x/disconnect', tags=['x'])

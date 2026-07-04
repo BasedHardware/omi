@@ -4,10 +4,9 @@ Wrapped 2025 API endpoints.
 Provides generation and retrieval of yearly recap data.
 """
 
-from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 from utils.executors import llm_executor
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -27,9 +26,9 @@ router = APIRouter()
 class WrappedStatusResponse(BaseModel):
     status: str
     year: int = 2025
-    result: Optional[dict] = None
+    result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-    progress: Optional[dict] = None
+    progress: Optional[Dict[str, Any]] = None
 
 
 class GenerateWrappedResponse(BaseModel):
@@ -80,7 +79,7 @@ def get_wrapped_status(year: int, uid: str = Depends(auth.get_current_user_uid))
 
 @router.post('/v1/wrapped/{year}/generate', response_model=GenerateWrappedResponse, tags=['wrapped'])
 def generate_wrapped(
-    year: int, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "wrapped:generate"))
+    year: int, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "wrapped:generate"))  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit returns untyped dependency
 ):
     """
     Start wrapped generation for a given year.
@@ -109,7 +108,7 @@ def generate_wrapped(
         if wrapped_db.is_wrapped_stuck(wrapped):
             # Restart stuck job
             wrapped_db.reset_wrapped_for_regeneration(uid, year)
-            llm_executor.submit(_run_wrapped_generation, uid, year)
+            llm_executor.submit(_run_wrapped_generation, uid, year)  # type: ignore[reportUnknownMemberType]  # llm_executor.submit params untyped
             return GenerateWrappedResponse(
                 status=WrappedStatus.PROCESSING,
                 message="Restarting stuck generation...",
@@ -127,7 +126,7 @@ def generate_wrapped(
         wrapped_db.create_wrapped(uid, year)
 
     # Start generation in background
-    llm_executor.submit(_run_wrapped_generation, uid, year)
+    llm_executor.submit(_run_wrapped_generation, uid, year)  # type: ignore[reportUnknownMemberType]  # llm_executor.submit params untyped
 
     return GenerateWrappedResponse(
         status=WrappedStatus.PROCESSING,

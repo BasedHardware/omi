@@ -1,12 +1,13 @@
+import ast
+import logging
 import re
-from typing import Optional, Tuple, List, Dict
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from fastapi import APIRouter, HTTPException
-from enum import Enum
-import ast
 
-from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
-import logging
+# `utils.github_releases` exports untyped helpers; results are narrowed at the boundary.
+from utils.github_releases import extract_key_value_pairs, get_omi_github_releases  # type: ignore[reportUnknownVariableType]  # utils.github_releases is untyped
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,28 @@ FIRMWARE_TAG_PATTERN = re.compile(
 )
 
 
+def _extract_kv(markdown_content: object) -> Dict[str, Any]:
+    """Typed adapter for the untyped `extract_key_value_pairs` util."""
+    return cast(Dict[str, Any], extract_key_value_pairs(markdown_content))
+
+
+async def _fetch_releases(
+    cache_key: str, tag_filter: Optional[re.Pattern[Any]] = None
+) -> Optional[List[Dict[str, Any]]]:
+    """Typed adapter for the untyped `get_omi_github_releases` util."""
+    return cast(
+        Optional[List[Dict[str, Any]]],
+        await get_omi_github_releases(cache_key, tag_filter),
+    )
+
+
 # Device Model Number
 # - DK2: Omi DevKit 2
 # - DK1: Friend | Friend DevKit 1
 # - OpenGlass: OpenGlass
 # - Omi_CV1: Omi CV 1
 # - OMI_GLASS: OMI Glass
-def _get_device_by_model_number(device_model: str):
+def _get_device_by_model_number(device_model: str) -> Optional[DeviceModel]:
     if device_model in ['Omi DevKit 2']:
         return DeviceModel.OMI_DEVKIT_2
     if device_model in ['Friend DevKit 1', 'Friend']:
@@ -71,7 +87,7 @@ def _parse_firmware_version(version_str: Optional[str]) -> Optional[Tuple[int, .
 
     parts = normalized_version_str.split('.')
 
-    version_tuple = []
+    version_tuple: List[int] = []
     for part in parts:
         try:
             version_tuple.append(int(part))
@@ -99,15 +115,17 @@ def _get_release_prefix(device: DeviceModel) -> str:
 
 
 def _find_candidate_releases(
-    releases: List[Dict], release_prefix: str, current_firmware_tuple: Optional[Tuple[int, ...]] = None
-) -> List[Dict]:
+    releases: List[Dict[str, Any]],
+    release_prefix: str,
+    current_firmware_tuple: Optional[Tuple[int, ...]] = None,
+) -> List[Dict[str, Any]]:
     """Filter releases matching the device prefix.
 
     When current_firmware_tuple is provided, only returns releases newer than
     the current version that meet minimum firmware requirements (update flow).
     When None, returns all valid releases (stable/rollback flow).
     """
-    candidates = []
+    candidates: List[Dict[str, Any]] = []
     for release in releases:
         tag_name = release.get("tag_name", "")
 
@@ -123,7 +141,7 @@ def _find_candidate_releases(
         if not re.match(regex_pattern, tag_name, re.IGNORECASE):
             continue
 
-        kv = extract_key_value_pairs(release.get("body"))
+        kv = _extract_kv(release.get("body"))
 
         release_firmware_version_str = kv.get("release_firmware_version")
         if not release_firmware_version_str:
@@ -152,12 +170,12 @@ def _find_candidate_releases(
     return candidates
 
 
-def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
+def _extract_firmware_response(device: DeviceModel, release: Dict[str, Any]) -> Dict[str, Any]:
     """Extract firmware details and download asset from a GitHub release."""
-    kv = extract_key_value_pairs(release.get("body"))
+    kv = _extract_kv(release.get("body"))
 
-    assets = release.get("assets", [])
-    asset = None
+    assets: Any = release.get("assets", [])
+    asset: Any = None
     if device == DeviceModel.OMI_GLASS:
         for a in assets:
             asset_name = a.get("name")
@@ -199,7 +217,12 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
 
 
 @router.get("/v2/firmware/latest")
-async def get_latest_version(device_model: str, firmware_revision: str, hardware_revision: str, manufacturer_name: str):
+async def get_latest_version(
+    device_model: str,
+    firmware_revision: str,
+    hardware_revision: str,
+    manufacturer_name: str,
+) -> Dict[str, Any]:
     device = _get_device_by_model_number(device_model)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -215,7 +238,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
             detail="Could not determine current firmware version",
         )
 
-    releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    releases = await _fetch_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
@@ -230,7 +253,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
 
 
 @router.get("/v2/firmware/stable")
-async def get_stable_version(device_model: str):
+async def get_stable_version(device_model: str) -> Dict[str, Any]:
     """Return the latest stable firmware for a device, regardless of current version.
 
     Used for rolling back to the official stable firmware after flashing custom firmware.
@@ -239,7 +262,7 @@ async def get_stable_version(device_model: str):
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    releases = await _fetch_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 

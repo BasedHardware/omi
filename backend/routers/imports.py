@@ -2,19 +2,16 @@
 Import endpoints for importing data from external sources.
 """
 
-import asyncio
 import logging
 import os
-import uuid
-from typing import List, Optional
+from typing import List
 
 from utils.executors import db_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 import database.import_jobs as import_jobs_db
-import database.conversations as conversations_db
-from models.import_job import ImportJob, ImportJobResponse, ImportJobStatus, ImportSourceType
+from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
 
@@ -78,7 +75,7 @@ async def import_limitless_data(
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
     # Start background processing
-    storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
+    storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)  # type: ignore[reportUnknownMemberType]  # MonitoredThreadPoolExecutor.submit is untyped
 
     return ImportJobResponse(
         job_id=job.id,
@@ -94,7 +91,7 @@ async def import_limitless_data(
 def get_import_jobs(
     uid: str = Depends(auth.get_current_user_uid),
     limit: int = 50,
-):
+) -> List[ImportJobResponse]:
     """
     Get all import jobs for the current user.
 
@@ -105,7 +102,7 @@ def get_import_jobs(
 
     # Build each response individually so one malformed/legacy job (missing id, or a status value not in
     # the ImportJobStatus enum) doesn't fail the whole list with a 500.
-    result = []
+    result: List[ImportJobResponse] = []
     for job in jobs:
         try:
             result.append(

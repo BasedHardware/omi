@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Any, Optional, cast
 
 import av
 
@@ -18,7 +18,7 @@ from utils.other.storage import (
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
-from utils.stt.speaker_embedding import extract_embedding
+from utils.stt.speaker_embedding import extract_embedding  # type: ignore[reportUnknownVariableType]  # returns np.ndarray without type params
 from utils.stt.vad import apply_vad_for_speech_profile
 import logging
 
@@ -53,7 +53,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
         f.write(file.file.read())
 
     try:
-        aseg = AudioSegment.from_wav(file_path)
+        aseg = cast(Any, AudioSegment.from_wav(file_path))  # type: ignore[reportUnknownMemberType]  # pydub AudioSegment is untyped
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid audio file: must be a valid 16kHz WAV.")
     if aseg.frame_rate != 16000:
@@ -65,15 +65,16 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     apply_vad_for_speech_profile(file_path)
 
     # Write-ahead: Cache exact duration after VAD processing (use av for fast header-only read)
+    duration: float = 0.0
     with av.open(file_path) as container:
-        duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
+        duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0  # type: ignore[reportAttributeAccessIssue]  # PyAV: av.time_base not in stubs
     set_speech_profile_duration(uid, duration)
 
     url = upload_profile_audio(file_path, uid)
 
     # Extract and store speaker embedding for user identification in listen sessions
     try:
-        embedding = extract_embedding(file_path)
+        embedding = cast(Any, extract_embedding(file_path))
         set_user_speaker_embedding(uid, embedding.flatten().tolist())
         logger.info(f"Speech profile: stored speaker embedding for {uid}")
     except Exception as e:

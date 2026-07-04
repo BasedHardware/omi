@@ -5,17 +5,16 @@ Provides endpoints for listing Google Calendar events for the event picker UI.
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.users as users_db
-from models.conversation import CalendarEventLink
-from utils.conversations.calendar_utils import extract_attendees, parse_event_times
+from utils.conversations.calendar_utils import extract_attendees, parse_event_times  # type: ignore[reportUnknownVariableType]  # helpers take bare dict, narrowed at call sites
 from utils.other import endpoints as auth
-from utils.retrieval.tools.calendar_tools import get_google_calendar_events
-from utils.retrieval.tools.google_utils import refresh_google_token
+from utils.retrieval.tools.calendar_tools import get_google_calendar_events  # type: ignore[reportUnknownVariableType]  # returns bare list, narrowed at call site
+from utils.retrieval.tools.google_utils import refresh_google_token  # type: ignore[reportUnknownVariableType]  # takes bare dict, narrowed at call site
 
 router = APIRouter()
 
@@ -32,7 +31,7 @@ class GoogleCalendarEvent(BaseModel):
     html_link: Optional[str] = Field(default=None, description="Link to open event in Google Calendar")
 
 
-def _get_google_calendar_token(uid: str) -> tuple[str, dict]:
+def _get_google_calendar_token(uid: str) -> tuple[str, Dict[str, Any]]:
     """Get and validate Google Calendar access token for a user.
 
     Returns (access_token, integration_dict).
@@ -47,7 +46,7 @@ def _get_google_calendar_token(uid: str) -> tuple[str, dict]:
     return access_token, integration
 
 
-def _event_to_response(event: dict) -> Optional[GoogleCalendarEvent]:
+def _event_to_response(event: Dict[str, Any]) -> Optional[GoogleCalendarEvent]:
     """Convert a raw Google Calendar event to our response model."""
     start_time, end_time = parse_event_times(event)
     if start_time is None or end_time is None:
@@ -90,12 +89,15 @@ async def list_google_calendar_events(
         time_max = time_max.replace(tzinfo=timezone.utc)
 
     try:
-        events = await get_google_calendar_events(
-            access_token=access_token,
-            time_min=time_min,
-            time_max=time_max,
-            max_results=max_results,
-            search_query=q,
+        events = cast(
+            List[Dict[str, Any]],
+            await get_google_calendar_events(
+                access_token=access_token,
+                time_min=time_min,
+                time_max=time_max,
+                max_results=max_results,
+                search_query=q,
+            ),
         )
     except Exception as e:
         error_msg = str(e)
@@ -103,12 +105,15 @@ async def list_google_calendar_events(
             new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    events = await get_google_calendar_events(
-                        access_token=new_token,
-                        time_min=time_min,
-                        time_max=time_max,
-                        max_results=max_results,
-                        search_query=q,
+                    events = cast(
+                        List[Dict[str, Any]],
+                        await get_google_calendar_events(
+                            access_token=new_token,
+                            time_min=time_min,
+                            time_max=time_max,
+                            max_results=max_results,
+                            search_query=q,
+                        ),
                     )
                 except Exception as retry_error:
                     raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")

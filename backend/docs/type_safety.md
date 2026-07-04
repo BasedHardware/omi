@@ -91,6 +91,9 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `database/memories.py`
   - `database/vector_db.py`
   - `database/entities.py`
+  - `database/webhook_health.py`
+  - `database/staged_tasks.py`
+  - `database/projection_repair.py`
   - `routers/knowledge_graph.py`
   - `routers/memory_admin.py`
   - `routers/memories.py`
@@ -102,6 +105,23 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `routers/onboarding.py`
   - `routers/other.py`
   - `routers/trends.py`
+  - `routers/firmware.py`
+  - `routers/tools.py`
+  - `routers/calendar_meetings.py`
+  - `routers/calendar_onboarding.py`
+  - `routers/fair_use_admin.py`
+  - `routers/folders.py`
+  - `routers/google_calendar.py`
+  - `routers/imports.py`
+  - `routers/other.py`
+  - `routers/scores.py`
+  - `routers/speech_profile.py`
+  - `routers/tts.py`
+  - `routers/phone_calls.py`
+  - `routers/x_connector.py`
+  - `routers/task_integrations.py`
+  - `routers/updates.py`
+  - `routers/wrapped.py`
   - `utils/conversations/memories.py`
   - `utils/llm/__init__.py`
   - `utils/llm/clients.py`
