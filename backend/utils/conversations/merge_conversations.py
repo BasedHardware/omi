@@ -11,13 +11,13 @@ This module provides functions for merging multiple conversations into one.
 import copy
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 import database.conversations as conversations_db
 from database._client import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
-from models.conversation import Conversation
+from models.conversation import Conversation, ConversationPhoto
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
@@ -27,24 +27,23 @@ from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.other.storage import (
     delete_conversation_audio_files,
-    list_audio_chunks,
-    _get_storage_client,
+    list_audio_chunks,  # type: ignore[reportUnknownVariableType]  # storage.list_audio_chunks partially typed
+    _get_storage_client,  # type: ignore[reportPrivateUsage]  # no public equivalent available
     private_cloud_sync_bucket,
-    _get_extension_for_path,
 )
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def _coerce_dt(value):
+def _coerce_dt(value: Any) -> Any:
     return coerce_utc_datetime(value)
 
 
 _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
 
 
-def _photo_created_at_sort_key(photo: Dict) -> datetime:
+def _photo_created_at_sort_key(photo: Dict[str, Any]) -> datetime:
     created_at = coerce_utc_datetime(photo.get('created_at'))
     if created_at is None:
         logger.warning(
@@ -62,7 +61,7 @@ def _photo_created_at_sort_key(photo: Dict) -> datetime:
 _TIMESTAMP_FIELDS = ('started_at', 'finished_at', 'created_at')
 
 
-def _normalize_conversation_timestamps(conversations: List[Dict]) -> List[Dict]:
+def _normalize_conversation_timestamps(conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Return shallow-copied conversation dicts with timestamp fields coerced.
 
     Older conversation docs persisted ``started_at`` / ``finished_at`` /
@@ -80,9 +79,9 @@ def _normalize_conversation_timestamps(conversations: List[Dict]) -> List[Dict]:
     already guard against ``None`` (e.g. ``if prev_finished and curr_started``)
     so a single bad field does not abort the merge.
     """
-    normalized = []
+    normalized: List[Dict[str, Any]] = []
     for conv in conversations:
-        c = dict(conv)
+        c: Dict[str, Any] = dict(conv)
         for field in _TIMESTAMP_FIELDS:
             if field in c:
                 c[field] = _coerce_dt(c[field])
@@ -91,7 +90,7 @@ def _normalize_conversation_timestamps(conversations: List[Dict]) -> List[Dict]:
 
 
 def validate_merge_compatibility(
-    conversations: List[Dict],
+    conversations: List[Dict[str, Any]],
 ) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Validate if conversations can be merged.
@@ -125,7 +124,7 @@ def validate_merge_compatibility(
             return False, f"Conversation {conv['id']} is not ready (status: {status}). Wait for it to complete.", None
 
     # Generate warnings for large gaps (but don't reject)
-    warnings = []
+    warnings: List[str] = []
     _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
     sorted_convs = sorted(conversations, key=lambda c: _coerce_dt(c.get('started_at')) or _UTC_MIN)
 
@@ -168,7 +167,7 @@ def perform_merge_async(
 
     try:
         # 1. Fetch all source conversations
-        conversations = []
+        conversations: List[Dict[str, Any]] = []
         for conv_id in conversation_ids:
             conv = conversations_db.get_conversation(uid, conv_id)
             if conv:
@@ -223,14 +222,14 @@ def perform_merge_async(
         geolocation = sorted_convs[0].get('geolocation')
 
         # 5. Create merge metadata
-        merge_metadata = {
+        merge_metadata: Dict[str, Any] = {
             'merged_at': datetime.now(timezone.utc).isoformat(),
             'source_conversation_ids': conversation_ids,
             'source_details': [
                 {
                     'id': c['id'],
-                    'started_at': c.get('started_at').isoformat() if c.get('started_at') else None,
-                    'finished_at': c.get('finished_at').isoformat() if c.get('finished_at') else None,
+                    'started_at': c.get('started_at').isoformat() if c.get('started_at') else None,  # type: ignore[reportOptionalMemberAccess]  # guarded by truthiness check
+                    'finished_at': c.get('finished_at').isoformat() if c.get('finished_at') else None,  # type: ignore[reportOptionalMemberAccess]  # guarded by truthiness check
                     'source': c.get('source', 'unknown'),
                 }
                 for c in sorted_convs
@@ -258,16 +257,18 @@ def perform_merge_async(
         )
 
         # 7. Save stub conversation to database
-        conversations_db.upsert_conversation(uid, new_conversation.dict())
+        conversations_db.upsert_conversation(uid, new_conversation.model_dump())
 
         # Store photos in subcollection if any
         if merged_photos:
-            conversations_db.store_conversation_photos(uid, new_conversation_id, merged_photos)
+            conversations_db.store_conversation_photos(
+                uid, new_conversation_id, cast(List[ConversationPhoto], merged_photos)
+            )
 
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         if reprocess:
             try:
-                processed_conversation = process_conversation(
+                process_conversation(
                     uid,
                     new_conversation.language or 'en',
                     new_conversation,
@@ -285,7 +286,7 @@ def perform_merge_async(
 
         # 9. Delete ALL source conversations and their related data
         for conv in sorted_convs:
-            _delete_conversation_and_related_data(uid, conv['id'])
+            _delete_conversation_and_related_data(uid, str(conv['id']))
 
         # 10. Send FCM notification
         send_merge_completed_message(uid, new_conversation_id, conversation_ids)
@@ -302,7 +303,7 @@ def perform_merge_async(
         _handle_merge_failure(uid, conversation_ids)
 
 
-def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
+def _merge_transcript_segments(conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Merge transcript segments from all conversations sequentially.
 
@@ -317,11 +318,11 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     Returns:
         List of merged transcript segment dictionaries
     """
-    merged = []
+    merged: List[Dict[str, Any]] = []
     cumulative_offset = 0.0
 
     for i, conv in enumerate(conversations):
-        segments = conv.get('transcript_segments', [])
+        segments: List[Dict[str, Any]] = cast(List[Dict[str, Any]], conv.get('transcript_segments', []))
 
         if i == 0:
             # First conversation - use segments as-is
@@ -358,7 +359,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     return merged
 
 
-def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
+def _collect_all_photos(uid: str, conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Fetch and merge photos from all conversation subcollections.
 
@@ -374,17 +375,17 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
     Returns:
         List of photo dictionaries
     """
-    all_photos = []
-    seen_ids = set()
+    all_photos: List[Dict[str, Any]] = []
+    seen_ids: Set[str] = set()
 
     for conv in conversations:
         try:
-            photos = conversations_db.get_conversation_photos(uid, conv['id'])
+            photos = conversations_db.get_conversation_photos(uid, str(conv['id']))
             for photo in photos:
                 photo_id = photo.get('id')
                 if photo_id and photo_id not in seen_ids:
                     all_photos.append(photo)
-                    seen_ids.add(photo_id)
+                    seen_ids.add(str(photo_id))
         except Exception as e:
             logger.error(f"Error fetching photos for {conv['id']}: {e}")
 
@@ -396,7 +397,7 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
 
 def _copy_audio_chunks_for_merge(
     uid: str,
-    conversations: List[Dict],
+    conversations: List[Dict[str, Any]],
     new_conversation_id: str,
 ) -> List[AudioFile]:
     """
@@ -422,23 +423,23 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)  # type: ignore[reportUnknownMemberType]  # storage client untyped
     has_chunks = False
 
     for conv in conversations:
-        conv_id = conv['id']
+        conv_id = str(conv['id'])
 
         # List and copy chunks for this conversation
         try:
-            chunks = list_audio_chunks(uid, conv_id)
+            chunks: List[Dict[str, Any]] = cast(List[Dict[str, Any]], list_audio_chunks(uid, conv_id))
             for chunk in chunks:
                 has_chunks = True
 
                 # Preserve original filename (handles both single and batch blob naming)
-                original_filename = chunk['path'].split('/')[-1]
+                original_filename = str(chunk['path']).split('/')[-1]
                 new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
-                source_blob = bucket.blob(chunk['path'])
-                bucket.copy_blob(source_blob, bucket, new_path)
+                source_blob = bucket.blob(chunk['path'])  # type: ignore[reportUnknownMemberType]  # storage client untyped
+                bucket.copy_blob(source_blob, bucket, new_path)  # type: ignore[reportUnknownMemberType]  # storage client untyped
 
         except Exception as e:
             logger.error(f"Error copying chunks for {conv_id}: {e}")
@@ -453,19 +454,19 @@ def _copy_audio_chunks_for_merge(
     return []
 
 
-def _determine_visibility(conversations: List[Dict]) -> str:
+def _determine_visibility(conversations: List[Dict[str, Any]]) -> str:
     """
     Determine visibility for merged conversation.
 
     Strategy: Most restrictive wins (private > shared > public)
     """
-    visibility_priority = {'private': 0, 'shared': 1, 'public': 2}
+    visibility_priority: Dict[str, int] = {'private': 0, 'shared': 1, 'public': 2}
 
     min_priority = 2  # Start with least restrictive (public)
     min_visibility = 'public'
 
     for conv in conversations:
-        vis = conv.get('visibility', 'private')
+        vis = str(conv.get('visibility', 'private'))
         priority = visibility_priority.get(vis, 0)
         if priority < min_priority:
             min_priority = priority

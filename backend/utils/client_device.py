@@ -10,7 +10,7 @@ Contract (see docs/memory/domain_model.md):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
 from starlette.requests import Request
 
@@ -94,10 +94,9 @@ def resolve_client_device_from_request(request: Request) -> ClientDeviceContext:
     )
 
 
-def resolve_client_device_from_headers(headers) -> ClientDeviceContext:
-    getter = headers.get if hasattr(headers, "get") else lambda key, default=None: headers.get(key, default)
+def resolve_client_device_from_headers(headers: Mapping[str, str]) -> ClientDeviceContext:
     return resolve_client_device(
-        x_app_platform=getter("x-app-platform") or getter("X-App-Platform"),
-        x_device_id_hash=getter("x-device-id-hash") or getter("X-Device-Id-Hash"),
-        x_app_version=getter("x-app-version") or getter("X-App-Version"),
+        x_app_platform=headers.get("x-app-platform") or headers.get("X-App-Platform"),
+        x_device_id_hash=headers.get("x-device-id-hash") or headers.get("X-Device-Id-Hash"),
+        x_app_version=headers.get("x-app-version") or headers.get("X-App-Version"),
     )

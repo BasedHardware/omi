@@ -11,10 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.users as users_db
-from utils.conversations.calendar_utils import extract_attendees, parse_event_times  # type: ignore[reportUnknownVariableType]  # helpers take bare dict, narrowed at call sites
+from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.other import endpoints as auth
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events  # type: ignore[reportUnknownVariableType]  # returns bare list, narrowed at call site
-from utils.retrieval.tools.google_utils import refresh_google_token  # type: ignore[reportUnknownVariableType]  # takes bare dict, narrowed at call site
+from utils.retrieval.tools.google_utils import refresh_google_token
 
 router = APIRouter()
 

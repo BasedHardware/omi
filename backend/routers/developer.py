@@ -46,7 +46,7 @@ from dependencies import (
     get_uid_with_goals_write,
 )
 from utils.apps import update_personas_async
-from utils.other.endpoints import with_rate_limit, get_current_user_uid  # type: ignore[reportUnknownVariableType]  # with_rate_limit/auth deps defined without annotations
+from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder

@@ -1,10 +1,10 @@
 import json
 import logging
 import os
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import httpx
-from pydub import AudioSegment
+from pydub import AudioSegment  # pydub is untyped
 
 from utils.executors import storage_executor, run_blocking
 from utils.http_client import get_stt_client
@@ -19,7 +19,17 @@ from utils.other.storage import (
 logger = logging.getLogger(__name__)
 
 
-def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
+def _get_speech_profile_api_url() -> str:
+    """Get the speech profile API URL from environment."""
+    url = os.getenv('HOSTED_SPEECH_PROFILE_API_URL')
+    if not url:
+        raise ValueError('HOSTED_SPEECH_PROFILE_API_URL environment variable not set')
+    return url
+
+
+def get_speech_profile_matching_predictions(
+    uid: str, audio_file_path: str, segments: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     logger.info('get_speech_profile_matching_predictions')
     default = [{'is_user': False, 'person_id': None}] * len(segments)
     with open(audio_file_path, 'rb') as audio_f:
@@ -27,7 +37,7 @@ def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segm
             ('audio_file', (os.path.basename(audio_file_path), audio_f, 'audio/wav')),
         ]
         response = httpx.post(
-            os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}',
+            _get_speech_profile_api_url() + f'?uid={uid}',
             data={'segments': json.dumps(segments)},
             files=files,
         )
@@ -38,10 +48,10 @@ def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segm
     try:
         result = response.json()
         logger.info(f'get_speech_profile_matching_predictions {sanitize(result)}')
-        if isinstance(result[0], bool):
-            return [{'is_user': r, 'person_id': None} for r in result]
+        if isinstance(result, list) and result and isinstance(result[0], bool):
+            return [{'is_user': r, 'person_id': None} for r in result]  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # untyped JSON list elements
 
-        return result
+        return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response
     except Exception as e:
         logger.info(f'get_speech_profile_matching_predictions {str(e)}')
         return default
@@ -52,7 +62,9 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
-async def async_get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
+async def async_get_speech_profile_matching_predictions(
+    uid: str, audio_file_path: str, segments: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     """Async version of get_speech_profile_matching_predictions using httpx.AsyncClient."""
     logger.info('async_get_speech_profile_matching_predictions')
     file_data = await run_blocking(storage_executor, _read_file, audio_file_path)
@@ -63,7 +75,7 @@ async def async_get_speech_profile_matching_predictions(uid: str, audio_file_pat
     try:
         client = get_stt_client()
         response = await client.post(
-            os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}',
+            _get_speech_profile_api_url() + f'?uid={uid}',
             data={'segments': json.dumps(segments)},
             files=files,
         )
@@ -77,36 +89,36 @@ async def async_get_speech_profile_matching_predictions(uid: str, audio_file_pat
     try:
         result = response.json()
         logger.info(f'async_get_speech_profile_matching_predictions {sanitize(result)}')
-        if isinstance(result[0], bool):
-            return [{'is_user': r, 'person_id': None} for r in result]
-        return result
+        if isinstance(result, list) and result and isinstance(result[0], bool):
+            return [{'is_user': r, 'person_id': None} for r in result]  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # untyped JSON list elements
+        return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response
     except Exception as e:
         logger.info(f'async_get_speech_profile_matching_predictions {str(e)}')
         return default
 
 
-def get_speech_profile_expanded(uid: str):
+def get_speech_profile_expanded(uid: str) -> Optional[str]:
     main = get_profile_audio_if_exists(uid, download=True)
     if not main:
         return None
     parts = get_additional_profile_recordings(uid, download=True)
-    aseg = AudioSegment.from_wav(main)
+    aseg: Any = AudioSegment.from_wav(main)  # type: ignore[reportUnknownMemberType]  # pydub untyped
     for part in parts:
-        aseg += AudioSegment.from_wav(part)
+        aseg += AudioSegment.from_wav(part)  # type: ignore[reportUnknownMemberType]  # pydub untyped
     path = f'_temp/{uid}_complete_speech_profile.wav'
-    aseg.export(path, format='wav')
+    aseg.export(path, format='wav')  # type: ignore[reportUnknownMemberType]  # pydub untyped
     return path
 
 
-def get_people_with_speech_samples(uid: str):
+def get_people_with_speech_samples(uid: str) -> List[Dict[str, str]]:
     people_ids = get_user_people_ids(uid)
-    people = []
+    people: List[Dict[str, str]] = []
     for pid in people_ids:
         file_paths = get_user_person_speech_samples(uid, pid, download=True)
-        aseg = AudioSegment.empty()
+        aseg: Any = AudioSegment.empty()
         for path in file_paths:
-            aseg += AudioSegment.from_wav(path)
+            aseg += AudioSegment.from_wav(path)  # type: ignore[reportUnknownMemberType]  # pydub untyped
         path = f'_temp/{uid}_{pid}_complete_speech_profile.wav'
-        aseg.export(path, format='wav')
+        aseg.export(path, format='wav')  # type: ignore[reportUnknownMemberType]  # pydub untyped
         people.append({'id': pid, 'path': path})
     return people

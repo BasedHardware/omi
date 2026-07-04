@@ -1,7 +1,7 @@
 import io
 import re
 import wave
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import av
 import numpy as np
@@ -64,7 +64,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
     wav_buffer.seek(0)
 
     # Use av to extract trimmed audio with sample-accurate boundaries
-    trimmed_samples = []
+    trimmed_samples: List[Any] = []
     with av.open(wav_buffer, mode='r') as container:
         stream = container.streams.audio[0]
 
@@ -72,7 +72,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
             if frame.pts is None:
                 continue
 
-            frame_time = float(frame.pts * stream.time_base)
+            frame_time = float(frame.pts * cast(Any, stream.time_base))
             frame_duration = frame.samples / sample_rate
             frame_end_time = frame_time + frame_duration
 
@@ -225,7 +225,7 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 }
 
 # Check all (multi lang)
-patterns_to_check = []
+patterns_to_check: List[str] = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
@@ -370,7 +370,7 @@ async def extract_speaker_samples(
             return
 
         # Collect all chunk timestamps from audio files
-        all_timestamps = []
+        all_timestamps: List[Any] = []
         for af in audio_files:
             timestamps = af.get('chunk_timestamps', [])
             all_timestamps.extend(timestamps)
@@ -380,7 +380,7 @@ async def extract_speaker_samples(
             return
 
         # Build chunks list in expected format
-        chunks = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
+        chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
 
         samples_added = 0
         max_samples_to_add = 1 - sample_count
@@ -453,7 +453,7 @@ async def extract_speaker_samples(
                     break
 
             # Collect from first_idx up to abs_end
-            relevant_timestamps = []
+            relevant_timestamps: List[Any] = []
             for chunk in sorted_chunks[first_idx:]:
                 if chunk['timestamp'] <= abs_end:
                     relevant_timestamps.append(chunk['timestamp'])

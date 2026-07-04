@@ -4,7 +4,7 @@ Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 
 import asyncio
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -48,7 +48,7 @@ class GoogleAPIError(Exception):
         return self.status_code in _RETRYABLE_STATUS_CODES
 
 
-async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
+async def refresh_google_token(uid: str, integration: Dict[str, Any]) -> Optional[str]:
     """
     Refresh Google access token using refresh token.
     Works for both Calendar and Gmail since they use the same OAuth.
@@ -122,10 +122,10 @@ async def google_api_request(
     method: str,
     url: str,
     access_token: str,
-    params: dict | None = None,
-    body: dict | None = None,
+    params: Optional[Dict[str, Any]] = None,
+    body: Optional[Dict[str, Any]] = None,
     allow_204: bool = False,
-):
+) -> Any:
     """
     Make a Google API request with automatic retry for transient failures.
 
@@ -190,7 +190,7 @@ async def google_api_request(
         raise GoogleAPIError(r.status_code, snippet)
 
     # All retries exhausted
-    if last_error and isinstance(last_error, (httpx.TimeoutException, httpx.ConnectError)):
+    if last_error:
         raise last_error
     # Unreachable with _MAX_RETRIES >= 1, but kept as a safety net
     raise GoogleAPIError(0, "All retries exhausted with no response")

@@ -23,7 +23,7 @@ from firebase_admin import auth as firebase_auth
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
-from utils.conversations.render import populate_speaker_names, redact_conversations_for_list  # type: ignore[reportUnknownVariableType]  # helpers take bare dict, narrowed at call site
+from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
@@ -35,7 +35,7 @@ from dependencies import (
     get_mcp_memory_default_memory_read_context,
     get_mcp_memory_default_memory_write_context,
 )
-from utils.other.endpoints import with_rate_limit, with_rate_limit_context  # type: ignore[reportUnknownVariableType]  # decorators wrap untyped auth dependency
+from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
@@ -127,7 +127,7 @@ def create_memory(
         operation="mcp_memory_create",
         require_canonical_promotion=True,
     )
-    postprocess_executor.submit(update_personas_async, uid)  # type: ignore[reportUnknownMemberType]  # untyped executor fire-and-forget
+    postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
 

@@ -121,7 +121,7 @@ class SourceTypeConfig(StrictBaseModel):
     default_empty_on_noise: bool = False
     guidance_notes: str = ""
 
-    _REGISTRY: ClassVar[dict[str, "SourceTypeConfig"]] = {}
+    REGISTRY: ClassVar[dict[str, "SourceTypeConfig"]] = {}
 
 
 # Build registry after class definition
@@ -283,7 +283,7 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
     }
 
 
-SourceTypeConfig._REGISTRY = _build_source_type_registry()
+SourceTypeConfig.REGISTRY = _build_source_type_registry()
 
 
 class SourceDescriptor(StrictBaseModel):
@@ -315,7 +315,7 @@ class ActorDescriptor(StrictBaseModel):
     user_id: str | None = None
     synthetic_user_id: str | None = None
     display_name: str | None = None
-    known_aliases: list[str] = Field(default_factory=list)
+    known_aliases: list[str] = Field(default_factory=list[str])
     locale: str | None = None
 
 
@@ -346,7 +346,21 @@ class EventQuality(StrictBaseModel):
             "out_of_order",
             "unknown",
         ]
-    ] = Field(default_factory=list)
+    ] = Field(
+        default_factory=list[
+            Literal[
+                "low_audio_quality",
+                "overlapping_speech",
+                "speaker_uncertain",
+                "ocr_noisy",
+                "truncated",
+                "translated",
+                "provider_duplicate",
+                "out_of_order",
+                "unknown",
+            ]
+        ]
+    )
 
 
 class RawContextEvent(StrictBaseModel):
@@ -391,15 +405,15 @@ class EntityRef(StrictBaseModel):
         "unknown",
     ]
     canonical_name: str | None = None
-    aliases: list[str] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list[str])
     confidence: ConfidenceLabel | None = None
 
 
 class EntitySnapshot(StrictBaseModel):
     entity: EntityRef
-    external_refs: list[SourceRef] = Field(default_factory=list)
+    external_refs: list[SourceRef] = Field(default_factory=list[SourceRef])
     attributes: dict[str, Any] = Field(default_factory=dict)
-    merged_entity_ids: list[str] = Field(default_factory=list)
+    merged_entity_ids: list[str] = Field(default_factory=list[str])
 
 
 class RelationshipSnapshot(StrictBaseModel):
@@ -408,7 +422,7 @@ class RelationshipSnapshot(StrictBaseModel):
     predicate: str
     object: EntityRef
     confidence: ConfidenceLabel | None = None
-    source_refs: list[SourceRef] = Field(default_factory=list)
+    source_refs: list[SourceRef] = Field(default_factory=list[SourceRef])
 
 
 class SpeakerProfileSnapshot(StrictBaseModel):
@@ -432,12 +446,12 @@ class ExistingMemorySnapshot(StrictBaseModel):
     updated_at: datetime | None = None
     invalid_at: datetime | None = None
     subject: EntityRef | None = None
-    entities: list[EntityRef] = Field(default_factory=list)
-    event_frame_ids: list[str] = Field(default_factory=list)
-    source_refs: list[SourceRef] = Field(default_factory=list)
+    entities: list[EntityRef] = Field(default_factory=list[EntityRef])
+    event_frame_ids: list[str] = Field(default_factory=list[str])
+    source_refs: list[SourceRef] = Field(default_factory=list[SourceRef])
     confidence: ConfidenceLabel | None = None
-    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list)
-    supersedes: list[str] = Field(default_factory=list)
+    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list[UncertaintyReason])
+    supersedes: list[str] = Field(default_factory=list[str])
     superseded_by: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 
@@ -445,13 +459,13 @@ class ExistingMemorySnapshot(StrictBaseModel):
 class UserStateSnapshot(StrictBaseModel):
     snapshot_id: str
     snapshot_at: datetime
-    active_memories: list[ExistingMemorySnapshot] = Field(default_factory=list)
-    inactive_memories: list[ExistingMemorySnapshot] = Field(default_factory=list)
-    rejected_memories: list[ExistingMemorySnapshot] = Field(default_factory=list)
-    reviewed_memories: list[ExistingMemorySnapshot] = Field(default_factory=list)
-    entities: list[EntitySnapshot] = Field(default_factory=list)
-    relationships: list[RelationshipSnapshot] = Field(default_factory=list)
-    speaker_profiles: list[SpeakerProfileSnapshot] = Field(default_factory=list)
+    active_memories: list[ExistingMemorySnapshot] = Field(default_factory=list[ExistingMemorySnapshot])
+    inactive_memories: list[ExistingMemorySnapshot] = Field(default_factory=list[ExistingMemorySnapshot])
+    rejected_memories: list[ExistingMemorySnapshot] = Field(default_factory=list[ExistingMemorySnapshot])
+    reviewed_memories: list[ExistingMemorySnapshot] = Field(default_factory=list[ExistingMemorySnapshot])
+    entities: list[EntitySnapshot] = Field(default_factory=list[EntitySnapshot])
+    relationships: list[RelationshipSnapshot] = Field(default_factory=list[RelationshipSnapshot])
+    speaker_profiles: list[SpeakerProfileSnapshot] = Field(default_factory=list[SpeakerProfileSnapshot])
     user_profile: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -502,7 +516,27 @@ class SensitivityClassification(StrictBaseModel):
             "ordinary_work_fact",
             "none",
         ]
-    ] = Field(default_factory=list)
+    ] = Field(
+        default_factory=list[
+            Literal[
+                "credential",
+                "api_key",
+                "password",
+                "financial_account",
+                "government_id",
+                "health",
+                "mental_health",
+                "biometric",
+                "precise_location",
+                "third_party_private_fact",
+                "work_confidential",
+                "minor",
+                "ordinary_personal_fact",
+                "ordinary_work_fact",
+                "none",
+            ]
+        ]
+    )
     auto_store_allowed: bool = True
     review_required: bool = False
 
@@ -658,12 +692,12 @@ class WorkingMemoryCandidate(StrictBaseModel):
     actor_role: WorkingMemoryActorRole
     speaker_identity_claim: str | None = None
     evidence: list[WorkingMemoryEvidence]
-    source_refs: list[str] = Field(default_factory=list)
-    evidence_quotes: list[str] = Field(default_factory=list)
-    evidence_spans: list[dict[str, Any]] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list[str])
+    evidence_quotes: list[str] = Field(default_factory=list[str])
+    evidence_spans: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]])
     capture_confidence: ConfidenceLabel = "medium"
     candidate_kind_hint: WorkingMemoryKindHint
-    risk_flags: list[str] = Field(default_factory=list)
+    risk_flags: list[str] = Field(default_factory=list[str])
     route_hint: WorkingMemoryRouteHint = "pending_l2"
     allowed_use: WorkingMemoryAllowedUse = "read_with_status"
     extractor_id: str = "l1_realtime_v1"
@@ -696,23 +730,23 @@ class LiberalMemoryCandidate(StrictBaseModel):
     candidate_text: str
     source_type: str
     source_example_id: str | None = None
-    source_unit_ids: list[str] = Field(default_factory=list)
-    source_artifact_ids: list[str] = Field(default_factory=list)
-    source_chunk_ids: list[str] = Field(default_factory=list)
-    evidence_spans: list[CandidateEvidenceSpan] = Field(default_factory=list)
-    raw_quotes: list[str] = Field(default_factory=list)
+    source_unit_ids: list[str] = Field(default_factory=list[str])
+    source_artifact_ids: list[str] = Field(default_factory=list[str])
+    source_chunk_ids: list[str] = Field(default_factory=list[str])
+    evidence_spans: list[CandidateEvidenceSpan] = Field(default_factory=list[CandidateEvidenceSpan])
+    raw_quotes: list[str] = Field(default_factory=list[str])
     speaker_or_actor_attribution: str | None = None
     attribution_confidence: ConfidenceLabel = "medium"
     candidate_kind_hint: str | None = None
     predicate_hint: str | None = None
     subject_mention: str | None = None
-    entity_mentions: list[CandidateEntityMention] = Field(default_factory=list)
-    time_qualifiers: list[str] = Field(default_factory=list)
-    risk_flags: list[str] = Field(default_factory=list)
+    entity_mentions: list[CandidateEntityMention] = Field(default_factory=list[CandidateEntityMention])
+    time_qualifiers: list[str] = Field(default_factory=list[str])
+    risk_flags: list[str] = Field(default_factory=list[str])
     confidence: ConfidenceLabel = "medium"
     extractor_id: str = "liberal_l1_v1"
     prompt_version: str | None = None
-    extraction_notes: list[str] = Field(default_factory=list)
+    extraction_notes: list[str] = Field(default_factory=list[str])
 
 
 class CandidateClaim(StrictBaseModel):
@@ -724,13 +758,13 @@ class CandidateClaim(StrictBaseModel):
     raw_claim: str
     predicate_hint: str | None = None
     subject_mention: str | None = None
-    object_mentions: list[str] = Field(default_factory=list)
-    qualifier_mentions: list[str] = Field(default_factory=list)
-    entity_mentions: list[CandidateEntityMention] = Field(default_factory=list)
-    evidence_spans: list[CandidateEvidenceSpan] = Field(default_factory=list)
-    risk_flags: list[str] = Field(default_factory=list)
+    object_mentions: list[str] = Field(default_factory=list[str])
+    qualifier_mentions: list[str] = Field(default_factory=list[str])
+    entity_mentions: list[CandidateEntityMention] = Field(default_factory=list[CandidateEntityMention])
+    evidence_spans: list[CandidateEvidenceSpan] = Field(default_factory=list[CandidateEvidenceSpan])
+    risk_flags: list[str] = Field(default_factory=list[str])
     confidence: ConfidenceLabel = "medium"
-    extraction_notes: list[str] = Field(default_factory=list)
+    extraction_notes: list[str] = Field(default_factory=list[str])
 
 
 class ExtractionMetadata(StrictBaseModel):
@@ -738,7 +772,7 @@ class ExtractionMetadata(StrictBaseModel):
     model: str | None = None
     prompt_version: str | None = None
     source_block_id: str | None = None
-    notes: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list[str])
 
 
 class MemoryEventFrame(StrictBaseModel):
@@ -777,9 +811,9 @@ class MemoryEventFrame(StrictBaseModel):
     evidence: list[EvidenceSpan]
     source_event_ids: list[str]
     confidence: ConfidenceLabel
-    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list)
+    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list[UncertaintyReason])
     extraction: ExtractionMetadata = Field(default_factory=ExtractionMetadata)
-    normalized_from_frame_ids: list[str] = Field(default_factory=list)
+    normalized_from_frame_ids: list[str] = Field(default_factory=list[str])
     duplicate_of_frame_id: str | None = None
 
 
@@ -793,8 +827,8 @@ class DerivedTriple(StrictBaseModel):
     valid_until: datetime | None = None
     asserted_at: datetime | None = None
     confidence: ConfidenceLabel
-    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list)
-    evidence: list[EvidenceSpan] = Field(default_factory=list)
+    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list[UncertaintyReason])
+    evidence: list[EvidenceSpan] = Field(default_factory=list[EvidenceSpan])
 
 
 class MutationPrecondition(StrictBaseModel):
@@ -826,13 +860,13 @@ class MemoryDecision(StrictBaseModel):
         "reject_policy",
         "reject_unsupported_inference",
     ]
-    target_memory_ids: list[str] = Field(default_factory=list)
-    target_entity_ids: list[str] = Field(default_factory=list)
+    target_memory_ids: list[str] = Field(default_factory=list[str])
+    target_entity_ids: list[str] = Field(default_factory=list[str])
     final_memory_text: str | None = None
     rationale: str
     confidence: ConfidenceLabel
-    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list)
-    preconditions: list[MutationPrecondition] = Field(default_factory=list)
+    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list[UncertaintyReason])
+    preconditions: list[MutationPrecondition] = Field(default_factory=list[MutationPrecondition])
 
 
 class FrameResolution(StrictBaseModel):
@@ -868,10 +902,10 @@ class UpdateMemoryMutation(StrictBaseModel):
     frame_id: str
     memory_id: str
     new_text: str | None = None
-    add_entities: list[EntityRef] = Field(default_factory=list)
-    add_source_refs: list[SourceRef] = Field(default_factory=list)
-    add_evidence: list[EvidenceSpan] = Field(default_factory=list)
-    add_event_frame_ids: list[str] = Field(default_factory=list)
+    add_entities: list[EntityRef] = Field(default_factory=list[EntityRef])
+    add_source_refs: list[SourceRef] = Field(default_factory=list[SourceRef])
+    add_evidence: list[EvidenceSpan] = Field(default_factory=list[EvidenceSpan])
+    add_event_frame_ids: list[str] = Field(default_factory=list[str])
     confidence: ConfidenceLabel
     uncertainty_reasons: list[UncertaintyReason]
     preconditions: list[MutationPrecondition]
@@ -915,12 +949,12 @@ class TaskRouteMutation(StrictBaseModel):
 
 class MemoryMutationPlan(StrictBaseModel):
     plan_id: str
-    creates: list[CreateMemoryMutation] = Field(default_factory=list)
-    updates: list[UpdateMemoryMutation] = Field(default_factory=list)
-    invalidations: list[InvalidateMemoryMutation] = Field(default_factory=list)
-    evidence_links: list[EvidenceLinkMutation] = Field(default_factory=list)
-    review_upserts: list[ReviewItemMutation] = Field(default_factory=list)
-    task_routes: list[TaskRouteMutation] = Field(default_factory=list)
+    creates: list[CreateMemoryMutation] = Field(default_factory=list[CreateMemoryMutation])
+    updates: list[UpdateMemoryMutation] = Field(default_factory=list[UpdateMemoryMutation])
+    invalidations: list[InvalidateMemoryMutation] = Field(default_factory=list[InvalidateMemoryMutation])
+    evidence_links: list[EvidenceLinkMutation] = Field(default_factory=list[EvidenceLinkMutation])
+    review_upserts: list[ReviewItemMutation] = Field(default_factory=list[ReviewItemMutation])
+    task_routes: list[TaskRouteMutation] = Field(default_factory=list[TaskRouteMutation])
 
 
 class VectorUpsert(StrictBaseModel):
@@ -941,18 +975,18 @@ class VectorDelete(StrictBaseModel):
 
 
 class VectorMutationPlan(StrictBaseModel):
-    upserts: list[VectorUpsert] = Field(default_factory=list)
-    deletes: list[VectorDelete] = Field(default_factory=list)
+    upserts: list[VectorUpsert] = Field(default_factory=list[VectorUpsert])
+    deletes: list[VectorDelete] = Field(default_factory=list[VectorDelete])
 
 
 class EntityOperation(StrictBaseModel):
     op_id: str
     action: Literal["create_entity", "update_entity", "merge_entities", "no_op"]
     entity: EntityRef
-    target_entity_ids: list[str] = Field(default_factory=list)
-    evidence: list[EvidenceSpan] = Field(default_factory=list)
+    target_entity_ids: list[str] = Field(default_factory=list[str])
+    evidence: list[EvidenceSpan] = Field(default_factory=list[EvidenceSpan])
     confidence: ConfidenceLabel
-    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list)
+    uncertainty_reasons: list[UncertaintyReason] = Field(default_factory=list[UncertaintyReason])
 
 
 class RelationshipOperation(StrictBaseModel):
@@ -962,7 +996,7 @@ class RelationshipOperation(StrictBaseModel):
     predicate: str
     object: FrameObject
     source_frame_id: str
-    evidence: list[EvidenceSpan] = Field(default_factory=list)
+    evidence: list[EvidenceSpan] = Field(default_factory=list[EvidenceSpan])
     confidence: ConfidenceLabel
 
 
@@ -1055,7 +1089,7 @@ class StageTrace(StrictBaseModel):
     finished_at: datetime
     input_count: int | None = None
     output_count: int | None = None
-    notes: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list[str])
 
 
 class PromptCallRef(StrictBaseModel):
@@ -1082,7 +1116,7 @@ class AuditTrace(StrictBaseModel):
     run_id: str
     stage_traces: list[StageTrace]
     redactions: list[RedactionRecord]
-    dropped_artifacts: list[DroppedArtifactRecord] = Field(default_factory=list)
+    dropped_artifacts: list[DroppedArtifactRecord] = Field(default_factory=list[DroppedArtifactRecord])
     prompt_call_refs: list[PromptCallRef]
     lint_results: list[LintResult]
 
@@ -1133,8 +1167,8 @@ class MemoryPipelineOutput(StrictBaseModel):
     config_version: str
     model_manifest: ModelManifest
     event_frames: list[MemoryEventFrame]
-    candidates: list[CandidateClaim] = Field(default_factory=list)
-    liberal_candidates: list[LiberalMemoryCandidate] = Field(default_factory=list)
+    candidates: list[CandidateClaim] = Field(default_factory=list[CandidateClaim])
+    liberal_candidates: list[LiberalMemoryCandidate] = Field(default_factory=list[LiberalMemoryCandidate])
     frame_resolutions: list[FrameResolution]
     derived_triples: list[DerivedTriple]
     decisions: list[MemoryDecision]
@@ -1146,7 +1180,7 @@ class MemoryPipelineOutput(StrictBaseModel):
     rejected_items: list[RejectedItem]
     audit: AuditTrace
     stats: PipelineStats
-    errors: list[PipelineError] = Field(default_factory=list)
+    errors: list[PipelineError] = Field(default_factory=list[PipelineError])
 
     @model_validator(mode="after")
     def reject_benchmark_label_leakage(self):

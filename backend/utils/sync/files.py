@@ -4,7 +4,7 @@ import re
 import shutil
 import struct
 import wave
-from typing import List
+from typing import Any, List, Optional
 
 from fastapi import HTTPException, UploadFile
 
@@ -16,25 +16,27 @@ try:
     from opuslib import Decoder
 except Exception as e:
     Decoder = None
-    _OPUS_IMPORT_ERROR = e
+    _opus_import_error: Optional[BaseException] = e
 else:
-    _OPUS_IMPORT_ERROR = None
+    _opus_import_error = None
 
 logger = logging.getLogger(__name__)
 
 MAX_SYNC_FRAME_BYTES = 65536
 
 
-def _get_opus_decoder_class():
+def _get_opus_decoder_class() -> Any:
     if Decoder is None:
         raise RuntimeError(
             'Opus sync decoding requires opuslib and the native libopus library. '
             'Install the OS-level Opus package before processing .opus sync files.'
-        ) from _OPUS_IMPORT_ERROR
+        ) from _opus_import_error
     return Decoder
 
 
-def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
+def decode_opus_file_to_wav(
+    opus_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, frame_size: int = 160
+) -> bool:
     """Decode an Opus file with length-prefixed frames to WAV format.
 
     Writes directly to WAV file to avoid accumulating all PCM data in memory.
@@ -92,14 +94,14 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
         return False
 
 
-def get_timestamp_from_path(path: str):
+def get_timestamp_from_path(path: str) -> int | float:
     return parse_sync_filename_timestamp(path)
 
 
-def retrieve_file_paths(files: List[UploadFile], uid: str):
+def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
     directory = f'syncing/{uid}/'
     os.makedirs(directory, exist_ok=True)
-    paths = []
+    paths: List[str] = []
     for file in files:
         filename = file.filename
         if not filename:
@@ -141,7 +143,9 @@ def get_wav_duration(wav_path: str) -> float:
         return 0.0
 
 
-def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, channels=1, sample_width=2):
+def decode_pcm_file_to_wav(
+    pcm_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2
+) -> bool:
     """Decode a length-prefixed PCM .bin file to WAV.
 
     The file format is: [4-byte uint32 frame_length][frame_bytes] repeated.
@@ -184,8 +188,8 @@ def _is_pcm_codec(filename: str) -> bool:
     return '_pcm16_' in filename or '_pcm8_' in filename
 
 
-def decode_files_to_wav(files_path: List[str]):
-    wav_files = []
+def decode_files_to_wav(files_path: List[str]) -> List[str]:
+    wav_files: List[str] = []
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
         filename = os.path.basename(path)

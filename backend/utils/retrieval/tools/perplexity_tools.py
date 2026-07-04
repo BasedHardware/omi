@@ -3,9 +3,10 @@ Tools for performing web searches using Perplexity AI.
 """
 
 import os
+from typing import Any, Dict, List, cast
 
 import httpx
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.http_client import get_webhook_client
 from utils.llm.clients import get_model
 from utils.log_sanitizer import sanitize
@@ -72,12 +73,12 @@ async def perplexity_web_search_tool(
             )
             return f"Error: Perplexity API returned status {response.status_code}. Please try again later."
 
-        result = response.json()
+        result = cast(Dict[str, Any], response.json())
 
         if 'choices' in result and len(result['choices']) > 0:
             content = result['choices'][0]['message']['content']
 
-            citations = []
+            citations: List[Any] = []
             if 'citations' in result:
                 citations = result['citations']
             elif 'citations' in result.get('choices', [{}])[0].get('message', {}):
@@ -86,11 +87,11 @@ async def perplexity_web_search_tool(
             formatted_result = f"Web Search Results:\n\n{content}\n\n"
 
             if citations:
-                formatted_result += "\nSources:\n"
                 for i, citation in enumerate(citations[:10], 1):
                     if isinstance(citation, dict):
-                        url = citation.get('url', citation.get('citation', ''))
-                        title = citation.get('title', '')
+                        c: Dict[str, Any] = cast(Dict[str, Any], citation)
+                        url = c.get('url', c.get('citation', ''))
+                        title = c.get('title', '')
                         if url:
                             formatted_result += f"{i}. {title}\n   {url}\n"
                     elif isinstance(citation, str):

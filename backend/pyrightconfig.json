@@ -267,7 +267,8 @@
         "models/transcript_segment.py",
         "models/tts.py",
         "models/user_usage.py",
-        "models/users.py"
+        "models/users.py",
+        "main.py"
     ],
     "exclude": ["**/__pycache__", ".venv", "pretrained_models"],
     "extraPaths": ["."],

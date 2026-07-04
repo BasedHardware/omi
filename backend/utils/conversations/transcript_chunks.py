@@ -7,7 +7,7 @@ conversation date, so semantic search can land on the verbatim evidence.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
 
@@ -17,7 +17,7 @@ CHUNK_WINDOW = 8
 CHUNK_STRIDE = 6
 
 
-def _speaker_label(seg: dict, people_by_id: Optional[dict] = None) -> str:
+def _speaker_label(seg: Dict[str, Any], people_by_id: Optional[Dict[str, str]] = None) -> str:
     if seg.get('is_user'):
         return 'User'
     person_id = seg.get('person_id')
@@ -28,18 +28,18 @@ def _speaker_label(seg: dict, people_by_id: Optional[dict] = None) -> str:
 
 
 def build_transcript_chunks(
-    segments: List[dict],
+    segments: List[Dict[str, Any]],
     started_at: Optional[datetime],
     window: int = CHUNK_WINDOW,
     stride: int = CHUNK_STRIDE,
-    people_by_id: Optional[dict] = None,
-) -> List[dict]:
+    people_by_id: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
     """segments: transcript_segment dicts ({'text','is_user','speaker_id','person_id',...}).
 
     Returns [{'text', 'created_at' (unix ts), 'chunk_index'}] ready for
     vector_db.upsert_transcript_chunk_vectors.
     """
-    lines = []
+    lines: List[str] = []
     for seg in segments or []:
         text = (seg.get('text') or '').strip()
         if not text:
@@ -54,7 +54,7 @@ def build_transcript_chunks(
         date_header = f"[Conversation on {started_at.strftime('%d %b %Y, %H:%M')}]\n"
         created_ts = int(started_at.timestamp())
 
-    chunks = []
+    chunks: List[Dict[str, Any]] = []
     idx = 0
     pos = 0
     while pos < len(lines):
@@ -73,7 +73,7 @@ def build_transcript_chunks(
     return chunks
 
 
-def hydrate_chunk_texts(uid: str, rows: List[dict]) -> List[dict]:
+def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Attach verbatim text to chunk references returned by vector search.
 
     Re-reads the conversations from Firestore (decrypted by the db layer) and rebuilds
@@ -84,15 +84,18 @@ def hydrate_chunk_texts(uid: str, rows: List[dict]) -> List[dict]:
     if not conv_ids:
         return []
     conversations = conversations_db.get_conversations_by_id(uid, conv_ids)
-    chunks_by_conv = {}
+    chunks_by_conv: Dict[str, Dict[int, str]] = {}
     for c in conversations:
-        segs = c.get('transcript_segments') or []
+        segs: List[Dict[str, Any]] = c.get('transcript_segments') or []
         started = c.get('started_at') or c.get('created_at')
         chunks_by_conv[c['id']] = {ch['chunk_index']: ch['text'] for ch in build_transcript_chunks(segs, started)}
 
-    hydrated = []
+    hydrated: List[Dict[str, Any]] = []
     for r in rows:
-        text = chunks_by_conv.get(r.get('conversation_id'), {}).get(r.get('chunk_index'))
+        conv_id = r.get('conversation_id')
+        chunk_idx = r.get('chunk_index')
+        conv_chunks = chunks_by_conv.get(conv_id) if conv_id else None
+        text = conv_chunks.get(chunk_idx) if (conv_chunks is not None and chunk_idx is not None) else None
         if text:
             hydrated.append({**r, 'text': text})
     return hydrated

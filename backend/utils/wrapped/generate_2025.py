@@ -5,8 +5,8 @@ Computes analytics from user's 2025 data and generates LLM-based insights.
 """
 
 from collections import Counter
-from datetime import datetime, timezone
-from typing import List, Dict, Any
+from datetime import datetime, timezone, date
+from typing import List, Dict, Any, Set, cast
 
 import database.wrapped as wrapped_db
 import database.conversations as conversations_db
@@ -80,6 +80,14 @@ DECISION_ARCHETYPES = [
 ]
 
 
+def _content_str(response: Any) -> str:
+    """Extract a string from an LLM response's content."""
+    content: Any = response.content
+    if isinstance(content, str):
+        return content
+    return ''
+
+
 def _update_progress(uid: str, year: int, step: str, pct: float):
     """Update generation progress."""
     wrapped_db.update_wrapped_progress(uid, year, {"step": step, "pct": pct})
@@ -99,7 +107,7 @@ def _compute_conversation_duration(conv: Conversation) -> float:
 
 def _find_signature_phrases(conversations: List[Conversation], sample_size: int = 50) -> Dict[str, int]:
     """Find signature phrases in user's conversations (sample for performance)."""
-    phrase_counts = Counter()
+    phrase_counts: Counter[str] = Counter()
 
     # Sample conversations
     sampled = conversations[:sample_size] if len(conversations) > sample_size else conversations
@@ -150,7 +158,7 @@ Make the description specific to THIS person based on what you see in their conv
 
         logger.info(f"[Wrapped]     - Calling Gemini for decision style...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -158,9 +166,10 @@ Make the description specific to THIS person based on what you see in their conv
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]
+        loaded: Any = json.loads(content)
+        if isinstance(loaded, list) and loaded:
+            loaded = cast(Any, loaded[0])
+        result = cast(Dict[str, str], loaded)
 
         logger.info(f"[Wrapped]     - Decision style: {result.get('name')}")
         return result
@@ -208,7 +217,7 @@ Be specific with actual phrases from their conversations. Avoid generic filler w
 
         logger.info(f"[Wrapped]     - Calling Gemini for top phrases...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -216,8 +225,9 @@ Be specific with actual phrases from their conversations. Avoid generic filler w
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
-        phrases = result.get("phrases", []) if isinstance(result, dict) else result
+        loaded: Any = json.loads(content)
+        phrases_loaded: Any = cast(Dict[str, Any], loaded).get("phrases", []) if isinstance(loaded, dict) else loaded
+        phrases = cast(List[Dict[str, Any]], phrases_loaded)
 
         logger.info(f"[Wrapped]     - Found {len(phrases)} top phrases")
         return phrases[:5]
@@ -238,7 +248,7 @@ Be specific with actual phrases from their conversations. Avoid generic filler w
 
 def _build_conversations_context(conversations: List[Conversation], max_chars: int = 800000) -> str:
     """Build a context string from conversations for Gemini analysis (title + overview for broad coverage)."""
-    context_parts = []
+    context_parts: List[str] = []
     total_chars = 0
 
     for conv in conversations:
@@ -310,7 +320,7 @@ Be specific and reference actual events from the conversations. Make titles catc
 
         logger.info(f"[Wrapped]     - Calling Gemini for memorable days...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         # Parse JSON
@@ -385,7 +395,7 @@ Pick something genuinely funny and retell it in an entertaining way. Make the us
 
         logger.info(f"[Wrapped]     - Calling Gemini for funniest event...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -445,7 +455,7 @@ Frame it in a lighthearted, relatable way - we've all been there! Make it funny 
 
         logger.info(f"[Wrapped]     - Calling Gemini for most embarrassing event...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -508,7 +518,7 @@ IMPORTANT:
 
         logger.info(f"[Wrapped]     - Calling Gemini for top buddies...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -516,12 +526,12 @@ IMPORTANT:
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
-        if not isinstance(result, list):
-            result = [result]
+        loaded: Any = json.loads(content)
+        if not isinstance(loaded, list):
+            loaded = [loaded]
 
         # Ensure we have exactly 5
-        result = result[:5]
+        result = cast(List[Dict[str, Any]], loaded)[:5]
 
         logger.info(f"[Wrapped]     - Successfully parsed {len(result)} buddies")
         return result
@@ -584,7 +594,7 @@ Be specific with actual names. If something isn't clearly mentioned, make your b
 
         logger.info(f"[Wrapped]     - Calling Gemini for obsessions...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -592,9 +602,10 @@ Be specific with actual names. If something isn't clearly mentioned, make your b
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]
+        loaded: Any = json.loads(content)
+        if isinstance(loaded, list) and loaded:
+            loaded = cast(Any, loaded[0])
+        result = cast(Dict[str, Any], loaded)
 
         logger.info(f"[Wrapped]     - Obsessions found: {result}")
         return result
@@ -640,7 +651,7 @@ Include a mix of movies they mentioned AND movies that match their vibe/interest
 
         logger.info(f"[Wrapped]     - Calling Gemini for movie recommendations...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -648,11 +659,11 @@ Include a mix of movies they mentioned AND movies that match their vibe/interest
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
-        if isinstance(result, list):
-            return result[:5]
-
-        movies = result.get("movies", [])
+        loaded: Any = json.loads(content)
+        if isinstance(loaded, list):
+            return cast(List[str], loaded)[:5]
+        result = cast(Dict[str, Any], loaded)
+        movies = cast(List[str], result.get("movies", []))
         logger.info(f"[Wrapped]     - Movie recommendations: {movies}")
         return movies[:5]
 
@@ -705,7 +716,7 @@ Be specific and empathetic. These should feel personal and meaningful."""
 
         logger.info(f"[Wrapped]     - Calling Gemini for struggles and wins...")
         response = get_llm('wrapped_analysis').invoke(prompt)
-        content = response.content.strip()
+        content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
 
         if "```json" in content:
@@ -713,9 +724,10 @@ Be specific and empathetic. These should feel personal and meaningful."""
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]
+        loaded: Any = json.loads(content)
+        if isinstance(loaded, list) and loaded:
+            loaded = cast(Any, loaded[0])
+        result = cast(Dict[str, Any], loaded)
 
         logger.info(f"[Wrapped]     - Struggles and wins found")
         return result
@@ -923,12 +935,12 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         wrapped_db.update_wrapped_status(uid, year, WrappedStatus.ERROR, error=str(e))
 
 
-def _compute_all_stats(conversations: List[Conversation], action_items: List[dict]) -> Dict[str, Any]:
+def _compute_all_stats(conversations: List[Conversation], action_items: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Compute all analytics stats from conversations and action items."""
     logger.info(
         f"[Wrapped]   - Computing stats from {len(conversations)} conversations, {len(action_items)} action items"
     )
-    result = {}
+    result: Dict[str, Any] = {}
 
     # === Section 1: Your Year in Numbers ===
     logger.info(f"[Wrapped]   - Section 1: Year in Numbers...")
@@ -936,7 +948,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[dic
     result["total_conversations"] = total_conversations
 
     # Days active (unique days with conversations)
-    active_days = set()
+    active_days: Set[date] = set()
     for conv in conversations:
         if conv.created_at:
             active_days.add(conv.created_at.date())
@@ -952,7 +964,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[dic
 
     # === Section 2: What You Talked About ===
     logger.info(f"[Wrapped]   - Section 2: Topics & Categories...")
-    category_counts = Counter()
+    category_counts: Counter[str] = Counter()
 
     for conv in conversations:
         cat = conv.structured.category.value if conv.structured and conv.structured.category else "other"

@@ -40,7 +40,7 @@ from models.chat import (
     MessageConversation,
     FileChat,
 )
-from utils.apps import get_available_app_by_id  # type: ignore[reportUnknownVariableType]  # apps module untyped
+from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids  # type: ignore[reportUnknownVariableType]  # conversation_helpers untyped
 from utils.chat import (
     acquire_chat_session,
@@ -51,15 +51,15 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
-from utils.stt.streaming import process_audio_dg, get_stt_service_for_language  # type: ignore[reportUnknownVariableType]  # stt.streaming untyped
-from utils.llm.goals import extract_and_update_goal_progress  # type: ignore[reportUnknownVariableType]  # llm.goals untyped
+from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
+from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
-from utils.retrieval.graph import execute_chat_stream  # type: ignore[reportUnknownVariableType]  # retrieval.graph untyped
+from utils.retrieval.graph import execute_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
@@ -87,7 +87,7 @@ _MAX_PCM_BODY_BYTES = 200_000_000
 
 def _rate_limited_uid(policy: str) -> Any:
     """Typed wrapper for the untyped endpoints.with_rate_limit dependency factory."""
-    return Depends(auth.with_rate_limit(auth.get_current_user_uid, policy))  # type: ignore[reportUnknownMemberType]  # endpoints module untyped
+    return Depends(auth.with_rate_limit(auth.get_current_user_uid, policy))
 
 
 def _current_uid() -> Any:
@@ -292,9 +292,9 @@ def send_message(
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
-        llm_executor.submit(extract_and_update_goal_progress, uid, data.text)  # type: ignore[reportUnknownMemberType,reportUnknownArgumentType]  # extract_and_update_goal_progress untyped
+        llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
-    app_dict = cast(Optional[Dict[str, Any]], get_available_app_by_id(compat_app_id, uid)) if compat_app_id else None
+    app_dict = get_available_app_by_id(compat_app_id, uid) if compat_app_id else None
     app = App(**app_dict) if app_dict else None
 
     app_id_from_app = app.id if app else None
@@ -467,11 +467,11 @@ def create_voice_message_stream(
     enforce_chat_quota(uid, platform=x_app_platform)
 
     # wav
-    paths: List[str] = cast(List[str], retrieve_file_paths(files, uid))
+    paths: List[str] = retrieve_file_paths(files, uid)
     if len(paths) == 0:
         raise HTTPException(status_code=400, detail='Paths is invalid')
 
-    wav_paths: List[str] = cast(List[str], decode_files_to_wav(paths))
+    wav_paths: List[str] = decode_files_to_wav(paths)
     if len(wav_paths) == 0:
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
@@ -620,13 +620,13 @@ async def transcribe_voice_message(
             wav_paths.append(temp_path)
         else:
             # For other files, collect paths for later conversion
-            path = cast(List[str], retrieve_file_paths([file], uid))
+            path = retrieve_file_paths([file], uid)
             if path:
                 other_file_paths.extend(path)
 
     # Convert other files to WAV if needed
     if other_file_paths:
-        converted_wav_paths: List[str] = cast(List[str], decode_files_to_wav(other_file_paths))
+        converted_wav_paths: List[str] = decode_files_to_wav(other_file_paths)
         if converted_wav_paths:
             wav_paths.extend(converted_wav_paths)
 
@@ -1007,7 +1007,7 @@ def upload_file_chat(  # type: ignore[reportRedeclaration]  # v1 compat duplicat
                 temp_file.unlink()
 
     if len(thumbs_name) > 0:
-        thumbs_path: Dict[str, Any] = cast(Dict[str, Any], storage.upload_multi_chat_files(thumbs_name, uid))  # type: ignore[reportUnknownMemberType]  # storage.upload_multi_chat_files untyped
+        thumbs_path: Dict[str, Any] = cast(Dict[str, Any], storage.upload_multi_chat_files(thumbs_name, uid))
         for fc in files_chat:
             if not fc.is_image():
                 continue
@@ -1066,7 +1066,7 @@ def upload_file_chat(  # noqa: F811  — v1 compat duplicate of v2 route
                 temp_file.unlink()
 
     if len(thumbs_name) > 0:
-        thumbs_path: Dict[str, Any] = cast(Dict[str, Any], storage.upload_multi_chat_files(thumbs_name, uid))  # type: ignore[reportUnknownMemberType]  # storage.upload_multi_chat_files untyped
+        thumbs_path: Dict[str, Any] = cast(Dict[str, Any], storage.upload_multi_chat_files(thumbs_name, uid))
         for fc in files_chat:
             if not fc.is_image():
                 continue

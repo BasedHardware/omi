@@ -5,7 +5,7 @@ Handles user goals with AI-powered suggestions and advice.
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,9 +15,9 @@ from database import goals as goals_db
 from utils.other import endpoints as auth
 from utils.request_validation import HistoryDays
 from utils.llm.goals import (
-    suggest_goal as suggest_goal_llm,  # type: ignore[reportUnknownVariableType]  # utils.llm.goals not yet strict
+    suggest_goal as suggest_goal_llm,
     get_goal_advice as get_goal_advice_llm,
-    extract_and_update_goal_progress,  # type: ignore[reportUnknownVariableType]  # utils.llm.goals not yet strict
+    extract_and_update_goal_progress,
 )
 
 router = APIRouter()
@@ -209,14 +209,16 @@ def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> 
 
 
 @router.get('/v1/goals/suggest', tags=['goals'])
-def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> Dict[str, Any]:  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit returns untyped dependency
+def suggest_goal(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))
+) -> Dict[str, Any]:
     """Generate an AI-suggested goal based on user's memories and conversations."""
-    return cast(Dict[str, Any], suggest_goal_llm(uid))
+    return suggest_goal_llm(uid)
 
 
 @router.get('/v1/goals/{goal_id}/advice', tags=['goals'])
 def get_goal_advice(
-    goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit returns untyped dependency
+    goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> Dict[str, Any]:
     """Get AI-generated actionable advice for achieving a goal."""
     try:
@@ -228,7 +230,7 @@ def get_goal_advice(
 
 @router.get('/v1/goals/advice', tags=['goals'])
 def get_current_goal_advice(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit returns untyped dependency
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> Dict[str, Any]:
     """Get AI-generated advice for the current active goal."""
     goal = goals_db.get_user_goal(uid)
@@ -247,13 +249,13 @@ class ProgressExtractRequest(BaseModel):
 @router.post('/v1/goals/extract-progress', tags=['goals'])
 def extract_and_update_progress(
     request: ProgressExtractRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit returns untyped dependency
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),
 ) -> Dict[str, Any]:
     """
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
-    result = cast(Optional[Dict[str, Any]], extract_and_update_goal_progress(uid, request.text))
+    result = extract_and_update_goal_progress(uid, request.text)
     if result is None:
         return {'updated': False, 'reason': 'No active goal'}
 

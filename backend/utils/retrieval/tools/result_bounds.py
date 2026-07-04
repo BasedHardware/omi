@@ -8,10 +8,14 @@ helpers cap the row count and the raw character size, and append a note telling 
 summarize what it has and offer to narrow.
 """
 
+from typing import List, Tuple, TypeVar
+
+T = TypeVar("T")
+
 MAX_RESULT_CHARS = 60000
 
 
-def cap_items_for_llm(items: list, max_items: int):
+def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, bool]:
     """Keep at most ``max_items`` rows for the chat model.
 
     Callers pass rows already ordered most-relevant- or most-recent-first, so this keeps the

@@ -27,7 +27,7 @@ import functools
 import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Callable, ParamSpec, TypeVar
+from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ T = TypeVar("T")
 class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor with active-task tracking for observability."""
 
-    def __init__(self, name: str, **kwargs):
+    def __init__(self, name: str, **kwargs: Any):
         super().__init__(**kwargs)
         self.name = name
         self._active_count = 0
@@ -48,11 +48,11 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     def active_count(self) -> int:
         return self._active_count
 
-    def submit(self, fn, /, *args, **kwargs):
+    def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
         future = super().submit(self._tracked, fn, *args, **kwargs)
         return future
 
-    def _tracked(self, fn, *args, **kwargs):
+    def _tracked(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         with self._active_lock:
             self._active_count += 1
         try:
@@ -99,9 +99,9 @@ def submit_with_context(
     return executor.submit(ctx.run, fn, *args, **kwargs)
 
 
-def get_executor_metrics() -> list:
+def get_executor_metrics() -> List[Dict[str, Any]]:
     """Return health metrics for all named executor pools."""
-    metrics = []
+    metrics: List[Dict[str, Any]] = []
     for executor in _ALL_EXECUTORS:
         max_w = executor._max_workers
         active = executor.active_count
@@ -140,10 +140,10 @@ async def log_executor_health(
             pass
 
 
-_background_tasks: set[asyncio.Task] = set()
+_background_tasks: set[asyncio.Task[Any]] = set()
 
 
-def start_background_task(coro, *, name: str) -> asyncio.Task:
+def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
     """Schedule *coro* as a tracked background task with exception logging.
 
     Use this instead of bare ``asyncio.create_task()`` for production
@@ -153,7 +153,7 @@ def start_background_task(coro, *, name: str) -> asyncio.Task:
     task = asyncio.create_task(coro, name=name)
     _background_tasks.add(task)
 
-    def _done(t: asyncio.Task) -> None:
+    def _done(t: asyncio.Task[Any]) -> None:
         _background_tasks.discard(t)
         if t.cancelled():
             logger.info('background_task cancelled: %s', t.get_name())

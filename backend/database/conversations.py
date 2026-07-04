@@ -17,7 +17,7 @@ from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
-from utils.other.storage import list_audio_chunks  # type: ignore[reportUnknownVariableType]  # returns List[dict] with untyped value params
+from utils.other.storage import list_audio_chunks
 import logging
 
 logger = logging.getLogger(__name__)
@@ -399,7 +399,7 @@ def create_audio_files_from_chunks(
         List of AudioFile objects
     """
     # Get all chunks for this conversation
-    chunks: List[Dict[str, Any]] = cast(List[Dict[str, Any]], list_audio_chunks(uid, conversation_id))
+    chunks: List[Dict[str, Any]] = list_audio_chunks(uid, conversation_id)
     if not chunks:
         return []
 
@@ -1093,7 +1093,7 @@ def store_model_emotion_predictions_result(
                 "created_at": now,
                 "start": prediction.time[0],
                 "end": prediction.time[1],
-                "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),  # type: ignore[reportUnknownMemberType]  # utils.other.hume is an untyped module
+                "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
             },
         )
         count = count + 1

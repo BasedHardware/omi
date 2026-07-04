@@ -9,7 +9,7 @@ from database.redis_db import get_enabled_apps, r as redis_client
 from database.chat import add_integration_chat_message
 from utils.apps import (
     verify_api_key,
-    get_available_app_by_id,  # type: ignore[reportUnknownVariableType]  # returns bare dict, narrowed at call site
+    get_available_app_by_id,
 )
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
@@ -126,7 +126,7 @@ def send_app_notification_to_user(
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     # Get app details and convert to App model
-    app_data = cast(Optional[Dict[str, Any]], get_available_app_by_id(aid, uid))
+    app_data = get_available_app_by_id(aid, uid)
     if not app_data:
         raise HTTPException(status_code=404, detail='App not found')
     app = App(**app_data)

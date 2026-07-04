@@ -21,7 +21,7 @@ This module reads those numbers rather than maintaining a parallel counter.
 """
 
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from database import user_usage as user_usage_db
 from models.users import PlanType
@@ -94,7 +94,7 @@ def is_overage_plan(plan: PlanType) -> bool:
     return _plan_included_questions(plan) is not None or _plan_included_cost_usd(plan) is not None
 
 
-def get_user_overage(uid: str, plan: PlanType) -> dict:
+def get_user_overage(uid: str, plan: PlanType) -> Dict[str, Any]:
     """Current-month overage snapshot for *uid* on *plan*.
 
     Returns a dict with:

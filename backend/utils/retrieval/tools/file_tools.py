@@ -6,10 +6,10 @@ These tools allow the LLM to search and query files uploaded to chat sessions.
 
 import contextvars
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
-from typing import List, Optional
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
+from typing import Any, Dict, List, Optional, cast
 import database.chat as chat_db
-from models.chat import ChatSession, FileChat, Message
+from models.chat import ChatSession
 from utils.other.chat_file import FileChatTool
 import logging
 
@@ -23,8 +23,16 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
+
+
 @tool
-def search_files_tool(question: str, file_ids: Optional[List[str]] = None, config: RunnableConfig = None) -> str:
+def search_files_tool(question: str, file_ids: Optional[List[str]] = None, config: RunnableConfig = None) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
     """
     Search and ask questions about files attached to the current chat session.
     Use this when the user asks about documents, images, PDFs, or any files they've uploaded.
@@ -47,22 +55,20 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         Answer based on the file contents
     """
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                logger.info(f"🔧 search_files_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ search_files_tool - config not found in context variable")
-            config = None
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+        if cfg:
+            logger.info(f"🔧 search_files_tool - got config from context variable")
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ search_files_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-        chat_session_id = config['configurable'].get('chat_session_id')
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+        chat_session_id = configurable.get('chat_session_id')
     except (KeyError, TypeError) as e:
         logger.error(f"❌ search_files_tool - error accessing config: {e}")
         import traceback

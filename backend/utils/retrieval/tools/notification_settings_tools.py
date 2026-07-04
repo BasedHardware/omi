@@ -2,10 +2,10 @@
 Tools for managing user notification settings.
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 import contextvars
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.notifications as notification_db
@@ -18,6 +18,14 @@ try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
 
 
 def _format_hour(hour: int) -> str:
@@ -36,7 +44,7 @@ def _format_hour(hour: int) -> str:
 def manage_daily_summary_tool(
     action: str,
     hour: Optional[int] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Manage the user's daily summary/reflection notification settings.
@@ -70,18 +78,20 @@ def manage_daily_summary_tool(
     """
     logger.info(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-        except LookupError:
-            config = None
-
-    if config is None:
+    # config may be None when called directly (not via langchain injection)
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+    if cfg is None:
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
+        raw_configurable = cfg.get('configurable')
+        if isinstance(raw_configurable, dict):
+            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
+            uid = configurable.get('user_id')
+        else:
+            uid = None
     except (KeyError, TypeError):
         return "Error: Configuration not available"
 

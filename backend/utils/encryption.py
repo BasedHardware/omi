@@ -56,7 +56,7 @@ def decrypt(encrypted_data: str, uid: str) -> str:
     """
     Decrypts a base64 encoded string using a user-specific key.
     """
-    if not encrypted_data or not isinstance(encrypted_data, str):
+    if not encrypted_data:
         return encrypted_data
 
     try:

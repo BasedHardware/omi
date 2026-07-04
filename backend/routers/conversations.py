@@ -11,7 +11,7 @@ import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
-from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
 from utils.other.storage import delete_conversation_audio_files, get_app_thumbnail_url
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -51,12 +51,12 @@ from utils.conversations.search import search_conversations  # type: ignore[repo
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.conversations.merge_conversations import (
     perform_merge_async,
-    validate_merge_compatibility,  # type: ignore[reportUnknownVariableType]  # partially-typed import
+    validate_merge_compatibility,
 )
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
-from utils.app_integrations import trigger_external_integrations  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -64,7 +64,7 @@ from utils.conversations.calendar_linking import (
 )
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times  # type: ignore[reportUnknownVariableType]  # partially-typed import
 from utils.retrieval.tools.calendar_tools import get_google_calendar_event  # type: ignore[reportUnknownVariableType]  # partially-typed import
-from utils.retrieval.tools.google_utils import refresh_google_token  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import get_google_maps_location
 import logging
 
@@ -127,7 +127,7 @@ class ProcessConversationRequest(BaseModel):
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
 def process_in_progress_conversation(
     request: Optional[ProcessConversationRequest] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit untyped
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
@@ -152,7 +152,7 @@ def process_in_progress_conversation(
     conversation = process_conversation(uid, conversation.language or 'en', conversation, force_process=True)
     messages: List[Any] = cast(
         List[Any],
-        asyncio.run(trigger_external_integrations(uid, conversation)),  # type: ignore[reportUnknownArgumentType]  # trigger_external_integrations returns a partially-typed coroutine
+        asyncio.run(trigger_external_integrations(uid, conversation)),
     )
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -164,7 +164,7 @@ def process_in_progress_conversation(
 def finalize_conversation(
     conversation_id: str,
     request: Optional[ProcessConversationRequest] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit untyped
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     """Finalize exactly one backend conversation.
 
@@ -212,7 +212,7 @@ def finalize_conversation(
         conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
     messages: List[Any] = cast(
         List[Any],
-        asyncio.run(trigger_external_integrations(uid, conversation)),  # type: ignore[reportUnknownArgumentType]  # trigger_external_integrations returns a partially-typed coroutine
+        asyncio.run(trigger_external_integrations(uid, conversation)),
     )
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -223,7 +223,7 @@ def reprocess_conversation(
     conversation_id: str,
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit untyped
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -609,7 +609,7 @@ def conversation_has_audio_recording(
     _get_valid_conversation_by_id(uid, conversation_id)
     # get_conversation_recording_if_exists is annotated as returning str but actually returns
     # None when the recording is missing; treat the value as Optional[str].
-    recording: Optional[str] = cast(Optional[str], get_conversation_recording_if_exists(uid, conversation_id))
+    recording: Optional[str] = get_conversation_recording_if_exists(uid, conversation_id)
     return {'has_recording': recording is not None}
 
 
@@ -1007,7 +1007,7 @@ def get_shared_conversation_by_id(conversation_id: str) -> Dict[str, Any]:
 @router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
 def search_conversations_endpoint(
     search_request: SearchRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit untyped
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
 ) -> Dict[str, Any]:
     if search_request.speaker_id and search_request.speaker_id != 'user':
         person = users_db.get_person(uid, search_request.speaker_id)
@@ -1059,7 +1059,7 @@ def get_conversation_suggested_apps(
     # Get suggested app models with full data (similar to /v1/apps endpoint)
     suggested_apps: List[App] = []
     for app_id in conversation.suggested_summarization_apps:
-        app_data_raw = cast(Optional[Dict[str, Any]], get_available_app_by_id_with_reviews(app_id, uid))
+        app_data_raw = get_available_app_by_id_with_reviews(app_id, uid)
         if app_data_raw:
             app = App(**app_data_raw)
             # Add user-specific data
@@ -1082,7 +1082,7 @@ def get_conversation_suggested_apps(
 def test_prompt(
     conversation_id: str,
     request: TestPromptRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "test:prompt")),  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit untyped
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "test:prompt")),
 ):
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
@@ -1107,7 +1107,7 @@ def test_prompt(
 def merge_conversations(
     request: MergeConversationsRequest,
     background_tasks: BackgroundTasks,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),  # type: ignore[reportUnknownMemberType]  # auth.with_rate_limit untyped
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
 ):
     """
     Merge multiple conversations into a new conversation (async).

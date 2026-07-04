@@ -10,13 +10,14 @@ again (same behavior as before this module existed); the quota snapshot
 returned to the client in that case reports ``has_access = False``.
 """
 
-from typing import FrozenSet, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from fastapi import HTTPException
 
 import database.phone_call_usage as phone_call_usage_db
 import database.users as users_db
 from database.phone_call_config import get_config_for_plan
+from models.users import PlanType
 from utils.subscription import is_paid_plan
 
 # Minimal E.164 prefix → ISO-2 mapping. Intentionally covers the cheap/common
@@ -96,12 +97,12 @@ class QuotaSnapshot:
 
     def __init__(
         self,
-        plan,
+        plan: Optional[PlanType],
         is_paid: bool,
         monthly_limit: Optional[int],
         monthly_used: int,
         max_duration_seconds: Optional[int],
-        allowed_countries: list,
+        allowed_countries: List[str],
         reset_at: int,
     ):
         self.plan = plan
@@ -129,7 +130,7 @@ class QuotaSnapshot:
             return None
         return max(0, self.monthly_limit - self.monthly_used)
 
-    def to_client_dict(self) -> dict:
+    def to_client_dict(self) -> Dict[str, Any]:
         return {
             'has_access': self.has_access,
             'is_paid': self.is_paid,

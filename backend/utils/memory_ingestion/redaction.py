@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from utils.memory_ingestion.ids import StableIdFactory, stable_hmac
 from utils.memory_ingestion.models import RedactionRecord
@@ -116,9 +116,10 @@ def redact_payload(
             value, source_event_id=source_event_id, id_factory=id_factory, hmac_key=hmac_key, payload_path=path
         )
     if isinstance(value, list):
-        out = []
+        items: list[Any] = cast(list[Any], value)
+        out: list[Any] = []
         redactions: list[RedactionRecord] = []
-        for index, item in enumerate(value):
+        for index, item in enumerate(items):
             redacted_item, item_redactions = redact_payload(
                 item,
                 source_event_id=source_event_id,
@@ -130,9 +131,10 @@ def redact_payload(
             redactions.extend(item_redactions)
         return out, redactions
     if isinstance(value, dict):
-        out = {}
+        items_dict: dict[Any, Any] = cast(dict[Any, Any], value)
+        out_dict: dict[Any, Any] = {}
         redactions = []
-        for key, item in value.items():
+        for key, item in items_dict.items():
             redacted_item, item_redactions = redact_payload(
                 item,
                 source_event_id=source_event_id,
@@ -140,7 +142,7 @@ def redact_payload(
                 hmac_key=hmac_key,
                 path=f"{path}.{key}",
             )
-            out[key] = redacted_item
+            out_dict[key] = redacted_item
             redactions.extend(item_redactions)
-        return out, redactions
+        return out_dict, redactions
     return value, []

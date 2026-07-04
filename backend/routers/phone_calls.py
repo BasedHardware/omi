@@ -3,7 +3,7 @@ import re
 import traceback
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
@@ -18,12 +18,12 @@ from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
 from utils.executors import db_executor, run_blocking
 from utils.twilio_service import (
-    generate_access_token,  # type: ignore[reportUnknownVariableType]  # twilio_service returns bare dict
-    start_caller_id_verification,  # type: ignore[reportUnknownVariableType]  # twilio_service returns bare dict
+    generate_access_token,
+    start_caller_id_verification,
     check_caller_id_verified,
     delete_caller_id,
-    get_caller_id,  # type: ignore[reportUnknownVariableType]  # twilio_service returns bare dict
-    validate_twilio_signature,  # type: ignore[reportUnknownVariableType]  # twilio_service takes bare dict
+    get_caller_id,
+    validate_twilio_signature,
 )
 
 E164_PATTERN = re.compile(r'^\+[1-9]\d{1,14}$')
@@ -115,14 +115,14 @@ def verify_phone_number(
         raise HTTPException(status_code=409, detail="Phone number already verified")
 
     try:
-        result = cast(Dict[str, Any], start_caller_id_verification(phone_number))
+        result = start_caller_id_verification(phone_number)
         phone_calls_db.set_pending_verification(uid, phone_number)
         return VerifyPhoneNumberResponse(**result)
     except TwilioRestException as e:
         # Error 21450: a validation request already exists for this number.
         # This could mean (a) it's already verified by another user, or (b) a verification is still pending.
         if e.code == 21450:
-            caller_id_info = cast(Optional[Dict[str, Any]], get_caller_id(phone_number))
+            caller_id_info = get_caller_id(phone_number)
             if caller_id_info:
                 # Number is already verified in Twilio by someone else — block this attempt
                 raise HTTPException(
@@ -169,7 +169,7 @@ def check_phone_verification(
         return CheckVerificationResponse(verified=False)
 
     # Store the verified number
-    caller_id_info = cast(Optional[Dict[str, Any]], get_caller_id(phone_number))
+    caller_id_info = get_caller_id(phone_number)
     existing_numbers = phone_calls_db.get_phone_numbers(uid)
 
     phone_number_id = str(uuid.uuid4())
@@ -227,7 +227,7 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=400, detail="No verified phone number found. Verify a number first.")
 
     try:
-        token_data = cast(Dict[str, Any], generate_access_token(uid))
+        token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate token: {str(e)}")

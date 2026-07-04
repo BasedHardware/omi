@@ -4,7 +4,7 @@ Safety guards for agentic chat system.
 Prevents infinite loops, context overflow, and excessive tool usage.
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 import time
 import logging
 
@@ -32,14 +32,14 @@ class AgentSafetyGuard:
 
         # Tracking
         self.tool_call_count = 0
-        self.tool_call_history: List[Tuple[str, Dict, float]] = []  # (tool_name, params, timestamp)
+        self.tool_call_history: List[Tuple[str, Dict[str, Any], float]] = []  # (tool_name, params, timestamp)
         self.estimated_tokens = 0
         self.start_time = time.time()
 
         # Loop detection window (check last N calls)
         self.loop_detection_window = 3
 
-    def validate_tool_call(self, tool_name: str, params: Dict) -> None:
+    def validate_tool_call(self, tool_name: str, params: Dict[str, Any]) -> None:
         """
         Validate a tool call before execution.
 
@@ -107,7 +107,7 @@ class AgentSafetyGuard:
             f"🛡️ Safety Guard: Context size: {self.estimated_tokens}/{self.max_context_tokens} tokens (+{new_tokens})"
         )
 
-    def _is_loop_detected(self, tool_name: str, params: Dict) -> bool:
+    def _is_loop_detected(self, tool_name: str, params: Dict[str, Any]) -> bool:
         """
         Detect if the same tool is being called repeatedly with similar parameters.
 
@@ -133,7 +133,7 @@ class AgentSafetyGuard:
         # If more than half of recent calls are the same tool with similar params, it's likely a loop
         return similar_count >= (self.loop_detection_window // 2 + 1)
 
-    def _params_similar(self, params1: Dict, params2: Dict, threshold: float = 0.8) -> bool:
+    def _params_similar(self, params1: Dict[str, Any], params2: Dict[str, Any], threshold: float = 0.8) -> bool:
         """
         Check if two parameter sets are similar (for loop detection).
 
@@ -166,7 +166,7 @@ class AgentSafetyGuard:
         similarity = matching / len(all_keys)
         return similarity >= threshold
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> Dict[str, Any]:
         """
         Get statistics about the current session.
 

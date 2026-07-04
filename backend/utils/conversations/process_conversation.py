@@ -74,6 +74,7 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.goals import extract_and_update_goal_progress
+from utils.llm.knowledge_graph import extract_knowledge_from_memory
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -83,7 +84,12 @@ from utils.llm.chat import (
 from utils.llm.external_integrations import get_message_structure
 from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
-from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
+from utils.other.hume import (
+    get_hume,
+    HumeJobCallbackModel,
+    HumeJobModelPredictionResponseModel,
+    HumePredictionEmotionResponseModel,
+)
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
@@ -662,11 +668,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation):
         record_usage(uid, memories_created=len(parsed_memories))
 
         try:
-            from utils.llm.knowledge_graph import extract_knowledge_from_memory
-
-            user_name = get_user_name(uid)
-
-            from database.memories import set_memory_kg_extracted
+            user_name = cast(str, get_user_name(uid))
 
             for memory_db_obj in parsed_memories:
                 if memory_db_obj.kg_extracted or memory_db_obj.is_locked:
@@ -674,14 +676,14 @@ def _extract_memories_legacy(uid: str, conversation: Conversation):
                 try:
                     result = extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
                     if result is not None:
-                        set_memory_kg_extracted(uid, memory_db_obj.id)
+                        memories_db.set_memory_kg_extracted(uid, memory_db_obj.id)
                 except Exception:
                     logging.exception(f"Error extracting knowledge graph from memory_id: {memory_db_obj.id}")
         except Exception:
             logging.exception("Error extracting knowledge graph from memory.")
 
 
-def _transcript_artifact_ref(conversation: Conversation) -> dict:
+def _transcript_artifact_ref(conversation: Conversation) -> Dict[str, Any]:
     segments = conversation.transcript_segments or []
     return {
         "kind": "transcript_segments",
@@ -692,7 +694,7 @@ def _transcript_artifact_ref(conversation: Conversation) -> dict:
     }
 
 
-def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
+def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> None:
     memories_str = ", ".join([memory.content for memory in memories])
     message = f"New memories {memories_str}"
     ai_message = NotificationMessage(
@@ -715,7 +717,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         return
 
     is_locked = conversation.is_locked
-    action_items_data = []
+    action_items_data: List[Dict[str, Any]] = []
     now = datetime.now(timezone.utc)
 
     for action_item in conversation.structured.action_items:
@@ -776,48 +778,56 @@ TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED
 
 
 def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
-    segments = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
+    segments: List[Dict[str, Any]] = [s.model_dump() for s in (conversation.transcript_segments or [])]
     chunks = build_transcript_chunks(segments, conversation.started_at or conversation.created_at)
     if chunks:
         upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
 
 
-def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
+def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
-    tz = notification_db.get_user_time_zone(uid)
+    tz = notification_db.get_user_time_zone(uid) or ''
 
-    metadata = {}
+    metadata: Dict[str, Any] = {}
 
     # Extract metadata based on conversation source
     if conversation.source == ConversationSource.external_integration:
-        text_source = conversation.external_data.get('text_source')
-        text_content = conversation.external_data.get('text')
+        ext_data: Dict[str, Any] = conversation.external_data or {}
+        text_source = ext_data.get('text_source')
+        text_content = ext_data.get('text')
         if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
-            text_source_spec = conversation.external_data.get('text_source_spec')
+            text_source_spec = ext_data.get('text_source_spec') or ''
             if text_source == ExternalIntegrationConversationSource.message.value:
-                metadata = retrieve_metadata_from_message(
-                    uid, conversation.created_at, text_content, tz, text_source_spec
+                metadata = cast(
+                    Dict[str, Any],
+                    retrieve_metadata_from_message(uid, conversation.created_at, text_content, tz, text_source_spec),
                 )
             elif text_source == ExternalIntegrationConversationSource.other.value:
-                metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
+                metadata = cast(
+                    Dict[str, Any],
+                    retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec),
+                )
     else:
         # For regular conversations with transcript segments
-        segments = [t.dict() for t in conversation.transcript_segments]
-        metadata = retrieve_metadata_fields_from_transcript(
-            uid, conversation.created_at, segments, tz, photos=conversation.photos
+        segments: List[Dict[str, Any]] = [t.model_dump() for t in conversation.transcript_segments]
+        metadata = cast(
+            Dict[str, Any],
+            retrieve_metadata_fields_from_transcript(
+                uid, conversation.created_at, segments, tz, photos=conversation.photos
+            ),
         )
 
     metadata['created_at'] = int(conversation.created_at.timestamp())
 
     if not update_only:
         logger.info('save_structured_vector creating vector')
-        upsert_vector2(uid, conversation.id, vector, metadata)
+        upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata)
     else:
         logger.info('save_structured_vector updating metadata')
         update_vector_metadata(uid, conversation.id, metadata)
 
 
-def _update_personas_async(uid: str):
+def _update_personas_async(uid: str):  # type: ignore[reportUnusedFunction]  # referenced in tests
     logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
@@ -834,13 +844,15 @@ def _update_personas_async(uid: str):
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
-def _build_deferred_structured(conversation) -> Structured:
+def _build_deferred_structured(
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+) -> Structured:
     """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
     the first few words of the transcript so the conversation list stays usable until the user
     opens it (which triggers the real enrichment). A non-empty title is required — an empty one
     marks the conversation discarded in `_get_conversation_obj`."""
     text = ''
-    for seg in getattr(conversation, 'transcript_segments', None) or []:
+    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
         seg_text = (getattr(seg, 'text', '') or '').strip()
         if seg_text:
             text = seg_text
@@ -850,7 +862,9 @@ def _build_deferred_structured(conversation) -> Structured:
     return Structured(title=title or 'Recording')
 
 
-def _store_deferred_conversation(uid: str, conversation):
+def _store_deferred_conversation(
+    uid: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]
+) -> Conversation:
     """Persist a desktop conversation with a cheap (no-LLM) title and `deferred=True`, skipping
     all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
@@ -863,7 +877,7 @@ def _store_deferred_conversation(uid: str, conversation):
     # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
     # back to `completed`.
     conversation.status = ConversationStatus.processing
-    conversations_db.upsert_conversation(uid, conversation.dict())
+    conversations_db.upsert_conversation(uid, conversation.model_dump())
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
 
@@ -897,12 +911,12 @@ def process_conversation(
         # Return the conversation as-is with no LLM work performed. If it has
         # a status field, mark it processed so the client doesn't show a stuck
         # "processing" state forever.
-        if hasattr(conversation, 'status'):
+        if isinstance(conversation, Conversation):
             try:
                 conversation.status = ConversationStatus.completed
             except Exception:
                 pass
-        return conversation
+        return cast(Conversation, conversation)
 
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
@@ -921,14 +935,14 @@ def process_conversation(
         return _store_deferred_conversation(uid, conversation)
 
     # Fetch meeting context from Firestore if meeting_id is associated with this conversation
-    if hasattr(conversation, 'id') and conversation.id:
+    if isinstance(conversation, Conversation) and conversation.id:
         meeting_id = redis_db.get_conversation_meeting_id(conversation.id)
         if meeting_id:
             try:
                 meeting_data = calendar_db.get_meeting(uid, meeting_id)
                 if meeting_data:
                     # Add meeting context to conversation's external_data
-                    if not hasattr(conversation, 'external_data') or not conversation.external_data:
+                    if not conversation.external_data:
                         conversation.external_data = {}
                     conversation.external_data['calendar_meeting_context'] = meeting_data
                     logger.info(
@@ -938,7 +952,7 @@ def process_conversation(
                 logger.error(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
 
     person_ids = conversation.get_person_ids()
-    people = []
+    people: List[Person] = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
@@ -1070,7 +1084,7 @@ def process_conversation(
     return conversation
 
 
-def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation):
+def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation) -> None:  # type: ignore[reportUnusedFunction]  # reserved for re-enablement
     """
     Send notification for long conversations (>30 minutes) that just completed.
     Only sends once per conversation using Redis deduplication.
@@ -1107,7 +1121,7 @@ def _send_important_conversation_notification_if_needed(uid: str, conversation: 
     send_important_conversation_message(uid, conversation.id)
 
 
-def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: [str]):
+def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: List[str]) -> None:
     logger.info(f'process_user_emotion conversation.id= {conversation.id}')
 
     # save task
@@ -1142,7 +1156,9 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
     return
 
 
-def process_user_expression_measurement_callback(provider: str, request_id: str, callback: HumeJobCallbackModel):
+def process_user_expression_measurement_callback(
+    provider: str, request_id: str, callback: HumeJobCallbackModel
+) -> None:
     support_providers = [TaskActionProvider.HUME]
     if provider not in support_providers:
         logger.info(f"Provider is not supported. {provider}")
@@ -1187,18 +1203,17 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         logger.info(f"Task is not done yet. Uid: {task.user_uid}, task_id: {task.id}, status: {task.status}")
         return
 
-    uid = task.user_uid
+    uid = cast(str, task.user_uid)
+    memory_id = cast(str, task.memory_id)
 
     # Save predictions
     if len(callback.predictions) > 0:
-        conversations_db.store_model_emotion_predictions_result(
-            task.user_uid, task.memory_id, provider, callback.predictions
-        )
+        conversations_db.store_model_emotion_predictions_result(uid, memory_id, provider, callback.predictions)
 
     # Conversation
-    conversation_data = conversations_db.get_conversation(uid, task.memory_id)
+    conversation_data = conversations_db.get_conversation(uid, memory_id)
     if conversation_data is None:
-        logger.warning(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
+        logger.warning(f"Conversation is not found. Uid: {uid}. Conversation: {memory_id}")
         return
 
     conversation = deserialize_conversation(conversation_data)
@@ -1211,7 +1226,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         return
 
     # Filter users emotions only
-    users_frames = []
+    users_frames: List[Tuple[float, float]] = []
     for seg in filter(lambda seg: seg.is_user and 0 <= seg.start < seg.end, conversation.transcript_segments):
         users_frames.append((seg.start, seg.end))
     # print(users_frames)
@@ -1220,7 +1235,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         logger.info(f"User time frames are empty. Uid: {uid}")
         return
 
-    users_predictions = []
+    users_predictions: List[HumeJobModelPredictionResponseModel] = []
     for prediction in predictions:
         for uf in users_frames:
             logger.info(f"{uf} {prediction.time}")
@@ -1232,14 +1247,14 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         return
 
     # Top emotions
-    emotion_filters = []
-    user_emotions = []
+    emotion_filters: List[str] = []
+    user_emotions: List[HumePredictionEmotionResponseModel] = []
     for up in users_predictions:
         user_emotions += up.emotions
     emotions = HumeJobModelPredictionResponseModel.get_top_emotion_names(user_emotions, 1, 0.5)
     # print(emotions)
     if len(emotion_filters) > 0:
-        emotions = filter(lambda emotion: emotion in emotion_filters, emotions)
+        emotions = list(filter(lambda emotion: emotion in emotion_filters, emotions))
     if len(emotions) == 0:
         logger.info(f"Can not extract users emmotion. uid: {uid}")
         return
@@ -1262,9 +1277,9 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     return
 
 
-def retrieve_in_progress_conversation(uid):
+def retrieve_in_progress_conversation(uid: str) -> Optional[Dict[str, Any]]:
     conversation_id = redis_db.get_in_progress_conversation_id(uid)
-    existing = None
+    existing: Optional[Dict[str, Any]] = None
 
     if conversation_id:
         existing = conversations_db.get_conversation(uid, conversation_id)

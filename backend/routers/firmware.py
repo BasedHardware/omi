@@ -6,8 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from fastapi import APIRouter, HTTPException
 
-# `utils.github_releases` exports untyped helpers; results are narrowed at the boundary.
-from utils.github_releases import extract_key_value_pairs, get_omi_github_releases  # type: ignore[reportUnknownVariableType]  # utils.github_releases is untyped
+from utils.github_releases import extract_key_value_pairs, get_omi_github_releases
 
 logger = logging.getLogger(__name__)
 
@@ -30,18 +29,15 @@ FIRMWARE_TAG_PATTERN = re.compile(
 
 
 def _extract_kv(markdown_content: object) -> Dict[str, Any]:
-    """Typed adapter for the untyped `extract_key_value_pairs` util."""
-    return cast(Dict[str, Any], extract_key_value_pairs(markdown_content))
+    """Extract key/value pairs from firmware release markdown."""
+    return extract_key_value_pairs(cast(str, markdown_content))
 
 
 async def _fetch_releases(
     cache_key: str, tag_filter: Optional[re.Pattern[Any]] = None
 ) -> Optional[List[Dict[str, Any]]]:
-    """Typed adapter for the untyped `get_omi_github_releases` util."""
-    return cast(
-        Optional[List[Dict[str, Any]]],
-        await get_omi_github_releases(cache_key, tag_filter),
-    )
+    """Fetch Omi GitHub releases, optionally filtered by tag."""
+    return await get_omi_github_releases(cache_key, tag_filter)
 
 
 # Device Model Number

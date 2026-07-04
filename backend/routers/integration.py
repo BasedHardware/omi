@@ -23,7 +23,7 @@ from models.conversation import SearchRequest
 from models.app import App
 from utils.app_integrations import (
     send_app_notification,
-    trigger_external_integrations,  # type: ignore[reportUnknownVariableType]  # returns untyped list; result discarded at call site
+    trigger_external_integrations,
 )
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import redact_conversation_for_integration  # type: ignore[reportUnknownVariableType]  # takes/returns bare Dict; narrowed at call site

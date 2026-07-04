@@ -18,26 +18,26 @@ from utils.conversations.factory import deserialize_conversation  # type: ignore
 from models.geolocation import Geolocation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
-    trigger_realtime_integrations,  # type: ignore[reportUnknownVariableType]  # partially-typed import
+    trigger_realtime_integrations,
     trigger_realtime_audio_bytes,
-    trigger_external_integrations,  # type: ignore[reportUnknownVariableType]  # partially-typed import
+    trigger_external_integrations,
 )
 from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.async_tasks import (
-    supervise_tasks,  # type: ignore[reportUnknownVariableType]  # partially-typed import
-    drain_tasks,  # type: ignore[reportUnknownVariableType]  # partially-typed import
-    create_named_task,  # type: ignore[reportUnknownVariableType]  # partially-typed import
+    supervise_tasks,
+    drain_tasks,
+    create_named_task,
     wait_for_event,
 )
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
-    realtime_transcript_webhook,  # type: ignore[reportUnknownVariableType]  # partially-typed import
+    realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import upload_audio_chunks_batch  # type: ignore[reportUnknownVariableType]  # partially-typed import
+from utils.other.storage import upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -654,14 +654,12 @@ async def _websocket_util_trigger(
     bg_main_tasks: List[asyncio.Task[Any]] = []
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
-        receive_task = cast(asyncio.Task[Any], create_named_task(receive_tasks(), name=f"ws:{uid}:receive"))
+        receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
         bg_main_tasks = [
-            cast(
-                asyncio.Task[Any], create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples")
-            ),
-            cast(asyncio.Task[Any], create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud")),
-            cast(asyncio.Task[Any], create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts")),
-            cast(asyncio.Task[Any], create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes")),
+            create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
+            create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
+            create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
+            create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
         ]
 
         exit_result = await supervise_tasks(

@@ -9,8 +9,8 @@ from fastapi.responses import Response, HTMLResponse
 from database.desktop_update_policy import get_desktop_update_policy
 from database.redis_db import delete_generic_cache
 from utils.github_releases import (
-    get_omi_github_releases,  # type: ignore[reportUnknownVariableType]  # untyped util — boundary cast at call site
-    extract_key_value_pairs,  # type: ignore[reportUnknownVariableType]  # untyped util — boundary cast at call site
+    get_omi_github_releases,
+    extract_key_value_pairs,
 )
 
 router = APIRouter()

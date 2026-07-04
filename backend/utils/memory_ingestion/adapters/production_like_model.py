@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import re
-from typing import Iterable, Literal, Any, Callable
+from typing import Iterable, Literal, Any, Callable, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI
@@ -20,6 +20,7 @@ from utils.memory_ingestion.adapters.typed_extraction_prompt import (
 from utils.memory_ingestion.ids import StableIdFactory
 from utils.memory_ingestion.models import (
     ActorDescriptor,
+    ConfidenceLabel,
     EntityRef,
     EvidenceSpan,
     ExtractionMetadata,
@@ -31,6 +32,7 @@ from utils.memory_ingestion.models import (
     RawContextEvent,
     SensitivityClassification,
     TemporalScope,
+    UncertaintyReason,
 )
 from utils.memory_ingestion.pipeline import MemoryModelClient
 from utils.memory_ingestion.source_routing import route_source
@@ -43,21 +45,24 @@ def _model_dump(obj: Any) -> Any:
     if obj is None or isinstance(obj, (str, int, float, bool)):
         return obj
     if isinstance(obj, dict):
-        return {str(k): _model_dump(v) for k, v in obj.items()}
+        pairs: Iterable[tuple[object, object]] = cast(Iterable[tuple[object, object]], obj.items())
+        return {str(k): _model_dump(v) for k, v in pairs}
     if isinstance(obj, (list, tuple, set)):
-        return [_model_dump(v) for v in obj]
+        items: Iterable[object] = cast(Iterable[object], obj)
+        return [_model_dump(v) for v in items]
     if hasattr(obj, "model_dump"):
         try:
-            return obj.model_dump(mode="json")
+            return cast(Any, obj).model_dump(mode="json")
         except Exception:
             try:
-                return obj.model_dump()
+                return cast(Any, obj).model_dump()
             except Exception:
                 pass
     if hasattr(obj, "content") and obj.__class__.__name__.endswith("Message"):
         return str(getattr(obj, "content", ""))
     if hasattr(obj, "__dict__"):
-        return {str(k): _model_dump(v) for k, v in vars(obj).items() if not k.startswith("_")}
+        attrs: dict[str, object] = cast(dict[str, object], vars(cast(Any, obj)))
+        return {str(k): _model_dump(v) for k, v in attrs.items() if not k.startswith("_")}
     return str(obj)
 
 
@@ -86,12 +91,12 @@ class ProductionLikeMemory(BaseModel):
 
 
 class ProductionLikeMemories(BaseModel):
-    facts: list[ProductionLikeMemory] = Field(default_factory=list, max_items=2)
+    facts: list[ProductionLikeMemory] = Field(default_factory=list[ProductionLikeMemory], max_length=2)
 
 
 class HighRecallProductionLikeMemories(BaseModel):
     facts: list[ProductionLikeMemory] = Field(
-        default_factory=list,
+        default_factory=list[ProductionLikeMemory],
         description="List of all memory-worthy facts from the conversation.",
     )
 
@@ -137,20 +142,20 @@ class TypedProductionLikeMemory(ProductionLikeMemory):
 
 class TypedProductionLikeMemories(BaseModel):
     facts: list[TypedProductionLikeMemory] = Field(
-        default_factory=list,
+        default_factory=list[TypedProductionLikeMemory],
         description="All memory-worthy facts from the conversation, as typed propositions.",
-        max_items=6,
+        max_length=6,
     )
 
 
 class VoiceRecallTypedProductionLikeMemories(BaseModel):
     facts: list[TypedProductionLikeMemory] = Field(
-        default_factory=list,
+        default_factory=list[TypedProductionLikeMemory],
         description=(
             "All memory-worthy voice facts from the selected claim-dense spans. "
             "Preserve user, speaker, project, organization, and tool subjects explicitly."
         ),
-        max_items=10,
+        max_length=10,
     )
 
 

@@ -18,7 +18,7 @@ from utils.other.storage import (
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
-from utils.stt.speaker_embedding import extract_embedding  # type: ignore[reportUnknownVariableType]  # returns np.ndarray without type params
+from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
 import logging
 

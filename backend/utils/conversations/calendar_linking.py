@@ -6,17 +6,17 @@ Detects and links conversations to Google Calendar events when they overlap in t
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional, cast
 
 import database.users as users_db
 from models.conversation import CalendarEventLink
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.retrieval.tools.calendar_tools import (
-    get_google_calendar_events,
-    get_google_calendar_event,
-    update_google_calendar_event,
+    get_google_calendar_events,  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
+    get_google_calendar_event,  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
+    update_google_calendar_event,  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
 )
-from utils.retrieval.tools.google_utils import refresh_google_token
+from utils.retrieval.tools.google_utils import refresh_google_token  # type: ignore[reportUnknownVariableType]  # retrieval.tools partially typed
 from utils.executors import run_blocking, db_executor
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,8 @@ async def get_overlapping_calendar_event(
     Returns:
         CalendarEventLink if a matching event is found, None otherwise
     """
-    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
+    integration_raw = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
+    integration: Optional[Dict[str, Any]] = integration_raw
     if not integration or not integration.get('connected'):
         return None
 
@@ -60,24 +61,31 @@ async def get_overlapping_calendar_event(
     search_start = conversation_start - timedelta(minutes=30)
     search_end = conversation_end + timedelta(minutes=30)
 
+    events: List[Dict[str, Any]] = []
     try:
-        events = await get_google_calendar_events(
-            access_token=access_token,
-            time_min=search_start,
-            time_max=search_end,
-            max_results=20,
+        events = cast(
+            List[Dict[str, Any]],
+            await get_google_calendar_events(
+                access_token=str(access_token),
+                time_min=search_start,
+                time_max=search_end,
+                max_results=20,
+            ),
         )
     except Exception as e:
         error_msg = str(e)
         if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
-            new_token = await refresh_google_token(uid, integration)
+            new_token: Optional[str] = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    events = await get_google_calendar_events(
-                        access_token=new_token,
-                        time_min=search_start,
-                        time_max=search_end,
-                        max_results=20,
+                    events = cast(
+                        List[Dict[str, Any]],
+                        await get_google_calendar_events(
+                            access_token=new_token,
+                            time_min=search_start,
+                            time_max=search_end,
+                            max_results=20,
+                        ),
                     )
                 except Exception:
                     return None
@@ -89,7 +97,7 @@ async def get_overlapping_calendar_event(
     if not events:
         return None
 
-    best_match = None
+    best_match: Optional[Dict[str, Any]] = None
     best_overlap_seconds = 0
 
     conversation_duration = (conversation_end - conversation_start).total_seconds()
@@ -128,9 +136,14 @@ async def get_overlapping_calendar_event(
     event_start, event_end = parse_event_times(best_match)
     attendee_names, attendee_emails = extract_attendees(best_match)
 
+    # best_match was selected only when parse_event_times returned valid datetimes
+    # (the loop body continues on None), but re-parse for the model. Guard anyway.
+    if event_start is None or event_end is None:
+        return None
+
     return CalendarEventLink(
-        event_id=best_match.get('id', ''),
-        title=best_match.get('summary', 'Untitled Event'),
+        event_id=str(best_match.get('id', '')),
+        title=str(best_match.get('summary', 'Untitled Event')),
         attendees=attendee_names,
         attendee_emails=attendee_emails,
         start_time=event_start,
@@ -151,7 +164,8 @@ async def write_conversation_link_to_calendar_event(
     Silently no-ops on any error — linking the conversation to the event is the primary
     action; failing to write the description link should not block the caller.
     """
-    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
+    integration_raw = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
+    integration: Optional[Dict[str, Any]] = integration_raw
     if not integration or not integration.get('connected'):
         return
 
@@ -162,19 +176,19 @@ async def write_conversation_link_to_calendar_event(
     conversation_link = f"https://h.omi.me/conversations/{conversation_id}"
 
     async def _write(token: str) -> None:
-        existing = await get_google_calendar_event(token, event_id)
-        current_description = existing.get('description', '') or ''
+        existing = cast(Dict[str, Any], await get_google_calendar_event(token, event_id))
+        current_description = str(existing.get('description', '') or '')
         if conversation_link in current_description:
             return
         new_description = f"{current_description}\n\n{conversation_link}" if current_description else conversation_link
         await update_google_calendar_event(access_token=token, event_id=event_id, description=new_description)
 
     try:
-        await _write(access_token)
+        await _write(str(access_token))
     except Exception as e:
         error_msg = str(e)
         if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
-            new_token = await refresh_google_token(uid, integration)
+            new_token: Optional[str] = await refresh_google_token(uid, integration)
             if new_token:
                 try:
                     await _write(new_token)

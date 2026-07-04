@@ -28,7 +28,7 @@ from utils.notifications import (
     send_action_items_batch_deletion_message,
     sync_action_item_reminder,
 )
-from utils.task_sync import auto_sync_action_item  # type: ignore[reportUnknownVariableType]  # utils.task_sync.auto_sync_action_item has untyped dict param/return
+from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field, ValidationError
 
 router = APIRouter()

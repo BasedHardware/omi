@@ -287,6 +287,7 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `models/tts.py`
   - `models/user_usage.py`
   - `models/users.py`
+  - `main.py`
 
 Backend unit CI runs this before pytest. The repo pre-push hook runs it when the covered files, dependency locks, type-check config, or hook wiring change.
 

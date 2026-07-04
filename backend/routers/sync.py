@@ -64,7 +64,7 @@ from utils.other.storage import (
     upload_playback_artifact,
     mark_playback_unavailable,
     upload_audio_chunk,
-    precache_conversation_audio,  # type: ignore[reportUnknownVariableType]  # upstream audio_files list[Unknown]
+    precache_conversation_audio,
 )
 
 from utils.byok import set_byok_keys, has_byok_keys
@@ -78,14 +78,14 @@ from utils.http_client import _get_semaphore  # type: ignore[reportPrivateUsage]
 from utils.log_sanitizer import sanitize
 from utils.sync import playback as sync_playback
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
-from utils.stt.pre_recorded import postprocess_words, prerecorded  # type: ignore[reportUnknownVariableType]  # upstream returns list[Unknown]
-from utils.stt.vad import vad_is_empty  # type: ignore[reportUnknownVariableType]  # upstream returns list[Unknown]
+from utils.stt.pre_recorded import postprocess_words, prerecorded
+from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
     record_speech_ms,
-    get_rolling_speech_ms,  # type: ignore[reportUnknownVariableType]  # upstream returns dict[Unknown, Unknown]
-    check_soft_caps,  # type: ignore[reportUnknownVariableType]  # upstream returns list[Unknown]
+    get_rolling_speech_ms,
+    check_soft_caps,
     get_hard_restriction_status,
-    trigger_classifier_if_needed,  # type: ignore[reportUnknownVariableType]  # upstream triggered_caps list[Unknown]
+    trigger_classifier_if_needed,
     is_dg_budget_exhausted,
     get_enforcement_stage,
     record_dg_usage_ms,
@@ -204,7 +204,7 @@ def download_audio_file_endpoint(
     if not audio_file:
         raise HTTPException(status_code=404, detail="Audio file not found in conversation")
 
-    return sync_playback.download_audio_file_response(uid, conversation_id, audio_file_id, audio_file, request, format)  # type: ignore[reportUnknownMemberType]  # upstream audio_file dict[Unknown, Unknown]
+    return sync_playback.download_audio_file_response(uid, conversation_id, audio_file_id, audio_file, request, format)
 
 
 # **********************************************
@@ -255,7 +255,7 @@ def _merge_and_cap_vad_segments(voice_segments: List[_VadSegment]) -> List[_VadS
 def retrieve_vad_segments(path: str, segmented_paths: Set[str], errors: Optional[List[str]] = None) -> None:
     try:
         start_timestamp = get_timestamp_from_path(path)
-        voice_segments_raw = vad_is_empty(path, return_segments=True, cache=True)  # type: ignore[reportUnknownVariableType]  # upstream returns Any|bool|list[Unknown]
+        voice_segments_raw = vad_is_empty(path, return_segments=True, cache=True)
     except Exception as e:
         error_msg = f"VAD failed for {path}: {str(e)}"
         logger.info(error_msg)
@@ -582,7 +582,7 @@ def process_segment(
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
-        words, detected_language = prerecorded(  # type: ignore[reportUnknownVariableType]  # upstream returns Union list|tuple
+        words, detected_language = prerecorded(
             url,
             speakers_count=3,
             attempts=0,
@@ -791,7 +791,7 @@ def _store_sync_audio_chunk(
         pcm = _wav_bytes_to_pcm16_16k(audio_bytes)
         if not pcm:
             return
-        upload_audio_chunk(pcm, uid, conversation_id, float(timestamp), data_protection_level)  # type: ignore[reportArgumentType]  # upstream str=None signature bug, accepts None at runtime
+        upload_audio_chunk(pcm, uid, conversation_id, float(timestamp), data_protection_level)
         del pcm
     except Exception as e:
         logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
@@ -870,8 +870,8 @@ async def sync_local_files(
 
     try:
         try:
-            paths = cast(List[str], retrieve_file_paths(files, uid))
-            wav_paths = cast(List[str], decode_files_to_wav(paths))
+            paths = retrieve_file_paths(files, uid)
+            wav_paths = decode_files_to_wav(paths)
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
@@ -903,7 +903,7 @@ async def sync_local_files(
 
         if FAIR_USE_ENABLED and total_speech_ms > 0:
             record_speech_ms(uid, total_speech_ms, source='sync')
-            speech_totals = cast(Dict[str, Any], get_rolling_speech_ms(uid))
+            speech_totals = get_rolling_speech_ms(uid)
             triggered_caps = cast(List[Any], check_soft_caps(uid, speech_totals=speech_totals))
             if triggered_caps:
                 logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
@@ -1144,7 +1144,7 @@ async def _run_full_pipeline_background_async(
             await run_blocking(db_executor, update_sync_job, job_id, {'stage': 'decoding'})
             t0 = time.monotonic()
             try:
-                wav_paths = cast(List[str], await run_blocking(sync_executor, decode_files_to_wav, raw_paths))
+                wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
             except HTTPException as e:
                 await run_blocking(db_executor, mark_job_failed, job_id, f'Decode failed: {e.detail}')
                 return
@@ -1240,7 +1240,7 @@ async def _run_full_pipeline_background_async(
                     List[Any],
                     await run_blocking(
                         db_executor,
-                        check_soft_caps,  # type: ignore[reportUnknownArgumentType]  # upstream returns list[Unknown]
+                        check_soft_caps,
                         uid,
                         speech_totals=speech_totals,
                     ),
@@ -1738,7 +1738,7 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
 
         try:
             mp3_data = await run_blocking(
-                sync_executor, sync_playback.build_playback_artifact, uid, conversation_id, timestamps  # type: ignore[reportUnknownArgumentType]  # upstream timestamps list[Unknown]
+                sync_executor, sync_playback.build_playback_artifact, uid, conversation_id, timestamps
             )
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')

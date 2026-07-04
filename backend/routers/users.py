@@ -124,7 +124,7 @@ from utils.notifications import (
     send_training_data_submitted_notification,
 )
 from utils.llm.external_integrations import (
-    generate_comprehensive_daily_summary,  # type: ignore[reportUnknownVariableType]  # generate_comprehensive_daily_summary untyped
+    generate_comprehensive_daily_summary,
 )
 from utils.observability import submit_langsmith_feedback
 from models.notification_message import NotificationMessage
@@ -1277,8 +1277,8 @@ def test_daily_summary(
     conversations = deserialize_conversations(conversations_data)
 
     # Generate summary (pass date range for fetching actual action items)
-    summary_data: Dict[str, Any] = cast(
-        Dict[str, Any], generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    summary_data: Dict[str, Any] = generate_comprehensive_daily_summary(
+        uid, conversations, date_str, start_date_utc, end_date_utc
     )
 
     # Store in database
@@ -1429,8 +1429,8 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
 
     conversations = deserialize_conversations(conversations_data)
 
-    summary_data: Dict[str, Any] = cast(
-        Dict[str, Any], generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    summary_data: Dict[str, Any] = generate_comprehensive_daily_summary(
+        uid, conversations, date_str, start_date_utc, end_date_utc
     )
     # Preserve fields readers care about that the generator silently resets:
     # - visibility: sharing state shouldn't toggle off on regenerate

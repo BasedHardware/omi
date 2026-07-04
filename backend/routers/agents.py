@@ -15,14 +15,14 @@ router = APIRouter()
 def hume_expression_measurement_callback(request: Request, data: Dict[str, Any]) -> Dict[str, Any]:
     job_callback = cast(
         Optional[hume.HumeJobCallbackModel],
-        hume.HumeJobCallbackModel.from_dict("prosody", data),  # type: ignore[reportUnknownMemberType]  # utils.other.hume.from_dict takes an untyped dict
+        hume.HumeJobCallbackModel.from_dict("prosody", data),
     )
     if job_callback is None:
         raise HTTPException(status_code=400, detail="Job callback is invalid")
 
     process_user_expression_measurement_callback(
         task.TaskActionProvider.HUME,
-        cast(str, job_callback.job_id),  # type: ignore[reportUnknownMemberType]  # utils.other.hume.HumeJobCallbackModel.job_id is untyped
+        cast(str, job_callback.job_id),
         job_callback,
     )
 

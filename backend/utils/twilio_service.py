@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from twilio.rest import Client
 from twilio.jwt.access_token import AccessToken
@@ -29,7 +29,7 @@ def _get_client() -> Client:
     return _client
 
 
-def generate_access_token(uid: str, ttl: int = 3600) -> dict:
+def generate_access_token(uid: str, ttl: int = 3600) -> Dict[str, Any]:
     """
     Generate a Twilio Access Token with Voice grant for the given user.
 
@@ -57,16 +57,16 @@ def generate_access_token(uid: str, ttl: int = 3600) -> dict:
         outgoing_application_sid=twiml_app_sid,
         incoming_allow=False,
     )
-    token.add_grant(voice_grant)
+    token.add_grant(voice_grant)  # type: ignore[reportUnknownMemberType]  # twilio add_grant untyped
 
     return {
-        'access_token': token.to_jwt(),
+        'access_token': token.to_jwt(),  # type: ignore[reportUnknownMemberType]  # twilio to_jwt untyped
         'ttl': ttl,
         'identity': uid,
     }
 
 
-def start_caller_id_verification(phone_number: str) -> dict:
+def start_caller_id_verification(phone_number: str) -> Dict[str, Any]:
     """
     Start the caller ID verification process via Twilio.
     Twilio will call the user's phone with a verification code.
@@ -105,7 +105,7 @@ def check_caller_id_verified(phone_number: str) -> bool:
     return len(outgoing_caller_ids) > 0
 
 
-def get_caller_id(phone_number: str) -> Optional[dict]:
+def get_caller_id(phone_number: str) -> Optional[Dict[str, Any]]:
     """
     Get the caller ID record for a verified phone number.
 
@@ -178,7 +178,7 @@ def delete_user_caller_ids(uid: str) -> int:
     return deleted
 
 
-def list_caller_ids() -> list:
+def list_caller_ids() -> List[Dict[str, Any]]:
     """
     List all verified outgoing caller IDs for the account.
 
@@ -197,7 +197,7 @@ def list_caller_ids() -> list:
     ]
 
 
-def validate_twilio_signature(url: str, params: dict, signature: str) -> bool:
+def validate_twilio_signature(url: str, params: Dict[str, Any], signature: str) -> bool:
     """
     Validate that a request originated from Twilio using the X-Twilio-Signature header.
 
@@ -212,4 +212,4 @@ def validate_twilio_signature(url: str, params: dict, signature: str) -> bool:
     if not auth_token:
         return False
     validator = RequestValidator(auth_token)
-    return validator.validate(url, params, signature)
+    return validator.validate(url, params, signature)  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]  # twilio RequestValidator.validate untyped

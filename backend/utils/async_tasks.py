@@ -21,9 +21,9 @@ import asyncio
 import logging
 import sys
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import ModuleType
-from typing import Any, Awaitable, Generic, Iterable, TypeVar
+from typing import Any, Awaitable, Coroutine, Dict, Generic, Iterable, List, TypeVar, cast
 
 from prometheus_client import Counter, Histogram
 
@@ -38,33 +38,35 @@ T = TypeVar('T')
 _METRIC_CACHE_MODULE = 'utils._async_tasks_metric_cache'
 
 
-def _new_metric_cache_module():
-    module = ModuleType(_METRIC_CACHE_MODULE)
+def _new_metric_cache_module() -> Any:
+    module: Any = ModuleType(_METRIC_CACHE_MODULE)
     module.cache = {}
     module.lock = threading.Lock()
     return module
 
 
-def _metric_cache_state():
-    state = sys.modules.get(_METRIC_CACHE_MODULE)
+def _metric_cache_state() -> Any:
+    state: Any = sys.modules.get(_METRIC_CACHE_MODULE)
     if state is None:
         state = sys.modules.setdefault(_METRIC_CACHE_MODULE, _new_metric_cache_module())
     return state
 
 
-def _metric_cache():
+def _metric_cache() -> Any:  # type: ignore[reportUnusedFunction]  # exercised by tests/unit/test_async_tasks.py
     return _metric_cache_state().cache
 
 
-def _cacheable_value(value):
+def _cacheable_value(value: Any) -> Any:
     if isinstance(value, list):
-        return tuple(_cacheable_value(item) for item in value)
+        items: List[Any] = cast(List[Any], value)
+        return tuple(_cacheable_value(item) for item in items)
     if isinstance(value, dict):
-        return tuple(sorted((key, _cacheable_value(item)) for key, item in value.items()))
+        entries: Dict[str, Any] = cast(Dict[str, Any], value)
+        return tuple(sorted((key, _cacheable_value(item)) for key, item in entries.items()))
     return value
 
 
-def _metric_cache_key(metric_class, name, labelnames=(), **kwargs):
+def _metric_cache_key(metric_class: Any, name: str, labelnames: Any = (), **kwargs: Any) -> Any:
     return (
         metric_class,
         name,
@@ -73,7 +75,7 @@ def _metric_cache_key(metric_class, name, labelnames=(), **kwargs):
     )
 
 
-def _get_or_create_metric(metric_class, name, documentation, labelnames=(), **kwargs):
+def _get_or_create_metric(metric_class: Any, name: str, documentation: str, labelnames: Any = (), **kwargs: Any) -> Any:
     state = _metric_cache_state()
     cache_key = _metric_cache_key(metric_class, name, labelnames, **kwargs)
     with state.lock:
@@ -162,9 +164,9 @@ class WebSocketTaskSupervisor:
         self.label = label
         self.gauge = gauge
         self.shutdown_event = asyncio.Event()
-        self._tracked_tasks: set[asyncio.Task] = set()
-        self._monitored_tasks: list[asyncio.Task] = []
-        self._finite_tasks: set[asyncio.Task] = set()
+        self._tracked_tasks: set[asyncio.Task[Any]] = set()
+        self._monitored_tasks: list[asyncio.Task[Any]] = []
+        self._finite_tasks: set[asyncio.Task[Any]] = set()
         self._session_started = False
 
     def start_session(self) -> None:
@@ -182,7 +184,9 @@ class WebSocketTaskSupervisor:
             self.gauge.dec()
         self._session_started = False
 
-    def create_task(self, coro: Awaitable[Any], *, name: str, monitor: bool = False, finite: bool = False):
+    def create_task(
+        self, coro: Coroutine[Any, Any, Any], *, name: str, monitor: bool = False, finite: bool = False
+    ) -> asyncio.Task[Any]:
         if name.startswith("ws:"):
             raise ValueError("WebSocket task names must be logical names, not preformatted ws:* names")
         task = create_named_task(coro, name=f"ws:{self.uid}:{name}", task_set=self._tracked_tasks)
@@ -193,13 +197,13 @@ class WebSocketTaskSupervisor:
             self._finite_tasks.add(task)
         return task
 
-    def create_lifetime_task(self, coro: Awaitable[Any], *, name: str) -> asyncio.Task:
+    def create_lifetime_task(self, coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
         return self.create_task(coro, name=name, monitor=True)
 
-    def create_finite_task(self, coro: Awaitable[Any], *, name: str) -> asyncio.Task:
+    def create_finite_task(self, coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
         return self.create_task(coro, name=name, monitor=True, finite=True)
 
-    async def supervise(self, *, receive_task: asyncio.Task) -> SupervisorResult:
+    async def supervise(self, *, receive_task: asyncio.Task[Any]) -> SupervisorResult:
         return await supervise_tasks(
             receive_task=receive_task,
             bg_tasks=list(self._monitored_tasks),
@@ -216,10 +220,10 @@ class WebSocketTaskSupervisor:
         )
 
     @property
-    def monitored_tasks(self) -> list[asyncio.Task]:
+    def monitored_tasks(self) -> list[asyncio.Task[Any]]:
         return list(self._monitored_tasks)
 
-    def _log_unhandled_exception(self, task: asyncio.Task) -> None:
+    def _log_unhandled_exception(self, task: asyncio.Task[Any]) -> None:
         if task.cancelled():
             return
         try:
@@ -237,9 +241,9 @@ class WebSocketTaskSupervisor:
 
 async def supervise_tasks(
     *,
-    receive_task: asyncio.Task,
-    bg_tasks: list[asyncio.Task],
-    finite_tasks: set[asyncio.Task] | None = None,
+    receive_task: asyncio.Task[Any],
+    bg_tasks: list[asyncio.Task[Any]],
+    finite_tasks: set[asyncio.Task[Any]] | None = None,
     label: str,
 ) -> SupervisorResult:
     """Supervisor loop using asyncio.wait(FIRST_COMPLETED).
@@ -293,7 +297,7 @@ async def supervise_tasks(
 
 
 async def drain_tasks(
-    tasks: Iterable[asyncio.Task],
+    tasks: Iterable[asyncio.Task[Any]],
     *,
     timeout: float = 30.0,
     label: str = "drain",
@@ -462,11 +466,11 @@ async def wait_for_event(event: asyncio.Event, seconds: float) -> bool:
 
 
 def create_named_task(
-    coro: Awaitable[Any],
+    coro: Coroutine[Any, Any, Any],
     *,
     name: str,
-    task_set: set[asyncio.Task] | None = None,
-) -> asyncio.Task:
+    task_set: set[asyncio.Task[Any]] | None = None,
+) -> asyncio.Task[Any]:
     """Create a named task with optional tracking set.
 
     - Names the task for debugging (visible in asyncio.all_tasks())

@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from database.redis_db import get_generic_cache, set_generic_cache
 from utils.executors import db_executor, run_blocking
@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 MAX_PAGES = 20  # Safety cap to prevent runaway pagination
 
 
-async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Pattern] = None) -> Optional[List[Dict]]:
+async def get_omi_github_releases(
+    cache_key: str, tag_filter: Optional[re.Pattern[str]] = None
+) -> Optional[List[Dict[str, Any]]]:
     """Fetch releases from GitHub API with caching.
 
     When tag_filter is provided, paginates through all pages and returns only
@@ -40,7 +42,7 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
     if github_token:
         headers["Authorization"] = f"Bearer {github_token}"
 
-    collected: List[Dict] = []
+    collected: List[Dict[str, Any]] = []
     fetch_failed = False
 
     try:
@@ -59,9 +61,10 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
                 fetch_failed = True
                 break
 
-            page_releases = response.json()
-            if not page_releases:
+            loaded: object = response.json()
+            if not loaded:
                 break
+            page_releases: List[Dict[str, Any]] = cast(List[Dict[str, Any]], loaded) if isinstance(loaded, list) else []
 
             if tag_filter:
                 for release in page_releases:
@@ -101,7 +104,7 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
     return collected
 
 
-def extract_key_value_pairs(markdown_content):
+def extract_key_value_pairs(markdown_content: str) -> Dict[str, Any]:
     if not markdown_content:
         return {}
 
@@ -113,7 +116,7 @@ def extract_key_value_pairs(markdown_content):
 
     key_value_string = key_value_match.group(1).strip()
     lines = key_value_string.split('\n')
-    key_value_map = {}
+    key_value_map: Dict[str, Any] = {}
 
     for line in lines:
         line = line.strip()

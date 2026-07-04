@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from utils import x_connector
-from utils.executors import start_background_task  # type: ignore[reportUnknownVariableType]  # start_background_task takes an untyped coro param
+from utils.executors import start_background_task
 from utils.other import endpoints as auth
 
 router = APIRouter()

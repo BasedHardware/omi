@@ -4,7 +4,7 @@ from utils.memory.canonical_short_term_maintenance_cron import (
 )
 from utils.other.notifications import should_run_job as should_run_daily_notification_job
 from utils.other.notifications import start_cron_job as start_cron_notification_job
-from utils.x_connector import should_run_x_sync_job, run_x_sync_job
+from utils.x_connector import should_run_x_sync_job, run_x_sync_job  # type: ignore[reportUnknownVariableType]  # x_connector.run_x_sync_job returns untyped Dict (unenrolled)
 
 
 async def start_job():

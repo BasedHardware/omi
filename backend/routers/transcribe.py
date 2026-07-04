@@ -76,7 +76,7 @@ from models.message_event import (
 from models.transcript_segment import Translation
 from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
-from utils.app_integrations import trigger_realtime_integrations  # type: ignore[reportUnknownVariableType]  # returns partially-typed dict
+from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.process_conversation import retrieve_in_progress_conversation  # type: ignore[reportUnknownVariableType]  # uid param partially typed
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
@@ -89,7 +89,7 @@ from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
     make_stream_callback,  # type: ignore[reportUnknownVariableType]
-    process_audio_dg,  # type: ignore[reportUnknownVariableType]
+    process_audio_dg,
     process_audio_modulate,  # type: ignore[reportUnknownVariableType]
     process_audio_parakeet,  # type: ignore[reportUnknownVariableType]
     sort_segments_by_start,  # type: ignore[reportUnknownVariableType]
@@ -101,9 +101,9 @@ from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
     record_speech_ms,
-    get_rolling_speech_ms,  # type: ignore[reportUnknownVariableType]
-    check_soft_caps,  # type: ignore[reportUnknownVariableType]
-    trigger_classifier_if_needed,  # type: ignore[reportUnknownVariableType]
+    get_rolling_speech_ms,
+    check_soft_caps,
+    trigger_classifier_if_needed,
     get_enforcement_stage,
     is_dg_budget_exhausted,
     record_dg_usage_ms,
@@ -123,7 +123,7 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     ConversationLifecycleAction,
     USER_SELF_PERSON_ID,
     decide_existing_conversation_action,
-    decide_lifecycle_action,  # type: ignore[reportUnknownVariableType]
+    decide_lifecycle_action,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -140,10 +140,10 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     should_include_speech_profile,
     should_initialize_vad_gate,
     should_load_speech_profile,
-    should_queue_speaker_embedding,  # type: ignore[reportUnknownVariableType]
-    should_process_on_disconnect,  # type: ignore[reportUnknownVariableType]
+    should_queue_speaker_embedding,
+    should_process_on_disconnect,
     should_remove_in_progress_pointer,
-    should_skip_speaker_detection,  # type: ignore[reportUnknownVariableType]
+    should_skip_speaker_detection,
     should_spawn_speaker_match,
     stt_buffer_flush_size as calculate_stt_buffer_flush_size,
     vad_gate_mode,
@@ -162,10 +162,10 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,  # type: ignore[reportUnknownVariableType]
     SPEAKER_MATCH_THRESHOLD,
 )
-from utils.speaker_sample_migration import maybe_migrate_person_samples  # type: ignore[reportUnknownVariableType]
+from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task  # type: ignore[reportUnknownVariableType]
 from utils.log_sanitizer import sanitize, sanitize_pii
-from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event  # type: ignore[reportUnknownVariableType]
+from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 
 logger = logging.getLogger(__name__)
 
@@ -621,7 +621,7 @@ async def _stream_handler(
             if FAIR_USE_ENABLED and now_ts - session.fair_use_last_check_ts >= FAIR_USE_CHECK_INTERVAL_SECONDS:
                 session.fair_use_last_check_ts = now_ts
                 try:
-                    speech_totals = cast(Dict[str, Any], get_rolling_speech_ms(uid))
+                    speech_totals = get_rolling_speech_ms(uid)
                     triggered_caps = cast(List[Any], check_soft_caps(uid, speech_totals=speech_totals))
                     if triggered_caps:
                         logger.info(
@@ -1153,7 +1153,7 @@ async def _stream_handler(
                 except Exception:
                     logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
                     vad_gate = None
-            passthrough = stt_service == STTService.modulate  # type: ignore[reportUnnecessaryComparison]  # stt_service is a closure var; pyright over-narrows
+            passthrough = stt_service == STTService.modulate
 
             raw_socket = await _create_stt_socket(
                 cast(
@@ -1424,7 +1424,7 @@ async def _stream_handler(
             for person in people:
                 # Migrate if needed for v2 API compatibility
                 if person.get('speech_samples'):
-                    person = cast(Dict[str, Any], await maybe_migrate_person_samples(uid, person))
+                    person = await maybe_migrate_person_samples(uid, person)
 
                 # Skip cache if migration failed (version still <3) to avoid mixing embedding spaces
                 if person.get('speech_samples_version', 1) < 3:
@@ -2284,7 +2284,7 @@ async def _stream_handler(
         finally:
             # Log VAD gate metrics before cleanup
             if vad_gate is not None:
-                logger.info(json.dumps(vad_gate.to_json_log()))  # type: ignore[reportUnknownMemberType]  # VADStreamingGate.to_json_log returns dict[Unknown, Unknown]
+                logger.info(json.dumps(vad_gate.to_json_log()))
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:
                 await flush_stt_buffer(force=True)
@@ -2300,7 +2300,7 @@ async def _stream_handler(
                     if isinstance(stt_socket, GatedSTTSocket):
                         drain_target = stt_socket._conn  # type: ignore[reportPrivateUsage]  # access underlying STT socket for EOS drain
                     if drain_target and hasattr(drain_target, 'drain_and_close'):
-                        await drain_target.drain_and_close()  # type: ignore[reportAttributeAccessIssue]  # not all STT sockets implement async drain_and_close
+                        await drain_target.drain_and_close()
             except Exception as e:
                 logger.error(f"Error draining STT EOS: {e} {uid} {session_id}")
             session.active = False
@@ -2731,7 +2731,7 @@ async def web_listen_handler(
 
     # Authenticate via first message
     try:
-        uid = auth.get_current_user_uid_from_ws_message(cast(Dict[str, Any], first_message))  # type: ignore[reportUnknownMemberType]  # endpoints helper accepts partially-typed mapping
+        uid = auth.get_current_user_uid_from_ws_message(cast(Dict[str, Any], first_message))
     except ValueError as e:
         await websocket.close(code=1008, reason=str(e))
         return

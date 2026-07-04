@@ -5,7 +5,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Set
 
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -69,7 +69,7 @@ def get_conversations_text(
             return f"Error: Invalid end_date format: {e}"
 
     # Parse statuses
-    status_list = []
+    status_list: List[str] = []
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
@@ -103,9 +103,9 @@ def get_conversations_text(
         return f"No conversations found{date_info}."
 
     # Load people for speaker names
-    people = []
+    people: List[Person] = []
     if include_transcript:
-        all_person_ids = set()
+        all_person_ids: Set[str] = set()
         for conv_data in conversations_data:
             segments = conv_data.get('transcript_segments', [])
             all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
@@ -114,7 +114,7 @@ def get_conversations_text(
             people = [Person(**p) for p in people_data]
 
     # Convert to objects
-    conversations = []
+    conversations: List[Conversation] = []
     for conv_data in conversations_data:
         try:
             conversation = deserialize_conversation(conv_data)
@@ -208,9 +208,9 @@ def search_conversations_text(
             return f"No conversations found matching query: '{query}'"
 
         # Load people
-        people = []
+        people: List[Person] = []
         if include_transcript:
-            all_person_ids = set()
+            all_person_ids: Set[str] = set()
             for conv_data in conversations_data:
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
@@ -219,7 +219,7 @@ def search_conversations_text(
                 people = [Person(**p) for p in people_data]
 
         # Convert
-        conversations = []
+        conversations: List[Conversation] = []
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)

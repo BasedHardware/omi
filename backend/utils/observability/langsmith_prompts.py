@@ -9,7 +9,7 @@ This module provides utilities for fetching prompts from LangSmith with:
 
 import os
 import time
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, Iterable, cast
 from dataclasses import dataclass
 
 from utils.observability.langsmith import has_langsmith_api_key
@@ -74,7 +74,7 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
         client = Client()
 
         # Pull the prompt - this returns a ChatPromptTemplate or similar
-        prompt = client.pull_prompt(prompt_name)
+        prompt: Any = client.pull_prompt(prompt_name)
 
         # Extract the system message template text
         # LangSmith prompts can be ChatPromptTemplate with messages
@@ -89,10 +89,10 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
         # Handle different prompt types
         if hasattr(prompt, 'messages'):
             # ChatPromptTemplate - get the system message
-            for msg in prompt.messages:
+            for msg in cast(Iterable[Any], prompt.messages):
                 if hasattr(msg, 'prompt') and hasattr(msg.prompt, 'template'):
                     # SystemMessagePromptTemplate
-                    if 'system' in str(type(msg)).lower():
+                    if 'system' in msg.__class__.__name__.lower():
                         template_text = msg.prompt.template
                         break
                 elif hasattr(msg, 'template'):
@@ -193,8 +193,8 @@ def render_prompt(template_text: str, variables: Dict[str, Any]) -> str:
     """
 
     # Use a SafeDict that returns empty string for missing keys with default empty sections
-    class SafeDict(dict):
-        def __missing__(self, key):
+    class SafeDict(Dict[str, Any]):
+        def __missing__(self, key: str) -> str:
             # For section variables that may be empty, return empty string
             if key.endswith('_section') or key.endswith('_hint'):
                 return ''

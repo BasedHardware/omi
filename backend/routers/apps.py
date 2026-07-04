@@ -49,10 +49,10 @@ from utils.other.storage import delete_app_logo, get_app_thumbnail_url, upload_a
 from utils.request_validation import (
     backfill_app_home_url_from_auth_steps,
     normalize_required_webhook_url,
-    parse_form_json,  # type: ignore[reportUnknownVariableType]  # utils.request_validation partially typed
+    parse_form_json,
 )
 from utils.social import (
-    add_twitter_to_persona,  # type: ignore[reportUnknownVariableType]  # utils.social returns bare dict
+    add_twitter_to_persona,
     get_twitter_profile,
     upsert_persona_from_twitter_profile,
     verify_latest_tweet,
@@ -103,18 +103,18 @@ from database.redis_db import (
 from database.webhook_health import clear_app_webhook_health
 from utils.apps import (
     add_app_access_for_tester,
-    add_tester,  # type: ignore[reportUnknownVariableType]  # utils.apps takes bare dict
+    add_tester,
     build_capability_category_groups_response,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
     build_capability_groups_response,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
     build_pagination_metadata,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
     filter_apps_by_capability,
     generate_api_key,
     generate_persona_desc,
-    generate_persona_prompt,  # type: ignore[reportUnknownVariableType]  # utils.apps takes bare dict
+    generate_persona_prompt,
     get_app_reviews,
     get_approved_available_apps,
-    get_available_app_by_id,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
-    get_available_app_by_id_with_reviews,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
+    get_available_app_by_id,
+    get_available_app_by_id_with_reviews,
     get_available_apps,
     get_capabilities_list,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
     get_is_user_paid_app,
@@ -128,12 +128,12 @@ from utils.apps import (
     normalize_app_numeric_fields,  # type: ignore[reportUnknownVariableType]  # utils.apps returns bare dict
     paginate_apps,
     remove_app_access_for_tester,
-    set_app_review,  # type: ignore[reportUnknownVariableType]  # utils.apps takes bare dict
+    set_app_review,
     sort_apps_by_installs,
     group_apps_by_capability,  # type: ignore[reportUnknownVariableType]  # utils.apps takes bare dict
     group_capability_apps_by_category,
     upsert_app_payment_link,
-    validate_app_endpoints_for_reenable,  # type: ignore[reportUnknownVariableType]  # utils.apps takes bare dict
+    validate_app_endpoints_for_reenable,
 )
 
 from models.app import ActionType, App, AppBaseModel, AppCreate, AppUpdate, ChatTool
@@ -151,12 +151,12 @@ def _write_file(path: str, data: bytes) -> None:
 
 def _get_app_by_id(app_id: str, uid: Optional[str]) -> Optional[Dict[str, Any]]:
     """Typed wrapper for get_available_app_by_id."""
-    return cast(Optional[Dict[str, Any]], get_available_app_by_id(app_id, uid))
+    return get_available_app_by_id(app_id, uid)
 
 
 def _get_app_by_id_with_reviews(app_id: str, uid: Optional[str]) -> Optional[Dict[str, Any]]:
     """Typed wrapper for get_available_app_by_id_with_reviews."""
-    return cast(Optional[Dict[str, Any]], get_available_app_by_id_with_reviews(app_id, uid))
+    return get_available_app_by_id_with_reviews(app_id, uid)
 
 
 def _process_chat_tools_manifest(external_integration: Dict[str, Any], app_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -1225,7 +1225,7 @@ async def generate_description_and_emoji_endpoint(
 
 @router.get('/v1/app/generate-prompts', tags=['v1'])
 async def generate_sample_prompts_endpoint(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),  # type: ignore[reportUnknownMemberType]  # utils.other.endpoints.with_rate_limit untyped
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
 ) -> Dict[str, Any]:
     """
     Generate sample app prompts for the AI app generator.
@@ -1414,8 +1414,8 @@ async def verify_twitter_ownership_tweet(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Get provider info from Firebase
-    user_info = auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-    provider_data = [p.provider_id for p in user_info.provider_data]  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    user_info = auth.get_user(uid)
+    provider_data = [p.provider_id for p in user_info.provider_data]
 
     # Verify handle
     if handle.startswith('@'):

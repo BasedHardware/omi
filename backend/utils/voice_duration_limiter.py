@@ -18,6 +18,7 @@ Constants:
 
 import logging
 import time
+from typing import Any, Dict, Optional
 
 import av
 
@@ -101,10 +102,10 @@ end
 return {1, used + request, math.max(0, budget - used - request)}
 """
 
+_consume_lua: Optional[Any] = None
 try:
-    _CONSUME_LUA = r.register_script(_CONSUME_LUA_SRC)
+    _consume_lua = r.register_script(_CONSUME_LUA_SRC)
 except Exception:
-    _CONSUME_LUA = None
     logger.warning('voice_duration_limiter: failed to register Lua script (Redis unavailable?)')
 
 
@@ -126,11 +127,11 @@ def try_consume_budget(uid: str, duration_ms: int) -> tuple[bool, int, int]:
     if duration_ms < 0:
         return True, 0, DAILY_BUDGET_MS
 
-    if _CONSUME_LUA is None:
+    if _consume_lua is None:
         return True, 0, DAILY_BUDGET_MS
 
     try:
-        result = _CONSUME_LUA(
+        result = _consume_lua(
             keys=[_budget_key(uid)],
             args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, duration_ms],
         )
@@ -166,11 +167,11 @@ def record_actual_duration(uid: str, duration_ms: int) -> bool:
     if duration_ms <= 0:
         return True
 
-    if _CONSUME_LUA is None:
+    if _consume_lua is None:
         return True
 
     try:
-        _CONSUME_LUA(
+        _consume_lua(
             keys=[_budget_key(uid)],
             args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, duration_ms, 1],  # force=1
         )
@@ -180,7 +181,7 @@ def record_actual_duration(uid: str, duration_ms: int) -> bool:
         return True  # Fail-open
 
 
-def get_budget_status(uid: str) -> dict:
+def get_budget_status(uid: str) -> Dict[str, Any]:
     """Get the current budget status for a user.
 
     Returns dict with: daily_limit_ms, used_ms, remaining_ms, exhausted.
@@ -227,7 +228,7 @@ def read_wav_duration_ms(file_path: str) -> int | None:
             stream = container.streams.audio[0]
             # Prefer container-level duration; fall back to stream-level
             if container.duration is not None:
-                duration_s = float(container.duration) / av.time_base
+                duration_s = float(container.duration) / getattr(av, 'time_base', 1_000_000)
             elif stream.duration is not None and stream.time_base is not None:
                 duration_s = float(stream.duration * stream.time_base)
             else:

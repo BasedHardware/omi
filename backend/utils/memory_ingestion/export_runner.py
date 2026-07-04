@@ -10,7 +10,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from utils.memory_ingestion.adapters.production_like_model import ProductionLikeMemoryModelClient
 from utils.memory_ingestion.models import (
@@ -171,9 +171,13 @@ async def run_export(args: argparse.Namespace) -> None:
 
 def _read_export(zip_path: str, export_root: str) -> ExportDataset:
     with zipfile.ZipFile(zip_path) as archive:
-        segments = json.loads(archive.read(export_root + "raw_tables/transcription_segments.json"))
-        memories = json.loads(archive.read(export_root + "raw_tables/memories.json"))
-        sessions = json.loads(archive.read(export_root + "raw_tables/transcription_sessions.json"))
+        segments = cast(
+            list[dict[str, Any]], json.loads(archive.read(export_root + "raw_tables/transcription_segments.json"))
+        )
+        memories = cast(list[dict[str, Any]], json.loads(archive.read(export_root + "raw_tables/memories.json")))
+        sessions = cast(
+            list[dict[str, Any]], json.loads(archive.read(export_root + "raw_tables/transcription_sessions.json"))
+        )
     return ExportDataset(segments=segments, memories=memories, sessions=sessions)
 
 
@@ -362,10 +366,10 @@ def _combine_outputs(run_dir: Path) -> None:
     output_dir = run_dir / "outputs"
     combined_jsonl = run_dir / "combined_outputs.jsonl"
     combined_json = run_dir / "combined_outputs.json"
-    outputs = []
+    outputs: list[dict[str, Any]] = []
     with combined_jsonl.open("w") as jsonl:
         for output_path in sorted(output_dir.glob("*.json")):
-            output = json.loads(output_path.read_text())
+            output = cast(dict[str, Any], json.loads(output_path.read_text()))
             outputs.append(output)
             jsonl.write(json.dumps(output, sort_keys=True, separators=(",", ":")) + "\n")
     _write_json(combined_json, outputs)
@@ -385,13 +389,18 @@ def _write_debug_trace(run_dir: Path) -> dict[str, Any]:
     }
     with trace_path.open("w") as jsonl:
         for output_path in sorted(output_dir.glob("*.json")):
-            output = json.loads(output_path.read_text())
+            output = cast(dict[str, Any], json.loads(output_path.read_text()))
             counters["rows"] += 1
-            decisions = {decision.get("frame_id"): decision for decision in output.get("decisions") or []}
-            review_items = {item.get("frame_id"): item for item in output.get("review_items") or []}
-            for frame in output.get("event_frames") or []:
+            decisions: dict[Any, dict[str, Any]] = {
+                decision.get("frame_id"): decision
+                for decision in cast(list[dict[str, Any]], output.get("decisions") or [])
+            }
+            review_items: dict[Any, dict[str, Any]] = {
+                item.get("frame_id"): item for item in cast(list[dict[str, Any]], output.get("review_items") or [])
+            }
+            for frame in cast(list[dict[str, Any]], output.get("event_frames") or []):
                 counters["frames"] += 1
-                decision = decisions.get(frame.get("frame_id")) or {}
+                decision: dict[str, Any] = decisions.get(frame.get("frame_id")) or {}
                 action = str(decision.get("action") or "no_decision")
                 if action == "create_memory":
                     counters["creates"] += 1
@@ -420,12 +429,33 @@ def _debug_trace_row(
     decision: dict[str, Any],
     review_item: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    frame_evidence = cast(list[dict[str, Any]], frame.get("evidence") or [])
+    first_evidence: dict[str, Any] = frame_evidence[0] if frame_evidence else {}
+    first_source_ref: dict[str, Any] = cast(dict[str, Any], first_evidence.get("source_ref") or {})
+    frame_arguments = cast(dict[str, Any], frame.get("arguments") or {})
+    frame_sensitivity = cast(dict[str, Any], frame.get("sensitivity") or {})
+    decision_target_ids = cast(list[Any], decision.get("target_memory_ids") or [])
+    review = review_item or {}
+    evidence_refs: list[dict[str, Any]] = []
+    for evidence in cast(list[dict[str, Any]], frame.get("evidence") or []):
+        source_ref = cast(dict[str, Any], evidence.get("source_ref") or {})
+        speaker = cast(dict[str, Any], evidence.get("speaker") or {})
+        evidence_refs.append(
+            {
+                "source_event_id": evidence.get("source_event_id"),
+                "conversation_id": source_ref.get("conversation_id"),
+                "transcript_segment_id": source_ref.get("transcript_segment_id"),
+                "start_at": evidence.get("start_at"),
+                "end_at": evidence.get("end_at"),
+                "speaker_label": speaker.get("label"),
+            }
+        )
     return {
         "run_id": output.get("run_id"),
         "mode": output.get("mode"),
         "status": output.get("status"),
         "source": {
-            "conversation_id": ((frame.get("evidence") or [{}])[0].get("source_ref") or {}).get("conversation_id"),
+            "conversation_id": first_source_ref.get("conversation_id"),
             "event_ids": frame.get("source_event_ids") or [],
         },
         "frame": {
@@ -434,10 +464,10 @@ def _debug_trace_row(
             "predicate": frame.get("predicate"),
             "canonical_text": frame.get("canonical_text"),
             "subject": _entity_name(frame.get("subject")),
-            "arguments": _trace_arguments(frame.get("arguments") or {}),
+            "arguments": _trace_arguments(frame_arguments),
             "confidence": frame.get("confidence"),
             "uncertainty_reasons": frame.get("uncertainty_reasons") or [],
-            "sensitivity": frame.get("sensitivity") or {},
+            "sensitivity": frame_sensitivity,
             "durability": frame.get("durability"),
             "scope": frame.get("scope"),
         },
@@ -445,23 +475,13 @@ def _debug_trace_row(
             "decision_id": decision.get("decision_id"),
             "action": decision.get("action"),
             "rationale": decision.get("rationale"),
-            "target_memory_ids": decision.get("target_memory_ids") or [],
+            "target_memory_ids": decision_target_ids,
         },
         "review": {
-            "review_id": (review_item or {}).get("review_id"),
-            "reason": (review_item or {}).get("reason"),
+            "review_id": review.get("review_id"),
+            "reason": review.get("reason"),
         },
-        "evidence_refs": [
-            {
-                "source_event_id": evidence.get("source_event_id"),
-                "conversation_id": (evidence.get("source_ref") or {}).get("conversation_id"),
-                "transcript_segment_id": (evidence.get("source_ref") or {}).get("transcript_segment_id"),
-                "start_at": evidence.get("start_at"),
-                "end_at": evidence.get("end_at"),
-                "speaker_label": (evidence.get("speaker") or {}).get("label"),
-            }
-            for evidence in frame.get("evidence") or []
-        ],
+        "evidence_refs": evidence_refs,
     }
 
 
@@ -471,14 +491,16 @@ def _trace_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
 
 def _object_value(value: Any) -> Any:
     if isinstance(value, dict):
-        entity = value.get("entity") or {}
-        return value.get("value") or entity.get("canonical_name") or entity.get("entity_id")
+        d = cast(dict[str, Any], value)
+        entity = cast(dict[str, Any], d.get("entity") or {})
+        return d.get("value") or entity.get("canonical_name") or entity.get("entity_id")
     return value
 
 
 def _entity_name(value: Any) -> str | None:
     if isinstance(value, dict):
-        return value.get("canonical_name") or value.get("entity_id")
+        d = cast(dict[str, Any], value)
+        return d.get("canonical_name") or d.get("entity_id")
     return None
 
 

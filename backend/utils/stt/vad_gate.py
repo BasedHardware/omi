@@ -20,12 +20,17 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from utils.stt.socket import STTSocket
-from utils.stt.vad import _get_ort_session, make_fresh_state, run_vad_window, VAD_WINDOW_SAMPLES
+from utils.stt.vad import (
+    VAD_WINDOW_SAMPLES,
+    _get_ort_session,  # type: ignore[reportPrivateUsage]  # internal helper, same package
+    make_fresh_state,
+    run_vad_window,
+)
 
 logger = logging.getLogger('vad_gate')
 
@@ -167,6 +172,8 @@ class VADStreamingGate:
         _get_ort_session()
         self._vad_window_samples = VAD_WINDOW_SAMPLES  # 512 for 16kHz (Silero v6)
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
+        self._vad_state: np.ndarray[Any, Any]
+        self._vad_context: np.ndarray[Any, Any]
         self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
         self._vad_inference_lock = threading.Lock()
         self._speech_threshold = VAD_GATE_SPEECH_THRESHOLD
@@ -182,7 +189,7 @@ class VADStreamingGate:
 
         # Pre-roll buffer: stores recent audio chunks for playback on speech onset.
         # Tracks accumulated duration to respect _pre_roll_ms regardless of chunk size.
-        self._pre_roll: deque = deque()
+        self._pre_roll: Deque[bytes] = deque()
         self._pre_roll_total_ms: float = 0.0
 
         # Timestamp mapper
@@ -222,7 +229,7 @@ class VADStreamingGate:
             self._vad_state, self._vad_context = make_fresh_state()
             self._vad_buffer = np.array([], dtype=np.float32)
             # Sync mapper cursor: DG received all audio during shadow phase
-            self.dg_wall_mapper._provider_cursor_sec = self._audio_cursor_ms / 1000.0
+            self.dg_wall_mapper._provider_cursor_sec = self._audio_cursor_ms / 1000.0  # type: ignore[reportPrivateUsage]  # sync internal mapper cursor
             logger.info(
                 'VADGate activated shadow->active uid=%s session=%s cursor=%.1fms',
                 self.uid,
@@ -239,7 +246,7 @@ class VADStreamingGate:
             return False
         return (wall_time - ref_time) >= VAD_GATE_KEEPALIVE_SEC
 
-    def _convert_for_vad(self, pcm_data: bytes) -> np.ndarray:
+    def _convert_for_vad(self, pcm_data: bytes) -> np.ndarray[Any, Any]:
         """Convert audio to float32 at 16kHz mono for VAD."""
         # Convert to mono if stereo
         data = pcm_data
@@ -490,7 +497,7 @@ class VADStreamingGate:
         self._speech_ms_delta = 0.0
         return delta
 
-    def get_metrics(self) -> dict:
+    def get_metrics(self) -> Dict[str, Any]:
         """Return gate metrics for logging/monitoring."""
         total = self._chunks_total or 1
         bytes_skipped = max(0, self._bytes_received - self._bytes_sent)
@@ -512,7 +519,7 @@ class VADStreamingGate:
             'mode': self.mode,
         }
 
-    def to_json_log(self) -> dict:
+    def to_json_log(self) -> Dict[str, Any]:
         """Return JSON-safe metrics with derived quality/cost fields."""
         metrics = self.get_metrics()
         total = metrics['chunks_total'] or 1
@@ -526,7 +533,7 @@ class VADStreamingGate:
             **metrics,
         }
 
-    def remap_segments(self, segments: list) -> None:
+    def remap_segments(self, segments: List[Dict[str, Any]]) -> None:
         """Remap STT provider timestamps to wall-clock-relative if gate is active."""
         if self.mode == 'active':
             for seg in segments:
@@ -573,7 +580,7 @@ class GatedSTTSocket(STTSocket):
 
     @property
     def is_connection_dead(self) -> bool:
-        if isinstance(self._conn, STTSocket):
+        if isinstance(self._conn, STTSocket):  # type: ignore[reportUnnecessaryIsInstance]  # runtime safety check
             return self._conn.is_connection_dead
         return False
 
@@ -608,7 +615,7 @@ class GatedSTTSocket(STTSocket):
             try:
                 self._conn.finalize()
             except Exception:
-                self._gate._finalize_errors += 1
+                self._gate._finalize_errors += 1  # type: ignore[reportPrivateUsage]  # internal counter
                 logger.warning('finalize failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
 
     def finalize(self) -> None:
@@ -621,7 +628,7 @@ class GatedSTTSocket(STTSocket):
             try:
                 self._conn.finalize()
             except Exception:
-                self._gate._finalize_errors += 1
+                self._gate._finalize_errors += 1  # type: ignore[reportPrivateUsage]  # internal counter
                 logger.warning('finalize in finish() failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
         self._conn.finish()
         for f in (self._raw_file, self._gated_file):
@@ -631,12 +638,12 @@ class GatedSTTSocket(STTSocket):
                 except Exception:
                     pass
 
-    def remap_segments(self, segments: list) -> None:
+    def remap_segments(self, segments: List[Dict[str, Any]]) -> None:
         """Remap STT provider timestamps from audio-time to wall-clock-relative time."""
         if self._gate is not None:
             self._gate.remap_segments(segments)
 
-    def get_metrics(self) -> Optional[dict]:
+    def get_metrics(self) -> Optional[Dict[str, Any]]:
         """Return gate metrics, or None if no gate."""
         if self._gate is not None:
             return self._gate.get_metrics()
