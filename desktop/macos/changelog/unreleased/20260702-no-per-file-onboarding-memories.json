@@ -1,0 +1,3 @@
+{
+  "change": "Fixed onboarding file scan flooding your memories with one entry per local file — it now saves only a few aggregate facts about your projects and technologies"
+}
