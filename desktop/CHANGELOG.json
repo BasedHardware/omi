@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed the macOS app popping up the Screen Recording permission dialog on every launch when permission hadn't been granted"
+  ],
   "releases": [
     {
       "version": "0.11.423",
