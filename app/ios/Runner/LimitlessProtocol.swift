@@ -158,7 +158,12 @@ enum LimitlessProtocol {
             } else if wireType == 2 {
                 let (length, next) = decodeVarint(data, pos)
                 pos = next
-                guard length >= 0, length <= Int64(data.count - pos) else { return nil }
+                // Dart parity: a past-the-end length only faults the packet when it is
+                // the payload field; other fields just end the walk, keeping what parsed.
+                guard length >= 0, length <= Int64(data.count - pos) else {
+                    if fieldNum == 4 { return nil }
+                    break
+                }
                 let len = Int(length)
                 if fieldNum == 4 { payload = data.subdata(in: pos ..< pos + len) }
                 pos += len
@@ -237,12 +242,59 @@ enum LimitlessProtocol {
         }
 
         guard let pageData = flashPageData, !pageData.isEmpty else { return nil }
+        let frames = extractOpusFramesFromFlashPage(pageData)
+        // Dart parity: an audio page that yielded zero frames is a parse failure and
+        // is never surfaced — ACKing past it would delete audio we failed to extract.
+        // Diagnostic pages (no audio subfields) surface with zero frames so the drain
+        // can advance past them.
+        if frames.isEmpty, hasAudioSubfields(pageData) { return nil }
         return FlashPage(
             index: index,
             session: session,
             timestampMs: parseFlashPageTimestampMs(pageData),
-            opusFrames: extractOpusFramesFromFlashPage(pageData)
+            opusFrames: frames
         )
+    }
+
+    /// Mirror of `_hasAudioSubfields`: any 0x12 subfield inside a 0x1a wrapper.
+    static func hasAudioSubfields(_ flashPageData: Data) -> Bool {
+        var pos = 0
+        if pos < flashPageData.count, flashPageData[pos] == 0x08 {
+            pos += 1
+            pos = decodeVarint(flashPageData, pos).1
+        }
+        if pos < flashPageData.count, flashPageData[pos] == 0x10 {
+            pos += 1
+            pos = decodeVarint(flashPageData, pos).1
+        }
+
+        while pos < flashPageData.count - 2 {
+            if flashPageData[pos] == 0x1a {
+                pos += 1
+                let (wrapperLength, afterLen) = decodeVarint(flashPageData, pos)
+                pos = afterLen
+                guard wrapperLength >= 0, wrapperLength <= Int64(flashPageData.count - pos) else { break }
+                let wrapperEnd = pos + Int(wrapperLength)
+
+                while pos < wrapperEnd - 1 {
+                    let marker = Int(flashPageData[pos])
+                    if marker == 0x12 { return true }
+                    let wireType = marker & 0x07
+                    pos += 1
+                    if wireType == 0 {
+                        pos = decodeVarint(flashPageData, pos).1
+                    } else if wireType == 2 {
+                        let (length, next) = decodeVarint(flashPageData, pos)
+                        guard length >= 0, length <= Int64(flashPageData.count) else { return false }
+                        pos = next + Int(length)
+                    }
+                }
+                pos = wrapperEnd
+            } else {
+                pos += 1
+            }
+        }
+        return false
     }
 
     /// Field 1 (0x08) at the start of the flash page = pendant-clock timestamp_ms.

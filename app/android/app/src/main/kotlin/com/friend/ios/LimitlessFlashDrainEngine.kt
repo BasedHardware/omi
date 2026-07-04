@@ -128,7 +128,11 @@ class LimitlessFlashDrainEngine(
         val fragments = fragmentBuffer[packet.index] ?: return
         if (fragments.size != packet.numFrags) return
 
-        val complete = ByteArray(fragments.entries.sortedBy { it.key }.sumOf { it.value.size })
+        var totalSize = 0
+        for (i in 0 until packet.numFrags) {
+            totalSize += fragments[i]?.size ?: 0
+        }
+        val complete = ByteArray(totalSize)
         var offset = 0
         for (i in 0 until packet.numFrags) {
             val fragment = fragments[i] ?: continue

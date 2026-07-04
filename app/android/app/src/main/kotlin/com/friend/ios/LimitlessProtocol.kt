@@ -129,7 +129,12 @@ object LimitlessProtocol {
                 } else if (wireType == 2) {
                     val (length, next) = decodeVarint(data, pos)
                     pos = next
-                    if (pos + length > data.size) return null
+                    // Dart parity: a past-the-end length only faults the packet when it is
+                    // the payload field; other fields just end the walk, keeping what parsed.
+                    if (pos + length > data.size) {
+                        if (fieldNum == 4) return null
+                        break
+                    }
                     if (fieldNum == 4) payload = data.copyOfRange(pos, pos + length.toInt())
                     pos += length.toInt()
                 } else {
@@ -210,11 +215,17 @@ object LimitlessProtocol {
 
             val pageData = flashPageData ?: return null
             if (pageData.isEmpty()) return null
+            val frames = extractOpusFramesFromFlashPage(pageData)
+            // Dart parity: an audio page that yielded zero frames is a parse failure and
+            // is never surfaced — ACKing past it would delete audio we failed to extract.
+            // Diagnostic pages (no audio subfields) surface with zero frames so the drain
+            // can advance past them.
+            if (frames.isEmpty() && hasAudioSubfields(pageData)) return null
             return FlashPage(
                 index = index,
                 session = session,
                 timestampMs = parseFlashPageTimestampMs(pageData),
-                opusFrames = extractOpusFramesFromFlashPage(pageData),
+                opusFrames = frames,
             )
         } catch (_: Exception) {
         }
@@ -320,6 +331,49 @@ object LimitlessProtocol {
                 break
             }
         }
+    }
+
+    /** Mirror of `_hasAudioSubfields`: any 0x12 subfield inside a 0x1a wrapper. */
+    fun hasAudioSubfields(flashPageData: ByteArray): Boolean {
+        try {
+            var pos = 0
+            if (pos < flashPageData.size && flashPageData[pos].toInt() == 0x08) {
+                pos++
+                pos = decodeVarint(flashPageData, pos).second
+            }
+            if (pos < flashPageData.size && flashPageData[pos].toInt() == 0x10) {
+                pos++
+                pos = decodeVarint(flashPageData, pos).second
+            }
+
+            while (pos < flashPageData.size - 2) {
+                if (flashPageData[pos].toInt() == 0x1a) {
+                    pos++
+                    val (wrapperLength, afterLen) = decodeVarint(flashPageData, pos)
+                    pos = afterLen
+                    val wrapperEnd = pos + wrapperLength.toInt()
+                    if (wrapperEnd > flashPageData.size) break
+
+                    while (pos < wrapperEnd - 1) {
+                        val marker = flashPageData[pos].toInt() and 0xFF
+                        if (marker == 0x12) return true
+                        val wireType = marker and 0x07
+                        pos++
+                        if (wireType == 0) {
+                            pos = decodeVarint(flashPageData, pos).second
+                        } else if (wireType == 2) {
+                            val (length, next) = decodeVarint(flashPageData, pos)
+                            pos = next + length.toInt()
+                        }
+                    }
+                    pos = wrapperEnd
+                } else {
+                    pos++
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return false
     }
 
     fun isValidOpusToc(byte: Byte): Boolean {
