@@ -899,7 +899,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     structured = Structured(wire.structured ?? OmiAPI.Structured(actionItems: nil, category: nil, emoji: nil, events: nil, overview: nil, title: nil))
     transcriptSegmentsIncluded = wire.transcriptSegments != nil
     transcriptSegments = (wire.transcriptSegments ?? []).map(TranscriptSegment.init)
-    geolocation = wire.geolocation.map(Geolocation.init)
+    geolocation = wire.geolocation
     photos = (wire.photos ?? []).map(ConversationPhoto.init)
     appsResults = (wire.appsResults ?? []).map(AppResponse.init)
     source = wire.source.map { ConversationSource(rawValue: $0.rawValue) ?? .unknown }
@@ -1348,25 +1348,11 @@ struct TranscriptSegment: Codable, Identifiable {
   }
 }
 
-struct Geolocation: Codable {
-  let latitude: Double?
-  let longitude: Double?
-  let address: String?
-  let locationType: String?
-
-  enum CodingKeys: String, CodingKey {
-    case latitude, longitude, address
-    case locationType = "location_type"
-  }
-
-  /// Adapter from the generated wire DTO (OmiAPI.Geolocation).
-  init(_ wire: OmiAPI.Geolocation) {
-    self.latitude = wire.latitude
-    self.longitude = wire.longitude
-    self.address = wire.address
-    self.locationType = wire.locationType
-  }
-}
+/// Schema authority: OmiAPI.Geolocation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO; the prior adapter only passed
+/// the four exposed fields through with no transformation (no Date parsing,
+/// no defaults, no computed properties), so this is a thin alias.
+typealias Geolocation = OmiAPI.Geolocation
 
 struct ConversationPhoto: Codable, Identifiable {
   let id: String
