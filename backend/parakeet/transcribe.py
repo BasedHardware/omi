@@ -293,6 +293,11 @@ def _diarize_segments(
         Z = linkage(X, method='average', metric='cosine')
 
         if num_speakers is not None:
+            if min_speakers is not None or max_speakers is not None:
+                logger.warning(
+                    'num_speakers=%d overrides min_speakers/max_speakers — range constraints ignored',
+                    num_speakers,
+                )
             n_clust = min(num_speakers, len(embeddings))
             labels = fcluster(Z, t=n_clust, criterion='maxclust')
         else:
