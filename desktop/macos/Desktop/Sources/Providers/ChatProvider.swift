@@ -3323,21 +3323,51 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return aiMessage
     }
 
+    /// Local ID of a voice/PTT user message shown optimistically the instant its
+    /// transcript is known — before the assistant reply exists — via
+    /// `beginVoiceUserMessage`. `recordCompletedTurn` reconciles the completed turn
+    /// against this bubble (updating its text if the transcript was corrected) instead
+    /// Show the user's spoken question on the main chat page the moment its transcript
+    /// is known, before the assistant reply is generated — so a voice/PTT question
+    /// appears instantly, matching how a typed message shows up immediately. Returns the
+    /// created message; the caller keeps its `id` for THIS turn and hands it back to
+    /// `recordCompletedTurn(earlyUserMessageId:)` so the completed turn reconciles against
+    /// its own bubble. Keyed per-turn (not a shared field) on purpose: voice completions
+    /// run from async tasks and can arrive out of order relative to the next turn's start,
+    /// so a shared id would let an old completion rewrite a newer turn's bubble.
+    /// UI-only: persistence happens once, at turn completion, with the final text.
+    @discardableResult
+    func beginVoiceUserMessage(userText: String) -> ChatMessage? {
+        let text = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        let message = ChatMessage(text: text, sender: .user)
+        messages.append(message)
+        log("ChatProvider: showing voice user message early (\(text.count) chars)")
+        return message
+    }
+
     /// Record a completed turn that did not stream through `sendMessage`.
     /// Appends both messages to the in-memory provider session immediately, then
     /// persists them sequentially in the background so later follow-ups retain context.
+    /// - Parameter earlyUserMessageId: id of the bubble `beginVoiceUserMessage` created
+    ///   for THIS turn (nil if none). Reconciled in place instead of appending a
+    ///   duplicate. Passed explicitly per turn so an out-of-order async completion can
+    ///   never touch a different turn's bubble.
     @discardableResult
     func recordCompletedTurn(
         userText: String,
         assistantText: String,
         logLabel: String = "completed",
-        messageSource: String = "desktop_chat"
+        messageSource: String = "desktop_chat",
+        earlyUserMessageId: String? = nil
     ) -> (
         user: ChatMessage?, assistant: ChatMessage?
     ) {
         let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !user.isEmpty || !assistant.isEmpty else { return (nil, nil) }
+        guard !user.isEmpty || !assistant.isEmpty else {
+            return (nil, nil)
+        }
 
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -3345,9 +3375,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var userMessage: ChatMessage?
         var aiMessage: ChatMessage?
         if !user.isEmpty {
-            let m = ChatMessage(text: user, sender: .user)
-            messages.append(m)
-            userMessage = m
+            if let earlyId = earlyUserMessageId,
+                let idx = messages.firstIndex(where: { $0.id == earlyId }) {
+                // This turn's early bubble (shown by beginVoiceUserMessage): reconcile its
+                // text (in case the final transcript was language-corrected) and reuse it —
+                // persisted once, below — instead of appending a duplicate.
+                if messages[idx].text != user { messages[idx].text = user }
+                userMessage = messages[idx]
+            } else {
+                let m = ChatMessage(text: user, sender: .user)
+                messages.append(m)
+                userMessage = m
+            }
         }
         if !assistant.isEmpty {
             let m = ChatMessage(text: assistant, sender: .ai)
@@ -3382,12 +3421,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// normal query path, so without this the turn would never appear in chat history
     /// or sync to the backend. Empty sides are skipped (a tool-only turn with no
     /// spoken reply still records the user's request).
-    func recordVoiceTurn(userText: String, assistantText: String) {
+    func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil) {
         recordCompletedTurn(
             userText: userText,
             assistantText: assistantText,
             logLabel: "voice",
-            messageSource: "realtime_voice"
+            messageSource: "realtime_voice",
+            earlyUserMessageId: earlyUserMessageId
         )
     }
 

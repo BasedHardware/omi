@@ -3248,15 +3248,28 @@ class FloatingControlBarManager {
         mostRecentNotificationID = notification.id
     }
 
+    /// Show the user's spoken question in the main chat history the instant its
+    /// transcript is known — before the reply is generated — so a voice/PTT question
+    /// appears on the home-page chat immediately, the same as a typed message. Returns
+    /// the bubble's id; the caller keeps it for THIS turn and passes it back to
+    /// `recordVoiceTurn`/`recordVoiceAgentHandoff` for reconciliation. Nil if not set up.
+    func beginVoiceUserMessage(userText: String) -> String? {
+        historyChatProvider?.beginVoiceUserMessage(userText: userText)?.id
+    }
+
     /// Record a completed realtime-hub voice turn into the main chat history (+ backend
     /// sync) via the shared history provider — the same provider notifications use. The
     /// hub plays its own audio and never routes through the query path, so this is the
     /// only way voice turns reach chat history. No-op if the bar isn't set up yet.
-    func recordVoiceTurn(userText: String, assistantText: String) {
-        historyChatProvider?.recordVoiceTurn(userText: userText, assistantText: assistantText)
+    /// `earlyUserMessageId` reconciles this turn's early bubble (see beginVoiceUserMessage).
+    func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil) {
+        historyChatProvider?.recordVoiceTurn(
+            userText: userText, assistantText: assistantText, earlyUserMessageId: earlyUserMessageId)
     }
 
-    func recordVoiceAgentHandoff(userText: String, agentTitle: String, agentBrief: String) {
+    func recordVoiceAgentHandoff(
+        userText: String, agentTitle: String, agentBrief: String, earlyUserMessageId: String? = nil
+    ) {
         let title = agentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let brief = agentBrief.trimmingCharacters(in: .whitespacesAndNewlines)
         let assistantText = "Started background agent\(title.isEmpty ? "" : " \"\(title)\"")\(brief.isEmpty ? "." : " for: \(brief)")"
@@ -3264,7 +3277,8 @@ class FloatingControlBarManager {
             userText: userText,
             assistantText: assistantText,
             logLabel: "voice_agent_handoff",
-            messageSource: "realtime_voice"
+            messageSource: "realtime_voice",
+            earlyUserMessageId: earlyUserMessageId
         )
     }
 
