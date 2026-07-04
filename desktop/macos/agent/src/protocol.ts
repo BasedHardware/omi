@@ -159,6 +159,7 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  artifacts?: Record<string, unknown>[];
 }
 
 export interface RuntimeFailurePayload {

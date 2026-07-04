@@ -15,7 +15,7 @@ import type {
 } from "../protocol.js";
 import { requestIdFor } from "../protocol.js";
 import type { RuntimeFailure } from "./failures.js";
-import type { AgentEvent, RunMode } from "./types.js";
+import type { AgentArtifact, AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 
 export type CompatibilitySend = (message: OutboundMessage) => void;
@@ -248,6 +248,7 @@ export class JsonlCompatibilityFacade {
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
+        artifacts: result.artifacts.map(serializeArtifact),
       };
       this.send(this.withCorrelation(resultMessage, context));
     } catch (error) {
@@ -696,6 +697,35 @@ export class JsonlCompatibilityFacade {
       await this.onRecoverableError?.(error);
       return true;
     };
+  }
+}
+
+function serializeArtifact(artifact: AgentArtifact): Record<string, unknown> {
+  return {
+    artifactId: artifact.artifactId,
+    omiSessionId: artifact.sessionId,
+    runId: artifact.runId,
+    attemptId: artifact.attemptId,
+    kind: artifact.kind,
+    role: artifact.role,
+    uri: artifact.uri,
+    displayName: artifact.displayName,
+    mimeType: artifact.mimeType,
+    contentHash: artifact.contentHash,
+    sizeBytes: artifact.sizeBytes,
+    lifecycleState: artifact.lifecycleState,
+    lifecycleUpdatedAtMs: artifact.lifecycleUpdatedAtMs,
+    metadata: parseJsonObject(artifact.metadataJson),
+    createdAtMs: artifact.createdAtMs,
+  };
+}
+
+function parseJsonObject(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
   }
 }
 

@@ -196,6 +196,15 @@ struct AIResponseView: View {
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        if !message.displayResources.isEmpty {
+            ChatResourceStrip(
+                resources: message.displayResources,
+                density: .compact,
+                alignment: .leading
+            )
+            .environment(\.colorScheme, .dark)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {

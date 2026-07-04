@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import GRDB
+import UniformTypeIdentifiers
 
 // MARK: - UserDefaults Extension for KVO
 
@@ -139,6 +140,31 @@ enum ChatContentBlock: Identifiable {
         case "WebFetch": return "Fetching page"
         default: return "Using \(cleanName)"
         }
+    }
+
+    /// Tools whose runs are legitimately long — shell commands, file
+    /// generation/edits, web fetches, database queries, and delegated
+    /// agents. The stall banner ("This is taking longer than usual") is
+    /// suppressed for these so normal long work doesn't read as stuck.
+    static func isSlowExpectedTool(_ toolName: String) -> Bool {
+        let cleaned: String
+        if toolName.hasPrefix("mcp__") {
+            cleaned = String(toolName.split(separator: "__").last ?? Substring(toolName))
+        } else {
+            cleaned = toolName
+        }
+        // Any MCP tool is an out-of-process call we don't time-bound.
+        if toolName.hasPrefix("mcp__") { return true }
+        let lower = cleaned.lowercased()
+        let slowPrefixes = ["bash", "write", "edit", "multiedit", "webfetch", "websearch", "task", "notebookedit"]
+        if slowPrefixes.contains(where: { lower.hasPrefix($0) }) { return true }
+        let slowExact: Set<String> = [
+            "execute_sql", "semantic_search", "spawn_agent", "manage_agent_pills",
+            "search_tasks", "run_attempt", "delegate_agent", "send_agent_message",
+        ]
+        // Strip any embedded summary suffix ("Bash: cmd" style) before matching.
+        let head = lower.split(separator: ":").first.map(String.init) ?? lower
+        return slowExact.contains(head.trimmingCharacters(in: .whitespaces))
     }
 
     /// Extracts a short summary from tool input for inline display
@@ -633,8 +659,12 @@ struct ChatMessage: Identifiable {
     var notificationScreenshot: Data?
     /// User-attached files (screenshots, images, documents) — populated for user messages.
     var attachments: [ChatAttachment]
+    /// Surface-neutral resources associated with this message. Assistant messages
+    /// use this for generated artifacts; user messages derive resources from
+    /// `attachments` for backwards compatibility.
+    var resources: [ChatResource]
 
-    init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = []) {
+    init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [], resources: [ChatResource] = []) {
         self.id = id
         self.clientTurnId = clientTurnId
         self.text = text
@@ -649,6 +679,7 @@ struct ChatMessage: Identifiable {
         self.notificationContext = notificationContext
         self.notificationScreenshot = notificationScreenshot
         self.attachments = attachments
+        self.resources = resources
     }
 }
 
@@ -662,6 +693,13 @@ extension ChatMessage {
             return structuredText
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var displayResources: [ChatResource] {
+        if !resources.isEmpty {
+            return resources
+        }
+        return attachments.map(ChatResource.attachment)
     }
 }
 
@@ -1354,7 +1392,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
             let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
             let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
-            await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
+            await agentBridge.warmupSession(cwd: effectiveAgentWorkingDirectory(), sessions: [
                 .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
                 .init(key: "floating", model: floatingWarmupModel, systemPrompt: floatingSystemPrompt)
             ])
@@ -2656,6 +2694,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
+    private func effectiveAgentWorkingDirectory() -> String {
+        if let workingDirectory, !workingDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return workingDirectory
+        }
+        let artifactsDirectory = AgentRuntimeProcess.defaultArtifactsDirectory()
+        try? FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: artifactsDirectory),
+            withIntermediateDirectories: true
+        )
+        return artifactsDirectory
+    }
+
     /// Reinitialize after settings change
     func reinitialize() async {
         sessions = []
@@ -3370,9 +3420,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // For non-image files we still need bytes — load them lazily here
             // (we skipped this at add-time to keep the UI responsive).
             let data: Data? = attachment.data
+                ?? attachment.localFileURL.flatMap { try? Data(contentsOf: $0) }
             guard let bytes = data else {
                 await MainActor.run {
-                    self.setAttachmentState(id: id, state: .failed("File could not be read"))
+                    if attachment.isSendableLocalResource {
+                        self.setAttachmentState(id: id, state: .localOnly)
+                    } else {
+                        self.setAttachmentState(id: id, state: .failed("File could not be read"))
+                    }
                 }
                 return
             }
@@ -3396,7 +3451,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } catch {
                 logError("ChatProvider: attachment upload failed", error: error)
                 await MainActor.run {
-                    self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
+                    if attachment.isSendableLocalResource {
+                        self.setAttachmentState(id: id, state: .localOnly)
+                    } else {
+                        self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
+                    }
                 }
             }
         }
@@ -3418,6 +3477,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 "mime_type": att.mimeType,
             ]
             if let thumb = att.thumbnailURL { dict["thumbnail"] = thumb }
+            if let localFileURL = att.localFileURL { dict["local_path"] = localFileURL.path }
             return dict
         }
         let root: [String: Any] = ["attachments": items]
@@ -3443,9 +3503,41 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         return !pendingAttachments.contains(where: {
-            if case .failed = $0.state { return true }
+            if case .failed = $0.state { return !$0.isSendableLocalResource }
             return false
         })
+    }
+
+    nonisolated static func attachmentContextPrompt(for attachments: [ChatAttachment]) -> String? {
+        guard !attachments.isEmpty else { return nil }
+        let plural = attachments.count == 1 ? "file" : "files"
+        var lines: [String] = [
+            "[Attached Files]",
+            "The user attached \(attachments.count) \(plural) to this exact message. Treat references like \"this\", \"the file\", \"the attachment\", or \"what do you think of this\" as referring to these attachment(s). If the answer depends on file contents, inspect the local_path with file-reading tools before asking for clarification.",
+        ]
+        for (index, attachment) in attachments.enumerated() {
+            lines.append("")
+            lines.append("\(index + 1). \(attachment.fileName)")
+            lines.append("   mime_type: \(attachment.mimeType)")
+            if let localFileURL = attachment.localFileURL {
+                lines.append("   local_path: \(localFileURL.path)")
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: localFileURL.path),
+                   let size = attrs[.size] as? NSNumber {
+                    lines.append(
+                        "   size: \(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file))"
+                    )
+                }
+            } else {
+                lines.append("   local_path: unavailable")
+            }
+            if let serverId = attachment.serverId {
+                lines.append("   uploaded_file_id: \(serverId)")
+            }
+            if attachment.isImage {
+                lines.append("   image_payload: included separately when available")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Send Message
@@ -3993,6 +4085,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if let coordinatorCompletionDeltaContext {
                 bridgePromptContexts.append("[Desktop Completed Agent Delta]\n\(coordinatorCompletionDeltaContext.prompt)")
             }
+            if let attachmentContext = Self.attachmentContextPrompt(for: attachmentsForMessage) {
+                bridgePromptContexts.append(attachmentContext)
+            }
             let promptForBridge = bridgePromptContexts.isEmpty
                 ? basePromptForBridge
                 : "\(bridgePromptContexts.joined(separator: "\n\n"))\n\n\(basePromptForBridge)"
@@ -4006,7 +4101,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 externalRefKind: resolvedSurface?.externalRefKind,
                 externalRefId: resolvedSurface?.externalRefId,
                 legacyClientScope: resolvedLegacyClientScope,
-                cwd: workingDirectory,
+                cwd: effectiveAgentWorkingDirectory(),
                 mode: chatMode.rawValue,
                 model: effectiveRequestModel,
                 resume: resume,
@@ -4052,6 +4147,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let metricsSnapshot = responseMetrics.snapshot()
                 messages[index].text = messageText
                 messages[index].isStreaming = false
+                messages[index].resources = mergedResources(
+                    existing: messages[index].resources,
+                    adding: queryResult.artifacts.map(ChatResource.artifact)
+                )
                 messages[index].metadata = MessageMetadata(
                     model: effectiveRequestModel,
                     inputTokens: queryResult.inputTokens,
@@ -4527,6 +4626,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             toolUseId: toolUseId,
             input: input
         )
+        if status == .completed {
+            attachGeneratedFileResources(
+                messageIndex: index,
+                toolName: toolName,
+                toolUseId: toolUseId,
+                extraTexts: []
+            )
+        }
     }
 
     /// Add tool result output to an existing tool call block
@@ -4538,6 +4645,139 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             name: name,
             output: output
         )
+        attachGeneratedFileResources(
+            messageIndex: index,
+            toolName: name,
+            toolUseId: toolUseId,
+            extraTexts: [output]
+        )
+    }
+
+    private func attachGeneratedFileResources(
+        messageIndex index: Int,
+        toolName: String,
+        toolUseId: String?,
+        extraTexts: [String]
+    ) {
+        let discoveredResources = localFileResources(
+            fromToolName: toolName,
+            texts: toolResourceCandidateTexts(
+                in: messages[index].contentBlocks,
+                toolName: toolName,
+                toolUseId: toolUseId,
+                extraTexts: extraTexts
+            )
+        )
+        if !discoveredResources.isEmpty {
+            messages[index].resources = mergedResources(
+                existing: messages[index].resources,
+                adding: discoveredResources
+            )
+        }
+    }
+
+    private func mergedResources(existing: [ChatResource], adding newResources: [ChatResource]) -> [ChatResource] {
+        guard !newResources.isEmpty else { return existing }
+        var seen = Set(existing.map(\.id))
+        var merged = existing
+        for resource in newResources where !seen.contains(resource.id) {
+            seen.insert(resource.id)
+            merged.append(resource)
+        }
+        return merged
+    }
+
+    private func toolResourceCandidateTexts(
+        in blocks: [ChatContentBlock],
+        toolName: String,
+        toolUseId: String?,
+        extraTexts: [String]
+    ) -> [String] {
+        let normalizedToolUseId = toolUseId?.isEmpty == false ? toolUseId : nil
+        var texts = extraTexts
+        for block in blocks {
+            guard case .toolCall(_, let blockName, _, let blockToolUseId, let input, let output) = block else {
+                continue
+            }
+            let idsMatch = normalizedToolUseId != nil && blockToolUseId == normalizedToolUseId
+            let namesMatch = blockName == toolName
+            guard idsMatch || (normalizedToolUseId == nil && namesMatch) else {
+                continue
+            }
+            if let summary = input?.summary {
+                texts.append(summary)
+            }
+            if let details = input?.details {
+                texts.append(details)
+            }
+            if let output {
+                texts.append(output)
+            }
+        }
+        return texts
+    }
+
+    private func localFileResources(fromToolName name: String, texts: [String]) -> [ChatResource] {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard ["write", "edit", "multiedit"].contains(normalizedName) else { return [] }
+        return localFileURLs(from: texts.joined(separator: "\n")).map { url in
+            let mimeType = mimeType(forLocalFile: url)
+            return ChatResource(
+                id: "generated-file:\(url.path)",
+                origin: .generatedArtifact,
+                title: url.lastPathComponent,
+                subtitle: localFileSubtitle(url: url, mimeType: mimeType),
+                mimeType: mimeType,
+                thumbnailURL: nil,
+                imageData: nil,
+                uri: url.absoluteString,
+                artifactId: nil,
+                omiSessionId: nil,
+                runId: nil,
+                state: .ready
+            )
+        }
+    }
+
+    private func localFileURLs(from output: String) -> [URL] {
+        let pattern = #"(?:"file://)?(/Users/[^\n"`]+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let nsRange = NSRange(output.startIndex..<output.endIndex, in: output)
+        var urls: [URL] = []
+        var seen = Set<String>()
+        for match in regex.matches(in: output, range: nsRange) {
+            guard match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: output)
+            else { continue }
+            let rawPath = String(output[range])
+                .trimmingCharacters(in: CharacterSet(charactersIn: " \t\r\n.。,:;)'\"]"))
+            let url = URL(fileURLWithPath: rawPath)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue,
+                  !seen.contains(url.path)
+            else { continue }
+            seen.insert(url.path)
+            urls.append(url)
+        }
+        return urls
+    }
+
+    private func mimeType(forLocalFile url: URL) -> String {
+        if let type = UTType(filenameExtension: url.pathExtension),
+           let mime = type.preferredMIMEType {
+            return mime
+        }
+        return "application/octet-stream"
+    }
+
+    private func localFileSubtitle(url: URL, mimeType: String) -> String {
+        var parts = [mimeType]
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+           let size = attrs[.size] as? NSNumber {
+            parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file))
+        }
+        return parts.joined(separator: " • ")
     }
 
     /// Append thinking text to the streaming message via the shared buffer.

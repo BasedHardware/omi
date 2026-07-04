@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-struct AgentArtifactProjection: Equatable, Identifiable {
+struct AgentArtifactProjection: Codable, Equatable, Identifiable {
   var id: String { artifactId }
 
   let artifactId: String
@@ -41,7 +41,11 @@ struct AgentArtifactProjection: Equatable, Identifiable {
     guard let artifacts = root["artifacts"] as? [[String: Any]] else {
       throw AgentArtifactProjectionError.invalidResponse
     }
-    return artifacts.compactMap(parseArtifact(_:))
+    return parseList(fromJSONArray: artifacts)
+  }
+
+  static func parseList(fromJSONArray artifacts: [[String: Any]]) -> [AgentArtifactProjection] {
+    artifacts.compactMap(parseArtifact(_:))
   }
 
   private static func parseArtifact(_ dict: [String: Any]) -> AgentArtifactProjection? {

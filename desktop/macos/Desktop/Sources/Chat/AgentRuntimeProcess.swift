@@ -462,6 +462,7 @@ actor AgentRuntimeProcess {
     env["NODE_NO_WARNINGS"] = "1"
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
+    env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
@@ -971,7 +972,10 @@ actor AgentRuntimeProcess {
       inputTokens: payload["inputTokens"] as? Int ?? 0,
       outputTokens: payload["outputTokens"] as? Int ?? 0,
       cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0
+      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
+      artifacts: AgentArtifactProjection.parseList(
+        fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
+      )
     )
   }
 
@@ -1091,6 +1095,21 @@ actor AgentRuntimeProcess {
       .appendingPathComponent("Application Support")
       .appendingPathComponent("Omi")
       .appendingPathComponent("AgentRuntime")
+      .appendingPathComponent(bundleComponent)
+      .path
+  }
+
+  static func defaultArtifactsDirectory(
+    bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) -> String {
+    let bundleComponent = (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
+      ?? "com.omi.desktop-dev"
+    return homeDirectory
+      .appendingPathComponent("Library")
+      .appendingPathComponent("Application Support")
+      .appendingPathComponent("Omi")
+      .appendingPathComponent("Artifacts")
       .appendingPathComponent(bundleComponent)
       .path
   }

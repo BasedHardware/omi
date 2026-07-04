@@ -120,6 +120,7 @@ struct DesktopCoordinatorAgentRunInspection: Codable {
   let status: String
   let finalText: String?
   let errorMessage: String?
+  let artifacts: [AgentArtifactProjection]
 }
 
 @MainActor
@@ -738,7 +739,7 @@ final class DesktopCoordinatorService {
 
   private func parseInspectedRun(from raw: String) -> DesktopCoordinatorAgentRunInspection {
     guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else {
-      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run")
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run", artifacts: [])
     }
     let session = object["session"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]
@@ -748,7 +749,8 @@ final class DesktopCoordinatorService {
       runId: stringValue(run["runId"]),
       status: stringValue(run["status"]) ?? stringValue(object["terminalStatus"]) ?? "unknown",
       finalText: stringValue(run["finalText"]) ?? stringValue(result["text"]) ?? stringValue(object["text"]),
-      errorMessage: stringValue(run["errorMessage"]) ?? stringValue(object["error"])
+      errorMessage: stringValue(run["errorMessage"]) ?? stringValue(object["error"]),
+      artifacts: AgentArtifactProjection.parseList(fromJSONArray: object["artifacts"] as? [[String: Any]] ?? [])
     )
   }
 

@@ -762,9 +762,19 @@ final class AgentPillsManager: ObservableObject {
     }
 
     /// Send a follow-up to the same canonical background-agent session.
-    func continueAgent(from pill: AgentPill, text: String) {
+    func continueAgent(from pill: AgentPill, text: String, attachments: [ChatAttachment] = []) {
+        // The floating agent runs locally with disk access, so attachments are
+        // handed off by local_path in the prompt (see attachmentContextPrompt) —
+        // no upload round-trip needed. The visible bubble still renders the files
+        // through the shared ChatResource card UI.
+        let prompt: String
+        if let context = ChatProvider.attachmentContextPrompt(for: attachments) {
+            prompt = text.isEmpty ? context : "\(text)\n\n\(context)"
+        } else {
+            prompt = text
+        }
         guard let sessionId = pill.canonicalSessionId else {
-            pendingFollowUpsByPill[pill.id, default: []].append(text)
+            pendingFollowUpsByPill[pill.id, default: []].append(prompt)
             pill.latestActivity = "Queued follow-up until the agent starts…"
             pill.markContentChanged()
             return
@@ -773,7 +783,9 @@ final class AgentPillsManager: ObservableObject {
         pill.completedAt = nil
         pill.suggestedFollowUps = []
         pill.latestActivity = "Interrupting current run…"
-        pill.conversationMessages.append(ChatMessage(text: text, sender: .user))
+        pill.conversationMessages.append(
+            ChatMessage(text: text, sender: .user, resources: attachments.map(ChatResource.attachment))
+        )
         pill.markContentChanged()
         let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
         let activeRunId = pill.canonicalRunId
@@ -789,7 +801,7 @@ final class AgentPillsManager: ObservableObject {
                     case .cancelled:
                         return
                     case .failed:
-                        pendingFollowUpsByPill[pill.id, default: []].append(text)
+                        pendingFollowUpsByPill[pill.id, default: []].append(prompt)
                         pill.latestActivity = "Queued follow-up until the current run stops…"
                         pill.markContentChanged()
                         await self.pollCanonicalRun(for: pill)
@@ -807,7 +819,7 @@ final class AgentPillsManager: ObservableObject {
                 pill.markContentChanged()
                 let result = try await DesktopCoordinatorService.shared.continueAgent(
                     sessionId: sessionId,
-                    prompt: text,
+                    prompt: prompt,
                     model: pill.bridgeHarnessOverride == nil ? pill.model : nil,
                     cwd: workingDirectory
                 )
@@ -1139,7 +1151,11 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .running
             pill.latestActivity = inspection.status == "cancelling" ? "Stopping…" : "Working…"
         case "succeeded", "completed":
-            finish(pill: pill, finalText: inspection.finalText)
+            finish(
+                pill: pill,
+                finalText: inspection.finalText,
+                resources: inspection.artifacts.map(ChatResource.artifact)
+            )
         case "cancelled":
             pill.status = .stopped
             pill.latestActivity = "Stopped by user"
@@ -1158,10 +1174,11 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    private func finish(pill: AgentPill, finalText: String?) {
+    private func finish(pill: AgentPill, finalText: String?, resources: [ChatResource] = []) {
         let trimmed = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !trimmed.isEmpty {
-            let finalMessage = ChatMessage(text: trimmed, sender: .ai)
+        if !trimmed.isEmpty || !resources.isEmpty {
+            let messageText = trimmed.isEmpty ? "Done." : trimmed
+            let finalMessage = ChatMessage(text: messageText, sender: .ai, resources: resources)
             pill.aiMessage = finalMessage
             if pill.conversationMessages.isEmpty {
                 pill.conversationMessages = [
@@ -1171,7 +1188,7 @@ final class AgentPillsManager: ObservableObject {
             } else if !pill.conversationMessages.contains(where: { $0.id == finalMessage.id }) {
                 pill.conversationMessages.append(finalMessage)
             }
-            pill.latestActivity = String(trimmed.prefix(140))
+            pill.latestActivity = String(messageText.prefix(140))
         } else {
             pill.latestActivity = "Done"
         }
@@ -1195,7 +1212,11 @@ final class AgentPillsManager: ObservableObject {
         let recent = Array(messages.suffix(from: since))
         let displayMessages = recent.filter { message in
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty
+            return message.sender == .user
+                || !trimmed.isEmpty
+                || message.isStreaming
+                || !message.contentBlocks.isEmpty
+                || !message.displayResources.isEmpty
         }
         if !displayMessages.isEmpty {
             pill.conversationMessages = displayMessages
