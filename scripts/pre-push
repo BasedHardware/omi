@@ -398,6 +398,9 @@ check_backend_typecheck_if_needed() {
     'backend/database/memories.py' \
     'backend/database/vector_db.py' \
     'backend/database/entities.py' \
+    'backend/database/webhook_health.py' \
+    'backend/database/staged_tasks.py' \
+    'backend/database/projection_repair.py' \
     'backend/routers/knowledge_graph.py' \
     'backend/routers/memory_admin.py' \
     'backend/routers/memories.py' \
@@ -409,6 +412,20 @@ check_backend_typecheck_if_needed() {
     'backend/routers/onboarding.py' \
     'backend/routers/other.py' \
     'backend/routers/trends.py' \
+    'backend/routers/firmware.py' \
+    'backend/routers/tools.py' \
+    'backend/routers/calendar_onboarding.py' \
+    'backend/routers/fair_use_admin.py' \
+    'backend/routers/other.py' \
+    'backend/routers/scores.py' \
+    'backend/routers/google_calendar.py' \
+    'backend/routers/imports.py' \
+    'backend/routers/omni_relay.py' \
+    'backend/routers/tts.py' \
+    'backend/routers/phone_calls.py' \
+    'backend/routers/x_connector.py' \
+    'backend/routers/task_integrations.py' \
+    'backend/routers/updates.py' \
     'backend/utils/conversations/memories.py' \
     'backend/utils/llm/__init__.py' \
     'backend/utils/llm/clients.py' \
