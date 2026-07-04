@@ -225,6 +225,32 @@ final class TelegramClientService: @unchecked Sendable {
     send(command: ["cmd": "send", "chat_id": chatID, "text": text])
   }
 
+  /// Send a message and report whether the command actually reached a live helper
+  /// process (stdin present and the write succeeded). Returns false when the helper
+  /// is gone or the write failed, so callers must not optimistically render the
+  /// message as sent. NOTE: true confirms the command was handed to the helper, not
+  /// Telegram-side delivery.
+  @discardableResult
+  func sendConfirmed(chatID: String, text: String) -> Bool {
+    queue.sync {
+      guard let handle = stdinHandle else { return false }
+      let command: [String: Any] = ["cmd": "send", "chat_id": chatID, "text": text]
+      guard
+        let data = try? JSONSerialization.data(withJSONObject: command),
+        var line = String(data: data, encoding: .utf8)
+      else { return false }
+      line += "\n"
+      guard let out = line.data(using: .utf8) else { return false }
+      do {
+        try handle.write(contentsOf: out)
+        return true
+      } catch {
+        NSLog("Telegram: stdin write failed: %@", error.localizedDescription)
+        return false
+      }
+    }
+  }
+
   private func send(command: [String: Any]) {
     queue.async { [weak self] in
       guard let self, let handle = self.stdinHandle else { return }

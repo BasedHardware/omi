@@ -198,7 +198,8 @@ final class TelegramInboxStore: ObservableObject {
     upsert(chat)
     lastLatestMessageID[chat.chatID] = t.latestMessageID
     let payload = TelegramChat.ingestPayload(from: t)
-    _ = try? await APIClient.shared.telegramIngest(threads: [payload])
+    // Retain-and-retry ingest, independent of any UI flow (backfill has none).
+    Task { [weak self] in await self?.ingestThread(payload) }
   }
 
   private func handleThread(_ t: TelegramHelperThread) async {
@@ -206,9 +207,10 @@ final class TelegramInboxStore: ObservableObject {
     upsert(chat)
 
     // Ingest to the backend for conversation/memory processing (durable-ledger
-    // deduped server-side, so re-sends are safe).
+    // deduped server-side, so re-sends are safe). Runs as an independent retrying
+    // task so a slow/failed ingest never delays the reply flow below.
     let payload = TelegramChat.ingestPayload(from: t)
-    _ = try? await APIClient.shared.telegramIngest(threads: [payload])
+    Task { [weak self] in await self?.ingestThread(payload) }
 
     // Only act on a genuinely new latest message per chat.
     let known = lastLatestMessageID[chat.chatID]
@@ -226,6 +228,28 @@ final class TelegramInboxStore: ObservableObject {
         await predraft(chat)
       }
     }
+  }
+
+  /// Ingest a thread payload, retrying on a thrown error or a partial-persist
+  /// (`allPersisted == false`) response. Telegram events/backfills are the only source
+  /// of these normalized payloads, so a fire-once ingest silently loses messages on a
+  /// transient backend failure. This is a best-effort in-memory retry — bounded backoff
+  /// (~15s total), not a durable queue: it does NOT survive app quit or an outage longer
+  /// than the backoff budget. Re-sends are safe (the backend dedups every message via its
+  /// durable ledger); a persistent on-disk outbox would be the follow-up for full
+  /// at-least-once delivery.
+  private func ingestThread(_ payload: TelegramThreadPayload) async {
+    let maxAttempts = 5
+    for attempt in 0..<maxAttempts {
+      // nil → the call threw (transient/offline); false → backend released some
+      // windows without storing them; true → fully durable, nothing to retry.
+      let allPersisted = (try? await APIClient.shared.telegramIngest(threads: [payload]))?.allPersisted
+      if allPersisted == true { return }
+      if attempt + 1 < maxAttempts {
+        try? await Task.sleep(nanoseconds: UInt64(1 << attempt) * 1_000_000_000)  // 1, 2, 4, 8s
+      }
+    }
+    NSLog("Telegram ingest: gave up after %d attempts; some messages may be unstored", maxAttempts)
   }
 
   private func upsert(_ chat: TelegramChat) {
@@ -283,8 +307,16 @@ final class TelegramInboxStore: ObservableObject {
       preDrafts[chat.chatID] = text
       return
     }
-    TelegramClientService.shared.send(chatID: chat.chatID, text: text)
-    appendSent(text, to: chat.chatID)
+    // Only reflect the send once the command actually reached a live helper — a
+    // dead helper / failed stdin write must not leave a phantom "sent" bubble.
+    // Keep the draft on failure so the reply isn't silently lost (mirrors WhatsApp,
+    // which confirms against its DB, and iMessage, which drops the optimistic append).
+    if TelegramClientService.shared.sendConfirmed(chatID: chat.chatID, text: text) {
+      appendSent(text, to: chat.chatID)
+    } else {
+      NSLog("Telegram auto-reply send failed for %@ (helper unavailable); keeping draft", chat.chatID)
+      preDrafts[chat.chatID] = text
+    }
   }
 
   /// Send a user-composed (or edited pre-draft) reply for the selected chat.
@@ -312,6 +344,10 @@ final class TelegramInboxStore: ObservableObject {
       chatID: chat.chatID, displayName: chat.displayName, isGroup: chat.isGroup,
       personRef: chat.personRef, bubbles: chat.bubbles + [bubble],
       avatarImageData: chat.avatarImageData)
-    lastLatestMessageID[chatID] = bubble.id
+    // NOTE: do not overwrite lastLatestMessageID here. That key dedups *inbound*
+    // messages in handleThread (`known != t.latestMessageID`); stamping it with our
+    // outgoing bubble's UUID would let a re-emitted snapshot of the same inbound
+    // message pass the guard and trigger a duplicate auto-reply. WhatsApp's
+    // appendSent deliberately leaves the key untouched for the same reason.
   }
 }

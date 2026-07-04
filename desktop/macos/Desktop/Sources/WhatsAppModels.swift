@@ -89,6 +89,10 @@ struct WhatsAppIngestResponsePayload: Decodable {
   let peopleUpserted: Int
   let messagesIngested: Int
   let skippedDuplicates: Int
+  // True only when the backend durably persisted every window. The coordinator
+  // advances its Z_PK cursor only when this is true, so a partial persist failure
+  // re-sends the batch next sync instead of skipping (and losing) those messages.
+  let allPersisted: Bool
 
   enum CodingKeys: String, CodingKey {
     case success
@@ -96,9 +100,12 @@ struct WhatsAppIngestResponsePayload: Decodable {
     case peopleUpserted = "people_upserted"
     case messagesIngested = "messages_ingested"
     case skippedDuplicates = "skipped_duplicates"
+    case allPersisted = "all_persisted"
   }
 
   // Tolerant decode so a partial/older backend response can't fail the whole sync.
+  // allPersisted defaults to true when absent so an older backend (no field) never
+  // wedges the cursor.
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     success = (try? c.decode(Bool.self, forKey: .success)) ?? true
@@ -106,6 +113,7 @@ struct WhatsAppIngestResponsePayload: Decodable {
     peopleUpserted = (try? c.decode(Int.self, forKey: .peopleUpserted)) ?? 0
     messagesIngested = (try? c.decode(Int.self, forKey: .messagesIngested)) ?? 0
     skippedDuplicates = (try? c.decode(Int.self, forKey: .skippedDuplicates)) ?? 0
+    allPersisted = (try? c.decodeIfPresent(Bool.self, forKey: .allPersisted)) ?? true
   }
 }
 

@@ -124,6 +124,10 @@ struct TelegramIngestResponsePayload: Decodable {
   let peopleUpserted: Int
   let messagesIngested: Int
   let skippedDuplicates: Int
+  // True only when the backend durably persisted every window. Telegram events are
+  // the sole source of these payloads, so on a partial persist the client retries
+  // the ingest rather than dropping the un-stored messages.
+  let allPersisted: Bool
 
   enum CodingKeys: String, CodingKey {
     case success
@@ -131,6 +135,19 @@ struct TelegramIngestResponsePayload: Decodable {
     case peopleUpserted = "people_upserted"
     case messagesIngested = "messages_ingested"
     case skippedDuplicates = "skipped_duplicates"
+    case allPersisted = "all_persisted"
+  }
+
+  // Tolerant decode: allPersisted defaults to true when absent so an older backend
+  // (no field) is treated as fully persisted rather than retried forever.
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    success = (try? c.decode(Bool.self, forKey: .success)) ?? true
+    conversationsCreated = (try? c.decode(Int.self, forKey: .conversationsCreated)) ?? 0
+    peopleUpserted = (try? c.decode(Int.self, forKey: .peopleUpserted)) ?? 0
+    messagesIngested = (try? c.decode(Int.self, forKey: .messagesIngested)) ?? 0
+    skippedDuplicates = (try? c.decode(Int.self, forKey: .skippedDuplicates)) ?? 0
+    allPersisted = (try? c.decodeIfPresent(Bool.self, forKey: .allPersisted)) ?? true
   }
 }
 

@@ -58,8 +58,16 @@ actor WhatsAppSyncCoordinator {
     }
 
     let response = try await APIClient.shared.whatsappIngest(threads: threads)
-    // Advance the client-side cursor only after a successful push.
-    await WhatsAppReaderService.shared.setLastProcessedZPK(maxZPK)
+    // Advance the client-side cursor ONLY when the backend confirms every window
+    // persisted durably. On a partial failure the backend released those messages'
+    // ledger claims and did not store them; advancing our Z_PK would skip past them
+    // forever. Leaving the cursor put re-sends the batch next sync, and the durable
+    // ledger dedups the windows that already landed.
+    if response.allPersisted {
+      await WhatsAppReaderService.shared.setLastProcessedZPK(maxZPK)
+    } else {
+      NSLog("WhatsApp sync: backend reported partial persist failure; not advancing cursor (batch will retry)")
+    }
 
     return SyncOutcome(
       messagesIngested: response.messagesIngested,
