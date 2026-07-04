@@ -80,7 +80,7 @@ class CommitmentsStore: ObservableObject {
       try await CommitmentStorage.shared.updateDeadline(id: id, deadline: deadline)
       var updated = commitment
       updated.deadline = deadline
-      if let deadline = deadline {
+      if deadline != nil {
         CommitmentNotificationScheduler.shared.scheduleReminder(for: updated)
       } else {
         CommitmentNotificationScheduler.shared.cancelReminder(commitmentId: id)

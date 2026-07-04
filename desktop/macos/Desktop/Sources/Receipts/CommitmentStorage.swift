@@ -42,8 +42,9 @@ actor CommitmentStorage {
     let db = try await ensureInitialized()
     var rec = record
     rec.updatedAt = Date()
+    let captured = rec
     let inserted = try await db.write { database in
-      try rec.inserted(database)
+      try captured.inserted(database)
     }
     return inserted.id!
   }
@@ -175,18 +176,31 @@ actor CommitmentStorage {
 
   // MARK: - Session dedup
 
-  /// True if any commitment already exists sourced from the given session.
+  /// True if a session has already been processed (either commitments found or none found).
   func hasProcessedSession(_ sessionId: Int64) async -> Bool {
     guard let db = try? await ensureInitialized() else { return false }
     return (try? await db.read { database in
-      try CommitmentRecord
+      let hasCommitments = try CommitmentRecord
         .filter(Column("sourceSessionId") == sessionId)
+        .fetchCount(database) > 0
+      guard !hasCommitments else { return true }
+      return try ProcessedSessionRecord
+        .filter(Column("sessionId") == sessionId)
         .fetchCount(database) > 0
     }) ?? false
   }
 
-  /// Get IDs of completed, synced sessions that have no commitments extracted yet.
-  /// Used for the "scan past conversations" backfill on first launch.
+  /// Mark a session as processed (no commitments found), so it won't be re-scanned.
+  func markSessionProcessed(_ sessionId: Int64) async throws {
+    let db = try await ensureInitialized()
+    let record = ProcessedSessionRecord(sessionId: sessionId, processedAt: Date())
+    _ = try await db.write { database in
+      try record.insert(database)
+    }
+  }
+
+  /// Get IDs of completed, synced sessions that have neither commitments extracted
+  /// nor a processed-session marker. Used for the "scan past conversations" backfill.
   func getUnprocessedCompletedSessionIds(limit: Int = 20) async throws -> [Int64] {
     let db = try await ensureInitialized()
     return try await db.read { database in
@@ -200,6 +214,9 @@ actor CommitmentStorage {
             AND s.id NOT IN (
               SELECT DISTINCT sourceSessionId FROM commitments
               WHERE sourceSessionId IS NOT NULL
+            )
+            AND s.id NOT IN (
+              SELECT DISTINCT sessionId FROM processed_sessions
             )
           ORDER BY s.startedAt DESC
           LIMIT ?

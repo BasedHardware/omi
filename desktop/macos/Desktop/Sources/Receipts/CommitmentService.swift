@@ -8,17 +8,29 @@ actor CommitmentService {
 
   private init() {}
 
+  /// Whether the user has opted into commitment analysis of their conversations.
+  /// Defaults to false — users must explicitly enable in Settings.
+  static var isAnalysisEnabled: Bool {
+    UserDefaults.standard.bool(forKey: commitmentsAnalysisEnabledKey)
+  }
+
   // MARK: - Extraction (after conversation is finalized)
 
   /// Extract commitments from a finalized conversation session.
-  /// Skips if already processed (dedup via sourceSessionId).
+  /// Skips if already processed (dedup via sourceSessionId or processed_sessions).
+  /// Does nothing if the user has not opted into commitment analysis.
   func processSessionIfNeeded(sessionId: Int64) async {
+    guard Self.isAnalysisEnabled else { return }
+
     let alreadyProcessed = await CommitmentStorage.shared.hasProcessedSession(sessionId)
     guard !alreadyProcessed else { return }
 
     do {
       let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
-      guard !segments.isEmpty else { return }
+      guard !segments.isEmpty else {
+        try? await CommitmentStorage.shared.markSessionProcessed(sessionId)
+        return
+      }
 
       let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
       let conversationDate = session?.startedAt ?? Date()
@@ -54,6 +66,9 @@ actor CommitmentService {
 
       if !extracted.isEmpty {
         log("CommitmentService: Extracted \(extracted.count) commitment(s) from session \(sessionId)")
+      } else {
+        try? await CommitmentStorage.shared.markSessionProcessed(sessionId)
+        log("CommitmentService: No commitments found in session \(sessionId), marked as processed")
       }
     } catch {
       log("CommitmentService: processSessionIfNeeded failed: \(error.localizedDescription)")
@@ -63,8 +78,9 @@ actor CommitmentService {
   // MARK: - Follow-Through Detection
 
   /// Check a new conversation for evidence that prior pending commitments
-  /// were fulfilled.
+  /// were fulfilled. Does nothing if the user has not opted into commitment analysis.
   func processFollowThrough(sessionId: Int64) async {
+    guard Self.isAnalysisEnabled else { return }
     do {
       let pending = try await CommitmentStorage.shared.getPendingCommitments()
       guard !pending.isEmpty else { return }
@@ -148,8 +164,10 @@ actor CommitmentService {
 
   /// Scan past conversations for commitments that were never extracted.
   /// Called once on app launch to backfill conversations that predate
-  /// the commitment tracker feature.
+  /// the commitment tracker feature. Does nothing if the user has not
+  /// opted into commitment analysis.
   func scanPastConversations(limit: Int = 20) async {
+    guard Self.isAnalysisEnabled else { return }
     do {
       let sessionIds = try await CommitmentStorage.shared.getUnprocessedCompletedSessionIds(limit: limit)
       guard !sessionIds.isEmpty else { return }

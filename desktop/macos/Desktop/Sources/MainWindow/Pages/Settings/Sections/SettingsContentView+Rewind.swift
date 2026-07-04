@@ -173,6 +173,55 @@ extension SettingsContentView {
           }
         }
       }
+
+      // Commitments Analysis Opt-In
+      settingsCard(settingId: "rewind.commitments") {
+        VStack(alignment: .leading, spacing: 16) {
+          HStack {
+            Image(systemName: "hand.raised.fill")
+              .scaledFont(size: 16)
+              .foregroundColor(OmiColors.textSecondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Commitments")
+                .scaledFont(size: 15, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(
+                "Analyze conversations to detect promises and track follow-through"
+              )
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textTertiary)
+            }
+
+            Spacer()
+
+            Toggle(
+              "",
+              isOn: Binding(
+                get: { UserDefaults.standard.bool(forKey: commitmentsAnalysisEnabledKey) },
+                set: {
+                  UserDefaults.standard.set($0, forKey: commitmentsAnalysisEnabledKey)
+                  if $0 {
+                    Task.detached(priority: .utility) {
+                      await CommitmentService.shared.scanPastConversations()
+                      await CommitmentService.shared.checkOverdueCommitments()
+                    }
+                  }
+                }
+              )
+            )
+            .toggleStyle(.switch)
+            .controlSize(.small)
+          }
+
+          if !UserDefaults.standard.bool(forKey: commitmentsAnalysisEnabledKey) {
+            Text("When enabled, up to 20 recent conversations will be analyzed to find existing commitments. New conversations are analyzed as they complete.")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+        }
+      }
     }
   }
 

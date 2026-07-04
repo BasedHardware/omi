@@ -2344,6 +2344,15 @@ actor RewindDatabase {
             try db.create(index: "idx_commitments_source_session", on: "commitments", columns: ["sourceSessionId"])
         }
 
+        migrator.registerMigration("createProcessedSessionsTable") { db in
+            try db.create(table: "processed_sessions") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("sessionId", .integer).notNull().unique()
+                    .references("transcription_sessions", onDelete: .cascade)
+                t.column("processedAt", .datetime).notNull()
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

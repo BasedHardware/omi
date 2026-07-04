@@ -183,13 +183,24 @@ struct CommitmentsPage: View {
       Image(systemName: "handshake.fill")
         .font(.system(size: 36))
         .foregroundColor(OmiColors.textTertiary)
-      Text("No commitments yet")
-        .font(.headline)
-        .foregroundColor(OmiColors.textSecondary)
-      Text("Commitments you make in conversations will appear here")
-        .font(.caption)
-        .foregroundColor(OmiColors.textTertiary)
-        .multilineTextAlignment(.center)
+
+      if CommitmentService.isAnalysisEnabled {
+        Text("No commitments yet")
+          .font(.headline)
+          .foregroundColor(OmiColors.textSecondary)
+        Text("Commitments you make in conversations will appear here")
+          .font(.caption)
+          .foregroundColor(OmiColors.textTertiary)
+          .multilineTextAlignment(.center)
+      } else {
+        Text("Commitment tracking is off")
+          .font(.headline)
+          .foregroundColor(OmiColors.textSecondary)
+        Text("Enable Commitments in Settings \u{2192} Rewind to detect promises and track follow-through from your conversations")
+          .font(.caption)
+          .foregroundColor(OmiColors.textTertiary)
+          .multilineTextAlignment(.center)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

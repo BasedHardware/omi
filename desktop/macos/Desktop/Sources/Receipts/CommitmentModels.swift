@@ -163,6 +163,23 @@ struct FollowThroughBatchResult: Codable {
   let results: [CommitmentFollowThroughResult]
 }
 
+// MARK: - Processed Session Record
+
+/// Tracks which conversations have already been analyzed for commitments,
+/// regardless of whether any commitments were found. Prevents re-processing
+/// of completed sessions on every launch backfill.
+struct ProcessedSessionRecord: Codable, FetchableRecord, PersistableRecord {
+  var id: Int64?
+  var sessionId: Int64
+  var processedAt: Date
+
+  static let databaseTableName = "processed_sessions"
+}
+
+// MARK: - UserDefaults keys (commitments analysis opt-in)
+
+let commitmentsAnalysisEnabledKey = "commitmentsAnalysisEnabled"
+
 // MARK: - Storage Error
 
 enum CommitmentStorageError: LocalizedError {
