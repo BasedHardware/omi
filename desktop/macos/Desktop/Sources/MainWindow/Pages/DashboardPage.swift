@@ -3109,14 +3109,11 @@ private struct HomeStatusButton: View {
                 Text(title)
                     .scaledFont(size: 12, weight: .semibold)
                     .lineLimit(1)
-
-                Circle()
-                    .fill(status.indicator)
-                    .frame(width: 6, height: 6)
             }
             .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(height: 34)
             .background(
                 Capsule(style: .continuous)
                     .fill(statusFill)
@@ -3190,18 +3187,14 @@ private struct HomeListeningStatusButton: View {
                             .lineLimit(1)
 
                         Text(modeTitle)
-                            .scaledFont(size: 9, weight: .medium)
+                            .scaledFont(size: 8, weight: .medium)
                             .foregroundStyle(status.isActive ? HomePalette.secondary : HomePalette.muted)
                             .lineLimit(1)
                     }
-
-                    Circle()
-                        .fill(status.indicator)
-                        .frame(width: 6, height: 6)
                 }
                 .padding(.leading, 12)
-                .padding(.trailing, 9)
-                .padding(.vertical, 7)
+                .padding(.trailing, 8)
+                .frame(height: 34)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -3212,13 +3205,13 @@ private struct HomeListeningStatusButton: View {
 
             Rectangle()
                 .fill(HomePalette.hairline.opacity(0.65))
-                .frame(width: 1, height: 22)
+                .frame(width: 1, height: 18)
 
             Button(action: modeAction) {
-                Image(systemName: isMeetingsOnly ? "person.2.fill" : "infinity")
+                Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
                     .scaledFont(size: 11, weight: .semibold)
-                    .foregroundStyle(isMeetingsOnly ? HomePalette.green : HomePalette.ink)
-                    .frame(width: 30, height: 32)
+                    .foregroundStyle(modeIconColor)
+                    .frame(width: 30, height: 34)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -3236,6 +3229,11 @@ private struct HomeListeningStatusButton: View {
                 .stroke(statusStroke, lineWidth: 1)
         )
         .contentShape(Capsule())
+        .frame(height: 34)
+    }
+
+    private var modeIconColor: Color {
+        status.isActive ? HomePalette.green : HomePalette.muted
     }
 
     private var statusFill: Color {
