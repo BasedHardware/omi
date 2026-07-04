@@ -1,6 +1,6 @@
-from typing import List
+from typing import Any, Dict
 
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File
 
 from diarization import diarization_endpoint
 from embedding import embedding_endpoint, embedding_endpoint_v2
@@ -14,23 +14,23 @@ app = FastAPI()
 
 
 @app.post('/v1/diarization')
-def diarization(file: UploadFile = File(...)):
+def diarization(file: UploadFile = File(...)) -> Any:
     logger.info('diarization')
     return diarization_endpoint(file)
 
 
 @app.post('/v1/embedding')
-def embedding(file: UploadFile = File(...)):
+def embedding(file: UploadFile = File(...)) -> Any:
     logger.info('embedding')
     return embedding_endpoint(file)
 
 
 @app.post('/v2/embedding')
-def embedding_v2(file: UploadFile = File(...)):
+def embedding_v2(file: UploadFile = File(...)) -> Any:
     logger.info('embedding v2')
     return embedding_endpoint_v2(file)
 
 
 @app.get('/health')
-def health_check():
+def health_check() -> Dict[str, str]:
     return {"status": "healthy"}

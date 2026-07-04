@@ -77,7 +77,7 @@ from utils.llm.knowledge_graph import extract_knowledge_from_memory
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
-    retrieve_metadata_fields_from_transcript,  # type: ignore[reportUnknownVariableType]  # upstream partially-untyped signature
+    retrieve_metadata_fields_from_transcript,
     obtain_emotional_message,
 )
 from utils.llm.external_integrations import get_message_structure
@@ -808,23 +808,16 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
         if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
             text_source_spec = ext_data.get('text_source_spec') or ''
             if text_source == ExternalIntegrationConversationSource.message.value:
-                metadata = cast(
-                    Dict[str, Any],
-                    retrieve_metadata_from_message(uid, conversation.created_at, text_content, tz, text_source_spec),
+                metadata = retrieve_metadata_from_message(
+                    uid, conversation.created_at, text_content, tz, text_source_spec
                 )
             elif text_source == ExternalIntegrationConversationSource.other.value:
-                metadata = cast(
-                    Dict[str, Any],
-                    retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec),
-                )
+                metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
     else:
         # For regular conversations with transcript segments
         segments: List[Dict[str, Any]] = [t.model_dump() for t in conversation.transcript_segments]
-        metadata = cast(
-            Dict[str, Any],
-            retrieve_metadata_fields_from_transcript(
-                uid, conversation.created_at, segments, tz, photos=conversation.photos
-            ),
+        metadata = retrieve_metadata_fields_from_transcript(
+            uid, conversation.created_at, segments, tz, photos=conversation.photos
         )
 
     metadata['created_at'] = int(conversation.created_at.timestamp())
