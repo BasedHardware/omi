@@ -33,7 +33,7 @@ describe("OmiArtifactStorage", () => {
     expect(normalized.uri).not.toBe(pathToFileURL(source).toString());
     expect(normalized.uri).toContain("/Artifacts/owner-1/");
     expect(normalized.uri).toContain("/session-1/");
-    expect(normalized.uri).toContain("/session-1/answer.txt");
+    expect(normalized.uri).toContain("/run-1/attempt-1/answer.txt");
     expect(normalized.metadata).toMatchObject({
       omiManaged: true,
       originalUri: pathToFileURL(source).toString(),
@@ -44,7 +44,7 @@ describe("OmiArtifactStorage", () => {
     expect(readFileSync(manifest, "utf8")).toContain("originalUri");
   });
 
-  it("discovers files and directories from the stable session artifact directory", () => {
+  it("discovers files and directories from the isolated run artifact directory", () => {
     const temp = mkdtempSync(join(tmpdir(), "omi-artifacts-"));
     const root = join(temp, "Artifacts");
     const storage = new OmiArtifactStorage({ rootDir: root });
@@ -69,6 +69,36 @@ describe("OmiArtifactStorage", () => {
       contentHash: null,
       sizeBytes: null,
     });
+  });
+
+  it("isolates same-name artifacts across runs in the same session", () => {
+    const temp = mkdtempSync(join(tmpdir(), "omi-artifacts-"));
+    const root = join(temp, "Artifacts");
+    const storage = new OmiArtifactStorage({ rootDir: root });
+    const firstScope = {
+      ownerId: "owner-1",
+      sessionId: "session-1",
+      runId: "run-1",
+      attemptId: "attempt-1",
+    };
+    const secondScope = {
+      ownerId: "owner-1",
+      sessionId: "session-1",
+      runId: "run-2",
+      attemptId: "attempt-1",
+    };
+    writeFileSync(join(storage.prepareRunDirectory(firstScope), "answer.md"), "first");
+    writeFileSync(join(storage.prepareRunDirectory(secondScope), "answer.md"), "second");
+
+    const first = storage.discoverRunArtifacts(firstScope);
+    const second = storage.discoverRunArtifacts(secondScope, first);
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(first[0]?.uri).toContain("/run-1/attempt-1/answer.md");
+    expect(second[0]?.uri).toContain("/run-2/attempt-1/answer.md");
+    expect(readFileSync(new URL(first[0]!.uri), "utf8")).toBe("first");
+    expect(readFileSync(new URL(second[0]!.uri), "utf8")).toBe("second");
   });
 
   it("leaves user-specified external locations alone", () => {

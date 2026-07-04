@@ -2580,8 +2580,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             consumerSurface = AgentSurfaceReference.mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
         case .floating:
             consumerSurface = AgentSurfaceReference.floatingChat()
-        default:
-            return nil
         }
 
         guard let delta = await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface) else {
@@ -2594,15 +2592,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let normalized = userText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return false }
         let explicitNewWorkPatterns = [
-            #"ask\s+(an?\s+)?agent\s+to\s+"#,
-            #"\b(have|spawn|start)\s+(an?\s+)?agent\s+to\s+"#,
+            #"ask\s+((an?|the)\s+)?agent\s+to\s+"#,
+            #"\b(have|spawn|start)\s+((an?|the)\s+)?agent\s+to\s+"#,
             #"\b(build|create|generate|write|make)\b.*\b(file|html|page|artifact|app|site)\b"#,
         ]
         if explicitNewWorkPatterns.contains(where: { normalized.range(of: $0, options: .regularExpression) != nil }) {
             return false
         }
         let completionFollowUpPatterns = [
-            #"\b(done|ready|finished|complete|completed|where|open|show|find|saved|file|artifact)\b"#,
+            #"\b(done|ready|finished|complete|completed|saved|file|artifact)\b"#,
+            #"\b(where|open|show|find)\b.*\b(file|artifact|agent|subagent|background)\b"#,
             #"\b(agent|subagent|background)\b.*\b(status|result|output|finished|done|ready)\b"#,
         ]
         return completionFollowUpPatterns.contains { normalized.range(of: $0, options: .regularExpression) != nil }

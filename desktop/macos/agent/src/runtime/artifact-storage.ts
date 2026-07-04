@@ -151,7 +151,9 @@ export class OmiArtifactStorage {
     return join(
       this.rootDir,
       sanitizePathComponent(scope.ownerId || "local"),
-      sanitizePathComponent(scope.sessionId)
+      sanitizePathComponent(scope.sessionId),
+      sanitizePathComponent(scope.runId),
+      sanitizePathComponent(scope.attemptId)
     );
   }
 

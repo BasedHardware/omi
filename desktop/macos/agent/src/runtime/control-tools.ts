@@ -607,6 +607,7 @@ export async function handleAgentControlToolCall(
           adapterSessionId: result.adapterSessionId,
           terminalStatus: result.terminalStatus,
           text: result.text,
+          artifacts: result.artifacts.map(serializeArtifact),
         });
       }
       case "spawn_background_agent": {
