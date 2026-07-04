@@ -241,6 +241,14 @@ async def get_voices(uid: str = Depends(auth.get_current_user_uid)) -> dict:
         logger.warning(f"get_voices: ElevenLabs returned {resp.status_code} uid={uid}")
         raise HTTPException(status_code=502, detail="TTS upstream error")
 
-    voices = _normalize_voices(resp.json())
+    try:
+        payload = resp.json()
+    except ValueError as e:
+        # Upstream replied 200 but with a non-JSON body (proxy HTML error page, truncated
+        # response). Keep the documented 502-on-upstream-error contract instead of 500ing.
+        logger.error(f"get_voices: upstream returned a non-JSON body uid={uid}: {sanitize(str(e))}")
+        raise HTTPException(status_code=502, detail="TTS upstream error")
+
+    voices = _normalize_voices(payload)
     _voices_cache = (now, voices)
     return {"voices": voices}

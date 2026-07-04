@@ -9,7 +9,10 @@ integration tests — the unit layer here is intentionally scoped to the bits
 that are easy to regress by accident when someone edits the router.
 """
 
+import asyncio
+
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from models.tts import (
@@ -167,3 +170,74 @@ def test_is_cache_fresh_boundary():
 def test_voices_constants():
     assert tts_router._ELEVENLABS_VOICES_URL == "https://api.elevenlabs.io/v1/voices"
     assert tts_router._VOICES_CACHE_TTL_SECS == 3600
+
+
+# ---------------------------------------------------------------------------
+# get_voices upstream-error contract (async handler)
+# ---------------------------------------------------------------------------
+class _FakeResp:
+    def __init__(self, status_code, json_exc=None, json_val=None):
+        self.status_code = status_code
+        self._json_exc = json_exc
+        self._json_val = json_val
+
+    def json(self):
+        if self._json_exc is not None:
+            raise self._json_exc
+        return self._json_val
+
+
+class _FakeSemaphore:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakeClient:
+    def __init__(self, resp):
+        self._resp = resp
+
+    async def get(self, *args, **kwargs):
+        return self._resp
+
+
+def _wire_upstream(monkeypatch, resp):
+    tts_router._voices_cache = None
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+    monkeypatch.setattr(tts_router, "get_tts_semaphore", lambda: _FakeSemaphore())
+    monkeypatch.setattr(tts_router, "get_tts_client", lambda: _FakeClient(resp))
+
+
+def test_get_voices_502_on_non_json_body(monkeypatch):
+    # 200 OK but a non-JSON body must map to 502, not bubble up as a 500.
+    _wire_upstream(monkeypatch, _FakeResp(200, json_exc=ValueError("not json")))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(tts_router.get_voices(uid="u1"))
+    assert exc.value.status_code == 502
+
+
+def test_get_voices_502_on_upstream_non_200(monkeypatch):
+    _wire_upstream(monkeypatch, _FakeResp(500))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(tts_router.get_voices(uid="u1"))
+    assert exc.value.status_code == 502
+
+
+def test_get_voices_success_normalizes_and_caches(monkeypatch):
+    _wire_upstream(monkeypatch, _FakeResp(200, json_val={"voices": [{"voice_id": "v1", "name": "Sloane"}]}))
+    result = asyncio.run(tts_router.get_voices(uid="u1"))
+    assert result == {
+        "voices": [{"voice_id": "v1", "name": "Sloane", "category": None, "preview_url": None, "labels": {}}]
+    }
+    assert tts_router._voices_cache is not None and tts_router._voices_cache[1] == result["voices"]
+    tts_router._voices_cache = None  # reset shared module cache for later tests
+
+
+def test_get_voices_503_when_unconfigured(monkeypatch):
+    tts_router._voices_cache = None
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(tts_router.get_voices(uid="u1"))
+    assert exc.value.status_code == 503
