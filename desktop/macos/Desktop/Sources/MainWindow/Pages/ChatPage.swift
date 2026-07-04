@@ -684,12 +684,19 @@ struct ChatBubble: View {
         } else {
           // User messages or AI messages without content blocks (loaded from Firestore)
           VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 6) {
-            if !message.displayResources.isEmpty {
-              ChatResourceStrip(
+            // User attachments read as "here's what I'm sending" and belong
+            // above the text; AI-generated artifacts are the result of the
+            // reply and always sit below it.
+            let resourceStrip = message.displayResources.isEmpty
+              ? nil
+              : ChatResourceStrip(
                 resources: message.displayResources,
                 density: .full,
                 alignment: message.sender == .user ? .trailing : .leading
               )
+
+            if message.sender == .user, let resourceStrip {
+              resourceStrip
             }
 
             if !message.text.isEmpty {
@@ -712,6 +719,10 @@ struct ChatBubble: View {
                   .foregroundColor(.white)
               }
               .buttonStyle(.plain)
+            }
+
+            if message.sender != .user, let resourceStrip {
+              resourceStrip
             }
           }
         }

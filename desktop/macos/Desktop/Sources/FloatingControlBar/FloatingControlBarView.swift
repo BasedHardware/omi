@@ -1715,7 +1715,7 @@ private struct AgentMainChatView: View {
                     NSPasteboard.general.setString(message.copyableText, forType: .string)
                 }
             }
-        } else if trimmed.isEmpty && message.isStreaming {
+        } else if trimmed.isEmpty && message.isStreaming && message.displayResources.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)

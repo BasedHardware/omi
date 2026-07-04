@@ -371,11 +371,13 @@ final class DesktopCoordinatorService {
       if checkpointDefaults.object(forKey: highWaterKey) != nil {
         highWaterMs = checkpointDefaults.integer(forKey: highWaterKey)
       } else {
-        // First use should still deliver recent completed sub-agent artifacts.
-        // Using the max-age floor avoids dumping stale historical work while
-        // preventing a just-finished agent from being skipped forever.
-        highWaterMs = minCompletedAtMs
-        checkpointDefaults.set(minCompletedAtMs, forKey: highWaterKey)
+        // First use primes to *now*, not the max-age floor. Delivery is strictly
+        // forward-looking: a surface only receives sub-agents that finish after it
+        // starts observing, so the first delta doesn't dump a backlog of every
+        // agent completed in the last hour. Each run still delivers exactly once
+        // (via the seen set + advancing high-water) on the turn after it finishes.
+        highWaterMs = nowMs
+        checkpointDefaults.set(nowMs, forKey: highWaterKey)
       }
       let items = parseCompletionDeltaItems(from: raw)
         .filter {

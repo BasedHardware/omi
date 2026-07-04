@@ -139,7 +139,10 @@ struct ChatResourceStrip: View {
 
   var body: some View {
     if !resources.isEmpty {
-      LazyVGrid(columns: gridColumns, alignment: alignment, spacing: 6) {
+      // Always stack vertically: a single full-width column keeps file names
+      // and metadata readable. Side-by-side cards squeezed titles down to
+      // "d...ml" / "te...KB", which looked broken with 2+ artifacts.
+      VStack(alignment: alignment, spacing: 6) {
         ForEach(resources) { resource in
           ChatResourceCard(
             resource: resource,
@@ -151,11 +154,6 @@ struct ChatResourceStrip: View {
       }
       .frame(maxWidth: maxWidth, alignment: frameAlignment)
     }
-  }
-
-  private var gridColumns: [GridItem] {
-    let count = density == .compact ? 1 : min(max(resources.count, 1), 2)
-    return Array(repeating: GridItem(.flexible(), spacing: 6), count: count)
   }
 
   private var maxWidth: CGFloat {

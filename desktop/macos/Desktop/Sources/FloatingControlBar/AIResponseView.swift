@@ -340,7 +340,12 @@ struct AIResponseView: View {
                         // While streaming, show content without hover actions
                         contentBlocksView(for: message)
 
-                        if message.text.isEmpty && message.contentBlocks.isEmpty {
+                        // Only show the typing dots when nothing has rendered yet.
+                        // A message can carry a delivered artifact card (resources)
+                        // with no text/blocks — that's already content, not "still
+                        // thinking", so the trailing "..." must not linger under it.
+                        if message.text.isEmpty && message.contentBlocks.isEmpty
+                            && message.displayResources.isEmpty {
                             TypingIndicator()
                         }
                     } else {
