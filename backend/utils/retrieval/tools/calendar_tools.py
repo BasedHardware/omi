@@ -28,6 +28,13 @@ from utils.retrieval.tools.integration_base import (
     parse_iso_with_tz,
     prepare_access,
 )
+from utils.integration_telemetry import (
+    GOOGLE_CALENDAR,
+    IntegrationTelemetryContext,
+    emit_sync_attempted,
+    emit_sync_failed,
+    emit_sync_succeeded,
+)
 from utils.retrieval.tools.google_utils import google_api_request, GoogleAPIError
 
 # Import shared Google utilities
@@ -538,6 +545,7 @@ async def get_calendar_events_tool(
     )
     if access_err:
         return access_err
+    telemetry_context = None
 
     try:
         max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
@@ -587,6 +595,13 @@ async def get_calendar_events_tool(
                     logger.info(
                         f"📅 search_query provided, expanding date range to 1 year: {time_min.strftime('%Y-%m-%d')} to {time_max.strftime('%Y-%m-%d')}"
                     )
+
+        telemetry_context = IntegrationTelemetryContext(
+            integration_name=GOOGLE_CALENDAR,
+            operation='fetch_events_tool',
+            uid=uid,
+        )
+        emit_sync_attempted(telemetry_context)
 
         # Fetch events with smart date range handling
         try:
@@ -700,21 +715,27 @@ async def get_calendar_events_tool(
                         )
                     except Exception as retry_error:
                         logger.error(f"❌ Error after token refresh: {retry_error}")
+                        emit_sync_failed(telemetry_context, retry_error)
                         return f"Error fetching calendar events: {retry_error}"
                 else:
                     logger.error(f"❌ Token refresh failed")
+                    emit_sync_failed(telemetry_context, e)
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
                     )
             elif e.is_permission_error:
+                emit_sync_failed(telemetry_context, e)
                 return "Google Calendar access denied. Please reconnect your Google Calendar from settings with proper permissions."
             else:
+                emit_sync_failed(telemetry_context, e)
                 return f"Error fetching calendar events: {e.message}"
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error fetching calendar events: {e}")
+            emit_sync_failed(telemetry_context, e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
             logger.error(f"❌ Unexpected error fetching calendar events: {e}")
+            emit_sync_failed(telemetry_context, e)
             return f"Error fetching calendar events: {e}"
 
         events_count = len(events) if events else 0
@@ -728,6 +749,7 @@ async def get_calendar_events_tool(
             elif time_max:
                 date_info = f" before {time_max.strftime('%Y-%m-%d')}"
 
+            emit_sync_succeeded(telemetry_context, item_count=0)
             return f"No calendar events found{date_info}."
 
         # Format events
@@ -775,9 +797,12 @@ async def get_calendar_events_tool(
 
             result += "\n"
 
+        emit_sync_succeeded(telemetry_context, item_count=events_count)
         return result.strip()
     except Exception as e:
         logger.error(f"❌ Unexpected error in get_calendar_events_tool: {e}")
+        if telemetry_context:
+            emit_sync_failed(telemetry_context, e)
         return f"Unexpected error fetching calendar events: {e}"
 
 
