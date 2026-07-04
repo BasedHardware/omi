@@ -208,9 +208,7 @@ def append_commit(
         use_current_head,
     )
     if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(  # type: ignore[reportUnknownMemberType]  # projection_repair not yet enrolled in strict lane
-            uid, result.get('commit'), firestore_client=database
-        )
+        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 
@@ -237,9 +235,7 @@ def append_commit_with_builder(
         use_current_head,
     )
     if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(  # type: ignore[reportUnknownMemberType]  # projection_repair not yet enrolled in strict lane
-            uid, result.get('commit'), firestore_client=database
-        )
+        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 

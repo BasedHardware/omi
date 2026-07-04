@@ -89,10 +89,19 @@ The first required surface covers migration-sensitive gateway, config, memory re
   - `database/users.py`
   - `database/conversations.py`
   - `database/memories.py`
+  - `database/vector_db.py`
+  - `database/entities.py`
   - `routers/knowledge_graph.py`
   - `routers/memory_admin.py`
   - `routers/memories.py`
   - `routers/memory_product.py`
+  - `routers/__init__.py`
+  - `routers/advice.py`
+  - `routers/focus_sessions.py`
+  - `routers/metrics.py`
+  - `routers/onboarding.py`
+  - `routers/other.py`
+  - `routers/trends.py`
   - `utils/conversations/memories.py`
   - `utils/llm/__init__.py`
   - `utils/llm/clients.py`
