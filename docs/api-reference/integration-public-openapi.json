@@ -1441,6 +1441,29 @@
         "title": "SearchRequest",
         "type": "object"
       },
+      "SendAppNotificationRequest": {
+        "properties": {
+          "aid": {
+            "title": "Aid",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "aid",
+          "message",
+          "uid"
+        ],
+        "title": "SendAppNotificationRequest",
+        "type": "object"
+      },
       "SubjectAttribution": {
         "enum": [
           "user",
@@ -1634,9 +1657,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/SendAppNotificationRequest"
               }
             }
           },

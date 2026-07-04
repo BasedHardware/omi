@@ -329,11 +329,15 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 # ***********************************************
 
 
+class SetUserWebhookUrlRequest(BaseModel):
+    url: str
+
+
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'], response_model=UserStatusResponse)
-def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    url = data.get('url')
-    if url is None:
-        raise HTTPException(status_code=400, detail='url is required')
+def set_user_webhook_endpoint(
+    wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    url = data.url
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
     set_user_webhook_db(uid, wtype, url)
@@ -420,16 +424,22 @@ def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     }
 
 
+class OnboardingStateUpdate(BaseModel):
+    completed: Optional[bool] = None
+    acquisition_source: Optional[str] = None
+    device_onboarding_completed: Optional[bool] = None
+
+
 @router.patch('/v1/users/onboarding', tags=['v1'], response_model=UserStatusResponse)
-def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def update_onboarding_state(data: OnboardingStateUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """Update the user's onboarding state."""
     current_state = get_user_onboarding_state(uid)
-    if 'completed' in data:
-        current_state['completed'] = data['completed']
-    if 'acquisition_source' in data:
-        current_state['acquisition_source'] = data['acquisition_source']
-    if 'device_onboarding_completed' in data:
-        current_state['device_onboarding_completed'] = data['device_onboarding_completed']
+    if data.completed is not None:
+        current_state['completed'] = data.completed
+    if data.acquisition_source is not None:
+        current_state['acquisition_source'] = data.acquisition_source
+    if data.device_onboarding_completed is not None:
+        current_state['device_onboarding_completed'] = data.device_onboarding_completed
     set_user_onboarding_state(uid, current_state)
     return {'status': 'ok'}
 
@@ -685,10 +695,14 @@ def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     return {'language': language}
 
 
+class SetUserLanguageRequest(BaseModel):
+    language: str
+
+
 @router.patch('/v1/users/language', tags=['v1'], response_model=UserLanguageUpdateResponse)
-def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    language = data.get('language')
+    language = data.language
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)

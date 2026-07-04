@@ -169,10 +169,19 @@ class PayPalPaymentDetailsResponse(BaseModel):
     paypalme_url: str
 
 
+class SavePayPalPaymentDetailsRequest(BaseModel):
+    email: str
+    paypalme_url: str
+
+
 class PaymentMethodStatusResponse(BaseModel):
     stripe: str
     paypal: str
     default: Optional[str] = None
+
+
+class SetDefaultPaymentMethodRequest(BaseModel):
+    method: str
 
 
 class PricingOption(BaseModel):
@@ -1248,19 +1257,16 @@ def stripe_return(account_id: str):
 
 
 @router.post("/v1/paypal/payment-details", response_model=PaymentMutationResponse)
-def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def save_paypal_payment_details(data: SavePayPalPaymentDetailsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
     Save PayPal payment details (email and paypal.me link)
     """
     try:
-        if 'email' not in data or 'paypalme_url' not in data:
-            raise HTTPException(status_code=400, detail="Email and PayPal.me URL are required")
-        paypalme_url = data.get('paypalme_url').lower()
-        data['email'] = data.get('email').lower()
+        email = data.email.lower()
+        paypalme_url = data.paypalme_url.lower()
         if paypalme_url and not paypalme_url.startswith('http'):
             paypalme_url = 'https://' + paypalme_url
-        data['paypalme_url'] = paypalme_url
-        set_paypal_payment_details(uid, data)
+        set_paypal_payment_details(uid, {'email': email, 'paypalme_url': paypalme_url})
         if get_default_payment_method(uid) is None:
             set_default_payment_method(uid, 'paypal')
         return {"status": "success"}
@@ -1366,9 +1372,11 @@ def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post("/v1/payment-methods/default", response_model=PaymentMutationResponse)
-def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def set_default_payment_method_endpoint(
+    data: SetDefaultPaymentMethodRequest, uid: str = Depends(auth.get_current_user_uid)
+):
     """Set the default payment method for the user"""
-    method = data.get('method')
+    method = data.method
     if method not in ['stripe', 'paypal']:
         raise HTTPException(status_code=400, detail="Invalid method")
     set_default_payment_method(uid, method)

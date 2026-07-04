@@ -344,6 +344,55 @@ class PersonaRecordResponse(App):
     doc_id: Optional[str] = None
 
 
+# ******************************************************
+# ******************* REQUEST MODELS *******************
+# ******************************************************
+
+
+class ReviewAppRequest(PydanticBaseModel):
+    score: float
+    review: Optional[str] = None
+    username: Optional[str] = None
+    response: Optional[str] = None
+
+
+class ReplyToReviewRequest(PydanticBaseModel):
+    reviewer_uid: str
+    response: str
+
+
+class GenerateDescriptionRequest(PydanticBaseModel):
+    name: str
+    description: str
+
+
+class GenerateDescriptionEmojiRequest(PydanticBaseModel):
+    name: str
+    prompt: str
+
+
+class GenerateAppRequest(PydanticBaseModel):
+    prompt: str = ''
+
+
+class GenerateAppIconRequest(PydanticBaseModel):
+    name: str = ''
+    description: str = ''
+    category: str = 'other'
+
+
+class AddTesterRequest(PydanticBaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    uid: str
+    apps: List[str]
+
+
+class TesterAccessRequest(PydanticBaseModel):
+    uid: str
+    app_id: str
+
+
 def _write_file(path: str, data: bytes):
     """Write bytes to file — offloaded to storage_executor."""
     with open(path, 'wb') as f:
@@ -1133,10 +1182,7 @@ def get_app_categories():
 
 
 @router.post('/v1/apps/review', tags=['v1'], response_model=AppMutationResponse)
-def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    if 'score' not in data:
-        raise HTTPException(status_code=422, detail='Score is required')
-
+def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -1149,17 +1195,17 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
         raise HTTPException(status_code=403, detail='You are not authorized to review this app')
 
     review_data = {
-        'score': data['score'],
-        'review': data.get('review', ''),
-        'username': data.get('username', ''),
-        'response': data.get('response', ''),
+        'score': data.score,
+        'review': data.review or '',
+        'username': data.username or '',
+        'response': data.response or '',
         'rated_at': datetime.now(timezone.utc).isoformat(),
         'uid': uid,
     }
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
-    if review_body := data.get('review', ''):
+    if review_body := data.review or '':
         send_new_app_review_notification(
             app_owner_uid=app.uid,
             reviewer_uid=uid,
@@ -1172,10 +1218,7 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
 
 
 @router.patch('/v1/apps/{app_id}/review', tags=['v1'], response_model=AppMutationResponse)
-def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    if 'score' not in data:
-        raise HTTPException(status_code=422, detail='Score is required')
-
+def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -1190,18 +1233,18 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
     if not old_review:
         raise HTTPException(status_code=404, detail='Review not found')
     review_data = {
-        'score': data['score'],
-        'review': data.get('review', ''),
+        'score': data.score,
+        'review': data.review or '',
         'updated_at': datetime.now(timezone.utc).isoformat(),
         'rated_at': old_review['rated_at'],
-        'username': data.get('username', old_review.get('username', '')),
+        'username': data.username if data.username is not None else old_review.get('username', ''),
         'response': old_review.get('response', ''),
         'uid': uid,
     }
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
-    if review_body := data.get('review', ''):
+    if review_body := data.review or '':
         send_new_app_review_notification(
             app_owner_uid=app.uid,
             reviewer_uid=uid,
@@ -1214,7 +1257,7 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
 
 
 @router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'], response_model=AppMutationResponse)
-def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -1226,21 +1269,19 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
 
-    reviewer_uid = data.get('reviewer_uid')
-    if not reviewer_uid:
+    if not data.reviewer_uid:
         raise HTTPException(status_code=422, detail='Reviewer UID is required')
 
-    response = data.get('response')
-    if not isinstance(response, str) or not response.strip():
+    if not data.response.strip():
         raise HTTPException(status_code=422, detail='Response is required')
 
-    review = get_specific_user_review(app_id, reviewer_uid)
+    review = get_specific_user_review(app_id, data.reviewer_uid)
     if not review:
         raise HTTPException(status_code=404, detail='Review not found')
 
-    review['response'] = response
+    review['response'] = data.response
     review['responded_at'] = datetime.now(timezone.utc).isoformat()
-    set_app_review(app_id, reviewer_uid, review)
+    set_app_review(app_id, data.reviewer_uid, review)
 
     # Send notification to reviewer
     send_app_review_reply_notification(
@@ -1367,33 +1408,35 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/app/generate-description', tags=['v1'], response_model=AppDescriptionGenerationResponse)
-def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    if data['name'] == '':
+def generate_description_endpoint(data: GenerateDescriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
+    if data.name == '':
         raise HTTPException(status_code=422, detail='App Name is required')
-    if data['description'] == '':
+    if data.description == '':
         raise HTTPException(status_code=422, detail='App Description is required')
     with track_usage(uid, Features.APP_GENERATOR):
-        desc = generate_description(data['name'], data['description'])
+        desc = generate_description(data.name, data.description)
     return {
         'description': desc,
     }
 
 
 @router.post('/v1/app/generate-description-emoji', tags=['v1'], response_model=AppDescriptionEmojiGenerationResponse)
-def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def generate_description_and_emoji_endpoint(
+    data: GenerateDescriptionEmojiRequest, uid: str = Depends(auth.get_current_user_uid)
+):
     """
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
     from utils.llm.app_generator import generate_description_and_emoji
 
-    if not data.get('name'):
+    if not data.name:
         raise HTTPException(status_code=422, detail='App Name is required')
-    if not data.get('prompt'):
+    if not data.prompt:
         raise HTTPException(status_code=422, detail='App Prompt is required')
 
     with track_usage(uid, Features.APP_GENERATOR):
-        result = generate_description_and_emoji(data['name'], data['prompt'])
+        result = generate_description_and_emoji(data.name, data.prompt)
     return result
 
 
@@ -1454,14 +1497,14 @@ Be creative, fun, and varied. No generic ideas."""
 
 
 @router.post('/v1/app/generate', tags=['v1'], response_model=AppGenerationResponse)
-async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
     from utils.llm.app_generator import generate_app_from_prompt, generate_app_icon
 
-    prompt = data.get('prompt', '').strip()
+    prompt = data.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=422, detail='Prompt is required')
 
@@ -1493,7 +1536,7 @@ async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_
 
 
 @router.post('/v1/app/generate-icon', tags=['v1'], response_model=AppIconGenerationResponse)
-async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+async def generate_app_icon_endpoint(data: GenerateAppIconRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
@@ -1501,9 +1544,9 @@ async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_cur
     from utils.llm.app_generator import generate_app_icon
     import base64
 
-    app_name = data.get('name', '').strip()
-    app_description = data.get('description', '').strip()
-    category = data.get('category', 'other').strip()
+    app_name = data.name.strip()
+    app_description = data.description.strip()
+    category = data.category.strip()
 
     if not app_name:
         raise HTTPException(status_code=422, detail='App name is required')
@@ -2024,39 +2067,40 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 
 
 @router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
-def add_new_tester(data: dict, secret_key: str = Header(...)):
+def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
+    if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
-    if not data.get('apps'):
+    if not data.apps:
         raise HTTPException(status_code=422, detail='apps is required')
-    data['added_at'] = datetime.now(timezone.utc).isoformat()
-    add_tester(data)
+    payload = data.model_dump()
+    payload['added_at'] = datetime.now(timezone.utc).isoformat()
+    add_tester(payload)
     return {'status': 'ok'}
 
 
 @router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
-def add_app_access_tester(data: dict, secret_key: str = Header(...)):
+def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
+    if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
-    if not data.get('app_id'):
+    if not data.app_id:
         raise HTTPException(status_code=422, detail='app_id is required')
-    add_app_access_for_tester(data['app_id'], data['uid'])
+    add_app_access_for_tester(data.app_id, data.uid)
     return {'status': 'ok'}
 
 
 @router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
-def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
+def remove_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
+    if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
-    if not data.get('app_id'):
+    if not data.app_id:
         raise HTTPException(status_code=422, detail='app_id is required')
-    remove_app_access_for_tester(data['app_id'], data['uid'])
+    remove_app_access_for_tester(data.app_id, data.uid)
     return {'status': 'ok'}
 
 

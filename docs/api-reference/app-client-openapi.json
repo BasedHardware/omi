@@ -386,6 +386,28 @@
         "title": "ActionType",
         "type": "string"
       },
+      "AddTesterRequest": {
+        "additionalProperties": true,
+        "properties": {
+          "apps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Apps",
+            "type": "array"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "apps"
+        ],
+        "title": "AddTesterRequest",
+        "type": "object"
+      },
       "AdviceAssistantSettings": {
         "properties": {
           "analysis_prompt": {
@@ -8047,6 +8069,74 @@
         "title": "FullConversation",
         "type": "object"
       },
+      "GenerateAppIconRequest": {
+        "properties": {
+          "category": {
+            "default": "other",
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "GenerateAppIconRequest",
+        "type": "object"
+      },
+      "GenerateAppRequest": {
+        "properties": {
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "title": "GenerateAppRequest",
+        "type": "object"
+      },
+      "GenerateDescriptionEmojiRequest": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "prompt"
+        ],
+        "title": "GenerateDescriptionEmojiRequest",
+        "type": "object"
+      },
+      "GenerateDescriptionRequest": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "GenerateDescriptionRequest",
+        "type": "object"
+      },
       "GenerateWrappedResponse": {
         "properties": {
           "message": {
@@ -10559,6 +10649,45 @@
         "title": "OnboardingStateResponse",
         "type": "object"
       },
+      "OnboardingStateUpdate": {
+        "properties": {
+          "acquisition_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acquisition Source"
+          },
+          "completed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed"
+          },
+          "device_onboarding_completed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Onboarding Completed"
+          }
+        },
+        "title": "OnboardingStateUpdate",
+        "type": "object"
+      },
       "OverageInfoResponse": {
         "properties": {
           "byok_available": {
@@ -11673,6 +11802,24 @@
         "title": "ReorderFoldersRequest",
         "type": "object"
       },
+      "ReplyToReviewRequest": {
+        "properties": {
+          "response": {
+            "title": "Response",
+            "type": "string"
+          },
+          "reviewer_uid": {
+            "title": "Reviewer Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reviewer_uid",
+          "response"
+        ],
+        "title": "ReplyToReviewRequest",
+        "type": "object"
+      },
       "ResponseMessage": {
         "properties": {
           "app_id": {
@@ -11873,6 +12020,52 @@
         "title": "ResponseMessage",
         "type": "object"
       },
+      "ReviewAppRequest": {
+        "properties": {
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "score"
+        ],
+        "title": "ReviewAppRequest",
+        "type": "object"
+      },
       "ReviewResolutionRequest": {
         "properties": {
           "correction": {
@@ -11945,6 +12138,24 @@
           "time_zone"
         ],
         "title": "SaveFcmTokenRequest",
+        "type": "object"
+      },
+      "SavePayPalPaymentDetailsRequest": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "paypalme_url": {
+            "title": "Paypalme Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "paypalme_url"
+        ],
+        "title": "SavePayPalPaymentDetailsRequest",
         "type": "object"
       },
       "SearchConversationsResponse": {
@@ -12175,6 +12386,29 @@
         "title": "SearchedMemory",
         "type": "object"
       },
+      "SendAppNotificationRequest": {
+        "properties": {
+          "aid": {
+            "title": "Aid",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "aid",
+          "message",
+          "uid"
+        ],
+        "title": "SendAppNotificationRequest",
+        "type": "object"
+      },
       "SendMessageRequest": {
         "properties": {
           "context": {
@@ -12259,6 +12493,45 @@
           "values"
         ],
         "title": "SetConversationEventsStateRequest",
+        "type": "object"
+      },
+      "SetDefaultPaymentMethodRequest": {
+        "properties": {
+          "method": {
+            "title": "Method",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "title": "SetDefaultPaymentMethodRequest",
+        "type": "object"
+      },
+      "SetUserLanguageRequest": {
+        "properties": {
+          "language": {
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "language"
+        ],
+        "title": "SetUserLanguageRequest",
+        "type": "object"
+      },
+      "SetUserWebhookUrlRequest": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "SetUserWebhookUrlRequest",
         "type": "object"
       },
       "ShareActionItemsResponse": {
@@ -14213,6 +14486,24 @@
           "prompt"
         ],
         "title": "TestPromptRequest",
+        "type": "object"
+      },
+      "TesterAccessRequest": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "app_id"
+        ],
+        "title": "TesterAccessRequest",
         "type": "object"
       },
       "TokenResponse": {
@@ -19147,9 +19438,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/GenerateAppRequest"
               }
             }
           },
@@ -19236,9 +19525,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/GenerateDescriptionRequest"
               }
             }
           },
@@ -19326,9 +19613,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/GenerateDescriptionEmojiRequest"
               }
             }
           },
@@ -19416,9 +19701,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/GenerateAppIconRequest"
               }
             }
           },
@@ -20619,9 +20902,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/ReviewAppRequest"
               }
             }
           },
@@ -20681,9 +20962,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/AddTesterRequest"
               }
             }
           },
@@ -20743,9 +21022,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/TesterAccessRequest"
               }
             }
           },
@@ -20803,9 +21080,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/TesterAccessRequest"
               }
             }
           },
@@ -22005,9 +22280,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/ReviewAppRequest"
               }
             }
           },
@@ -22106,9 +22379,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/ReplyToReviewRequest"
               }
             }
           },
@@ -30446,9 +30717,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/SendAppNotificationRequest"
               }
             }
           },
@@ -33053,9 +33322,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/SetDefaultPaymentMethodRequest"
               }
             }
           },
@@ -33873,9 +34140,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/SavePayPalPaymentDetailsRequest"
               }
             }
           },
@@ -37729,9 +37994,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/SetUserWebhookUrlRequest"
               }
             }
           },
@@ -38391,9 +38654,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/SetUserLanguageRequest"
               }
             }
           },
@@ -40177,9 +40438,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/OnboardingStateUpdate"
               }
             }
           },
