@@ -644,6 +644,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         // Finalize the in-progress batch recording so it's saved + ingestable right away
         // (a plain BLE disconnect never delivers another packet to trigger the gap finalize).
         OmiBatchAudioWriter.shared.stop("disconnected")
+        LimitlessFlashDrainEngine.shared.onDeviceDisconnected(uuid)
 
         if !isManual {
             let reason = Self.bleReasonString(from: error)
@@ -705,6 +706,7 @@ extension OmiBleManager: CBPeripheralDelegate {
             }
             
             flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
+            LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
             startRssiKeepAlive(for: peripheral)
         }
     }
@@ -757,6 +759,17 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
+        }
+
+        // Limitless Transcribe Later: while batch mode targets this pendant's RX
+        // characteristic, the flash-drain engine consumes the packet natively.
+        if LimitlessFlashDrainEngine.shared.handle(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: charUuid,
+            value: data
+        ) {
+            return
         }
 
         // Batch (offline) mode: store audio natively and skip the Dart forward so the
