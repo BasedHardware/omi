@@ -162,10 +162,10 @@ class TelethonClient:
         # because the session's entity cache is empty on first
         # connect. Fetching dialogs resolves all recent contacts
         # and groups into the cache so subsequent operations work.
-        entity_cache_ready = False
+        self._entity_cache_ready = False
         try:
             await self._client.get_dialogs(limit=100)
-            entity_cache_ready = True
+            self._entity_cache_ready = True
             logger.info("entity cache populated from dialogs")
         except Exception as e:
             logger.warning(
@@ -177,8 +177,15 @@ class TelethonClient:
             "phone": getattr(me, "phone", None),
             "name": full_name or (getattr(me, "username", None) or "Unknown"),
             "device_label": self._device_model,
-            "entity_cache_ready": entity_cache_ready,
         }
+
+    @property
+    def entity_cache_ready(self) -> bool:
+        """True if the Telethon entity cache was populated during
+        connect(). When False, get_messages/send_message may fail
+        with 'Could not find the input entity for PeerUser(...)'.
+        Callers can check this to surface a degraded-state warning."""
+        return getattr(self, "_entity_cache_ready", False)
 
     async def disconnect(self) -> None:
         try:
