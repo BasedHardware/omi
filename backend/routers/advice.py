@@ -1,7 +1,7 @@
 """Advice — proactive coaching items."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 import database.advice as advice_db
 from utils.other import endpoints as auth
@@ -30,7 +30,9 @@ class UpdateAdviceRequest(BaseModel):
 
 
 class AdviceFeedbackRequest(BaseModel):
-    rating: int = Field(..., ge=-1, le=1)  # 1 = helpful, -1 = not helpful, 0 = clear
+    # StrictInt so a bool (True/False) is rejected rather than coerced to 1/0 — a stray `false`
+    # must not silently clear feedback via the rating==0 path.
+    rating: StrictInt = Field(..., ge=-1, le=1)  # 1 = helpful, -1 = not helpful, 0 = clear
     reason: str | None = Field(None, max_length=500)
 
 

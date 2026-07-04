@@ -109,6 +109,12 @@ class TestFeedbackEndpoint:
         with pytest.raises(ValidationError):
             r.AdviceFeedbackRequest(rating=bad)
 
+    @pytest.mark.parametrize("bad", [True, False])
+    def test_model_rejects_bool_rating(self, bad):
+        # A stray bool must not coerce to 1/0 (StrictInt) — false -> 0 would silently clear feedback.
+        with pytest.raises(ValidationError):
+            r.AdviceFeedbackRequest(rating=bad)
+
     def test_model_rejects_overlong_reason(self):
         with pytest.raises(ValidationError):
             r.AdviceFeedbackRequest(rating=1, reason="x" * 501)
