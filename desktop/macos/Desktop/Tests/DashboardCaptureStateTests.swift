@@ -129,6 +129,13 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(optionHelper.contains("destination.hasLocallyVerifiableLiveSetup"))
     }
 
+    func testGroupedConnectorSetupUsesUserSafeFailureCopy() throws {
+        let source = try source(named: "AgentConnectPickerSheet.swift")
+
+        XCTAssertTrue(source.contains("resultMessage = .failure(setupFailureMessage(for: error))"))
+        XCTAssertFalse(source.contains("resultMessage = .failure(error.localizedDescription)"))
+    }
+
     func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
         let source = try appsSource()
 

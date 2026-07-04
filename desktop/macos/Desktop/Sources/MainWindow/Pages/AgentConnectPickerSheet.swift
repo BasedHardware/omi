@@ -236,10 +236,32 @@ private struct ConnectOptionCard: View {
         }
         statuses[destination] = await MemoryExportService.shared.status(for: destination)
       } catch {
-        resultMessage = .failure(error.localizedDescription)
+        resultMessage = .failure(setupFailureMessage(for: error))
       }
       isRunning = false
     }
+  }
+
+  private func setupFailureMessage(for error: Error) -> String {
+    if let executorError = error as? MemoryExportExecutor.ExecutorError {
+      switch executorError {
+      case .browserSetupRequired:
+        return "Grant Accessibility, then try again."
+      case .unsupported:
+        return "\(optionLabel) setup isn't available yet."
+      }
+    }
+
+    if let connectorError = error as? MemoryBankConnector.ConnectError {
+      switch connectorError {
+      case .notInstalled:
+        return "\(optionLabel) isn't installed or available on this Mac."
+      case .invalidConfig:
+        return "Omi couldn't update \(optionLabel). Check its setup, then try again."
+      }
+    }
+
+    return "Omi couldn't finish setup. Try again."
   }
 
   private func manualText(for setup: MCPSetup) -> String {
