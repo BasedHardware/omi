@@ -331,6 +331,10 @@ def get_stt_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt', 8)
 
 
+def get_stt_proxy_semaphore() -> asyncio.Semaphore:
+    return _get_semaphore('stt_proxy', 4)
+
+
 def get_tts_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('tts', 32)
 
@@ -455,6 +459,23 @@ def get_stt_client() -> httpx.AsyncClient:
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=5.0),
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
+        ),
+    )
+
+
+def get_stt_proxy_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client for the client-facing STT proxy route.
+
+    Isolated from `get_stt_client()` on purpose: proxy uploads can hold a
+    connection for minutes each, and the listen pipeline's latency-sensitive
+    internal callers (VAD, speaker embedding, speech profile) share that pool
+    without a semaphore — bulk user traffic must never starve them.
+    """
+    return _get_client(
+        'stt_proxy',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=5.0),
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
         ),
     )
 
