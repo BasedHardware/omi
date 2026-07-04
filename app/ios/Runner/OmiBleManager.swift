@@ -564,6 +564,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 // Re-establish connection if not already connected
                 if peripheral.state != .connected {
                     central.connect(peripheral, options: nil)
+                } else {
+                    peripheral.discoverServices(nil)
                 }
             }
             flutterApi?.onStateRestored(peripheralUuids: uuids) { _ in }
