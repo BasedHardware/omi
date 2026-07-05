@@ -195,16 +195,18 @@ def render_fingerprint_lines(fp: StyleFingerprint) -> str:
     lo, hi = fp.word_band
     # Lead with the TYPICAL (median) length, not the p90 max, so drafts target the user's habit and
     # don't drift toward the long end. Surface the short-reply tendency generically (from their data).
+    # Descriptive, not prescriptive: report the user's real range so the model can size the reply to
+    # the moment (short for a quick reaction, longer for a real message) — never a hard "keep it short".
     if fp.short_reply_rate >= 0.4:
         length = (
-            f"usually replies VERY SHORT — about {fp.median_words} word(s) typical, and {round(fp.short_reply_rate * 100)}% "
-            f"of their messages are 1-2 words (often a single word or emoji). Match that: keep drafts this short, a "
-            f"one-word or emoji reply is fine; do NOT expand into a sentence (range {lo}-{hi} words)"
+            f"messages run short-to-medium — about {fp.median_words} word(s) typical, {round(fp.short_reply_rate * 100)}% "
+            f"are 1-2 words, but they range up to ~{hi}. A one-word reaction is fine for a one-liner; give a fuller "
+            f"reply when the message actually calls for it. Don't pad, don't force it short"
         )
     else:
         length = (
-            f"typically about {fp.median_words} words (range {lo}-{hi}) — match that length; do NOT pad or add "
-            f"extra sentences, and a short one-word reply is fine when it fits"
+            f"messages are typically about {fp.median_words} words (range {lo}-{hi}) — size the reply to the moment, "
+            f"short for a quick reaction and fuller for a real message; don't pad and don't force it short"
         )
     end_punct = (
         "usually ends sentences with punctuation" if fp.terminal_punct_rate > 0.5 else "usually skips end punctuation"
