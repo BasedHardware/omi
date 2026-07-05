@@ -379,7 +379,7 @@ static void write_to_gatt(struct bt_conn *conn)
 
         int err = storage_notify(conn, control_notify_buf, 13);
         if (err == -ENOMEM) {
-            k_sleep(K_MSEC(1));
+            k_yield();
             consume_stop_request();
             return;
         }
@@ -442,7 +442,7 @@ static void write_to_gatt(struct bt_conn *conn)
 
             int err = storage_notify(conn, data_notify_buf, payload + 1U);
             if (err == -ENOMEM) {
-                k_sleep(K_MSEC(1));
+                k_yield();
                 if (consume_stop_request()) {
                     return;
                 }
@@ -637,7 +637,7 @@ static void storage_write(void)
             } else if (done_pending) {
                 int err = send_done(conn, transfer_end_status, current_read_seq);
                 if (err == -ENOMEM) {
-                    k_sleep(K_MSEC(1));
+                    k_yield();
                 } else if (err == -EAGAIN) {
                     reset_transfer_state();
                 } else {
@@ -655,7 +655,7 @@ static void storage_write(void)
             uint32_t idle_sleep_ms = conn ? STORAGE_IDLE_POLL_MS_CONNECTED : STORAGE_IDLE_POLL_MS_OFFLINE;
             k_msleep(idle_sleep_ms);
         } else {
-            k_sleep(K_MSEC(1));
+            k_yield();
         }
     }
 }
