@@ -20,6 +20,4 @@ export PYRIGHT_PYTHON_FORCE_VERSION="${PYRIGHT_PYTHON_FORCE_VERSION:-1.1.403}"
 
 "$PYRIGHT_PYTHON" -m pyright \
   -p pyrightconfig.json \
-  --pythonpath "$PYRIGHT_PYTHON" \
-  --level warning \
-  --warnings
+  --pythonpath "$PYRIGHT_PYTHON"

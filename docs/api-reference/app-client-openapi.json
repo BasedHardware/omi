@@ -780,11 +780,9 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Chat Tools"
           },
           "connected_accounts": {
-            "default": [],
             "items": {
               "type": "string"
             },
@@ -1066,7 +1064,6 @@
             "type": "integer"
           },
           "reviews": {
-            "default": [],
             "items": {
               "$ref": "#/components/schemas/AppReview"
             },
@@ -1112,7 +1109,6 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Thumbnail Urls"
           },
           "thumbnails": {
@@ -1127,7 +1123,6 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Thumbnails"
           },
           "trigger_workflow_memories": {
@@ -1280,11 +1275,9 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Chat Tools"
           },
           "connected_accounts": {
-            "default": [],
             "items": {
               "type": "string"
             },
@@ -1527,7 +1520,6 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Thumbnail Urls"
           },
           "thumbnails": {
@@ -1542,7 +1534,6 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Thumbnails"
           },
           "trigger_workflow_memories": {
@@ -2527,7 +2518,10 @@
           "daily_active_energy": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
                 "type": "array"
               },
               {
@@ -2540,7 +2534,10 @@
           "daily_sleep": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
                 "type": "array"
               },
               {
@@ -2553,7 +2550,10 @@
           "daily_steps": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
                 "type": "array"
               },
               {
@@ -2608,7 +2608,10 @@
           "sleep_sessions": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
                 "type": "array"
               },
               {
@@ -2681,7 +2684,10 @@
           "workouts": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
                 "type": "array"
               },
               {
@@ -7435,7 +7441,6 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Actions"
           },
           "app_home_url": {
@@ -7461,7 +7466,6 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Auth Steps"
           },
           "chat_messages_enabled": {
@@ -7712,19 +7716,6 @@
           "weekly"
         ],
         "title": "FairUseUsagePctResponse",
-        "type": "object"
-      },
-      "FcmTokenResponse": {
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "FcmTokenResponse",
         "type": "object"
       },
       "FileChat": {
@@ -9682,7 +9673,6 @@
             "title": "Subject Entity Id"
           },
           "tags": {
-            "default": [],
             "description": "The tags of the memory and learning",
             "items": {
               "type": "string"
@@ -9711,10 +9701,17 @@
             "title": "Veracity"
           },
           "visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": "private",
             "description": "The visibility of the memory",
-            "title": "Visibility",
-            "type": "string"
+            "title": "Visibility"
           }
         },
         "required": [
@@ -10079,7 +10076,6 @@
             "title": "Superseded By"
           },
           "tags": {
-            "default": [],
             "description": "The tags of the memory and learning",
             "items": {
               "type": "string"
@@ -10687,19 +10683,6 @@
           "frequency"
         ],
         "title": "NotificationSettingsResponse",
-        "type": "object"
-      },
-      "NotificationStatusResponse": {
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "NotificationStatusResponse",
         "type": "object"
       },
       "OAuthUrlResponse": {
@@ -12473,29 +12456,6 @@
           "relevance_score"
         ],
         "title": "SearchedMemory",
-        "type": "object"
-      },
-      "SendAppNotificationRequest": {
-        "properties": {
-          "aid": {
-            "title": "Aid",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "uid": {
-            "title": "Uid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "aid",
-          "message",
-          "uid"
-        ],
-        "title": "SendAppNotificationRequest",
         "type": "object"
       },
       "SendMessageRequest": {
@@ -14733,7 +14693,6 @@
                 "type": "null"
               }
             ],
-            "default": [],
             "title": "Translations"
           }
         },
@@ -31129,7 +31088,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SendAppNotificationRequest"
+                "additionalProperties": true,
+                "title": "Data",
+                "type": "object"
               }
             }
           },
@@ -31139,9 +31100,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationStatusResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -38822,7 +38781,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FcmTokenResponse"
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Save Token V1 Users Fcm Token Post",
+                  "type": "object"
                 }
               }
             },
