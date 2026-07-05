@@ -18,6 +18,8 @@ Omi already remembers everything you learn — in meetings, lectures, and conver
 - **LLM-quality extraction with graceful degradation**: uses OpenAI if `OPENAI_API_KEY` is set; otherwise falls back to a heuristic fact extractor, so the app works with zero external services.
 - **Self-contained**: single-file FastAPI app + SQLite. No Redis, no Firestore, no sign-in.
 
+> **Security note:** This plugin currently relies only on the Omi `uid` for access control. If you deploy this publicly, consider adding a shared webhook secret or API token so that only Omi can trigger `/webhook` and only the owning user can access `/deck/{uid}.apkg`.
+
 ## How It Works
 
 ```
