@@ -490,6 +490,31 @@ class TestMetricsEndpoint:
         ]:
             assert name in body, f"Missing metric: {name}"
 
+    def test_metrics_endpoint_contains_vram_gauges(self):
+        from unittest.mock import PropertyMock
+
+        app, mod, _, _ = _make_app_with_mocks()
+        type(mod.gpu_worker).vram_info = PropertyMock(
+            return_value={
+                "total_mb": 22563.0,
+                "baseline_mb": 5968.0,
+                "current_used_mb": 11654.0,
+                "current_free_mb": 10909.0,
+                "attention_mode": "full",
+            }
+        )
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        body = resp.text
+        for name in [
+            "parakeet_vram_used_mb",
+            "parakeet_vram_free_mb",
+            "parakeet_vram_total_mb",
+            "parakeet_vram_baseline_mb",
+        ]:
+            assert name in body, f"Missing VRAM metric: {name}"
+
 
 class TestV4StreamEndpoint:
 

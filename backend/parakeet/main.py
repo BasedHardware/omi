@@ -3,6 +3,7 @@ import functools
 import gc
 import math
 import os
+import sys
 import time
 import uuid
 import logging
@@ -19,6 +20,7 @@ gc.disable()
 from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
+from prometheus_client.core import GaugeMetricFamily, REGISTRY
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
@@ -80,7 +82,38 @@ INFERENCE_DURATION = Histogram(
 GPU_OOM_TOTAL = Counter('parakeet_gpu_oom_total', 'CUDA out-of-memory events')
 REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', ['endpoint', 'status'])
 
+
 gpu_worker: Optional[GPUWorker] = None
+
+
+class _VRAMCollector:
+    def __init__(self, module):
+        self._module = module
+
+    def collect(self):
+        worker = self._module.gpu_worker
+        if worker is None:
+            return
+        info = worker.vram_info
+        if "current_used_mb" in info:
+            g = GaugeMetricFamily('parakeet_vram_used_mb', 'GPU VRAM currently used (MiB)')
+            g.add_metric([], info["current_used_mb"])
+            yield g
+        if "current_free_mb" in info:
+            g = GaugeMetricFamily('parakeet_vram_free_mb', 'GPU VRAM currently free (MiB)')
+            g.add_metric([], info["current_free_mb"])
+            yield g
+        if info.get("total_mb"):
+            g = GaugeMetricFamily('parakeet_vram_total_mb', 'GPU VRAM total (MiB)')
+            g.add_metric([], info["total_mb"])
+            yield g
+        if info.get("baseline_mb"):
+            g = GaugeMetricFamily('parakeet_vram_baseline_mb', 'GPU VRAM at model load (MiB)')
+            g.add_metric([], info["baseline_mb"])
+            yield g
+
+
+REGISTRY.register(_VRAMCollector(sys.modules[__name__]))
 batch_engine: Optional[BatchEngine] = None
 stream_engine: Optional[StreamEngine] = None
 start_time: float = 0
