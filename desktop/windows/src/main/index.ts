@@ -55,11 +55,16 @@ perfMark('app:start')
 // fatal events to a crash log under userData so field failures are diagnosable,
 // and keep the app usable on a renderer crash by reloading rather than leaving
 // a blank window. Handlers are best-effort and must never throw themselves.
-const crashLogPath = join(app.getPath('userData'), 'crash.log')
 function logFatal(kind: string, detail: unknown): void {
   const body = detail instanceof Error ? (detail.stack ?? detail.message) : String(detail)
   try {
-    appendFileSync(crashLogPath, `${new Date().toISOString()} [${kind}] ${body}\n`)
+    // Resolve the path at call time, not module load: the sandbox block below
+    // re-pins userData, and a path captured at import would send sandbox-mode
+    // crash logs to the production profile.
+    appendFileSync(
+      join(app.getPath('userData'), 'crash.log'),
+      `${new Date().toISOString()} [${kind}] ${body}\n`
+    )
   } catch {
     /* best-effort; never throw from a crash handler */
   }
@@ -67,16 +72,30 @@ function logFatal(kind: string, detail: unknown): void {
 }
 process.on('uncaughtException', (err) => logFatal('uncaughtException', err))
 process.on('unhandledRejection', (reason) => logFatal('unhandledRejection', reason))
+// Reload a crashed renderer instead of leaving a white window — but cap rapid
+// retries: a persistent startup failure would otherwise loop crash → reload →
+// crash forever, flashing the window and flooding crash.log.
+const RENDERER_RELOAD_WINDOW_MS = 60_000
+const RENDERER_RELOAD_MAX = 3
+let rendererReloadTimes: number[] = []
 app.on('render-process-gone', (_e, wc, details) => {
   logFatal('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
-  // Reload the crashed renderer instead of leaving a white window — unless it
-  // exited cleanly (intentional teardown).
-  if (details.reason !== 'clean-exit' && !wc.isDestroyed()) {
-    try {
-      wc.reload()
-    } catch {
-      /* window may be mid-teardown */
-    }
+  // Skip clean exits (intentional teardown) and destroyed windows.
+  if (details.reason === 'clean-exit' || wc.isDestroyed()) return
+  const now = Date.now()
+  rendererReloadTimes = rendererReloadTimes.filter((t) => now - t < RENDERER_RELOAD_WINDOW_MS)
+  if (rendererReloadTimes.length >= RENDERER_RELOAD_MAX) {
+    logFatal(
+      'render-process-gone',
+      `reload suppressed — renderer crashed ${RENDERER_RELOAD_MAX}+ times in ${RENDERER_RELOAD_WINDOW_MS / 1000}s; leaving window for manual reload`
+    )
+    return
+  }
+  rendererReloadTimes.push(now)
+  try {
+    wc.reload()
+  } catch {
+    /* window may be mid-teardown */
   }
 })
 app.on('child-process-gone', (_e, details) =>
