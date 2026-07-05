@@ -3392,7 +3392,9 @@ class FloatingControlBarManager {
         )
         floatingSessionKey = "floating"
         Task {
-            await activeFloatingProvider()?.invalidateAgentSurface(surface: .floatingChat())
+            if let provider = activeFloatingProvider() {
+                await provider.invalidateAgentSurface(surface: provider.mainChatSurfaceReference())
+            }
         }
         storedNotificationMessages.removeValue(forKey: notificationID)
         if mostRecentNotificationID == notificationID {
@@ -3697,7 +3699,7 @@ class FloatingControlBarManager {
             model: selectedFloatingModel,
             systemPromptSuffix: notificationContextSuffix,
             systemPromptStyle: .floating,
-            surfaceRef: .floatingChat(),
+            surfaceRef: provider.mainChatSurfaceReference(),
             imageData: screenshotData,
             turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
             clientTurnId: clientTurnId
@@ -3822,7 +3824,7 @@ class FloatingControlBarManager {
             message,
             model: selectedFloatingModel,
             systemPromptStyle: .floating,
-            surfaceRef: .floatingChat(),
+            surfaceRef: provider.mainChatSurfaceReference(),
             imageData: screenshotData,
             turnOwner: .floatingVoice,
             clientTurnId: clientTurnId

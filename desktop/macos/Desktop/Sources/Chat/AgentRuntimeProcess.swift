@@ -307,6 +307,20 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
+  func mergeFloatingChatIntoMainChat(clientId: String, chatId: String = "default") {
+    var dict: [String: Any] = [
+      "type": "merge_floating_chat_into_main_chat",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "chatId": chatId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
   func importConversationTurns(clientId: String, surface: AgentSurfaceReference, turns: [[String: Any]]) {
     var dict: [String: Any] = [
       "type": "import_conversation_turns",

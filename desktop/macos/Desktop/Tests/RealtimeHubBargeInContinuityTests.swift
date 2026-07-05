@@ -68,7 +68,9 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     XCTAssertTrue(source.contains("deferredFreshSessionSeedPrefetch"))
     XCTAssertTrue(source.contains("completeBargeInReplacementAfterContinuity("))
-    XCTAssertTrue(source.contains("await refreshVoiceSeedContext()"))
+    XCTAssertTrue(source.contains("await self.refreshVoiceSeedContext()") || source.contains("await refreshVoiceSeedContext()"))
+    XCTAssertTrue(source.contains("reconnectWarmSessionIfSeedStale()"))
+    XCTAssertTrue(source.contains("sessionVoiceSeedContextSnapshot"))
     XCTAssertTrue(source.contains("recordTurnToKernelAwaiting("))
     XCTAssertTrue(source.contains("RealtimeHubBargeInContinuity.prepareReplacementSession("))
     XCTAssertFalse(source.contains("preserveInterruptedTurnForContinuity()"))

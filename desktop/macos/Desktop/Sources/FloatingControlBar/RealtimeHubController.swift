@@ -185,6 +185,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Kernel-projected transcript tail prefetched when PTT is armed (key-down).
   private var prefetchedVoiceSeedContext = ""
   private var prefetchedFloatingAgentStatus = ""
+  /// Seed baked into the current warm session's system instructions.
+  private var sessionVoiceSeedContextSnapshot = ""
   private var voiceSeedPrefetchTask: Task<Void, Never>?
   private var bargeInContinuityTask: Task<Void, Never>?
   private var pendingBargeInProvider: RealtimeHubProvider?
@@ -568,6 +570,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
     let topLevelContext = voiceSessionSeedContext()
+    sessionVoiceSeedContextSnapshot = topLevelContext
     let instructions = RealtimeHubTools.systemInstruction(
       aboutUser: aboutUserCard,
       topLevelConversationContext: topLevelContext,
@@ -627,6 +630,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedFloatingAgentStatus = await FloatingControlBarManager.shared.floatingAgentStatusContext()
   }
 
+  /// Warm sessions bake instructions at connect time. Reconnect when newer typed turns
+  /// change the kernel-projected seed so PTT sees the latest main-chat transcript.
+  private func reconnectWarmSessionIfSeedStale() {
+    guard session != nil else { return }
+    let current = voiceSessionSeedContext()
+    guard current != sessionVoiceSeedContextSnapshot else { return }
+    log(
+      "RealtimeHub: voice seed changed — reconnecting warm session "
+        + "(was \(sessionVoiceSeedContextSnapshot.count) chars, now \(current.count))")
+    teardownSession()
+  }
+
   private func recordTurnToKernel(
     userText: String,
     assistantText: String,
@@ -668,6 +683,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionProvider = nil
     sessionAuth = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
+    sessionVoiceSeedContextSnapshot = ""
     clearBargeInReplacementState()
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
@@ -933,13 +949,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log("RealtimeHub[\(providerTag)]: barge-in — stopping local playback tail")
     }
     if !deferredFreshSessionSeedPrefetch {
-      prefetchVoiceSeedContextIfNeeded()
-    }
-    ensureWarm()  // (re)connect only if the socket idle-closed
-    // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
-    // turn on a warm session; OpenAI no-op).
-    if !replacementSessionOwnsInputTurn {
-      session?.beginInputTurn(interrupting: providerResponseInFlight)
+      let ownsInputTurn = !replacementSessionOwnsInputTurn
+      let interrupting = providerResponseInFlight
+      Task { @MainActor in
+        await self.refreshVoiceSeedContext()
+        self.reconnectWarmSessionIfSeedStale()
+        self.ensureWarm()
+        if ownsInputTurn {
+          self.session?.beginInputTurn(interrupting: interrupting)
+        }
+      }
+    } else {
+      ensureWarm()
+      if !replacementSessionOwnsInputTurn {
+        session?.beginInputTurn(interrupting: providerResponseInFlight)
+      }
     }
     // Capture the screen at turn START and, for Gemini, send it in-turn right away — early
     // enough that the ~450KB JPEG uploads/decodes during the seconds of speech, so the

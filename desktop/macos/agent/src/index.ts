@@ -46,6 +46,7 @@ import type {
   RefreshTokenMessage,
   RecordSurfaceTurnMessage,
   GetVoiceSeedContextMessage,
+  MergeFloatingChatIntoMainChatMessage,
   AuthMethod,
 } from "./protocol.js";
 import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
@@ -1378,6 +1379,18 @@ async function main(): Promise<void> {
             .filter((turn): turn is ConversationTurnImportEntry => turn !== null),
         });
         logErr(`Imported ${imported} conversation turn(s) for ${ownerId}/${surfaceKind}`);
+        break;
+      }
+
+      case "merge_floating_chat_into_main_chat": {
+        const merge = msg as MergeFloatingChatIntoMainChatMessage;
+        const ownerId = merge.ownerId?.trim() || currentOwnerId;
+        const chatId = typeof merge.chatId === "string" ? merge.chatId : "default";
+        const result = kernel.mergeFloatingChatIntoMainChat({ ownerId, chatId });
+        logErr(
+          `Merged floating_chat into main_chat for ${ownerId}/${chatId}: `
+            + `${result.mergedTurns} turn(s), removedMapping=${result.removedFloatingMapping}`,
+        );
         break;
       }
 

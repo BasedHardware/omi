@@ -96,6 +96,11 @@ export interface ImportConversationTurnsMessage extends ProtocolEnvelope {
   }>;
 }
 
+export interface MergeFloatingChatIntoMainChatMessage extends ProtocolEnvelope {
+  type: "merge_floating_chat_into_main_chat";
+  chatId?: string;
+}
+
 /** Swift tells the bridge which auth method the user chose */
 export interface AuthenticateMessage {
   type: "authenticate";
@@ -155,6 +160,7 @@ export type InboundMessage =
   | ClearOwnerStateMessage
   | ImportLegacyMainChatSessionsMessage
   | ImportConversationTurnsMessage
+  | MergeFloatingChatIntoMainChatMessage
   | RecordSurfaceTurnMessage
   | GetVoiceSeedContextMessage
   | AuthenticateMessage

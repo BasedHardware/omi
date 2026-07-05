@@ -251,6 +251,84 @@ export function importLegacyMainChatSessions(
   return imported;
 }
 
+export interface MergeFloatingChatIntoMainChatResult {
+  mergedTurns: number;
+  removedFloatingMapping: boolean;
+}
+
+/** One-time migration: fold legacy floating_chat transcript into main_chat. */
+export function mergeFloatingChatIntoMainChat(
+  store: AgentStore,
+  input: { ownerId: string; chatId?: string },
+  nowMs: () => number,
+): MergeFloatingChatIntoMainChatResult {
+  const chatId = input.chatId?.trim() || "default";
+  const floatingRef: SurfaceRef = {
+    surfaceKind: "floating_chat",
+    externalRefKind: "chat",
+    externalRefId: chatId,
+  };
+  const mainRef: SurfaceRef = {
+    surfaceKind: "main_chat",
+    externalRefKind: "chat",
+    externalRefId: chatId,
+  };
+
+  const floatingRow = store.getOptionalRow(
+    `SELECT conversation_id FROM surface_conversations
+     WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+    [input.ownerId, floatingRef.surfaceKind, floatingRef.externalRefKind, floatingRef.externalRefId],
+  );
+  if (!floatingRow) {
+    return { mergedTurns: 0, removedFloatingMapping: false };
+  }
+
+  const floatingConversationId = String(floatingRow.conversation_id);
+  const mainResolved = resolveSurfaceSession(store, { ownerId: input.ownerId, surfaceRef: mainRef }, nowMs);
+  const mainConversationId = mainResolved.conversationId;
+
+  if (floatingConversationId === mainConversationId) {
+    store.execute(
+      `DELETE FROM surface_conversations
+       WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+      [input.ownerId, floatingRef.surfaceKind, floatingRef.externalRefKind, floatingRef.externalRefId],
+    );
+    return { mergedTurns: 0, removedFloatingMapping: true };
+  }
+
+  const turns = store.allRows(
+    `SELECT role, content, created_at_ms, metadata_json
+     FROM conversation_turns
+     WHERE conversation_id = ?
+     ORDER BY created_at_ms ASC`,
+    [floatingConversationId],
+  );
+
+  let mergedTurns = 0;
+  store.withTransaction(() => {
+    for (const row of turns) {
+      store.insertConversationTurn({
+        conversationId: mainConversationId,
+        turnId: generateAgentId("turn"),
+        role: String(row.role) as "user" | "assistant",
+        surfaceKind: "main_chat",
+        content: String(row.content),
+        createdAtMs: Number(row.created_at_ms),
+        metadataJson: String(row.metadata_json ?? "{}"),
+      });
+      mergedTurns += 1;
+    }
+    store.execute(`DELETE FROM conversation_turns WHERE conversation_id = ?`, [floatingConversationId]);
+    store.execute(
+      `DELETE FROM surface_conversations
+       WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+      [input.ownerId, floatingRef.surfaceKind, floatingRef.externalRefKind, floatingRef.externalRefId],
+    );
+  });
+
+  return { mergedTurns, removedFloatingMapping: true };
+}
+
 export function clearOwnerSurfaceState(store: AgentStore, ownerId: string, nowMs: () => number): {
   invalidatedBindingIds: string[];
 } {

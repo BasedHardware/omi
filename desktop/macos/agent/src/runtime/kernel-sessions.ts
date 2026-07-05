@@ -11,6 +11,7 @@ import { AdapterRuntimeError, failureFromError } from "./failures.js";
 import {
   clearOwnerSurfaceState,
   importLegacyMainChatSessions,
+  mergeFloatingChatIntoMainChat,
   resolveSurfaceSession,
   type LegacyMainChatSessionEntry,
   type ResolveSurfaceSessionInput,
@@ -181,6 +182,13 @@ export class KernelSessions extends KernelArtifacts {
 
   importLegacyMainChatSessions(input: { ownerId: string; entries: LegacyMainChatSessionEntry[] }): number {
     return importLegacyMainChatSessions(this.store, input, () => Date.now());
+  }
+
+  mergeFloatingChatIntoMainChat(input: { ownerId: string; chatId?: string }): {
+    mergedTurns: number;
+    removedFloatingMapping: boolean;
+  } {
+    return mergeFloatingChatIntoMainChat(this.store, input, () => Date.now());
   }
 
   importConversationTurns(input: {

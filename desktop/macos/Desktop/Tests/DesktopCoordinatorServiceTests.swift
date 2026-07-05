@@ -344,6 +344,20 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(managerSource.contains("activeFloatingProvider()?.stopAgent()"))
     XCTAssertFalse(managerSource.contains("prepareVisibleQueryState(\"Omi is responding\""))
     XCTAssertFalse(providerSource.contains("func stopAgent(owner: ChatTurnOwner?"))
+    XCTAssertTrue(managerSource.contains("surfaceRef: provider.mainChatSurfaceReference()"))
+    XCTAssertFalse(managerSource.contains("surfaceRef: .floatingChat()"))
+    XCTAssertFalse(providerSource.contains("return .floatingChat()"))
+  }
+
+  func testVoiceSeedUsesMainChatSurfaceReference() throws {
+    let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+
+    XCTAssertTrue(managerSource.contains("fetchVoiceSeedContext("))
+    XCTAssertTrue(managerSource.contains("surface: provider.mainChatSurfaceReference()"))
+    XCTAssertTrue(hubSource.contains("await self.refreshVoiceSeedContext()"))
+    XCTAssertTrue(hubSource.contains("reconnectWarmSessionIfSeedStale()"))
+    XCTAssertTrue(hubSource.contains("sessionVoiceSeedContextSnapshot"))
   }
 
   func testVoiceSpawnAgentRecordsHandoffIntoKernelTranscript() throws {

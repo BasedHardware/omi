@@ -1416,7 +1416,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return .onboarding()
         }
         if systemPromptStyle == .floating {
-            return .floatingChat()
+            return mainChatSurfaceReference()
         }
         return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
     }

@@ -103,6 +103,7 @@ actor AgentBridge {
     try await runtime.registerClient(clientId: clientId, harnessMode: harnessMode)
     registered = true
     await migrateLegacyMainChatSessionsIfNeeded()
+    await migrateFloatingChatIntoMainChatIfNeeded()
 
     if isPiMonoHarness, tokenRefreshTask == nil {
       tokenRefreshTask = Task { [weak self] in
@@ -180,6 +181,10 @@ actor AgentBridge {
       clientId: clientId,
       entries: entries.map { ["chatId": $0.chatId, "agentSessionId": $0.agentSessionId] }
     )
+  }
+
+  func mergeFloatingChatIntoMainChat(chatId: String = "default") async {
+    await runtime.mergeFloatingChatIntoMainChat(clientId: clientId, chatId: chatId)
   }
 
   func importConversationTurns(
@@ -364,6 +369,13 @@ actor AgentBridge {
   }
 
   private static let legacyMainChatDefaultsKey = "mainChatRuntimeSessionIdsByOwnerAndChat"
+  private static let floatingChatMigrationDefaultsKey = "floatingChatToMainChatMigration_v1"
+
+  private func migrateFloatingChatIntoMainChatIfNeeded() async {
+    guard !UserDefaults.standard.bool(forKey: Self.floatingChatMigrationDefaultsKey) else { return }
+    await mergeFloatingChatIntoMainChat(chatId: "default")
+    UserDefaults.standard.set(true, forKey: Self.floatingChatMigrationDefaultsKey)
+  }
 
   private func migrateLegacyMainChatSessionsIfNeeded() async {
     let ownerId = await MainActor.run {
