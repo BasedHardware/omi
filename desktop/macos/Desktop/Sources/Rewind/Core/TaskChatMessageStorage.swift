@@ -86,7 +86,9 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     func toChatMessage() -> ChatMessage {
         let chatSender: ChatSender = sender == "user" ? .user : .ai
         let blocks = contentBlocksJson.flatMap { Self.decodeContentBlocks($0) } ?? []
-        let resources = resourcesJson.flatMap { ChatResource.decodeResourcesFromPersistence($0) } ?? []
+        let resources = ChatResource.hydrateFileStates(
+            resourcesJson.flatMap { ChatResource.decodeResourcesFromPersistence($0) } ?? []
+        )
 
         return ChatMessage(
             id: messageId,
