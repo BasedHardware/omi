@@ -15,6 +15,7 @@ import {
   bindingCarriesNativeHistory,
   getVoiceSeedContext,
   shouldInjectCompletedAgentDelta,
+  turnSourceAttribution,
   VOICE_SEED_MAX_CHARACTERS,
 } from "../src/runtime/turn-context.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
@@ -240,8 +241,70 @@ describe("turn-context", () => {
     });
 
     expect(assembled.prompt).toContain("<conversation_history>");
-    expect(assembled.prompt).toContain("User: Hello");
-    expect(assembled.prompt).toContain("Assistant: Hi there");
+    expect(assembled.prompt).toContain("[live:typed] User: Hello");
+    expect(assembled.prompt).toContain("[live:typed] Assistant: Hi there");
+  });
+
+  it("does not duplicate transcript in context packet and history tail", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-dedupe";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+    appendConversationTurn(store, {
+      conversationId: resolved.conversationId,
+      role: "user",
+      surfaceKind: "main_chat",
+      content: "Prior typed turn",
+      createdAtMs: 1_700_000_000_000,
+    });
+
+    const assembled = assembleTurnContext({
+      store,
+      services: {
+        persistDesktopContextPacket: (input) => ({
+          packet: {
+            packetId: "ctx_dedupe",
+            redactedPreviewJson: { objective: input.objective, snippetCount: input.snippets.length },
+          },
+        }),
+        routeDesktopIntent: () => ({ intent: "new_run", explanation: "test" }),
+        listSessions: () => [],
+        inspectArtifacts: () => [],
+      },
+      ownerId,
+      sessionId: resolved.agentSessionId,
+      conversationId: resolved.conversationId,
+      surfaceRef,
+      userText: "Follow up",
+      imagePresent: false,
+      bindingCarriesNativeHistory: false,
+      nowMs: 1_700_000_000_100,
+    });
+
+    expect(assembled.prompt).toContain("# Context Packet");
+    expect(assembled.prompt).toContain("<conversation_history>");
+    expect(assembled.prompt).toContain("Prior typed turn");
+    const occurrences = assembled.prompt.split("Prior typed turn").length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it("labels voice turns with live:voice attribution", () => {
+    const turn = {
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      role: "user" as const,
+      surfaceKind: "main_chat",
+      content: "Hello",
+      createdAtMs: 1,
+      metadataJson: JSON.stringify({ origin: "realtime_voice" }),
+    };
+    expect(turnSourceAttribution(turn)).toBe("[live:voice]");
   });
 
   it("matches completion follow-up heuristics", () => {
@@ -279,10 +342,10 @@ describe("turn-context", () => {
     });
 
     const seed = getVoiceSeedContext(store, resolved.conversationId);
-    expect(seed).toContain("User: Hello from PTT");
-    expect(seed).toContain("Omi: Hi back");
-    expect(seed).toContain("User: Interrupted question");
-    expect(seed).toContain("Omi (interrupted): Partial reply");
+    expect(seed).toContain("[live:voice] User: Hello from PTT");
+    expect(seed).toContain("[live:voice] Omi: Hi back");
+    expect(seed).toContain("[live:voice] User: Interrupted question");
+    expect(seed).toContain("[live:voice] Omi (interrupted): Partial reply");
     expect(seed.length).toBeLessThanOrEqual(VOICE_SEED_MAX_CHARACTERS + 64);
   });
 

@@ -341,38 +341,8 @@ function buildContextPacketSection(input: AssembleTurnContextInput): string | nu
     return null;
   }
 
-  const recentTurns = listRecentConversationTurns(input.store, input.conversationId, 6);
-  const snippets: DesktopContextSnippetInput[] = recentTurns
-    .filter((turn) => turn.content.trim().length > 0)
-    .map((turn, index) => ({
-      snippetId: `recent_message_${index + 1}`,
-      sourceKind: input.surfaceRef.surfaceKind === "task_chat" ? "task_chat" : "chat_surface",
-      operation:
-        turn.role === "user"
-          ? turn.content === input.userText
-            ? "current_user_message"
-            : "recent_user_message"
-          : "recent_assistant_message",
-      provenance: {
-        surface: `${input.surfaceRef.externalRefKind}:${input.surfaceRef.externalRefId}`,
-        turnId: turn.turnId,
-      },
-      content: String(turn.content).slice(0, 2_000),
-      redactedContent: String(turn.content).slice(0, 2_000),
-      sensitivityTier: input.surfaceRef.surfaceKind === "task_chat" ? "local_private" : "low",
-    }));
-
-  if (!snippets.some((snippet) => snippet.operation === "current_user_message")) {
-    snippets.push({
-      snippetId: "current_user_message",
-      sourceKind: input.surfaceRef.surfaceKind === "task_chat" ? "task_chat" : "chat_surface",
-      operation: "current_user_message",
-      provenance: { surface: `${input.surfaceRef.externalRefKind}:${input.surfaceRef.externalRefId}` },
-      content: input.userText,
-      redactedContent: input.userText,
-      sensitivityTier: "low",
-    });
-  }
+  // Policy/tools only — conversation transcript is injected separately (tail or delta).
+  const snippets: DesktopContextSnippetInput[] = [];
 
   if (input.surfaceRef.surfaceKind === "task_chat" && input.surfaceContextJson?.trim()) {
     snippets.unshift({
@@ -456,13 +426,14 @@ export function getVoiceSeedContext(
       metadata = {};
     }
     const interrupted = metadata.interrupted === true;
+    const attribution = turnSourceAttribution(turn);
     const role =
       turn.role === "user"
         ? "User"
         : interrupted
           ? "Omi (interrupted)"
           : "Omi";
-    const prefix = `${role}: `;
+    const prefix = `${attribution} ${role}: `;
     const contentBudget = Math.max(0, remaining - prefix.length);
     const line = `${prefix}${content.slice(0, contentBudget)}`;
     if (!line.trim()) continue;
@@ -473,12 +444,35 @@ export function getVoiceSeedContext(
   return lines.join("\n");
 }
 
+export function turnSourceAttribution(turn: ConversationTurn): string {
+  let metadata: Record<string, unknown> = {};
+  try {
+    metadata = JSON.parse(turn.metadataJson || "{}") as Record<string, unknown>;
+  } catch {
+    metadata = {};
+  }
+  const origin = typeof metadata.origin === "string" ? metadata.origin : "";
+  if (origin === "realtime_voice" || turn.surfaceKind === "realtime_voice") {
+    return "[live:voice]";
+  }
+  if (origin === "recording" || turn.surfaceKind === "recording") {
+    return "[recording]";
+  }
+  if (origin === "memory" || metadata.source === "memory") {
+    return "[memory]";
+  }
+  return "[live:typed]";
+}
+
+function formatTranscriptLine(turn: ConversationTurn): string {
+  const role = turn.role === "user" ? "User" : "Assistant";
+  const attribution = turnSourceAttribution(turn);
+  return `${attribution} ${role}: ${turn.content}`;
+}
+
 function formatTranscriptTail(turns: readonly ConversationTurn[]): string | null {
   if (turns.length === 0) return null;
-  const lines = turns.map((turn) => {
-    const role = turn.role === "user" ? "User" : "Assistant";
-    return `${role}: ${turn.content}`;
-  });
+  const lines = turns.map(formatTranscriptLine);
   return `<conversation_history>
 Below is the recent conversation history between you and the user. Use this to maintain continuity.
 ${lines.join("\n")}
@@ -487,10 +481,7 @@ ${lines.join("\n")}
 
 function formatTranscriptDelta(turns: readonly ConversationTurn[]): string | null {
   if (turns.length === 0) return null;
-  const lines = turns.map((turn) => {
-    const role = turn.role === "user" ? "User" : "Assistant";
-    return `${role}: ${turn.content}`;
-  });
+  const lines = turns.map(formatTranscriptLine);
   return `# Recent turns from other surfaces
 
 ${lines.join("\n")}`;

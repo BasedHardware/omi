@@ -1883,14 +1883,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Load Context (Memories)
 
-    /// Loads user memories from local SQLite for use in prompts
-    private func loadMemoriesIfNeeded() async {
-        guard !memoriesLoaded else { return }
-
+    /// Loads user memories from local SQLite for use in prompts (refreshed each turn).
+    private func refreshMemoriesForPrompt() async {
         do {
             cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
             memoriesLoaded = true
-            log("ChatProvider loaded \(cachedMemories.count) memories from local DB")
+            log("ChatProvider refreshed \(cachedMemories.count) memories from local DB")
         } catch {
             logError("Failed to load memories from local DB", error: error)
             // Continue without memories - non-critical
@@ -1905,7 +1903,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         var lines: [String] = ["<user_facts>", "Facts about \(userName):"]
         for memory in cachedMemories.prefix(30) {  // Limit to 30 most relevant
-            lines.append("- \(memory.content)")
+            lines.append("- [memory] \(memory.content)")
         }
         lines.append("</user_facts>")
 
@@ -2423,7 +2421,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Warm local prompt context used by first send / bridge startup.
     func warmupPromptContext() async {
-        await loadMemoriesIfNeeded()
+        await refreshMemoriesForPrompt()
         await loadGoalsIfNeeded()
         await loadTasksIfNeeded()
         await loadAIProfileIfNeeded()
@@ -3517,6 +3515,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             startedAtMs: turnStartMs
         )
 
+        // Refresh memories each turn so <user_facts> stays current.
+        await refreshMemoriesForPrompt()
+        let promptContext = formatMemoriesSection()
+
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
             // at session/new; for the normal reused-session path it is ignored.
@@ -3531,21 +3533,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } else {
                 if systemPromptStyle == .floating {
                     if isFloatingPillSurface(resolvedSurface) {
-                        if cachedFloatingPillSystemPrompt.isEmpty {
-                            cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
-                                contextString: formatMemoriesSection(),
-                                excludingToolNames: ["spawn_agent", "run_agent_and_wait"]
-                            )
-                        }
-                        systemPrompt = cachedFloatingPillSystemPrompt
-                    } else if cachedFloatingSystemPrompt.isEmpty {
-                        cachedFloatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: formatMemoriesSection())
-                        systemPrompt = cachedFloatingSystemPrompt
+                        systemPrompt = buildFloatingBarSystemPrompt(
+                            contextString: promptContext,
+                            excludingToolNames: ["spawn_agent", "run_agent_and_wait"]
+                        )
                     } else {
-                        systemPrompt = cachedFloatingSystemPrompt
+                        systemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
                     }
                 } else {
-                    systemPrompt = cachedMainSystemPrompt
+                    systemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
                 }
                 if let prefix = systemPromptPrefix, !prefix.isEmpty {
                     systemPrompt = prefix + "\n\n" + systemPrompt
