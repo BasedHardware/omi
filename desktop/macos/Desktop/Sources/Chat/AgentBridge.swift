@@ -183,7 +183,12 @@ actor AgentBridge {
     }
 
     if isPiMonoHarness {
-      if let cached = lastKnownQuota, !cached.allowed {
+      // Local dev/test builds on a developer's own machine never enforce the client-side
+      // usage limit, so development isn't interrupted by the free-tier quota. The shipped
+      // production build that real users run (bundle com.omi.computer-macos) still enforces
+      // it — this only affects non-production builds, so billing behavior for users is
+      // unchanged.
+      if !AppBuild.isNonProduction, let cached = lastKnownQuota, !cached.allowed {
         QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
         throw BridgeError.quotaExceeded(
           plan: cached.plan,
