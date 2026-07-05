@@ -195,7 +195,6 @@ struct RewindSearchBar: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     VStack {
         RewindSearchBar(
@@ -221,4 +220,3 @@ struct RewindSearchBar: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
-#endif

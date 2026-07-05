@@ -755,9 +755,7 @@ extension SettingsContentView {
           dailySummaryHour = dailySummary.hour
           notificationsEnabled = notifications.enabled
           notificationFrequency = notifications.frequency
-          // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
-          UserDefaults.standard.set(
-            notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
+          // Mirror to UserDefaults so NotificationService can throttle without a backend roundtrip.
           UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled

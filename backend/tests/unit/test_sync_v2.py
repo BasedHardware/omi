@@ -1119,15 +1119,6 @@ class TestAsyncCoordinatorScenarios:
         assert 'isinstance(r, asyncio.TimeoutError)' in seg_early
         assert 'Segment timed out' in seg_early
 
-    def test_generic_segment_task_exception_captured(self):
-        """Generic segment task exceptions must be counted in segment_errors."""
-        body = self._get_bg_func_body()
-        seg_section = body[body.index('seg_results = await asyncio.gather') :]
-        seg_early = seg_section[:800]
-        assert 'elif isinstance(r, Exception):' in seg_early
-        assert 'segment_errors.append' in seg_early
-        assert 'Segment failed:' in seg_early
-
     def test_segment_errors_included_in_result(self):
         """segment_errors must be included in the final result sent to mark_job_completed."""
         body = self._get_bg_func_body()
@@ -1579,42 +1570,6 @@ class TestAsyncCoordinatorBehavioral:
             result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
             assert result['failed_segments'] == 1
             assert result['total_segments'] == 2
-        finally:
-            self._cleanup(stubs['saved_modules'])
-
-    @pytest.mark.asyncio
-    async def test_generic_segment_task_exception_counts_as_failed_segment(self):
-        """A task-level segment exception must not complete with failed_segments=0."""
-        module, stubs = self._load_sync_module()
-        try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
-
-            def _vad_one_segment(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg_1700000001.wav')
-
-            module.retrieve_vad_segments = _vad_one_segment
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
-            module.users_db.get_data_protection_level = MagicMock(return_value=None)
-            module.build_person_embeddings_cache = MagicMock(return_value={})
-            module._reprocess_merged_conversations = MagicMock()
-            module.record_usage = MagicMock()
-            module.get_timestamp_from_path = MagicMock(return_value=1700000001)
-            module.sanitize = lambda value: value
-            module.process_segment = MagicMock(side_effect=RuntimeError('executor exploded'))
-
-            await module._run_full_pipeline_background_async(
-                'j-generic-segment-error', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-generic'
-            )
-
-            stubs['sync_jobs'].mark_job_completed.assert_called_once()
-            result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
-            assert result['failed_segments'] == 1
-            assert result['total_segments'] == 1
-            assert result['errors'] == ['Segment failed: executor exploded']
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -2375,12 +2330,6 @@ class TestTimeoutConfiguration:
         with open(path, encoding='utf-8') as f:
             return f.read()
 
-    @staticmethod
-    def _read_llm_providers_source():
-        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'llm', 'providers.py')
-        with open(path, encoding='utf-8') as f:
-            return f.read()
-
     def test_llm_mini_has_timeout(self):
         source = self._read_clients_source()
         llm_mini_line = [l for l in source.split('\n') if 'llm_mini' in l and 'ChatOpenAI' in l][0]
@@ -2410,12 +2359,12 @@ class TestTimeoutConfiguration:
         assert "'max_retries': 1" in func_body
 
     def test_classifier_llm_has_timeout(self):
-        classifier_source = self._read_classifier_source()
-        providers_source = self._read_llm_providers_source()
-
-        assert "get_llm('fair_use')" in classifier_source
-        assert "'request_timeout': options.get('request_timeout', 120)" in providers_source
-        assert "'max_retries': options.get('max_retries', 1)" in providers_source
+        source = self._read_classifier_source()
+        start = source.index('_classifier_llm')
+        end = source.index('\n', source.index(')', start))
+        constructor_call = source[start:end]
+        assert 'request_timeout=120' in constructor_call
+        assert 'max_retries=1' in constructor_call
 
     def test_dg_timeout_read_within_budget(self):
         """DG read timeout must be <= 150s so 2 attempts fit within 300s segment budget."""

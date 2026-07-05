@@ -164,7 +164,6 @@ def _projection_item(memory_id='m1'):
             'tags': [],
             'created_at': now,
             'updated_at': now,
-            'memory_tier': 'long_term',
             'reviewed': True,
             'user_review': None,
             'manually_added': False,
@@ -228,7 +227,6 @@ def _route_client(monkeypatch, db, legacy_calls):
                 'edited': False,
                 'conversation_id': None,
                 'data_protection_level': 'standard',
-                'memory_tier': 'short_term',
             }
         ]
 
@@ -250,12 +248,7 @@ def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_of
     response = client.get('/v3/memories?limit=3')
 
     assert response.status_code == 200
-    body = response.json()
-    assert body[0]['id'] == 'legacy-id'
-    assert 'layer' not in body[0]
-    assert 'memory_tier' not in body[0]
-    assert response.headers['x-omi-memory-canonical-lifecycle-exposed'] == 'false'
-    assert response.headers['x-omi-memory-device-scope-supported'] == 'false'
+    assert response.json()[0]['id'] == 'legacy-id'
     assert legacy_calls == [{'uid': 'uid-a', 'limit': 5000, 'offset': 0}]
     assert db.reads == []
     assert db.streams == []
@@ -273,9 +266,6 @@ def test_real_router_uses_actual_builder_for_enrolled_memory_read_and_never_call
 
     assert response.status_code == 200
     assert response.json()[0]['id'] == 'm1'
-    assert response.json()[0]['layer'] == 'long_term'
-    assert response.headers['x-omi-memory-canonical-lifecycle-exposed'] == 'true'
-    assert response.headers['x-omi-memory-device-scope-supported'] == 'true'
     assert legacy_calls == []
     assert any(path == 'users/uid-a/memory_state/head' for path, _ in db.reads)
     assert db.streams == [('users/uid-a/v3_compatibility_projection_items', 12)]

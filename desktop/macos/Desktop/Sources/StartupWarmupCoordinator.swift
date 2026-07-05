@@ -80,7 +80,6 @@ final class StartupWarmupCoordinator {
 
         scheduleDatabaseWarmup(dbAvailable: dbAvailable)
         scheduleDatabaseRetryIfNeeded(dbAvailable: dbAvailable)
-        scheduleMCPKeyWarmup()
     }
 
     private func scheduleDatabaseWarmup(dbAvailable: Bool) {
@@ -176,14 +175,6 @@ final class StartupWarmupCoordinator {
             guard let self else { return }
             await measurePerfAsync("DATA LOAD: Chat prompt context") {
                 await self.chatProvider.warmupPromptContext()
-            }
-        }
-    }
-
-    private func scheduleMCPKeyWarmup() {
-        scheduleSessionWarmup(id: .mcpKeyWarmup, delay: StartupWarmupPolicy.mcpKeyWarmupDelay) {
-            await measurePerfAsync("DATA LOAD: Hosted MCP key warmup") {
-                await MemoryExportService.shared.warmMCPKeyForCurrentUser()
             }
         }
     }

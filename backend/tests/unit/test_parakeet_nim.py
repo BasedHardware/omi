@@ -3,6 +3,7 @@
 import os
 import sys
 import tempfile
+import types
 import wave as _wave
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -10,6 +11,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
+
+_db_client = types.ModuleType('database._client')
+_db_client.db = MagicMock()
+_db_client.document_id_from_seed = lambda s: f'id-{s}'
+sys.modules.setdefault('database._client', _db_client)
 
 
 def _make_wav_file(duration_s=1.0, sample_rate=16000):

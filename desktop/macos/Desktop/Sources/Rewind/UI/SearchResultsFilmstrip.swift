@@ -375,7 +375,6 @@ extension Screenshot {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     SearchResultsFilmstrip(
         screenshots: [],
@@ -386,4 +385,3 @@ extension Screenshot {
     .frame(width: 800, height: 200)
     .background(Color.black)
 }
-#endif

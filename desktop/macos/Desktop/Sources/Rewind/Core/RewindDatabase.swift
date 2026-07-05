@@ -2314,10 +2314,6 @@ actor RewindDatabase {
             }
         }
 
-        migrator.registerMigration("addTaskChatMessageResources") { db in
-            try db.execute(sql: "ALTER TABLE task_chat_messages ADD COLUMN resourcesJson TEXT")
-        }
-
         try migrator.migrate(queue)
     }
 

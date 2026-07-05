@@ -145,8 +145,6 @@ extension InsightPromptEditorWindow: NSWindowDelegate {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     InsightPromptEditorView()
 }
-#endif

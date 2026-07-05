@@ -10632,7 +10632,7 @@
     "syncCustomSttWarningMessage": "Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана.",
     "transcribeLaterTitle": "Transkripcija kasnije",
     "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kada vam zatreba, umesto uživo. Snimci se čuvaju na telefonu, a zatim ih otpremate da biste kreirali razgovore.",
-    "transcribeLaterNote": "Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
+    "transcribeLaterNote": "Za sada radi sa Omi uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
     "transcribeLaterStorageFull": "Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novi snimak",
@@ -10682,17 +10682,33 @@
     "deviceOnboardingIntroDuration": "Око 1 минута",
     "jumpToLatestMessage": "Иди на најновију поруку",
     "latest": "Најновије",
-    "flashFirmware": "Инсталирај фирмвер",
-    "pendantRecordingTitle": "Snimanje na privesku",
-    "pendantRecordingNote": "Vaš privezak snima samostalno. Snimci se sinhronizuju sa telefonom dok je aplikacija otvorena.",
-    "pendantSyncingRecordings": "Sinhronizacija snimaka sa vašeg priveska…",
-    "pendantMinutesStored": "~{minutes} min sačuvano",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Повежите своје Meta Glasses",
+    "pairingDescMetaGlasses": "Упарите наочаре у апликацији Meta AI, затим додирните Повежи у Omi. Можете повезати више пари и изабрати који је активан.",
+    "metaGlassesUnavailable": "Апликација Meta AI није пронађена. Инсталирајте Meta AI и укључите режим за програмере да бисте повезали наочаре.",
+    "metaGlassesRegistering": "Довршите повезивање у апликацији Meta AI, а затим се вратите у Omi.",
+    "metaGlassesCameraPermission": "Дозволите приступ камери у апликацији Meta AI",
+    "metaGlassesCaptureModeLabel": "Режим снимања",
+    "metaGlassesModeCameraMic": "Камера + микрофон",
+    "metaGlassesModeMicOnly": "Само микрофон",
+    "metaGlassesStartCapture": "Покрени снимање",
+    "metaGlassesStopCapture": "Заустави снимање",
+    "metaGlassesGestureHint": "Контроле покретима за Meta наочаре нису подржане у овој верзији.",
+    "connectAnotherDevice": "Повежи други уређај",
+    "myDevices": "Моји уређаји",
+    "metaGlassesAutoCapture": "Аутоматско снимање при повезивању",
+    "metaGlassesShowPreview": "Преглед уживо",
+    "metaGlassesPendingPhotos": "{count} фотографија чека синхронизацију",
+    "metaGlassesPairInMetaAI": "Подесите у апликацији Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Naočare se hlade — snimanje je pauzirano",
+    "metaGlassesFolded": "Rasklopite naočare da nastavite snimanje",
+    "metaGlassesCaptureFrequency": "Учесталост снимања",
+    "metaGlassesEvery10s": "Свеких 10 с",
+    "metaGlassesEvery30s": "Свеких 30 с",
+    "metaGlassesEvery1min": "Сваког 1 мин",
+    "metaGlassesEvery5min": "Свеких 5 мин",
+    "metaGlassesGestures": "Гестови"
 }

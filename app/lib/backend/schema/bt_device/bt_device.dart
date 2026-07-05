@@ -1,16 +1,16 @@
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
-import 'package:omi/services/devices/connectors/bee_connection.dart';
-import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/bee_connection.dart';
+import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
-import 'package:omi/services/devices/connectors/fieldy_connection.dart';
-import 'package:omi/services/devices/connectors/friend_pendant_connection.dart';
-import 'package:omi/services/devices/connectors/limitless_connection.dart';
-import 'package:omi/services/devices/connectors/omi_connection.dart';
-import 'package:omi/services/devices/connectors/omiglass_connection.dart';
-import 'package:omi/services/devices/connectors/plaud_connection.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
+import 'package:omi/services/devices/friend_pendant_connection.dart';
+import 'package:omi/services/devices/limitless_connection.dart';
+import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/devices/omiglass_connection.dart';
+import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ImageOrientation {
@@ -184,7 +184,7 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
   }
 }
 
-enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, metaWearables }
 
 // Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
 const List<String> _legacyDeviceTypeNames = [
@@ -197,6 +197,7 @@ const List<String> _legacyDeviceTypeNames = [
   'fieldy',
   'friendPendant',
   'limitless',
+  'metaWearables',
 ];
 
 DeviceType _deviceTypeFromJson(dynamic raw) {
@@ -351,9 +352,21 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.appleWatch) {
       return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
+    } else if (type == DeviceType.metaWearables) {
+      return _getDeviceInfoFromMetaWearables();
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
+  }
+
+  BtDevice _getDeviceInfoFromMetaWearables() {
+    return copyWith(
+      modelNumber: modelNumber == 'Unknown' ? 'Meta Wearables DAT' : modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision == 'Unknown' ? 'Meta Wearables DAT' : hardwareRevision,
+      manufacturerName: manufacturerName == 'Unknown' ? 'Meta' : manufacturerName,
+      type: DeviceType.metaWearables,
+    );
   }
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
@@ -595,6 +608,7 @@ class BtDevice {
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.appleWatch:
+      case DeviceType.metaWearables:
         return ''; // No warning needed
     }
   }
@@ -632,6 +646,7 @@ class BtDevice {
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.appleWatch:
+      case DeviceType.metaWearables:
         return ''; // No warning needed
     }
   }

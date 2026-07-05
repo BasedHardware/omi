@@ -18,7 +18,6 @@ import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import UsageType, FairUseStage, SoftCapTrigger
 from utils.subscription import has_transcription_credits, is_paid_plan
-from utils.executors import db_executor, run_blocking
 
 # Deferred imports — exception to CLAUDE.md top-level import rule.
 # classify_user_purpose: fair_use_classifier.py constructs ChatOpenAI at import time,
@@ -636,8 +635,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
 
         # Send notification if action was taken
         if escalation['action'] != 'none':
-            # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
-            latest_events = await run_blocking(db_executor, fair_use_db.get_fair_use_events, uid, limit=1)
+            latest_events = fair_use_db.get_fair_use_events(uid, limit=1)
             case_ref = latest_events[0].get('case_ref', '') if latest_events else ''
             await _send_fair_use_notification(uid, escalation['action'], case_ref=case_ref)
 

@@ -41,23 +41,12 @@ final class RawWebSocket {
   }
 
   func connect() {
-    guard let host = url.host, !host.isEmpty else {
-      fail("invalid WebSocket host")
-      return
-    }
-
-    let rawPort = url.port ?? 443
-    guard (1...65535).contains(rawPort),
-      let port = NWEndpoint.Port(rawValue: UInt16(rawPort))
-    else {
-      fail("invalid WebSocket port \(rawPort)")
-      return
-    }
-
+    let host = url.host ?? ""
+    let port = UInt16(url.port ?? 443)
     let tls = NWProtocolTLS.Options()
     sec_protocol_options_add_tls_application_protocol(tls.securityProtocolOptions, "http/1.1")
     let params = NWParameters(tls: tls)
-    let c = NWConnection(host: NWEndpoint.Host(host), port: port, using: params)
+    let c = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: params)
     conn = c
     c.stateUpdateHandler = { [weak self] state in
       guard let self else { return }

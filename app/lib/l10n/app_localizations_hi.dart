@@ -9317,7 +9317,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'फ़िलहाल यह Omi और Limitless डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।';
+      'फ़िलहाल यह Omi डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9465,23 +9465,93 @@ class AppLocalizationsHi extends AppLocalizations {
   String get latest => 'नवीनतम';
 
   @override
-  String get flashFirmware => 'फ़र्मवेयर फ़्लैश करें';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'पेंडेंट पर रिकॉर्डिंग';
+  String get pairingTitleMetaGlasses => 'अपने Meta Glasses कनेक्ट करें';
 
   @override
-  String get pendantRecordingNote =>
-      'आपका पेंडेंट अपने आप रिकॉर्ड कर रहा है। ऐप खुला रहने पर रिकॉर्डिंग आपके फ़ोन में सिंक होती हैं।';
+  String get pairingDescMetaGlasses =>
+      'Meta AI ऐप में अपना चश्मा पेयर करें, फिर Omi में Connect पर टैप करें। आप एक से अधिक जोड़ी लिंक कर सकते हैं और सक्रिय जोड़ी चुन सकते हैं।';
 
   @override
-  String get pendantSyncingRecordings => 'आपके पेंडेंट से रिकॉर्डिंग सिंक हो रही हैं…';
+  String get metaGlassesUnavailable =>
+      'Meta AI ऐप नहीं मिला। चश्मा कनेक्ट करने के लिए Meta AI इंस्टॉल करें और डेवलपर मोड चालू करें।';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes मिनट संग्रहीत';
+  String get metaGlassesRegistering => 'Meta AI ऐप में कनेक्शन पूरा करें, फिर Omi में वापस आएं।';
+
+  @override
+  String get metaGlassesCameraPermission => 'Meta AI ऐप में कैमरा एक्सेस की अनुमति दें';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'कैप्चर मोड';
+
+  @override
+  String get metaGlassesModeCameraMic => 'कैमरा + माइक';
+
+  @override
+  String get metaGlassesModeMicOnly => 'केवल माइक';
+
+  @override
+  String get metaGlassesStartCapture => 'कैप्चर शुरू करें';
+
+  @override
+  String get metaGlassesStopCapture => 'कैप्चर बंद करें';
+
+  @override
+  String get metaGlassesGestureHint => 'इस बिल्ड में Meta चश्मे के लिए जेस्चर नियंत्रण समर्थित नहीं हैं।';
+
+  @override
+  String get connectAnotherDevice => 'दूसरा डिवाइस कनेक्ट करें';
+
+  @override
+  String get myDevices => 'मेरे डिवाइस';
+
+  @override
+  String get metaGlassesAutoCapture => 'कनेक्ट होने पर ऑटो-कैप्चर';
+
+  @override
+  String get metaGlassesShowPreview => 'लाइव प्रीव्यू';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count फ़ोटो सिंक की प्रतीक्षा में';
   }
 
   @override
-  String get pendantStorageAlmostFull => 'पेंडेंट का स्टोरेज लगभग भर गया है — सिंक करने के लिए ऐप खुला रखें।';
+  String get metaGlassesPairInMetaAI => 'Meta AI ऐप में सेट अप करें';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'चश्मा ठंडा हो रहा है — कैप्चर रुका हुआ है';
+
+  @override
+  String get metaGlassesFolded => 'कैप्चर जारी रखने के लिए चश्मा खोलें';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'कैप्चर आवृत्ति';
+
+  @override
+  String get metaGlassesEvery10s => 'हर 10 सेकंड';
+
+  @override
+  String get metaGlassesEvery30s => 'हर 30 सेकंड';
+
+  @override
+  String get metaGlassesEvery1min => 'हर 1 मिनट';
+
+  @override
+  String get metaGlassesEvery5min => 'हर 5 मिनट';
+
+  @override
+  String get metaGlassesGestures => 'जेस्चर';
 }

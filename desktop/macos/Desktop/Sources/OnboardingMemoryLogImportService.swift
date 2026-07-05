@@ -113,40 +113,26 @@ actor OnboardingMemoryLogImportService {
       }
       let profileSummary = parsed["profile"] as? String ?? ""
 
-      guard !memoryStrings.isEmpty else {
-        log("OnboardingMemoryLogImportService: No durable \(source.displayName) memories found")
-        return (0, profileSummary)
-      }
-
-      let items = memoryStrings.map { memory in
-        ImportEvidenceBatchItem(
-            title: source.headline,
-            snippet: memory,
+      var memoriesSaved = 0
+      for memory in memoryStrings {
+        do {
+          _ = try await APIClient.shared.createMemory(
             content: memory,
-            metadata: ["import_kind": "memory_log"]
-        )
-      }
-      let legacyMemories = memoryStrings.map { memory in
-        MemoryBatchItem(
-          content: memory,
-          tags: source.tags,
-          headline: source.headline,
-          source: source.memorySource
-        )
-      }
-      let saveResult = await OnboardingImportEvidenceService.save(
-        items,
-        sourceType: source.memorySource,
-        logPrefix: "OnboardingMemoryLogImportService",
-        legacyMemories: legacyMemories
-      )
-      if saveResult.failed > 0 {
-        log(
-          "OnboardingMemoryLogImportService: Saved \(saveResult.saved) \(source.displayName) memories; \(saveResult.failed) failed"
-        )
+            visibility: "private",
+            category: .system,
+            tags: source.tags,
+            source: source.memorySource,
+            headline: source.headline
+          )
+          memoriesSaved += 1
+        } catch {
+          log(
+            "OnboardingMemoryLogImportService: Failed saving \(source.displayName) memory: \(error)"
+          )
+        }
       }
 
-      return (saveResult.saved, profileSummary)
+      return (memoriesSaved, profileSummary)
     } catch {
       log("OnboardingMemoryLogImportService: \(source.displayName) import failed: \(error)")
       return (0, "")

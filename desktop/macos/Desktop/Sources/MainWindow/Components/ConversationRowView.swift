@@ -573,7 +573,6 @@ struct ConversationRowView: View {
   }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
   VStack(spacing: 12) {
     // Preview would require mock ServerConversation
@@ -583,4 +582,3 @@ struct ConversationRowView: View {
   .padding()
   .background(OmiColors.backgroundPrimary)
 }
-#endif

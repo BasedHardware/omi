@@ -3090,7 +3090,7 @@
     "syncCustomSttWarningMessage": "Você usa seu próprio provedor de transcrição. Sincronizar estas gravações as transcreve nos servidores da Omi e elas contam para o limite de transcrição do seu plano.",
     "transcribeLaterTitle": "Transcrever depois",
     "transcribeLaterDescription": "Grave o áudio agora e transcreva quando quiser, em vez de ao vivo. As gravações ficam salvas no seu telefone e você as envia para criar conversas.",
-    "transcribeLaterNote": "Por enquanto, funciona com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.",
+    "transcribeLaterNote": "Por enquanto, funciona com dispositivos Omi. O áudio permanece no seu telefone até você decidir enviá-lo.",
     "transcribeLaterStorageFull": "Seu telefone está com pouco espaço de armazenamento, por isso a gravação foi pausada. Libere espaço ou envie suas gravações e ela será retomada automaticamente.",
     "unmute": "Reativar áudio",
     "newRecording": "Nova gravação",
@@ -3140,17 +3140,33 @@
     "deviceOnboardingIntroDuration": "Cerca de 1 minuto",
     "jumpToLatestMessage": "Ir para a mensagem mais recente",
     "latest": "Mais recente",
-    "flashFirmware": "Gravar firmware",
-    "pendantRecordingTitle": "Gravando no pingente",
-    "pendantRecordingNote": "Seu pingente grava sozinho. As gravações são sincronizadas com o telefone enquanto o app está aberto.",
-    "pendantSyncingRecordings": "Sincronizando gravações do seu pingente…",
-    "pendantMinutesStored": "~{minutes} min armazenados",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "O armazenamento do pingente está quase cheio — mantenha o app aberto para sincronizar."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Conecte seus Meta Glasses",
+    "pairingDescMetaGlasses": "Emparelhe seus óculos no app Meta AI e depois toque em Conectar no Omi. Você pode vincular mais de um par e escolher qual está ativo.",
+    "metaGlassesUnavailable": "App Meta AI não encontrado. Instale o Meta AI e ative o modo de desenvolvedor para conectar seus óculos.",
+    "metaGlassesRegistering": "Conclua a conexão no app Meta AI e volte ao Omi.",
+    "metaGlassesCameraPermission": "Permita o acesso à câmera no app Meta AI",
+    "metaGlassesCaptureModeLabel": "Modo de captura",
+    "metaGlassesModeCameraMic": "Câmera + microfone",
+    "metaGlassesModeMicOnly": "Apenas microfone",
+    "metaGlassesStartCapture": "Iniciar captura",
+    "metaGlassesStopCapture": "Parar captura",
+    "metaGlassesGestureHint": "Os controles por gestos dos óculos Meta não são compatíveis nesta versão.",
+    "connectAnotherDevice": "Conectar outro dispositivo",
+    "myDevices": "Meus dispositivos",
+    "metaGlassesAutoCapture": "Captura automática ao conectar",
+    "metaGlassesShowPreview": "Prévia ao vivo",
+    "metaGlassesPendingPhotos": "{count} fotos aguardando sincronização",
+    "metaGlassesPairInMetaAI": "Configure no app Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Os óculos estão esfriando — captura pausada",
+    "metaGlassesFolded": "Abra os óculos para continuar capturando",
+    "metaGlassesCaptureFrequency": "Frequência de captura",
+    "metaGlassesEvery10s": "A cada 10 s",
+    "metaGlassesEvery30s": "A cada 30 s",
+    "metaGlassesEvery1min": "A cada 1 min",
+    "metaGlassesEvery5min": "A cada 5 min",
+    "metaGlassesGestures": "Gestos"
 }

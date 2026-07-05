@@ -279,7 +279,6 @@ private struct LiveSegmentView: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     LiveTranscriptView(segments: [
         SpeakerSegment(speaker: 0, text: "Hello, how are you doing today?", start: 0.0, end: 2.5),
@@ -290,4 +289,3 @@ private struct LiveSegmentView: View {
     .frame(width: 400, height: 300)
     .background(OmiColors.backgroundSecondary)
 }
-#endif

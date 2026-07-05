@@ -6,41 +6,43 @@ When not provided, falls back to the DB read for backward compatibility.
 """
 
 import os
-from unittest.mock import MagicMock
+import sys
+from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
-_STORAGE_PY = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "utils", "other", "storage.py"))
+# Mock heavy dependencies at sys.modules level before importing storage
+sys.modules.setdefault("database._client", MagicMock())
+_firebase_admin = MagicMock()
+_firebase_admin.auth = MagicMock()
+sys.modules.setdefault("firebase_admin", _firebase_admin)
+sys.modules.setdefault("firebase_admin.auth", _firebase_admin.auth)
 
+# We need the real storage module but with mocked GCS client
+_mock_gcs_storage = MagicMock()
+_mock_gcs_client_instance = MagicMock()
+_mock_gcs_storage.Client.return_value = _mock_gcs_client_instance
+sys.modules.setdefault("google.cloud.storage", _mock_gcs_storage)
+sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
+sys.modules.setdefault("google.cloud.exceptions", MagicMock())
+sys.modules.setdefault("google.oauth2", MagicMock())
+sys.modules.setdefault("google.oauth2.service_account", MagicMock())
+sys.modules.setdefault("google.oauth2.id_token", MagicMock())
 
-@pytest.fixture(scope="module")
-def storage_mod():
-    """Load ``utils.other.storage`` cred-free.
-
-    ``storage.py`` constructs ``storage.Client(...)`` at import time, which calls
-    ``google.auth.default()`` and raises ``DefaultCredentialsError`` in cred-less
-    environments (CI / local dev). Stubbing ``google.cloud.storage`` before the
-    fresh load makes that construction a no-op MagicMock. The ``stub_modules``
-    block self-restores on exit (the loaded module is evicted from ``sys.modules``
-    so it cannot leak to other test files); this fixture hands the test a direct
-    reference to the freshly loaded module.
-    """
-    fake_gcs = AutoMockModule("google.cloud.storage")
-    with stub_modules({"google.cloud.storage": fake_gcs}):
-        yield load_module_fresh("utils.other.storage", _STORAGE_PY)
+# Now import the module under test
+from utils.other import storage as storage_mod
 
 
 class TestUploadAudioChunkDataProtectionCache:
     """Tests for the data_protection_level caching in upload_audio_chunk."""
 
     @pytest.fixture(autouse=True)
-    def _stub_storage_seams(self, storage_mod, monkeypatch):
+    def _stub_opus_encoding(self, monkeypatch):
         monkeypatch.setattr(storage_mod, "encode_pcm_to_opus", lambda chunk_data: chunk_data)
-        monkeypatch.setattr(storage_mod, "storage_client", MagicMock())
 
-    def _setup_mock_bucket(self, storage_mod):
+    def _setup_mock_bucket(self):
         """Set up mock bucket and blob for upload tests."""
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
@@ -48,11 +50,10 @@ class TestUploadAudioChunkDataProtectionCache:
         storage_mod.storage_client.bucket.return_value = mock_bucket
         return mock_bucket, mock_blob
 
-    def test_skips_db_read_when_level_provided(self, storage_mod, monkeypatch):
+    @patch.object(storage_mod, 'users_db')
+    def test_skips_db_read_when_level_provided(self, mock_users_db):
         """When data_protection_level is passed, should NOT call Firestore."""
-        mock_users_db = MagicMock()
-        monkeypatch.setattr(storage_mod, "users_db", mock_users_db)
-        self._setup_mock_bucket(storage_mod)
+        self._setup_mock_bucket()
 
         storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 100,
@@ -64,12 +65,11 @@ class TestUploadAudioChunkDataProtectionCache:
 
         mock_users_db.get_data_protection_level.assert_not_called()
 
-    def test_falls_back_to_db_when_level_not_provided(self, storage_mod, monkeypatch):
+    @patch.object(storage_mod, 'users_db')
+    def test_falls_back_to_db_when_level_not_provided(self, mock_users_db):
         """When data_protection_level is None (default), should read from Firestore."""
-        mock_users_db = MagicMock()
+        self._setup_mock_bucket()
         mock_users_db.get_data_protection_level.return_value = 'standard'
-        monkeypatch.setattr(storage_mod, "users_db", mock_users_db)
-        self._setup_mock_bucket(storage_mod)
 
         storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 100,
@@ -80,11 +80,10 @@ class TestUploadAudioChunkDataProtectionCache:
 
         mock_users_db.get_data_protection_level.assert_called_once_with('test-uid')
 
-    def test_standard_level_uploads_unencrypted(self, storage_mod, monkeypatch):
+    @patch.object(storage_mod, 'users_db')
+    def test_standard_level_uploads_unencrypted(self, mock_users_db):
         """Standard protection level should upload unencrypted Opus audio."""
-        mock_users_db = MagicMock()
-        monkeypatch.setattr(storage_mod, "users_db", mock_users_db)
-        _, mock_blob = self._setup_mock_bucket(storage_mod)
+        _, mock_blob = self._setup_mock_bucket()
 
         path = storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 100,
@@ -97,14 +96,12 @@ class TestUploadAudioChunkDataProtectionCache:
         assert path.endswith('.opus')
         mock_blob.upload_from_string.assert_called_once()
 
-    def test_enhanced_level_uploads_encrypted(self, storage_mod, monkeypatch):
+    @patch.object(storage_mod, 'encryption')
+    @patch.object(storage_mod, 'users_db')
+    def test_enhanced_level_uploads_encrypted(self, mock_users_db, mock_encryption):
         """Enhanced protection level should encrypt and upload .enc."""
-        mock_users_db = MagicMock()
-        monkeypatch.setattr(storage_mod, "users_db", mock_users_db)
-        mock_encryption = MagicMock()
+        _, mock_blob = self._setup_mock_bucket()
         mock_encryption.encrypt_audio_chunk.return_value = b'\x01' * 120
-        monkeypatch.setattr(storage_mod, "encryption", mock_encryption)
-        _, mock_blob = self._setup_mock_bucket(storage_mod)
 
         path = storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 100,
@@ -117,12 +114,11 @@ class TestUploadAudioChunkDataProtectionCache:
         assert path.endswith('.enc')
         mock_encryption.encrypt_audio_chunk.assert_called_once_with(b'\x00' * 100, 'test-uid')
 
-    def test_explicit_none_falls_back_to_db(self, storage_mod, monkeypatch):
+    @patch.object(storage_mod, 'users_db')
+    def test_explicit_none_falls_back_to_db(self, mock_users_db):
         """Explicitly passing None should still fall back to DB read."""
-        mock_users_db = MagicMock()
+        self._setup_mock_bucket()
         mock_users_db.get_data_protection_level.return_value = 'standard'
-        monkeypatch.setattr(storage_mod, "users_db", mock_users_db)
-        self._setup_mock_bucket(storage_mod)
 
         storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 100,

@@ -224,22 +224,15 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
 
             if app.uid is not None:
                 if app.uid != uid:
-                    await run_blocking(
-                        db_executor,
-                        record_app_usage,
+                    record_app_usage(
                         uid,
                         app.id,
                         UsageHistoryType.memory_created_external_integration,
                         conversation_id=conversation.id,
                     )
             else:
-                await run_blocking(
-                    db_executor,
-                    record_app_usage,
-                    uid,
-                    app.id,
-                    UsageHistoryType.memory_created_external_integration,
-                    conversation_id=conversation.id,
+                record_app_usage(
+                    uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
                 )
 
             try:
@@ -261,7 +254,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     for key, message in results.items():
         if not message:
             continue
-        messages.append(await run_blocking(db_executor, add_app_message, message, key, uid, conversation.id))
+        messages.append(add_app_message(message, key, uid, conversation.id))
     return messages
 
 
@@ -712,7 +705,7 @@ async def _async_trigger_realtime_integrations(
         if mentor_results:
             messages = []
             for key, message in mentor_results.items():
-                messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
+                messages.append(add_app_message(message, key, uid))
             return messages
         return {}
 
@@ -803,7 +796,7 @@ async def _async_trigger_realtime_integrations(
     for key, message in all_results.items():
         if not message:
             continue
-        messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
+        messages.append(add_app_message(message, key, uid))
 
     return messages
 
@@ -812,7 +805,7 @@ def send_app_notification(user_id: str, app_name: str, app_id: str, message: str
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
-        plugin_id=app_id,
+        app_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',

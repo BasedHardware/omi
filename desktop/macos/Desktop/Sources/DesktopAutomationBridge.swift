@@ -382,22 +382,6 @@ final class DesktopAutomationActionRegistry {
       return await harness.run(timeoutSeconds: timeout)
     }
 
-    // Run the post-scan local-file memory import exactly as onboarding does
-    // (indexed-files snapshot → aggregate drafts → import evidence service
-    // with legacy batch fallback). Lets agents verify the import pipeline
-    // without driving the onboarding UI or the cursor.
-    register(
-      name: "onboarding_local_file_import",
-      summary: "Run the post-scan local-file memory import from the indexed snapshot; returns saved count"
-    ) { _ in
-      let coordinator = OnboardingPagedIntroCoordinator()
-      await coordinator.refreshSnapshotIfAvailable()
-      return [
-        "saved": String(coordinator.localFileMemoriesSaved),
-        "file_count": String(coordinator.scanSnapshot?.fileCount ?? 0),
-      ]
-    }
-
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
@@ -435,41 +419,6 @@ final class DesktopAutomationActionRegistry {
       return ["sent": query]
     }
 
-    // Force the floating-bar active state so the pill↔notch-island morph and the
-    // "thinking" animation can be exercised without a mic. Same flags a real PTT
-    // turn sets; non-prod bridge only. state = idle|listening|thinking|answering.
-    register(
-      name: "debug_bar_state",
-      summary: "Force floating-bar state: idle|listening|thinking|answering (visual verification)",
-      params: ["state"]
-    ) { params in
-      let s = (params["state"] ?? "thinking").lowercased()
-      let mgr = FloatingControlBarManager.shared
-      guard let bar = mgr.barState else { return ["error": "no bar state"] }
-      if s != "idle", !mgr.isVisible { mgr.show() }
-      bar.isVoiceResponseActive = (s == "answering")
-      bar.isVoiceListening = (s == "listening")
-      bar.isThinking = (s == "thinking")
-      return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
-    }
-
-    // Send a message through the real main-window chat pipeline (ChatPage),
-    // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
-    // or keyboard input, so it never touches the user's actual cursor.
-    register(
-      name: "ask_main_chat",
-      summary: "Send a query to the main-window chat (typed path); exercises the full chat pipeline",
-      params: ["query"]
-    ) { params in
-      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
-      guard let provider = ChatProvider.mainInstance else {
-        return ["error": "main ChatProvider not yet initialized"]
-      }
-      _ = await provider.sendMessage(query)
-      return ["sent": query]
-    }
-
     register(
       name: "memories_qa_export",
       summary: "Export memory counts by tier from the live API (local QA automation)",
@@ -496,70 +445,6 @@ final class DesktopAutomationActionRegistry {
         "long_term": "\(longCount)",
         "samples_json": samplesJson,
       ]
-    }
-
-    register(
-      name: "apple_notes_read_probe",
-      summary: "Probe Apple Notes access without importing or saving memories",
-      params: ["folderPath", "maxResults", "remember"]
-    ) { params in
-      let maxResults = min(max(intParam(params["maxResults"], default: 20), 1), 250)
-      let folderPath = params["folderPath"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let remember = boolParam(params["remember"], default: false)
-
-      do {
-        let selectedFolderPath: String?
-        if let folderPath, !folderPath.isEmpty {
-          let resolved = try await AppleNotesReaderService.shared.validateSelectedFolder(
-            path: folderPath,
-            remember: remember
-          )
-          selectedFolderPath = resolved.path
-        } else {
-          selectedFolderPath = nil
-        }
-
-        let status = await AppleNotesReaderService.shared.connectionStatus(
-          maxResults: maxResults,
-          selectedFolderPath: selectedFolderPath
-        )
-        switch status {
-        case .connected(let noteCount, _):
-          return [
-            "ok": "true",
-            "classification": "readable",
-            "noteCount": "\(noteCount)",
-            "folderSelected": selectedFolderPath == nil ? "false" : "true",
-          ]
-        case .needsAccess(let message, let reasonCode):
-          return [
-            "ok": "false",
-            "classification": reasonCode,
-            "message": message,
-            "needsFolderSelection": "true",
-          ]
-        case .error(let message, let reasonCode):
-          return [
-            "ok": "false",
-            "classification": reasonCode,
-            "message": message,
-            "needsFolderSelection": "false",
-          ]
-        }
-      } catch let error as AppleNotesReaderError {
-        return [
-          "ok": "false",
-          "classification": error.reasonCode,
-          "message": error.localizedDescription,
-          "needsFolderSelection": "\(error.shouldPromptForFolderSelection)",
-        ]
-      } catch {
-        return [
-          "ok": "false",
-          "classification": "unknown_error",
-          "message": error.localizedDescription,
-        ]
-      }
     }
 
     register(
@@ -613,43 +498,6 @@ final class DesktopAutomationActionRegistry {
         do {
           try data.write(to: URL(fileURLWithPath: path))
           return ["path": path, "bytes": "\(data.count)"]
-        } catch {
-          return ["error": error.localizedDescription]
-        }
-      }
-    }
-
-    register(
-      name: "capture_floating_bar_png",
-      summary: "Write PNG of the floating control bar window (in-process capture)",
-      params: ["path"]
-    ) { params in
-      guard let path = params["path"], !path.isEmpty else {
-        return ["error": "missing 'path'"]
-      }
-      return await MainActor.run { () -> [String: String] in
-        guard
-          let window = NSApp.windows.compactMap({ $0 as? FloatingControlBarWindow }).first,
-          window.isVisible,
-          let contentView = window.contentView
-        else {
-          return ["error": "no_floating_bar_window"]
-        }
-        let bounds = contentView.bounds
-        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
-          return ["error": "bitmap_rep_failed"]
-        }
-        contentView.cacheDisplay(in: bounds, to: rep)
-        guard let data = rep.representation(using: .png, properties: [:]) else {
-          return ["error": "png_encode_failed"]
-        }
-        do {
-          try data.write(to: URL(fileURLWithPath: path))
-          return [
-            "path": path,
-            "bytes": "\(data.count)",
-            "frame": NSStringFromRect(window.frame),
-          ]
         } catch {
           return ["error": error.localizedDescription]
         }
@@ -718,189 +566,6 @@ final class DesktopAutomationActionRegistry {
       summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
     ) { _ in
       await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
-    }
-
-    register(
-      name: "coordinator_awareness_snapshot",
-      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
-    ) { _ in
-      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
-      return ["snapshot": snapshot]
-    }
-
-    register(
-      name: "coordinator_action_queue",
-      summary: "Read the derived Swift coordinator attention queue",
-      params: ["limit"]
-    ) { params in
-      let limit = intParam(params["limit"], default: 20)
-      let queue = try await DesktopCoordinatorService.shared.actionQueueJSON(limit: max(1, limit))
-      return ["items": queue]
-    }
-
-    register(
-      name: "coordinator_open_loops",
-      summary: "Read unresolved agent/coordinator loops from the Swift projection"
-    ) { _ in
-      let loops = try await DesktopCoordinatorService.shared.openLoopsJSON()
-      return ["openLoops": loops]
-    }
-
-    register(
-      name: "coordinator_route_intent",
-      summary: "Route an intent through deterministic coordinator projection rules",
-      params: ["intent", "surfaceKind", "taskId"]
-    ) { params in
-      let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
-        intent: params["intent"] ?? "",
-        surfaceKind: params["surfaceKind"],
-        taskId: params["taskId"]
-      )
-      return ["decision": decision]
-    }
-
-    register(
-      name: "coordinator_create_dispatch",
-      summary: "Create a coordinator dispatch through the runtime control path for Agents & Attention testing",
-      params: ["kind", "title", "decisionPrompt", "recommendedDefault", "sourceSessionId", "sourceRunId"]
-    ) { params in
-      let dispatch = try await DesktopCoordinatorService.shared.createDispatchJSON(
-        kind: params["kind"] ?? "routing_choice",
-        title: params["title"] ?? "Coordinator attention",
-        decisionPrompt: params["decisionPrompt"] ?? "Review this coordinator attention item.",
-        recommendedDefault: params["recommendedDefault"],
-        sourceSessionId: params["sourceSessionId"],
-        sourceRunId: params["sourceRunId"]
-      )
-      return ["dispatch": dispatch]
-    }
-
-    register(
-      name: "coordinator_resolve_dispatch",
-      summary: "Resolve a coordinator dispatch through the runtime control path",
-      params: ["dispatchId", "resolution"]
-    ) { params in
-      guard let dispatchId = params["dispatchId"], !dispatchId.isEmpty else {
-        throw DesktopAutomationActionError.invalidParams("missing dispatchId")
-      }
-      let dispatch = try await DesktopCoordinatorService.shared.resolveDispatchJSON(
-        dispatchId: dispatchId,
-        resolution: params["resolution"] ?? "resolved"
-      )
-      return ["dispatch": dispatch]
-    }
-
-    register(
-      name: "calendar_read_probe",
-      summary: "Read Google Calendar through the real connector path and return classified status",
-      params: ["daysBack", "daysForward", "maxResults"]
-    ) { params in
-      let requestedDaysBack = intParam(params["daysBack"], default: 1)
-      let requestedDaysForward = intParam(params["daysForward"], default: 1)
-      let requestedMaxResults = intParam(params["maxResults"], default: 1)
-      let normalized = CalendarFetchParameters.normalized(
-        daysBack: requestedDaysBack,
-        daysForward: requestedDaysForward,
-        maxResults: requestedMaxResults
-      )
-
-      do {
-        let events = try await CalendarReaderService.shared.readEvents(
-          daysBack: normalized.daysBack,
-          daysForward: normalized.daysForward,
-          maxResults: normalized.maxResults
-        )
-        return [
-          "status": "connected",
-          "classification": "readable",
-          "eventCount": "\(events.count)",
-          "daysBack": "\(normalized.daysBack)",
-          "daysForward": "\(normalized.daysForward)",
-          "maxResults": "\(normalized.maxResults)",
-        ]
-      } catch let error as CalendarReaderError {
-        let classification: String
-        switch error {
-        case .noBrowserFound:
-          classification = "no_browser"
-        case .notSignedIn:
-          classification = "not_signed_in"
-        case .sessionExpired:
-          classification = "session_expired"
-        case .cookieDecryptionFailed:
-          classification = "decrypt_failed"
-        case .configurationError:
-          classification = "configuration"
-        case .networkError:
-          classification = "network"
-        case .pythonNotFound:
-          classification = "python_not_found"
-        }
-        return [
-          "status": "error",
-          "classification": classification,
-          "message": error.errorDescription ?? "\(error)",
-          "daysBack": "\(normalized.daysBack)",
-          "daysForward": "\(normalized.daysForward)",
-          "maxResults": "\(normalized.maxResults)",
-        ]
-      }
-    }
-
-    register(
-      name: "gmail_read_probe",
-      summary: "Read Gmail through the real connector path and return classified status",
-      params: ["maxResults", "query"]
-    ) { params in
-      let requestedMaxResults = intParam(params["maxResults"], default: 1)
-      let maxResults = min(max(requestedMaxResults, 1), 500)
-      let rawQuery = params["query"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      let query = rawQuery.isEmpty ? "newer_than:1d" : rawQuery
-
-      do {
-        let emails = try await GmailReaderService.shared.readRecentEmails(
-          maxResults: maxResults,
-          query: query
-        )
-        return [
-          "status": "connected",
-          "classification": "readable",
-          "emailCount": "\(emails.count)",
-          "maxResults": "\(maxResults)",
-          "query": query,
-        ]
-      } catch let error as GmailReaderError {
-        let classification: String
-        switch error {
-        case .noBrowserFound:
-          classification = "no_browser"
-        case .noGmailCookies, .notSignedIn:
-          classification = "not_signed_in"
-        case .sessionExpired, .authFailed:
-          classification = "session_expired"
-        case .cookieDecryptionFailed:
-          classification = "decrypt_failed"
-        case .networkError:
-          classification = "network"
-        case .pythonNotFound:
-          classification = "python_not_found"
-        }
-        return [
-          "status": "error",
-          "classification": classification,
-          "message": error.errorDescription ?? "\(error)",
-          "maxResults": "\(maxResults)",
-          "query": query,
-        ]
-      } catch {
-        return [
-          "status": "error",
-          "classification": "unknown",
-          "message": error.localizedDescription,
-          "maxResults": "\(maxResults)",
-          "query": query,
-        ]
-      }
     }
 
     register(
@@ -1258,21 +923,42 @@ final class DesktopAutomationBridge {
           statusCode: 500)
       }
     case ("POST", "/gmail-read"):
-      struct RemovedRoute: Codable {
-        let message: String
-        let replacement: String
+      do {
+        let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
+        let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+        struct GmailReadResult: Codable {
+          let emailCount: Int
+          let memoriesSaved: Int
+          let memoriesFailed: Int
+          let emails: [GmailEmailSummary]
+        }
+        struct GmailEmailSummary: Codable {
+          let from: String
+          let subject: String
+          let snippet: String
+          let date: String
+          let isUnread: Bool
+        }
+        let formatter = ISO8601DateFormatter()
+        let summaries = emails.prefix(50).map { e in
+          GmailEmailSummary(
+            from: e.from, subject: e.subject, snippet: e.snippet,
+            date: formatter.string(from: e.date), isUnread: e.isUnread)
+        }
+        let gmailResult = GmailReadResult(
+          emailCount: emails.count,
+          memoriesSaved: result.saved,
+          memoriesFailed: result.failed,
+          emails: summaries
+        )
+        return jsonResponse(DesktopAutomationResponse(ok: true, result: gmailResult, error: nil))
+      } catch {
+        struct ErrorResult: Codable { let message: String }
+        return jsonResponse(
+          DesktopAutomationResponse(ok: false, result: ErrorResult(message: error.localizedDescription), error: error.localizedDescription),
+          statusCode: 500
+        )
       }
-      return jsonResponse(
-        DesktopAutomationResponse(
-          ok: false,
-          result: RemovedRoute(
-            message: "The legacy Gmail import route was removed because automation responses must not expose email contents or trigger memory writes.",
-            replacement: "Use POST /action with gmail_read_probe for privacy-safe Gmail status checks."
-          ),
-          error: "gmail_read_removed"
-        ),
-        statusCode: 410
-      )
     default:
       return jsonResponse(
         DesktopAutomationResponse<DesktopAutomationSnapshot>(

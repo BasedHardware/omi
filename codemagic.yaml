@@ -32,8 +32,13 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -251,8 +256,13 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -2344,11 +2354,7 @@ workflows:
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
             cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
-            if [ ! -d ".harness/agent-runtime/agent-node_modules" ]; then
-              echo "ERROR: packaged agent dependencies missing"
-              exit 1
-            fi
-            cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
+            cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
             cp -f agent/src/runtime/control-tool-manifest.js "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -2367,11 +2373,7 @@ workflows:
             cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package-lock.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-            if [ ! -d ".harness/agent-runtime/pi-mono-extension-node_modules" ]; then
-              echo "ERROR: packaged pi-mono-extension dependencies missing"
-              exit 1
-            fi
-            cp -Rf .harness/agent-runtime/pi-mono-extension-node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
+            cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
           else
             echo "ERROR: pi-mono-extension directory not found"
             exit 1
@@ -2412,8 +2414,6 @@ workflows:
 
       - name: Sign app
         script: |
-          scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
-
           xattr -cr "$APP_BUNDLE"
 
           # Sign ffmpeg (inside SPM resource bundle)
@@ -2515,10 +2515,6 @@ workflows:
 
           codesign --verify --verbose=2 "$APP_BUNDLE" 2>&1 | head -3
           echo "App signed successfully"
-
-      - name: Audit app bundle dependencies
-        script: |
-          scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
       - name: Notarize app
         script: |
@@ -2632,11 +2628,11 @@ workflows:
             fi
           fi
 
-          if [ -z "$ED_SIGNATURE" ]; then
-            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work"
-            exit 1
+          if [ -n "$ED_SIGNATURE" ]; then
+            echo "EdDSA signature: $ED_SIGNATURE"
+          else
+            echo "WARNING: Could not generate EdDSA signature — Sparkle auto-update will not work"
           fi
-          echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
 
       - name: Create GitHub release
@@ -2749,7 +2745,7 @@ workflows:
           RELEASE_JSON=$(python3 -c "
           import json, os
           data = {
-            'version':      os.environ['VERSION'],
+            'version':      os.environ['BUILD_NAME'],
             'build_number': int(os.environ['BUILD_NUMBER']),
             'download_url': os.environ.get('DOWNLOAD_URL', ''),
             'ed_signature': os.environ.get('ED_SIGNATURE', ''),

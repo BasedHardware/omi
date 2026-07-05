@@ -25,11 +25,34 @@ extension AppState {
 
         if settings.authorizationStatus == .notDetermined {
           // First time - show the system prompt
-          NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-            reason: "launch_disabled_error",
-            previousStatus: "notDetermined"
-          ) { [weak self] _ in
-            self?.checkNotificationPermission()
+          NSApp.activate()
+          UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+          { [weak self] granted, error in
+            if let error = error {
+              let nsError = error as NSError
+              log(
+                "Notification permission error: \(error) (domain=\(nsError.domain) code=\(nsError.code))"
+              )
+
+              // UNErrorDomain code 1 = notificationsNotAllowed
+              // This happens when LaunchServices has the app marked as launch-disabled,
+              // which prevents the notification center from registering the app.
+              // Fix: unregister from LaunchServices and re-register to clear the flag, then retry.
+              if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
+                DispatchQueue.main.async {
+                  AnalyticsManager.shared.notificationRepairTriggered(
+                    reason: "launch_disabled_error",
+                    previousStatus: "notDetermined",
+                    currentStatus: "error_code_1"
+                  )
+                  self?.repairNotificationRegistrationAndRetry()
+                }
+                return
+              }
+            }
+            DispatchQueue.main.async {
+              self?.checkNotificationPermission()
+            }
           }
         } else if settings.authorizationStatus == .denied {
           // Previously denied - open System Settings so user can enable manually
@@ -44,18 +67,11 @@ extension AppState {
   /// The "launch-disabled" flag in LaunchServices prevents the notification center
   /// from registering the app. This unregisters and re-registers to clear the flag.
   func repairNotificationRegistrationAndRetry() {
-    NotificationRegistrationRepair.repair(reason: "app_state_retry", includeUnregister: true) {
-      [weak self] _ in
-      NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-        reason: "launch_disabled_error_retry",
-        previousStatus: "post_repair"
-      ) { [weak self] _ in
-        self?.checkNotificationPermission()
-      }
-    }
+    // Use the shared repair utility (also used by ProactiveAssistantsPlugin)
+    ProactiveAssistantsPlugin.repairNotificationRegistration()
 
-    // After the repair + retry, update our permission state and open System Settings as fallback.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+    // After the repair + retry, update our permission state and open System Settings as fallback
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
       UNUserNotificationCenter.current().getNotificationSettings { settings in
         DispatchQueue.main.async {
           let isNowGranted = settings.authorizationStatus == .authorized
@@ -73,15 +89,7 @@ extension AppState {
   /// Called from sidebar and settings "Fix" buttons when auth is not authorized.
   func repairNotificationAndFallback() {
     log("Fix button tapped — running lsregister repair for notifications")
-    NotificationRegistrationRepair.repair(reason: "settings_fix_button", includeUnregister: true) {
-      [weak self] _ in
-      NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-        reason: "settings_fix_button_retry",
-        previousStatus: "post_repair"
-      ) { [weak self] _ in
-        self?.checkNotificationPermission()
-      }
-    }
+    ProactiveAssistantsPlugin.repairNotificationRegistration()
 
     // Wait for repair + re-authorization, then check if it worked
     DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in

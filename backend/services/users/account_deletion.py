@@ -27,23 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 def purge_derived_user_data(uid: str):
-    """Purge a user's derived data outside Firestore.
-
-    Required failures must block the Firestore wipe because those IDs are
-    stored in Firestore and may become unrecoverable after ``delete_user_data``.
-    Best-effort failures are safe to retry independently or leave behind.
-    """
-    result = {'required_failures': [], 'best_effort_failures': []}
-
-    def record_failure(kind: str, operation: str, error: Exception):
-        result[kind].append({'operation': operation, 'error': sanitize(str(error))})
-
+    """Best-effort purge of a user's derived data outside Firestore."""
     try:
         conversation_ids = get_conversation_ids(uid)
         if conversation_ids:
             delete_conversation_vectors_batch(uid, conversation_ids)
     except Exception as e:
-        record_failure('required_failures', 'conversation_vectors', e)
         logger.error(f'delete_account purge conversation vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
@@ -51,7 +40,6 @@ def purge_derived_user_data(uid: str):
         if conversation_ids:
             delete_transcript_chunk_vectors_batch(uid, conversation_ids)
     except Exception as e:
-        record_failure('required_failures', 'transcript_chunk_vectors', e)
         logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
@@ -59,7 +47,6 @@ def purge_derived_user_data(uid: str):
         if memory_ids:
             delete_memory_vectors_batch(uid, memory_ids)
     except Exception as e:
-        record_failure('required_failures', 'memory_vectors', e)
         logger.error(f'delete_account purge memory vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
@@ -67,7 +54,6 @@ def purge_derived_user_data(uid: str):
         if action_item_ids:
             delete_action_item_vectors_batch(uid, action_item_ids)
     except Exception as e:
-        record_failure('required_failures', 'action_item_vectors', e)
         logger.error(f'delete_account purge action item vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
@@ -75,22 +61,17 @@ def purge_derived_user_data(uid: str):
         if screen_activity_ids:
             delete_screen_activity_vectors(uid, screen_activity_ids)
     except Exception as e:
-        record_failure('required_failures', 'screen_activity_vectors', e)
         logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
         delete_all_conversation_recordings(uid)
     except Exception as e:
-        record_failure('best_effort_failures', 'conversation_recordings', e)
         logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
 
     try:
         purge_canonical_derived_user_data(uid)
     except Exception as e:
-        record_failure('required_failures', 'canonical_derived_data', e)
         logger.error(f'delete_account purge canonical vectors failed for {uid}: {sanitize(str(e))}')
-
-    return result
 
 
 def background_wipe_user_data(uid: str):
@@ -105,11 +86,7 @@ def background_wipe_user_data(uid: str):
             logger.warning(f'delete_account marker transition to running failed for {uid}: {sanitize(str(e))}')
         # Twilio caller IDs first, while the phone_numbers subcollection still carries twilio_sid metadata.
         delete_user_caller_ids(uid)
-        purge_result = purge_derived_user_data(uid)
-        required_failures = purge_result.get('required_failures', []) if isinstance(purge_result, dict) else []
-        if required_failures:
-            failed_operations = ', '.join(failure['operation'] for failure in required_failures)
-            raise RuntimeError(f'required derived purge failed: {failed_operations}')
+        purge_derived_user_data(uid)
         users_db.delete_user_data(uid)
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:

@@ -1,29 +1,56 @@
 """Tests for the LLM fair-use classifier (utils/llm/fair_use_classifier.py)."""
 
 import json
+import sys
+import types
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import utils.llm.fair_use_classifier as classifier_mod
+# ---------------------------------------------------------------------------
+# Stub heavy dependencies before importing the module under test
+# ---------------------------------------------------------------------------
+_db_client = types.ModuleType('database._client')
+_db_client.db = MagicMock()
+sys.modules.setdefault('database._client', _db_client)
 
+_redis_mod = types.ModuleType('database.redis_db')
+_redis_mod.r = MagicMock()
+sys.modules.setdefault('database.redis_db', _redis_mod)
 
-@pytest.fixture
-def conversations_db(monkeypatch):
-    """Fake database.conversations patched onto the module under test."""
-    fake = MagicMock()
-    fake.get_conversations = MagicMock(return_value=[])
-    monkeypatch.setattr(classifier_mod, 'conversations_db', fake)
-    return fake
+sys.modules.setdefault('google.cloud.firestore', MagicMock())
+sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
 
+# Stub database.conversations
+_conversations_db = types.ModuleType('database.conversations')
+_conversations_db.get_conversations = MagicMock(return_value=[])
+sys.modules.setdefault('database.conversations', _conversations_db)
 
-@pytest.fixture
-def classifier_llm(monkeypatch):
-    """Fake classifier LLM patched onto the module under test."""
-    fake = MagicMock()
-    monkeypatch.setattr(classifier_mod, '_classifier_llm', fake)
-    return fake
+# Stub llm clients
+_llm_clients = types.ModuleType('utils.llm.clients')
+_llm_clients.llm_mini = MagicMock()
+sys.modules.setdefault('utils.llm.clients', _llm_clients)
+
+_langchain_openai = types.ModuleType('langchain_openai')
+_langchain_openai.ChatOpenAI = MagicMock(return_value=_llm_clients.llm_mini)
+sys.modules['langchain_openai'] = _langchain_openai
+
+_USAGE_TRACKER_MODULE = 'utils.llm.usage_tracker'
+_original_usage_tracker = sys.modules.get(_USAGE_TRACKER_MODULE)
+_usage_tracker = types.ModuleType('utils.llm.usage_tracker')
+_usage_tracker.get_usage_callback = MagicMock(return_value=MagicMock())
+sys.modules[_USAGE_TRACKER_MODULE] = _usage_tracker
+
+try:
+    import utils.llm.fair_use_classifier as classifier_mod
+finally:
+    if _original_usage_tracker is None:
+        sys.modules.pop(_USAGE_TRACKER_MODULE, None)
+    else:
+        sys.modules[_USAGE_TRACKER_MODULE] = _original_usage_tracker
+
+_classifier_llm = classifier_mod._classifier_llm
 
 
 class TestSelectRecipes:
@@ -69,14 +96,14 @@ class TestSelectRecipes:
 class TestPrepareConversationSummaries:
     """Test conversation metadata extraction."""
 
-    def test_empty_conversations(self, conversations_db):
-        conversations_db.get_conversations.return_value = []
+    def test_empty_conversations(self):
+        _conversations_db.get_conversations.return_value = []
         result = classifier_mod._prepare_conversation_summaries('user1')
         assert result == []
 
-    def test_extracts_metadata_correctly(self, conversations_db):
+    def test_extracts_metadata_correctly(self):
         now = datetime.utcnow()
-        conversations_db.get_conversations.return_value = [
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-1',
                 'structured': {'title': 'My Meeting', 'overview': 'We discussed plans', 'category': 'work'},
@@ -92,8 +119,8 @@ class TestPrepareConversationSummaries:
         assert result[0]['category'] == 'work'
         assert result[0]['duration_minutes'] == pytest.approx(60.0, abs=0.5)
 
-    def test_handles_missing_structured_fields(self, conversations_db):
-        conversations_db.get_conversations.return_value = [
+    def test_handles_missing_structured_fields(self):
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-2',
                 'structured': None,
@@ -108,9 +135,9 @@ class TestPrepareConversationSummaries:
         assert result[0]['title'] == ''
         assert result[0]['duration_minutes'] == 0
 
-    def test_truncates_long_overviews(self, conversations_db):
+    def test_truncates_long_overviews(self):
         long_overview = 'x' * 500
-        conversations_db.get_conversations.return_value = [
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-3',
                 'structured': {'title': 'Test', 'overview': long_overview, 'category': 'other'},
@@ -128,16 +155,16 @@ class TestClassifyUserPurpose:
     """Test the async LLM classification function."""
 
     @pytest.mark.asyncio
-    async def test_returns_default_when_no_conversations(self, conversations_db, classifier_llm):
-        conversations_db.get_conversations.return_value = []
+    async def test_returns_default_when_no_conversations(self):
+        _conversations_db.get_conversations.return_value = []
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == 0.0
         assert result['usage_type'] == 'none'
 
     @pytest.mark.asyncio
-    async def test_parses_llm_response_correctly(self, conversations_db, classifier_llm):
+    async def test_parses_llm_response_correctly(self):
         now = datetime.utcnow()
-        conversations_db.get_conversations.return_value = [
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-1',
                 'structured': {'title': 'Harry Potter Chapter 12', 'overview': 'Book reading', 'category': 'other'},
@@ -158,7 +185,7 @@ class TestClassifyUserPurpose:
                 'reasoning': 'Clear audiobook pattern',
             }
         )
-        classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
+        _classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
 
@@ -168,9 +195,9 @@ class TestClassifyUserPurpose:
         assert len(result['evidence']) == 1
 
     @pytest.mark.asyncio
-    async def test_handles_markdown_code_block_response(self, conversations_db, classifier_llm):
+    async def test_handles_markdown_code_block_response(self):
         now = datetime.utcnow()
-        conversations_db.get_conversations.return_value = [
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-1',
                 'structured': {'title': 'Test', 'overview': 'Test', 'category': 'other'},
@@ -183,15 +210,15 @@ class TestClassifyUserPurpose:
 
         llm_response = MagicMock()
         llm_response.content = '```json\n{"misuse_score": 0.1, "usage_type": "none", "confidence": 0.9, "evidence": [], "reasoning": "Normal"}\n```'
-        classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
+        _classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == pytest.approx(0.1)
 
     @pytest.mark.asyncio
-    async def test_clamps_score_to_valid_range(self, conversations_db, classifier_llm):
+    async def test_clamps_score_to_valid_range(self):
         now = datetime.utcnow()
-        conversations_db.get_conversations.return_value = [
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-1',
                 'structured': {'title': 'T', 'overview': '', 'category': ''},
@@ -206,16 +233,16 @@ class TestClassifyUserPurpose:
         llm_response.content = json.dumps(
             {'misuse_score': 1.5, 'usage_type': 'none', 'confidence': -0.2, 'evidence': [], 'reasoning': ''}
         )
-        classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
+        _classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == 1.0
         assert result['confidence'] == 0.0
 
     @pytest.mark.asyncio
-    async def test_returns_default_on_json_parse_error(self, conversations_db, classifier_llm):
+    async def test_returns_default_on_json_parse_error(self):
         now = datetime.utcnow()
-        conversations_db.get_conversations.return_value = [
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-1',
                 'structured': {'title': 'T', 'overview': '', 'category': ''},
@@ -228,16 +255,16 @@ class TestClassifyUserPurpose:
 
         llm_response = MagicMock()
         llm_response.content = 'This is not JSON at all'
-        classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
+        _classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == 0.0
         assert result['usage_type'] == 'none'
 
     @pytest.mark.asyncio
-    async def test_returns_default_on_llm_error(self, conversations_db, classifier_llm):
+    async def test_returns_default_on_llm_error(self):
         now = datetime.utcnow()
-        conversations_db.get_conversations.return_value = [
+        _conversations_db.get_conversations.return_value = [
             {
                 'id': 'conv-1',
                 'structured': {'title': 'T', 'overview': '', 'category': ''},
@@ -247,7 +274,7 @@ class TestClassifyUserPurpose:
                 'created_at': now,
             }
         ]
-        classifier_llm.ainvoke = AsyncMock(side_effect=Exception('LLM timeout'))
+        _classifier_llm.ainvoke = AsyncMock(side_effect=Exception('LLM timeout'))
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == 0.0

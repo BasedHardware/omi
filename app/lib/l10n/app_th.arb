@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ",
     "transcribeLaterTitle": "ถอดเสียงภายหลัง",
     "transcribeLaterDescription": "บันทึกเสียงไว้ก่อนแล้วค่อยถอดเสียงเมื่อต้องการ แทนที่จะถอดแบบเรียลไทม์ ไฟล์บันทึกจะถูกเก็บไว้ในเครื่องของคุณ จากนั้นคุณค่อยอัปโหลดเพื่อสร้างบทสนทนา",
-    "transcribeLaterNote": "ขณะนี้รองรับอุปกรณ์ Omi และ Limitless เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด",
+    "transcribeLaterNote": "ขณะนี้รองรับเฉพาะอุปกรณ์ Omi เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด",
     "transcribeLaterStorageFull": "พื้นที่จัดเก็บในเครื่องของคุณเหลือน้อย จึงหยุดการบันทึกชั่วคราว กรุณาเพิ่มพื้นที่ว่างหรืออัปโหลดไฟล์บันทึกของคุณ แล้วการบันทึกจะดำเนินต่อโดยอัตโนมัติ",
     "unmute": "เปิดเสียง",
     "newRecording": "การบันทึกใหม่",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
     "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
     "latest": "ล่าสุด",
-    "flashFirmware": "แฟลชเฟิร์มแวร์",
-    "pendantRecordingTitle": "กำลังบันทึกบนจี้",
-    "pendantRecordingNote": "จี้ของคุณกำลังบันทึกด้วยตัวเอง การบันทึกจะซิงค์ไปยังโทรศัพท์ของคุณขณะที่เปิดแอปอยู่",
-    "pendantSyncingRecordings": "กำลังซิงค์การบันทึกจากจี้ของคุณ…",
-    "pendantMinutesStored": "~{minutes} นาทีที่จัดเก็บไว้",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "พื้นที่จัดเก็บของจี้ใกล้เต็มแล้ว — เปิดแอปค้างไว้เพื่อซิงค์"
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "เชื่อมต่อ Meta Glasses ของคุณ",
+    "pairingDescMetaGlasses": "จับคู่แว่นตาของคุณในแอป Meta AI จากนั้นแตะ เชื่อมต่อ ใน Omi คุณสามารถเชื่อมโยงได้หลายคู่และเลือกคู่ที่ใช้งานอยู่",
+    "metaGlassesUnavailable": "ไม่พบแอป Meta AI โปรดติดตั้ง Meta AI และเปิดโหมดนักพัฒนาเพื่อเชื่อมต่อแว่นตาของคุณ",
+    "metaGlassesRegistering": "ทำการเชื่อมต่อในแอป Meta AI ให้เสร็จ แล้วกลับมาที่ Omi",
+    "metaGlassesCameraPermission": "อนุญาตการเข้าถึงกล้องในแอป Meta AI",
+    "metaGlassesCaptureModeLabel": "โหมดบันทึก",
+    "metaGlassesModeCameraMic": "กล้อง + ไมค์",
+    "metaGlassesModeMicOnly": "ไมค์เท่านั้น",
+    "metaGlassesStartCapture": "เริ่มบันทึก",
+    "metaGlassesStopCapture": "หยุดบันทึก",
+    "metaGlassesGestureHint": "ระบบควบคุมด้วยท่าทางสำหรับแว่น Meta ยังไม่รองรับในบิลด์นี้",
+    "connectAnotherDevice": "เชื่อมต่ออุปกรณ์อื่น",
+    "myDevices": "อุปกรณ์ของฉัน",
+    "metaGlassesAutoCapture": "บันทึกอัตโนมัติเมื่อเชื่อมต่อ",
+    "metaGlassesShowPreview": "ดูตัวอย่างสด",
+    "metaGlassesPendingPhotos": "รูปภาพ {count} รูปรอการซิงค์",
+    "metaGlassesPairInMetaAI": "ตั้งค่าในแอป Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "แว่นกำลังเย็นลง — หยุดจับภาพชั่วคราว",
+    "metaGlassesFolded": "กางแว่นออกเพื่อจับภาพต่อ",
+    "metaGlassesCaptureFrequency": "ความถี่ในการถ่าย",
+    "metaGlassesEvery10s": "ทุก 10 วิ",
+    "metaGlassesEvery30s": "ทุก 30 วิ",
+    "metaGlassesEvery1min": "ทุก 1 นาที",
+    "metaGlassesEvery5min": "ทุก 5 นาที",
+    "metaGlassesGestures": "ท่าทาง"
 }

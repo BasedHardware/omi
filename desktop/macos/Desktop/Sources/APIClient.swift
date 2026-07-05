@@ -84,8 +84,6 @@ actor APIClient {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
-      "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-      "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
       "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
       "X-Desktop-Request-ID": UUID().uuidString,
@@ -128,14 +126,13 @@ actor APIClient {
   func get<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    customBaseURL: String? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
 
     return try await performRequest(request)
   }
@@ -256,7 +253,7 @@ actor APIClient {
   }
 
   /// Report a managed realtime turn's token usage so the backend can price it and record
-  /// it into the llm_usage cost ledger. Fire-and-forget; failures are
+  /// it into the llm_usage ledger (counts toward quota). Fire-and-forget; failures are
   /// logged and dropped (the backend reconciler is the eventual safety net). Only called
   /// for managed (ephemeral) sessions — BYOK users pay the provider directly.
   func reportRealtimeUsage(
@@ -682,22 +679,6 @@ extension APIClient {
     let response: CountResponse = try await get(endpoint)
     conversationsCountCache[endpoint] = (count: response.count, time: Date())
     return response.count
-  }
-
-  /// True when this account has any conversations captured by an Omi wearable
-  /// (paired on any platform — usually the mobile app).
-  func hasOmiDeviceConversations() async throws -> Bool {
-    struct CountResponse: Decodable {
-      let count: Int
-      // Backends without the sources filter ignore the param and return the
-      // unfiltered total without this echo — decoding then fails, so we never
-      // read a false positive from an old backend.
-      let sources: [String]
-    }
-
-    let response: CountResponse = try await get(
-      "v1/conversations/count?include_discarded=true&sources=friend,omi")
-    return response.count > 0
   }
 
   /// Gets the count of AI chat messages from PostHog
@@ -1528,10 +1509,8 @@ struct ServerMemory: Decodable, Identifiable {
     let memoryIdValue = try container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
     case let (.some(id), .some(memoryId)) where id != memoryId:
-      // Legacy docs stored memory_id = conversation_id; a mismatched alias must
-      // not reject the row — one bad row used to blank the whole memories list.
-      // Silent by design: long-time accounts have thousands of these per sync.
-      self.id = id
+      throw ServerMemoryAliasDecodeError.conflict(
+        "id", id, "memory_id", memoryId, codingPath: container.codingPath)
     case let (.some(id), _):
       self.id = id
     case let (_, .some(memoryId)):
@@ -1772,14 +1751,6 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
-  private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
-  private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
-
-  struct MemoryListPage {
-    let memories: [ServerMemory]
-    let canonicalLifecycleExposed: Bool
-    let deviceScopeSupported: Bool?
-  }
 
   /// Fetches memories from the API with optional filtering
   func getMemories(
@@ -1804,69 +1775,6 @@ extension APIClient {
       endpoint += "&device_scope=\(deviceScope)"
     }
     return try await get(endpoint)
-  }
-
-  /// Fetches memories plus server-authoritative capability headers.
-  func getMemoriesPage(
-    limit: Int = 100,
-    offset: Int = 0,
-    category: String? = nil,
-    tags: [String]? = nil,
-    includeDismissed: Bool = false,
-    deviceScope: String? = nil
-  ) async throws -> MemoryListPage {
-    var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
-    if let category = category {
-      endpoint += "&category=\(category)"
-    }
-    if let tags = tags, !tags.isEmpty {
-      endpoint += "&tags=\(tags.joined(separator: ","))"
-    }
-    if includeDismissed {
-      endpoint += "&include_dismissed=true"
-    }
-    if let deviceScope = deviceScope {
-      endpoint += "&device_scope=\(deviceScope)"
-    }
-
-    let url = URL(string: baseURL + endpoint)!
-    var request = URLRequest(url: url)
-    request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    return try await performMemoryListRequest(request, retriedAuth: false)
-  }
-
-  private func performMemoryListRequest(_ request: URLRequest, retriedAuth: Bool) async throws -> MemoryListPage {
-    let (data, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retry = request
-      retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      return try await performMemoryListRequest(retry, retriedAuth: true)
-    }
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      let detail = Self.extractErrorDetail(from: data)
-      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
-    }
-
-    let memories = try decoder.decode([ServerMemory].self, from: data)
-    let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
-    let canonicalLifecycleExposed = lifecycleHeader == "true"
-    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
-    let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
-    return MemoryListPage(
-      memories: memories,
-      canonicalLifecycleExposed: canonicalLifecycleExposed,
-      deviceScopeSupported: deviceScopeSupported
-    )
   }
 
   /// Creates a new memory (manual or extracted)
@@ -1926,9 +1834,10 @@ extension APIClient {
   /// Max memories per POST /v3/memories/batch call. Must match the
   /// `MEMORIES_BATCH_MAX` constant in backend/routers/memories.py.
   static let memoriesBatchMaxSize = 100
-  static let memoryImportBatchMaxSize = 100
 
-  /// Creates many product memories in a single HTTP call.
+  /// Creates many memories in a single HTTP call. Used by the onboarding
+  /// local-file import flow to avoid fanning out N requests and tripping
+  /// Cloud Armor's per-Authorization 120/min throttle.
   ///
   /// Caller is responsible for chunking input into groups of at most
   /// `memoriesBatchMaxSize`. Returns the created count from the server.
@@ -1942,14 +1851,6 @@ extension APIClient {
     }
     let body = BatchRequest(memories: memories)
     return try await post("v3/memories/batch", body: body)
-  }
-
-  func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse {
-    precondition(
-      batch.items.count <= Self.memoryImportBatchMaxSize,
-      "createMemoryImportBatch received \(batch.items.count) artifacts, max is \(Self.memoryImportBatchMaxSize)"
-    )
-    return try await post("v3/memory-imports/batch", body: batch, includeBYOK: false)
   }
 
   /// Deletes a memory by ID
@@ -2087,30 +1988,19 @@ struct MemoryBatchItem: Encodable {
   let category: String
   let tags: [String]
   let headline: String?
-  let source: String?
-  let windowTitle: String?
 
   init(
     content: String,
     visibility: String = "private",
     category: MemoryCategory = .system,
     tags: [String] = [],
-    headline: String? = nil,
-    source: String? = nil,
-    windowTitle: String? = nil
+    headline: String? = nil
   ) {
     self.content = content
     self.visibility = visibility
     self.category = category.rawValue
     self.tags = tags
     self.headline = headline
-    self.source = source
-    self.windowTitle = windowTitle
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case content, visibility, category, tags, headline, source
-    case windowTitle = "window_title"
   }
 }
 
@@ -2129,116 +2019,6 @@ struct BatchMemoriesResponse: Decodable {
   struct BatchMemory: Decodable {
     let id: String
     let content: String
-  }
-}
-
-struct ImportEvidenceBatch: Encodable {
-  let sourceType: String
-  let importRunId: String?
-  let sourceAccountHash: String?
-  let importerVersion: String
-  let extractorVersion: String?
-  let items: [ImportEvidenceBatchItem]
-
-  init(
-    sourceType: String,
-    importRunId: String? = nil,
-    sourceAccountHash: String? = nil,
-    importerVersion: String = "desktop-import-v1",
-    extractorVersion: String? = nil,
-    items: [ImportEvidenceBatchItem]
-  ) {
-    self.sourceType = sourceType
-    self.importRunId = importRunId
-    self.sourceAccountHash = sourceAccountHash
-    self.importerVersion = importerVersion
-    self.extractorVersion = extractorVersion
-    self.items = items
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case sourceType = "source_type"
-    case importRunId = "import_run_id"
-    case sourceAccountHash = "source_account_hash"
-    case importerVersion = "importer_version"
-    case extractorVersion = "extractor_version"
-    case items
-  }
-}
-
-struct ImportEvidenceBatchItem: Encodable, Hashable {
-  let externalId: String?
-  let occurredAt: Date?
-  let title: String?
-  let snippet: String?
-  let content: String?
-  let contentHash: String?
-  let metadata: [String: String]
-  let clientDeviceId: String?
-
-  init(
-    externalId: String? = nil,
-    occurredAt: Date? = nil,
-    title: String? = nil,
-    snippet: String? = nil,
-    content: String? = nil,
-    contentHash: String? = nil,
-    metadata: [String: String] = [:],
-    clientDeviceId: String? = nil
-  ) {
-    self.externalId = externalId
-    self.occurredAt = occurredAt
-    self.title = title
-    self.snippet = snippet
-    self.content = content
-    self.contentHash = contentHash
-    self.metadata = metadata
-    self.clientDeviceId = clientDeviceId
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case externalId = "external_id"
-    case occurredAt = "occurred_at"
-    case title
-    case snippet
-    case content
-    case contentHash = "content_hash"
-    case metadata
-    case clientDeviceId = "client_device_id"
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var container = encoder.container(keyedBy: CodingKeys.self)
-    try container.encodeIfPresent(externalId, forKey: .externalId)
-    if let occurredAt {
-      let formatter = ISO8601DateFormatter()
-      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-      try container.encode(formatter.string(from: occurredAt), forKey: .occurredAt)
-    }
-    try container.encodeIfPresent(title, forKey: .title)
-    try container.encodeIfPresent(snippet, forKey: .snippet)
-    try container.encodeIfPresent(content, forKey: .content)
-    try container.encodeIfPresent(contentHash, forKey: .contentHash)
-    try container.encode(metadata, forKey: .metadata)
-    try container.encodeIfPresent(clientDeviceId, forKey: .clientDeviceId)
-  }
-}
-
-struct ImportEvidenceBatchResponse: Decodable {
-  let runId: String
-  let artifactsReceived: Int
-  let artifactsCreated: Int
-  let artifactsDeduped: Int
-  let candidatesCreated: Int
-  let status: String
-
-  enum CodingKeys: String, CodingKey {
-    case runId = "run_id"
-    case artifactsReceived = "artifacts_received"
-    case artifactsCreated = "artifacts_created"
-    case artifactsDeduped = "artifacts_deduped"
-    case candidatesCreated = "candidates_created"
-    case status
   }
 }
 
@@ -3774,34 +3554,33 @@ extension APIClient {
       let data: [OmiApp]
     }
 
-    var queryItems: [URLQueryItem] = [
-      URLQueryItem(name: "limit", value: "\(limit)"),
-      URLQueryItem(name: "offset", value: "\(offset)"),
+    var queryItems: [String] = [
+      "limit=\(limit)",
+      "offset=\(offset)",
     ]
 
     if let query = query, !query.isEmpty {
-      queryItems.append(URLQueryItem(name: "q", value: query))
+      queryItems.append(
+        "query=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)")
     }
 
     if let category = category {
-      queryItems.append(URLQueryItem(name: "category", value: category))
+      queryItems.append("category=\(category)")
     }
 
     if let capability = capability {
-      queryItems.append(URLQueryItem(name: "capability", value: capability))
+      queryItems.append("capability=\(capability)")
     }
 
     if let minRating = minRating {
-      queryItems.append(URLQueryItem(name: "rating", value: "\(minRating)"))
+      queryItems.append("rating=\(minRating)")
     }
 
     if installedOnly {
-      queryItems.append(URLQueryItem(name: "installed_apps", value: "true"))
+      queryItems.append("installed_apps=true")
     }
 
-    var components = URLComponents()
-    components.queryItems = queryItems
-    let endpoint = "v2/apps/search?\(components.percentEncodedQuery ?? "")"
+    let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
     let response: SearchResponse = try await get(endpoint)
     return response.data
   }
@@ -4101,13 +3880,8 @@ extension APIClient {
     return try await get("v1/users/language")
   }
 
-  /// Updates user language preference. The PATCH endpoint's response shape differs
-  /// from GET's (`{status, single_language_mode}`, not `{language}`) — decoding into
-  /// UserLanguageResponse here always threw ("data couldn't be read because it is
-  /// missing") even though the backend had already saved the language, silently
-  /// (pre-await-fix) or now visibly blocking the caller on a save that succeeded.
-  @discardableResult
-  func updateUserLanguage(_ language: String) async throws -> SetUserLanguageResponse {
+  /// Updates user language preference
+  func updateUserLanguage(_ language: String) async throws -> UserLanguageResponse {
     struct UpdateRequest: Encodable {
       let language: String
     }
@@ -4211,15 +3985,6 @@ extension APIClient {
     -> AssistantSettingsResponse
   {
     return try await patch("v1/users/assistant-settings", body: settings)
-  }
-
-  /// Fetches server-controlled desktop update/banner policy.
-  func getDesktopUpdatePolicy(currentBuild: Int?) async throws -> DesktopUpdatePolicyResponse {
-    var endpoint = "v2/desktop/update-policy?platform=macos"
-    if let currentBuild {
-      endpoint += "&current_build=\(currentBuild)"
-    }
-    return try await get(endpoint, requireAuth: false, includeBYOK: false)
   }
 
   // MARK: - Knowledge Graph API
@@ -4388,17 +4153,9 @@ struct TranscriptionPreferences: Codable {
   }
 }
 
-/// User language response (GET /v1/users/language)
+/// User language response
 struct UserLanguageResponse: Codable {
   let language: String
-}
-
-/// Response shape for PATCH /v1/users/language — deliberately distinct from
-/// UserLanguageResponse; the backend's set_user_language handler returns
-/// {status, single_language_mode}, never {language}.
-struct SetUserLanguageResponse: Codable {
-  let status: String
-  let single_language_mode: Bool
 }
 
 /// Recording permission response
@@ -4711,40 +4468,6 @@ struct UserProfileResponse: Codable {
   }
 }
 
-// MARK: - Desktop Update Policy Models
-
-struct DesktopUpdatePolicyResponse: Codable, Equatable {
-  enum Severity: String, Codable {
-    case none
-    case banner
-    case required
-  }
-
-  let id: String
-  let active: Bool
-  let severity: Severity
-  let maximumBuildNumber: Int?
-  let latestBuildNumber: Int?
-  let title: String?
-  let message: String?
-  let ctaText: String
-  let downloadURL: String
-  let canDismiss: Bool
-
-  enum CodingKeys: String, CodingKey {
-    case id, active, severity, title, message
-    case maximumBuildNumber = "maximum_build_number"
-    case latestBuildNumber = "latest_build_number"
-    case ctaText = "cta_text"
-    case downloadURL = "download_url"
-    case canDismiss = "can_dismiss"
-  }
-
-  var isRequired: Bool {
-    active && severity == .required
-  }
-}
-
 // MARK: - Assistant Settings Models
 
 struct SharedAssistantSettingsResponse: Codable {
@@ -4885,9 +4608,7 @@ extension APIClient {
     sender: String,
     appId: String? = nil,
     sessionId: String? = nil,
-    metadata: String? = nil,
-    clientMessageId: String? = nil,
-    messageSource: String = "desktop_chat"
+    metadata: String? = nil
   ) async throws -> SaveMessageResponse {
     struct SaveRequest: Encodable {
       let text: String
@@ -4895,18 +4616,9 @@ extension APIClient {
       let app_id: String?
       let session_id: String?
       let metadata: String?
-      let client_message_id: String?
-      let message_source: String
     }
     let body = SaveRequest(
-      text: text,
-      sender: sender,
-      app_id: appId,
-      session_id: sessionId,
-      metadata: metadata,
-      client_message_id: clientMessageId,
-      message_source: messageSource
-    )
+      text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
     return try await post("v2/desktop/messages", body: body)
   }
 
@@ -5198,14 +4910,10 @@ struct InitialMessageResponse: Codable {
 struct SaveMessageResponse: Codable {
   let id: String
   let createdAt: Date
-  let sessionId: String?
-  let created: Bool?
 
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
-    case sessionId = "session_id"
-    case created
   }
 }
 

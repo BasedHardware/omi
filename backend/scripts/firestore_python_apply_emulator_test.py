@@ -84,7 +84,7 @@ def main() -> int:
         "aboutness": "primary_user",
     }
 
-    db_client.document(collections.memory_apply_control_state).set(_stored_model(control))
+    db_client.document(collections.memory_control_state).set(_stored_model(control))
     db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}").set(_stored_model(evidence))
     db_client.document(f"{collections.memory_operations}/{operation.operation_id}").set(_stored_model(operation))
 
@@ -101,7 +101,7 @@ def main() -> int:
     if len(result.outbox_events) != 2:
         raise AssertionError(f"expected two outbox events, got {len(result.outbox_events)}")
 
-    stored_control = _required_doc(db_client, collections.memory_apply_control_state)
+    stored_control = _required_doc(db_client, collections.memory_control_state)
     stored_operation = _required_doc(db_client, f"{collections.memory_operations}/{operation.operation_id}")
     stored_memory = _required_doc(db_client, f"{collections.memory_items}/{result.memory_items[0].memory_id}")
     stored_commit = _required_doc(db_client, f"{collections.memory_commits}/{result.control_state.head_commit_id}")

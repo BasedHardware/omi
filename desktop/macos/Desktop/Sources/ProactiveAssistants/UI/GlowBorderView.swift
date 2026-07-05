@@ -218,7 +218,6 @@ struct GlowBorderView: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview("Focused (Green)") {
     ZStack {
         Color.black.opacity(0.3)
@@ -226,9 +225,7 @@ struct GlowBorderView: View {
     }
     .frame(width: 900, height: 700)
 }
-#endif
 
-#if canImport(PreviewsMacros)
 #Preview("Distracted (Red)") {
     ZStack {
         Color.black.opacity(0.3)
@@ -236,4 +233,3 @@ struct GlowBorderView: View {
     }
     .frame(width: 900, height: 700)
 }
-#endif

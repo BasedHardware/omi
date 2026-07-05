@@ -1,5 +1,4 @@
 import AVFoundation
-import CryptoKit
 import Foundation
 
 @MainActor
@@ -20,18 +19,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var playbackRate: Float { ShortcutSettings.shared.voicePlaybackSpeed }
 
   nonisolated private static let voiceSampleText = "Hey, how is it going?"
-  nonisolated static let backgroundAgentKickoffPhrases: [String] = [
-    "I'll get an agent on that.",
-    "Starting an agent for that now.",
-    "Got it. I'm handing this to an agent.",
-    "I'll have an agent work on that.",
-    "I'm getting an agent started.",
-    "I'll have an agent take it from here.",
-    "Got it. I'm starting an agent now.",
-    "I'll put an agent on that.",
-    "An agent is getting started on that.",
-    "I'm kicking off an agent now.",
-  ]
 
   nonisolated private static let fillerPhrases: [String] = [
     "Let me check.",
@@ -57,13 +44,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   // back to the system voice (speaking the text) if AVAudioPlayer can't play the audio.
   private var audioQueue: [(audio: Data, text: String)] = []
   private var isFillerSynthesizing = false
-  private var isOneShotSynthesizing = false
   private var isSynthesizing = false
   private var hasStartedRealPlayback = false
   private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
-  private var playbackGeneration: UInt64 = 0
-  private var localSpeechActive = false
 
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
@@ -77,10 +61,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   var isSpeaking: Bool {
     if audioPlayer?.isPlaying == true { return true }
-    if localSpeechActive { return true }
     if speechSynthesizer.isSpeaking { return true }
     if isFillerSynthesizing { return true }
-    if isOneShotSynthesizing { return true }
     if isSynthesizing { return true }
     return !audioQueue.isEmpty || !synthesisQueue.isEmpty
   }
@@ -101,7 +83,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       enqueueSystemSpeech(phrase)
     case .openAI(let voiceID, let instructions):
       isFillerSynthesizing = true
-      let generation = playbackGeneration
       fillerTask = Task { [weak self] in
         do {
           let audioData = try await Self.synthesizeOpenAISpeech(
@@ -109,7 +90,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           try Task.checkCancellation()
           await MainActor.run {
             guard let self else { return }
-            guard self.playbackGeneration == generation else { return }
             self.isFillerSynthesizing = false
             self.fillerTask = nil
             guard !self.hasStartedRealPlayback else {
@@ -122,7 +102,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         } catch {
           await MainActor.run {
             guard let self else { return }
-            guard self.playbackGeneration == generation else { return }
             self.isFillerSynthesizing = false
             self.fillerTask = nil
             self.clearFloatingPillResponseGlowIfIdle()
@@ -238,7 +217,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
     let text = synthesisQueue.removeFirst()
     isSynthesizing = true
-    let generation = playbackGeneration
     playbackTask?.cancel()
     playbackTask = Task { [weak self] in
       do {
@@ -253,7 +231,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         try Task.checkCancellation()
         await MainActor.run {
           guard let self else { return }
-          guard self.playbackGeneration == generation else { return }
           self.isSynthesizing = false
           self.playbackTask = nil
           self.audioQueue.append((audio: audioData, text: text))
@@ -264,7 +241,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       } catch is CancellationError {
         await MainActor.run {
           guard let self else { return }
-          guard self.playbackGeneration == generation else { return }
           self.isSynthesizing = false
           self.playbackTask = nil
           self.startSynthesisIfNeeded(mode: mode)
@@ -274,7 +250,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         if Self.isCancellation(error) {
           await MainActor.run {
             guard let self else { return }
-            guard self.playbackGeneration == generation else { return }
             self.isSynthesizing = false
             self.playbackTask = nil
             self.startSynthesisIfNeeded(mode: mode)
@@ -285,7 +260,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
         await MainActor.run {
           guard let self else { return }
-          guard self.playbackGeneration == generation else { return }
           self.isSynthesizing = false
           self.playbackTask = nil
           log(
@@ -323,7 +297,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
 
     if voice.isOpenAI, let openAIVoice = voice.openAIVoice {
-      let generation = playbackGeneration
       playbackTask = Task { [weak self] in
         do {
           let audioData = try await Self.synthesizeOpenAISpeech(
@@ -331,7 +304,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           try Task.checkCancellation()
           await MainActor.run {
             guard let self else { return }
-            guard self.playbackGeneration == generation else { return }
             self.startPlayback(audioData)
           }
         } catch is CancellationError {
@@ -354,90 +326,25 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   func speakOneShot(_ text: String) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
-    setFloatingPillResponseGlow(true)
     let mode = currentMode ?? resolvePlaybackMode()
     currentMode = mode
     switch mode {
     case .openAI(let voiceID, let instructions):
-      let generation = playbackGeneration
-      isOneShotSynthesizing = true
       Task { [weak self] in
         do {
           let audio = try await Self.synthesizeOpenAISpeech(
             text: trimmed, voiceID: voiceID, instructions: instructions)
           await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
-            self.isOneShotSynthesizing = false
-            self.startPlayback(audio, fallbackText: trimmed)
+            self?.startPlayback(audio, fallbackText: trimmed)
           }
         } catch {
           await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
-            self.isOneShotSynthesizing = false
-            self.enqueueSystemSpeech(trimmed)
+            self?.enqueueSystemSpeech(trimmed)
           }
         }
       }
     case .systemVoice:
       enqueueSystemSpeech(trimmed)
-    }
-  }
-
-  func speakBackgroundAgentKickoff() {
-    let phrase = Self.randomBackgroundAgentKickoffPhrase()
-    setFloatingPillResponseGlow(true)
-    let mode = currentMode ?? resolvePlaybackMode()
-    currentMode = mode
-
-    switch mode {
-    case .openAI(let voiceID, let instructions):
-      let generation = playbackGeneration
-      isOneShotSynthesizing = true
-      Task { [weak self] in
-        do {
-          let audio = try await Self.cachedOrSynthesizedBackgroundAgentKickoffAudio(
-            text: phrase, voiceID: voiceID, instructions: instructions)
-          await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
-            self.isOneShotSynthesizing = false
-            self.startPlayback(audio, fallbackText: phrase)
-          }
-        } catch {
-          let cachedFallback = Self.cachedBackgroundAgentKickoffAudio(
-            voiceID: voiceID, instructions: instructions)
-          await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
-            self.isOneShotSynthesizing = false
-            if let cachedFallback {
-              self.startPlayback(cachedFallback, fallbackText: phrase)
-            } else {
-              self.enqueueSystemSpeech(phrase)
-            }
-          }
-        }
-      }
-    case .systemVoice:
-      enqueueSystemSpeech(phrase)
-    }
-  }
-
-  func prewarmBackgroundAgentKickoffPhrases() {
-    let mode = currentMode ?? resolvePlaybackMode()
-    currentMode = mode
-    guard case .openAI(let voiceID, let instructions) = mode else { return }
-
-    Task {
-      for phrase in Self.backgroundAgentKickoffPhrases {
-        do {
-          _ = try await Self.cachedOrSynthesizedBackgroundAgentKickoffAudio(
-            text: phrase, voiceID: voiceID, instructions: instructions)
-        } catch {
-          log(
-            "FloatingBarVoicePlaybackService: background agent kickoff cache prewarm failed: \(error.localizedDescription)"
-          )
-          return
-        }
-      }
     }
   }
 
@@ -482,7 +389,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   private func enqueueSystemSpeech(_ text: String) {
-    localSpeechActive = true
     let utterance = AVSpeechUtterance(string: text)
     utterance.rate = 0.47
     utterance.pitchMultiplier = 1.02
@@ -495,7 +401,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
     Task { @MainActor [weak self] in
       guard let self else { return }
-      guard self.audioPlayer === player else { return }
       self.audioPlayer = nil
       self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
@@ -504,28 +409,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
     Task { @MainActor [weak self] in
-      guard let self else { return }
-      self.localSpeechActive = false
-      self.clearFloatingPillResponseGlowIfIdle()
-    }
-  }
-
-  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      self.localSpeechActive = false
-      self.clearFloatingPillResponseGlowIfIdle()
+      self?.clearFloatingPillResponseGlowIfIdle()
     }
   }
 
   private func resetPlaybackPipeline(clearMode: Bool) {
-    playbackGeneration &+= 1
     playbackTask?.cancel()
     playbackTask = nil
     fillerTask?.cancel()
     fillerTask = nil
     isFillerSynthesizing = false
-    isOneShotSynthesizing = false
     if clearMode {
       currentMode = nil
       // Drop the tracer only on full teardown. interruptCurrentResponse uses
@@ -543,16 +436,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     audioPlayer?.stop()
     audioPlayer = nil
     speechSynthesizer.stopSpeaking(at: .immediate)
-    localSpeechActive = false
     setFloatingPillResponseGlow(false)
   }
 
   private func setFloatingPillResponseGlow(_ active: Bool) {
-    if active {
-      FloatingControlBarManager.shared.barState?.isVoiceResponseActive = true
-    } else {
-      FloatingControlBarManager.shared.barState?.clearVoiceResponseState()
-    }
+    FloatingControlBarManager.shared.barState?.isVoiceResponseActive = active
   }
 
   private func clearFloatingPillResponseGlowIfIdle() {
@@ -624,58 +512,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       return false
     }
     return true
-  }
-
-  private nonisolated static func randomBackgroundAgentKickoffPhrase() -> String {
-    backgroundAgentKickoffPhrases.randomElement() ?? "Starting an agent for that now."
-  }
-
-  private nonisolated static func cachedOrSynthesizedBackgroundAgentKickoffAudio(
-    text: String,
-    voiceID: String,
-    instructions: String
-  ) async throws -> Data {
-    let cacheURL = backgroundAgentKickoffCacheURL(
-      text: text, voiceID: voiceID, instructions: instructions)
-    if let cached = try? Data(contentsOf: cacheURL), !cached.isEmpty {
-      return cached
-    }
-
-    let audio = try await synthesizeOpenAISpeech(text: text, voiceID: voiceID, instructions: instructions)
-    try FileManager.default.createDirectory(
-      at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try audio.write(to: cacheURL, options: [.atomic])
-    return audio
-  }
-
-  private nonisolated static func cachedBackgroundAgentKickoffAudio(
-    voiceID: String,
-    instructions: String
-  ) -> Data? {
-    let cached = backgroundAgentKickoffPhrases.shuffled().lazy.compactMap { phrase -> Data? in
-      let url = backgroundAgentKickoffCacheURL(
-        text: phrase, voiceID: voiceID, instructions: instructions)
-      guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
-      return data
-    }
-    return cached.first
-  }
-
-  private nonisolated static func backgroundAgentKickoffCacheURL(
-    text: String,
-    voiceID: String,
-    instructions: String
-  ) -> URL {
-    let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-      .first ?? FileManager.default.temporaryDirectory
-    let fingerprint = SHA256.hash(data: Data("\(voiceID)\n\(instructions)\n\(text)".utf8))
-      .map { String(format: "%02x", $0) }
-      .joined()
-    return baseURL
-      .appendingPathComponent("Omi", isDirectory: true)
-      .appendingPathComponent("VoicePhraseCache", isDirectory: true)
-      .appendingPathComponent("background-agent-kickoff-v1", isDirectory: true)
-      .appendingPathComponent("\(fingerprint).mp3")
   }
 
   private nonisolated static func nextChunkBoundary(

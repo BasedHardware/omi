@@ -82,12 +82,11 @@ You'll need to obtain the following API keys and credentials:
    NEXT_PUBLIC_FIREBASE_VAPID_KEY=your_firebase_vapid_key
 
    # API Keys
-   RAPIDAPI_KEY=your_rapidapi_key
-   RAPIDAPI_HOST=your_rapidapi_host
+   NEXT_PUBLIC_RAPIDAPI_KEY=your_rapidapi_key
    OPENROUTER_API_KEY=your_openrouter_api_key
    NEXT_PUBLIC_MIXPANEL_TOKEN=your_mixpanel_token
-   LINKEDIN_API_HOST=your_rapidapi_linkedin_host
-   LINKEDIN_API_KEY=your_rapidapi_linkedin_key
+   NEXT_PUBLIC_LINKEDIN_API_HOST=your_rapidapi_linkedin_host
+   NEXT_PUBLIC_LINKEDIN_API_KEY=your_rapidapi_linkedin_key
    REDIS_DB_HOST=your_redis_key
    REDIS_DB_PORT=redis_port
    REDIS_DB_PASSWORD=redis_password

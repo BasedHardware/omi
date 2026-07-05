@@ -473,7 +473,7 @@ struct OnboardingView: View {
     AnalyticsManager.shared.onboardingCompleted()
 
     // Stop the AI if it's still running
-    chatProvider.stopAgent(owner: .mainChat)
+    chatProvider.stopAgent()
 
     // Navigate to Tasks page after transition
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")

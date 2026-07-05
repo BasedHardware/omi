@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Optional, List
@@ -32,10 +33,11 @@ from models.conversation import (
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.render import conversation_to_dict
-from models.conversation_enums import ConversationStatus, ConversationVisibility
+from models.conversation_enums import ConversationSource, ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from pydantic import BaseModel
+from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
@@ -115,6 +117,112 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+
+
+class MetaWearablesPhotoCacheRequest(BaseModel):
+    base64: str
+    captured_at: Optional[datetime] = None
+    conversation_id: Optional[str] = None
+    device_uuid: Optional[str] = None
+    device_name: Optional[str] = None
+    frame_sha256: Optional[str] = None
+
+
+class MetaWearablesPhotoCacheResponse(BaseModel):
+    conversation_id: str
+    photo_id: str
+
+
+def get_cached_meta_wearables_photo(uid: str, conversation_id: str, photo_id: str):
+    photo_ref = (
+        db_client_module.db.collection('users')
+        .document(uid)
+        .collection(conversations_db.conversations_collection)
+        .document(conversation_id)
+        .collection('photos')
+        .document(photo_id)
+    )
+    photo_snapshot = photo_ref.get()
+    if not photo_snapshot.exists:
+        return None
+    return photo_snapshot.to_dict() or {'id': photo_id}
+
+
+def get_meta_wearables_cache_conversation(uid: str, conversation_id: str):
+    conversation_ref = (
+        db_client_module.db.collection('users')
+        .document(uid)
+        .collection(conversations_db.conversations_collection)
+        .document(conversation_id)
+    )
+    conversation_snapshot = conversation_ref.get()
+    if not conversation_snapshot.exists:
+        return None
+    return conversation_snapshot.to_dict() or {'id': conversation_id}
+
+
+@router.post('/v1/meta-wearables/photos/cache', response_model=MetaWearablesPhotoCacheResponse, tags=['conversations'])
+def cache_meta_wearables_photo(
+    request: MetaWearablesPhotoCacheRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "meta-wearables:photos-cache")),
+):
+    captured_at = request.captured_at or datetime.now(timezone.utc)
+
+    existing_photo_id = None
+    if request.frame_sha256:
+        captured_at_basis = request.captured_at.isoformat() if request.captured_at else 'capture-time-missing'
+        photo_basis = f'{uid}:{request.device_uuid or ""}:{request.frame_sha256}:{captured_at_basis}'
+        existing_photo_id = f'meta_{uuid.uuid5(uuid.NAMESPACE_URL, photo_basis)}'
+        photo_id = existing_photo_id
+    else:
+        photo_id = str(uuid.uuid4())
+
+    if request.conversation_id:
+        conversation_id = request.conversation_id
+    elif existing_photo_id:
+        conversation_basis = f'{uid}:{request.device_uuid or ""}:{request.frame_sha256}:conversation'
+        conversation_id = f'meta_cache_{uuid.uuid5(uuid.NAMESPACE_URL, conversation_basis)}'
+    else:
+        conversation_id = str(uuid.uuid4())
+
+    if existing_photo_id and get_cached_meta_wearables_photo(uid, conversation_id, existing_photo_id):
+        return MetaWearablesPhotoCacheResponse(conversation_id=conversation_id, photo_id=existing_photo_id)
+
+    existing = get_meta_wearables_cache_conversation(uid, conversation_id)
+
+    if not existing:
+        conversation = Conversation(
+            id=conversation_id,
+            created_at=captured_at,
+            started_at=captured_at,
+            finished_at=captured_at,
+            structured=Structured(),
+            transcript_segments=[],
+            photos=[],
+            status=ConversationStatus.processing,
+            source=ConversationSource.openglass,
+            external_data={
+                'meta_wearables': {
+                    'device_uuid': request.device_uuid,
+                    'device_name': request.device_name,
+                    'cache_only': True,
+                }
+            },
+        )
+        conversations_db.upsert_conversation(uid, conversation.dict())
+    else:
+        conversations_db.update_conversation(
+            uid,
+            conversation_id,
+            {
+                'finished_at': captured_at,
+                'source': ConversationSource.openglass,
+            },
+        )
+
+    photo = ConversationPhoto(id=photo_id, base64=request.base64, created_at=captured_at, discarded=False)
+    conversations_db.store_conversation_photos(uid, conversation_id, [photo])
+    return MetaWearablesPhotoCacheResponse(conversation_id=conversation_id, photo_id=photo_id)
 
 
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
@@ -289,16 +397,11 @@ def get_conversations_count(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
-    sources: Optional[str] = Query(None, description="Comma-separated source filter (e.g. friend,omi)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
-    source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
-    if status_list and source_list:
-        # Combining status+source `in` filters would need a composite index; keep them exclusive.
-        raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
     count = conversations_db.get_conversations_count(
         uid,
         include_discarded=include_discarded,
@@ -307,12 +410,7 @@ def get_conversations_count(
         end_date=end_date,
         folder_id=folder_id,
         starred=starred,
-        sources=source_list,
     )
-    if source_list:
-        # Echo the filter so clients can tell this backend applied it (older
-        # backends ignore the unknown param and return the unfiltered total).
-        return {'count': count, 'sources': source_list}
     return {'count': count}
 
 

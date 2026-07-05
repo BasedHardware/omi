@@ -16,7 +16,6 @@ import database.phone_call_usage as phone_call_usage_db
 from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
-from utils.executors import db_executor, run_blocking
 from utils.twilio_service import (
     generate_access_token,
     start_caller_id_verification,
@@ -264,8 +263,7 @@ async def twiml_voice_webhook(request: Request):
     caller_number = None
 
     if uid:
-        # Offloaded: the Firestore read is sync and blocks the event loop in this async handler.
-        primary = await run_blocking(db_executor, phone_calls_db.get_primary_phone_number, uid)
+        primary = phone_calls_db.get_primary_phone_number(uid)
         if primary:
             caller_number = primary.get('phone_number')
 
@@ -312,8 +310,7 @@ async def twiml_voice_webhook(request: Request):
     # attempts don't eat the user's quota.
     try:
         if not snapshot.is_paid:
-            # Offloaded: the Firestore write is sync and blocks the event loop in this async handler.
-            await run_blocking(db_executor, phone_call_usage_db.increment_current_month, uid)
+            phone_call_usage_db.increment_current_month(uid)
     except Exception:
         traceback.print_exc()
 

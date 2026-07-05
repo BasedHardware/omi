@@ -22,6 +22,11 @@ VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS = "completed"
 VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS = "dead_letter"
 VECTOR_REPAIR_PURGE_EVENT_TYPE = "vector_repair_purge"
 
+_TERMINAL_OR_LEASED_STATUSES = {
+    VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
+    VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS,
+    VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS,
+}
 _DELETE_REASONS = {"missing_authoritative_item"}
 _TOMBSTONE_STATUSES = {"deleted", "tombstoned", "purged", MemoryItemStatus.tombstoned.value}
 _TOMBSTONE_SOURCE_STATES = {SourceState.missing.value, SourceState.tombstoned.value, SourceState.purged.value}
@@ -220,40 +225,26 @@ def lease_vector_repair_purge_outbox_records(
     now_iso = observed_now.isoformat()
     lease_expires_at = (observed_now + timedelta(seconds=lease_seconds)).isoformat()
     collection_path = MemoryCollections(uid=uid).memory_outbox
-    pending_query = (
+    query = (
         db_client.collection(collection_path)
         .where("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE)
         .where("status", "==", VECTOR_REPAIR_OUTBOX_PENDING_STATUS)
         .where("available_at", "<=", now_iso)
         .limit(limit)
     )
-    expired_lease_query = (
-        db_client.collection(collection_path)
-        .where("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE)
-        .where("status", "==", VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS)
-        .where("lease_expires_at", "<=", now_iso)
-        .limit(limit)
-    )
 
     leased: List[Dict[str, Any]] = []
-    seen_paths = set()
-    for query in (pending_query, expired_lease_query):
-        for snapshot in query.stream():
-            if len(leased) >= limit:
-                return leased
-            path = getattr(getattr(snapshot, "reference", None), "path", f"{collection_path}/{snapshot.id}")
-            if path in seen_paths:
-                continue
-            seen_paths.add(path)
-            claimed = _claim_vector_repair_purge_outbox_snapshot(
-                db_client=db_client,
-                path=path,
-                worker_id=worker_id,
-                now_iso=now_iso,
-                lease_expires_at=lease_expires_at,
-            )
-            if claimed is not None:
-                leased.append(claimed)
+    for snapshot in query.stream():
+        path = getattr(getattr(snapshot, "reference", None), "path", f"{collection_path}/{snapshot.id}")
+        claimed = _claim_vector_repair_purge_outbox_snapshot(
+            db_client=db_client,
+            path=path,
+            worker_id=worker_id,
+            now_iso=now_iso,
+            lease_expires_at=lease_expires_at,
+        )
+        if claimed is not None:
+            leased.append(claimed)
     return leased
 
 
@@ -360,7 +351,6 @@ def _claim_vector_repair_purge_outbox_snapshot_in_transaction(
     if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
         return None
     record["outbox_path"] = path
-    record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
     transaction.update(doc_ref, _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
     return record
 
@@ -381,7 +371,6 @@ def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
     if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
         return None
     record["outbox_path"] = path
-    record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
     doc_ref.update(_lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
     return record
 
@@ -389,14 +378,10 @@ def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
 def _is_claimable_vector_repair_purge_outbox_record(*, record: Dict[str, Any], now_iso: str) -> bool:
     if record.get("event_type") != VECTOR_REPAIR_PURGE_EVENT_TYPE:
         return False
-    status = record.get("status")
-    if status == VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
-        available_at = record.get("available_at")
-        return isinstance(available_at, str) and available_at <= now_iso
-    if status == VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS:
-        lease_expires_at = record.get("lease_expires_at")
-        return isinstance(lease_expires_at, str) and lease_expires_at <= now_iso
-    return False
+    if record.get("status") != VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
+        return False
+    available_at = record.get("available_at")
+    return isinstance(available_at, str) and available_at <= now_iso
 
 
 def _lease_patch(*, worker_id: str, now_iso: str, lease_expires_at: str) -> Dict[str, Any]:

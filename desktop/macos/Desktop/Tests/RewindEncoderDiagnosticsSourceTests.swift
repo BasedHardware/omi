@@ -8,12 +8,11 @@ final class RewindEncoderDiagnosticsSourceTests: XCTestCase {
     XCTAssertTrue(source.contains("maxBufferFrames"))
     XCTAssertTrue(source.contains("encoderRestartCount"))
     XCTAssertTrue(source.contains("emergencyResetCount"))
-    // Encoder diagnostics were renamed ffmpeg* -> writer* (AVAssetWriter-based encoder).
-    XCTAssertTrue(source.contains("writerNotReadyCount"))
+    XCTAssertTrue(source.contains("ffmpegNotReadyCount"))
     XCTAssertTrue(source.contains("maxConsecutiveNotReadyFailures"))
-    XCTAssertTrue(source.contains("writer_not_ready_loop"))
+    XCTAssertTrue(source.contains("ffmpeg_not_ready_loop"))
     XCTAssertTrue(source.contains("buffer_overflow"))
-    XCTAssertTrue(source.contains("writer_start_failure"))
+    XCTAssertTrue(source.contains("ffmpeg_start_failure"))
     XCTAssertTrue(source.contains("write_failure"))
   }
 
@@ -21,10 +20,10 @@ final class RewindEncoderDiagnosticsSourceTests: XCTestCase {
     let source = try readSource("Sources/ResourceMonitor.swift")
 
     XCTAssertTrue(source.contains("videoEncoder_maxBufferFrames"))
-    XCTAssertTrue(source.contains("videoEncoder_isEncoderRunning"))
+    XCTAssertTrue(source.contains("videoEncoder_isFFmpegRunning"))
     XCTAssertTrue(source.contains("videoEncoder_restartCount"))
     XCTAssertTrue(source.contains("videoEncoder_emergencyResetCount"))
-    XCTAssertTrue(source.contains("videoEncoder_writerNotReadyCount"))
+    XCTAssertTrue(source.contains("videoEncoder_ffmpegNotReadyCount"))
     XCTAssertTrue(source.contains("rewind_isMonitoring"))
     XCTAssertTrue(source.contains("rewind_effectiveCaptureIntervalSec"))
     XCTAssertTrue(source.contains("system_memoryPressurePercent"))

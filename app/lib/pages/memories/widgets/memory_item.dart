@@ -11,6 +11,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/services/client_device_service.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -29,17 +30,12 @@ class MemoryItem extends StatelessWidget {
   final Function(BuildContext, Memory, MemoriesProvider) onTap;
   final bool showDismissible;
 
-  /// Invoked after a swipe-to-delete so the host page can show an undo
-  /// notification. Optional — hosts without one (e.g. category page) omit it.
-  final void Function(String content, Memory memory)? onDeleteNotification;
-
   const MemoryItem({
     super.key,
     required this.memory,
     required this.provider,
     required this.onTap,
     this.showDismissible = true,
-    this.onDeleteNotification,
   });
 
   @override
@@ -143,7 +139,9 @@ class MemoryItem extends StatelessWidget {
         provider.deleteMemory(memory);
         PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
 
-        onDeleteNotification?.call(memoryContent, memory);
+        if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
+          context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
+        }
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),

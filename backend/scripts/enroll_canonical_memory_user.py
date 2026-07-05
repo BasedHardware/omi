@@ -157,12 +157,6 @@ def inspect_v3_read_prerequisites(db_client, *, uid: str) -> dict[str, bool]:
     return result
 
 
-def assert_v3_read_prerequisites_ready(prerequisites: dict[str, bool]) -> None:
-    missing = [path for path, exists in prerequisites.items() if not exists]
-    if missing:
-        raise RuntimeError("--stage read --apply requires existing v3 read prerequisite docs: " + ", ".join(missing))
-
-
 def apply_documents(
     db_client,
     documents: list[RolloutDocumentPlan],
@@ -283,14 +277,12 @@ def main() -> int:
         db_client = _load_firestore_client(firestore_project=args.firestore_project)
     if args.inspect_existing or args.apply:
         existing_docs = inspect_existing_docs(db_client, documents)
-    if args.check_v3_read_prereqs or (args.apply and args.stage == "read"):
+    if args.check_v3_read_prereqs:
         v3_read_prerequisites = inspect_v3_read_prerequisites(db_client, uid=args.uid)
 
     if args.apply:
         if args.confirm_uid != args.uid:
             raise SystemExit("--confirm-uid must exactly match --uid when --apply is used")
-        if args.stage == "read":
-            assert_v3_read_prerequisites_ready(v3_read_prerequisites or {})
         writes = apply_documents(db_client, documents, allow_existing_update=args.allow_existing_update)
 
     print(

@@ -128,16 +128,6 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "https://api.omiapi.com/")
     }
 
-    func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
-        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: nil)
-        XCTAssertEqual(url, "https://api.omi.me/")
-    }
-
-    func testAuthBackendCanBeExplicitlyOverridden() {
-        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: "http://localhost:8080")
-        XCTAssertEqual(url, "http://localhost:8080/")
-    }
-
     func testStableProductionBundleKeepsProductionPythonBackend() {
         let url = DesktopBackendEnvironment.pythonBaseURL(
             useDevelopmentBackends: false,
@@ -365,28 +355,6 @@ final class APIClientRoutingTests: XCTestCase {
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/apps", method: "GET",
                      label: "getApps")
-    }
-
-    func testSearchAppsUsesBackendFilterParameters() async {
-        let client = await makeTestClient()
-        _ = try? await client.searchApps(
-            query: "R&D calendar",
-            category: "productivity",
-            capability: "external_integration",
-            installedOnly: true
-        ) as [OmiApp]
-
-        let requests = URLCapture.capturedRequests
-        assertRoutes(requests, host: "python-test", port: 9001,
-                     pathContains: "v2/apps/search", method: "GET",
-                     label: "searchApps")
-
-        let queryItems = URLComponents(url: requests.first!.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        XCTAssertEqual(queryItems.first(where: { $0.name == "q" })?.value, "R&D calendar")
-        XCTAssertNil(queryItems.first(where: { $0.name == "query" })?.value)
-        XCTAssertEqual(queryItems.first(where: { $0.name == "category" })?.value, "productivity")
-        XCTAssertEqual(queryItems.first(where: { $0.name == "capability" })?.value, "external_integration")
-        XCTAssertEqual(queryItems.first(where: { $0.name == "installed_apps" })?.value, "true")
     }
 
     // -- Personas (GET → Python) --

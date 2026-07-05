@@ -95,7 +95,6 @@ private struct BarView: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     VStack(spacing: 20) {
         // Idle state
@@ -129,4 +128,3 @@ private struct BarView: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
-#endif

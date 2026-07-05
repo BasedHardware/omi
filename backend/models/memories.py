@@ -543,16 +543,15 @@ class MemoryDB(Memory):
     kg_extracted: bool = False
     evidence: List[Evidence] = Field(default_factory=list)
 
-    # Canonical memory tiering. Legacy API/service boundaries set this to None
-    # so non-cohort users cannot receive Short-term/Long-term rollout state.
-    memory_tier: Optional[MemoryTier] = None
+    # memory tiering. Pre-memory docs lack this field and read back as long_term, so
+    # the existing UI is unchanged; newly produced memories are tiered at birth
+    # (decide_initial_memory_tier) and may be promoted on corroboration.
+    memory_tier: MemoryTier = MemoryTier.long_term
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def layer(self) -> Optional[str]:
+    def layer(self) -> str:
         """Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only."""
-        if self.memory_tier is None:
-            return None
         return tier_to_layer(self.memory_tier).value
 
     # Temporal lifecycle — the "constantly updated brain". All optional, so existing
@@ -571,11 +570,10 @@ class MemoryDB(Memory):
 
     def __init__(self, **data):
         super().__init__(**data)
-        # Deprecated alias for legacy clients: always mirror `id`. Older code stored
-        # `memory_id = conversation_id` on the doc; serving that stored value makes
-        # desktop's ServerMemory decoder reject the whole memories list, so the alias
-        # must be normalized here rather than trusted from Firestore.
-        self.memory_id = self.id
+        # Deprecated alias for legacy clients: mirror `id` only. Do not copy
+        # `conversation_id` — that produces id/memory_id conflicts on desktop.
+        if self.memory_id is None:
+            self.memory_id = self.id
 
     @property
     def is_active(self) -> bool:

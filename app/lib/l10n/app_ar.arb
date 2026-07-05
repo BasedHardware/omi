@@ -3021,7 +3021,7 @@
     "syncCustomSttWarningMessage": "أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.",
     "transcribeLaterTitle": "التفريغ النصي لاحقًا",
     "transcribeLaterDescription": "سجّل الصوت الآن وفرّغه نصيًا عند الطلب بدلًا من التفريغ المباشر. تُحفظ التسجيلات على هاتفك، ثم ترفعها لإنشاء المحادثات.",
-    "transcribeLaterNote": "يعمل مع أجهزة Omi وLimitless في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.",
+    "transcribeLaterNote": "يعمل مع أجهزة Omi في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.",
     "transcribeLaterStorageFull": "مساحة التخزين في هاتفك منخفضة، لذا توقّف التسجيل مؤقتًا. أفرغ بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.",
     "unmute": "إلغاء الكتم",
     "newRecording": "تسجيل جديد",
@@ -3071,17 +3071,33 @@
     "deviceOnboardingIntroDuration": "حوالي دقيقة واحدة",
     "jumpToLatestMessage": "الانتقال إلى أحدث رسالة",
     "latest": "الأحدث",
-    "flashFirmware": "تحديث البرنامج الثابت",
-    "pendantRecordingTitle": "التسجيل على القلادة",
-    "pendantRecordingNote": "تسجّل قلادتك من تلقاء نفسها. تتم مزامنة التسجيلات مع هاتفك أثناء فتح التطبيق.",
-    "pendantSyncingRecordings": "جارٍ مزامنة التسجيلات من قلادتك…",
-    "pendantMinutesStored": "~{minutes} دقيقة مخزّنة",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "مساحة تخزين القلادة ممتلئة تقريبًا — أبقِ التطبيق مفتوحًا للمزامنة."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "قم بتوصيل نظارات Meta Glasses",
+    "pairingDescMetaGlasses": "قم بإقران نظارتك في تطبيق Meta AI، ثم اضغط على «اتصال» في Omi. يمكنك ربط أكثر من نظارة واختيار النشطة منها.",
+    "metaGlassesUnavailable": "لم يتم العثور على تطبيق Meta AI. قم بتثبيت Meta AI وتفعيل وضع المطوّر لتوصيل نظارتك.",
+    "metaGlassesRegistering": "أكمل الاتصال في تطبيق Meta AI ثم عد إلى Omi.",
+    "metaGlassesCameraPermission": "اسمح بالوصول إلى الكاميرا في تطبيق Meta AI",
+    "metaGlassesCaptureModeLabel": "وضع الالتقاط",
+    "metaGlassesModeCameraMic": "الكاميرا + الميكروفون",
+    "metaGlassesModeMicOnly": "الميكروفون فقط",
+    "metaGlassesStartCapture": "بدء الالتقاط",
+    "metaGlassesStopCapture": "إيقاف الالتقاط",
+    "metaGlassesGestureHint": "عناصر التحكم بالإيماءات غير مدعومة لنظارات Meta في هذا الإصدار.",
+    "connectAnotherDevice": "توصيل جهاز آخر",
+    "myDevices": "أجهزتي",
+    "metaGlassesAutoCapture": "التقاط تلقائي عند الاتصال",
+    "metaGlassesShowPreview": "معاينة مباشرة",
+    "metaGlassesPendingPhotos": "{count} صور بانتظار المزامنة",
+    "metaGlassesPairInMetaAI": "قم بالإعداد في تطبيق Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "النظارة تبرد الآن — تم إيقاف الالتقاط مؤقتًا",
+    "metaGlassesFolded": "افتح النظارة للمتابعة في الالتقاط",
+    "metaGlassesCaptureFrequency": "تكرار الالتقاط",
+    "metaGlassesEvery10s": "كل 10 ثوانٍ",
+    "metaGlassesEvery30s": "كل 30 ثانية",
+    "metaGlassesEvery1min": "كل دقيقة",
+    "metaGlassesEvery5min": "كل 5 دقائق",
+    "metaGlassesGestures": "الإيماءات"
 }

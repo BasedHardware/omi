@@ -104,10 +104,6 @@ class AnalyticsManager {
     PostHogManager.shared.signInFailed(provider: provider, error: error)
   }
 
-  func authFlowEvent(_ eventName: String, properties: [String: Any]) {
-    PostHogManager.shared.authFlowEvent(eventName, properties: properties)
-  }
-
   func signedOut() {
     PostHogManager.shared.signedOut()
   }
@@ -158,28 +154,6 @@ class AnalyticsManager {
       source: source,
       stage: stage,
       retryCount: retryCount
-    )
-  }
-
-  func conversationReconciliationFailed(
-    error: String,
-    reason: String,
-    source: String?,
-    stage: String?,
-    retryCount: Int,
-    hasBackendId: Bool,
-    hasClientConversationId: Bool,
-    segmentCount: Int?
-  ) {
-    PostHogManager.shared.conversationReconciliationFailed(
-      error: error,
-      reason: reason,
-      source: source,
-      stage: stage,
-      retryCount: retryCount,
-      hasBackendId: hasBackendId,
-      hasClientConversationId: hasClientConversationId,
-      segmentCount: segmentCount
     )
   }
 
@@ -685,20 +659,12 @@ class AnalyticsManager {
 
   // MARK: - Update Events
 
-  func updateAvailable(
-    version: String,
-    context: UpdateAnalyticsContext,
-    item: UpdateItemAnalytics
-  ) {
-    PostHogManager.shared.updateAvailable(version: version, context: context, item: item)
+  func updateAvailable(version: String) {
+    PostHogManager.shared.updateAvailable(version: version)
   }
 
-  func updateInstalled(
-    version: String,
-    context: UpdateAnalyticsContext,
-    item: UpdateItemAnalytics
-  ) {
-    PostHogManager.shared.updateInstalled(version: version, context: context, item: item)
+  func updateInstalled(version: String) {
+    PostHogManager.shared.updateInstalled(version: version)
   }
 
   func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {

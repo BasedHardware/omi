@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Ви використовуєте власний сервіс транскрипції. Синхронізація цих записів розшифрує їх на серверах Omi, і вони зараховуються до ліміту транскрипції вашого тарифу.",
     "transcribeLaterTitle": "Транскрибувати пізніше",
     "transcribeLaterDescription": "Записуйте аудіо зараз, а транскрибуйте за потреби, а не наживо. Записи зберігаються на вашому телефоні, а потім ви завантажуєте їх, щоб створити розмови.",
-    "transcribeLaterNote": "Наразі працює з пристроями Omi та Limitless. Аудіо залишається на вашому телефоні, доки ви не вирішите його завантажити.",
+    "transcribeLaterNote": "Наразі працює з пристроями Omi. Аудіо залишається на вашому телефоні, доки ви не вирішите його завантажити.",
     "transcribeLaterStorageFull": "На телефоні бракує місця, тому запис призупинено. Звільніть місце або завантажте свої записи — і запис автоматично відновиться.",
     "unmute": "Увімкнути звук",
     "newRecording": "Новий запис",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "Близько 1 хвилини",
     "jumpToLatestMessage": "Перейти до останнього повідомлення",
     "latest": "Останнє",
-    "flashFirmware": "Встановити прошивку",
-    "pendantRecordingTitle": "Запис на кулоні",
-    "pendantRecordingNote": "Ваш кулон записує самостійно. Записи синхронізуються з телефоном, поки застосунок відкритий.",
-    "pendantSyncingRecordings": "Синхронізація записів із вашого кулона…",
-    "pendantMinutesStored": "~{minutes} хв збережено",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Пам'ять кулона майже заповнена — тримайте застосунок відкритим для синхронізації."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Підключіть свої Meta Glasses",
+    "pairingDescMetaGlasses": "Створіть пару з окулярами в застосунку Meta AI, потім натисніть «Підключити» в Omi. Можна зв'язати кілька пар і вибрати активну.",
+    "metaGlassesUnavailable": "Застосунок Meta AI не знайдено. Установіть Meta AI та ввімкніть режим розробника, щоб підключити окуляри.",
+    "metaGlassesRegistering": "Завершіть підключення в застосунку Meta AI та поверніться в Omi.",
+    "metaGlassesCameraPermission": "Дозвольте доступ до камери в застосунку Meta AI",
+    "metaGlassesCaptureModeLabel": "Режим запису",
+    "metaGlassesModeCameraMic": "Камера + мікрофон",
+    "metaGlassesModeMicOnly": "Лише мікрофон",
+    "metaGlassesStartCapture": "Почати запис",
+    "metaGlassesStopCapture": "Зупинити запис",
+    "metaGlassesGestureHint": "Керування жестами для окулярів Meta не підтримується в цій збірці.",
+    "connectAnotherDevice": "Підключити інший пристрій",
+    "myDevices": "Мої пристрої",
+    "metaGlassesAutoCapture": "Автозапис під час підключення",
+    "metaGlassesShowPreview": "Попередній перегляд наживо",
+    "metaGlassesPendingPhotos": "{count} фото очікують синхронізації",
+    "metaGlassesPairInMetaAI": "Налаштуйте в застосунку Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Окуляри охолоджуються — зйомку призупинено",
+    "metaGlassesFolded": "Розгорніть окуляри, щоб продовжити зйомку",
+    "metaGlassesCaptureFrequency": "Частота зйомки",
+    "metaGlassesEvery10s": "Кожні 10 с",
+    "metaGlassesEvery30s": "Кожні 30 с",
+    "metaGlassesEvery1min": "Щохвилини",
+    "metaGlassesEvery5min": "Кожні 5 хв",
+    "metaGlassesGestures": "Жести"
 }

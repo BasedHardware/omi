@@ -43,7 +43,7 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
-from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
+from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 
@@ -51,8 +51,6 @@ logger = logging.getLogger(__name__)
 
 # Q5: canonical Pinecone ids are neutral ``mem_…`` memory ids (not ``memvec:`` or ``{uid}-{id}``).
 # Canonical writes upsert neutral-metadata vectors directly; purge paths use neutral ids only.
-
-_ALLOWED_MEMORY_VISIBILITIES = {"private", "public", "shared"}
 
 
 def neutral_vector_id_for_memory(memory_id: str) -> str:
@@ -67,7 +65,7 @@ def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str], *, db_c
     client = db_client if db_client is not None else default_db_client
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return
-    pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids, db_client=client)
+    pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids)
     logger.info(
         "kg_citations_pruned uid=%s retracted_memory_count=%d pruned_entities=%d",
         uid,
@@ -221,7 +219,7 @@ def search_canonical_memories(
             for memory in memories[:capped_limit]
         ]
 
-    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
+    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit)
     if vector_query is None:
         from database.vector_db import query_memory_vector_candidates
 
@@ -283,7 +281,7 @@ def search_canonical_memories(
 
 def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_apply_control_state)
+    ref = db_client.document(collections.memory_control_state)
     snapshot = ref.get()
     if getattr(snapshot, "exists", False):
         return MemoryControlState(**(snapshot.to_dict() or {}))
@@ -437,23 +435,9 @@ def _apply_product_metadata(item: MemoryItem, metadata: Dict[str, Any]) -> Memor
     return item.model_copy(update={"promotion": promotion})
 
 
-def _validate_memory_item_for_write(item: MemoryItem) -> MemoryItem:
-    item = MemoryItem.model_validate(item.model_dump(mode="python"))
-    if item.visibility not in _ALLOWED_MEMORY_VISIBILITIES:
-        raise ValueError("visibility must be private, public, or shared")
-    return item
-
-
 def _persist_memory_item(uid: str, item: MemoryItem, *, db_client) -> None:
-    item = _validate_memory_item_for_write(item)
     path = f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}"
     db_client.document(path).set(item.model_dump(mode="json"))
-
-
-def _validated_memory_item_copy(item: MemoryItem, updates: Dict[str, Any]) -> MemoryItem:
-    payload = item.model_dump(mode="python")
-    payload.update(updates)
-    return _validate_memory_item_for_write(MemoryItem.model_validate(payload))
 
 
 def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
@@ -495,8 +479,6 @@ def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client) -> Optio
     item = MemoryItem(**(snapshot.to_dict() or {}))
     if item.status != MemoryItemStatus.active:
         return None
-    if item.memory_id != memory_id:
-        raise ValueError(f"canonical memory id mismatch: requested {memory_id}, found {item.memory_id}")
     return item
 
 
@@ -634,24 +616,21 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
     if not trimmed:
         raise ValueError("canonical update requires non-empty content")
     now = datetime.now(timezone.utc)
-    updated = _validated_memory_item_copy(item, {"content": trimmed, "updated_at": now, "user_asserted": True})
-    _persist_memory_item(uid, updated, db_client=client)
+    updated = item.model_copy(update={"content": trimmed, "updated_at": now, "user_asserted": True})
+    item_path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+    client.document(item_path).set(updated.model_dump(mode="json"))
     if (
         updated.tier == MemoryLayer.long_term
         and getattr(updated, "kg_extracted", False)
         and resolve_memory_system(uid, db_client=client) == MemorySystem.CANONICAL
     ):
         invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
-        updated = _validated_memory_item_copy(updated, {"kg_extracted": False, "updated_at": now})
-        client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(
-            {"kg_extracted": False, "updated_at": now},
-            merge=True,
-        )
+        updated = updated.model_copy(update={"kg_extracted": False})
+        client.document(item_path).set({"kg_extracted": False, "updated_at": now}, merge=True)
         from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 
-        kg_result = extract_kg_for_promoted_memory(uid, updated, db_client=client)
-        if kg_result.success:
-            updated = _validated_memory_item_copy(updated, {"kg_extracted": True})
+        if extract_kg_for_promoted_memory(uid, updated, db_client=client):
+            updated = updated.model_copy(update={"kg_extracted": True})
     sync_atom_keyword_index_for_item(updated, db_client=client)
     sync_canonical_memory_vector(updated)
     return updated
@@ -663,10 +642,8 @@ def update_canonical_memory_visibility(uid: str, memory_id: str, visibility: str
     if item is None:
         raise ValueError(f"canonical memory not found: {memory_id}")
     now = datetime.now(timezone.utc)
-    updated = _validated_memory_item_copy(item, {"visibility": visibility, "updated_at": now})
-    _persist_memory_item(uid, updated, db_client=client)
-    sync_atom_keyword_index_for_item(updated, db_client=client)
-    sync_canonical_memory_vector(updated)
+    updated = item.model_copy(update={"visibility": visibility, "updated_at": now})
+    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
     return updated
 
 
@@ -679,7 +656,7 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
     promotion = dict(item.promotion or {})
     promotion["reviewed"] = True
     promotion["user_review"] = value
-    updated = _validated_memory_item_copy(item, {"promotion": promotion, "updated_at": now})
+    updated = item.model_copy(update={"promotion": promotion, "updated_at": now})
     _persist_memory_item(uid, updated, db_client=client)
     return updated
 
@@ -704,7 +681,7 @@ def update_canonical_memory_product_fields(
     if not metadata:
         return item
     now = datetime.now(timezone.utc)
-    updated = _validated_memory_item_copy(_apply_product_metadata(item, metadata), {"updated_at": now})
+    updated = _apply_product_metadata(item, metadata).model_copy(update={"updated_at": now})
     _persist_memory_item(uid, updated, db_client=client)
     return updated
 
@@ -738,17 +715,16 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
         if ev_ref.get().exists:
             ev_ref.set(next_evidence.model_dump(mode="json"))
 
-    updated_item = _validated_memory_item_copy(
-        item,
-        {
+    updated_item = item.model_copy(
+        update={
             "status": MemoryItemStatus.tombstoned,
             "source_state": SourceState.tombstoned,
             "content": None,
             "evidence": tombstoned_evidence,
             "updated_at": now,
-        },
+        }
     )
-    _persist_memory_item(uid, updated_item, db_client=db_client)
+    db_client.document(f"{collections.memory_items}/{item.memory_id}").set(updated_item.model_dump(mode="json"))
 
     purge_candidates = [
         {
@@ -763,8 +739,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
     for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
         db_client.document(record["outbox_path"]).set(record)
 
-    delete_canonical_memory_vector(uid, item.memory_id)
-    delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
+    delete_atom_keyword_doc(uid, item.memory_id)
     purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason, db_client=db_client)
 
 
@@ -783,7 +758,7 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
         retracted_ids.append(item.memory_id)
 
     bumped_control = _bump_source_generation(uid, db_client=client)
-    invalidate_kg_for_memory_retraction(uid, retracted_ids, db_client=client)
+    invalidate_kg_for_memory_retraction(uid, retracted_ids)
 
     return {
         "retracted_memory_ids": retracted_ids,
@@ -836,8 +811,8 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
 
         delete_pinecone_memory_vectors_by_id(vector_ids)
 
-    keyword_deleted = purge_user_atom_keyword_index(uid, db_client=client, force=True)
-    kg_db.delete_knowledge_graph(uid, db_client=client)
+    keyword_deleted = purge_user_atom_keyword_index(uid)
+    kg_db.delete_knowledge_graph(uid)
 
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1

@@ -21,14 +21,17 @@ export default async function PopularPage() {
   const sortedPlugins = [...plugins].sort((a, b) => b.installs - a.installs);
 
   // Group plugins by category for nav
-  const groupedPlugins = plugins.reduce((acc, plugin) => {
-    const category = plugin.category;
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(plugin);
-    return acc;
-  }, {} as Record<string, Plugin[]>);
+  const groupedPlugins = plugins.reduce(
+    (acc, plugin) => {
+      const category = plugin.category;
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(plugin);
+      return acc;
+    },
+    {} as Record<string, Plugin[]>,
+  );
 
   return (
     <div className="relative">

@@ -340,9 +340,7 @@ struct RewindSettingsView: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     RewindOnlyView()
         .frame(width: 1000, height: 700)
 }
-#endif

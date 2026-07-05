@@ -79,11 +79,7 @@ jobs:
 
       - name: Verify rollout
         run: |
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-vad --timeout=600s; then
-            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service vad || true
-            exit 1
-          fi
-          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service vad
+          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-vad --timeout=600s
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'

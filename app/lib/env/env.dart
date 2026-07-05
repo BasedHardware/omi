@@ -72,7 +72,13 @@ abstract class Env {
 
   static bool get useWebAuth => _instance.useWebAuth ?? false;
 
+  static bool get useAppleWebAuth => _instance.useAppleWebAuth ?? false;
+
+  static bool get appleSignInEnabled => _instance.appleSignInEnabled ?? false;
+
   static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
+
+  static String get authRedirectScheme => _instance.authRedirectScheme ?? 'omi';
 }
 
 abstract class EnvFields {
@@ -96,7 +102,13 @@ abstract class EnvFields {
 
   bool? get useWebAuth;
 
+  bool? get useAppleWebAuth;
+
+  bool? get appleSignInEnabled;
+
   bool? get useAuthCustomToken;
+
+  String? get authRedirectScheme;
 
   String? get stagingApiUrl;
 }

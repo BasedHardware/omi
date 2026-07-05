@@ -10632,7 +10632,7 @@
     "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.",
     "transcribeLaterTitle": "תמלול מאוחר יותר",
     "transcribeLaterDescription": "הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.",
-    "transcribeLaterNote": "פועל עם מכשירי Omi ו-Limitless בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
+    "transcribeLaterNote": "פועל עם מכשירי Omi בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
     "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
     "unmute": "בטל השתקה",
     "newRecording": "הקלטה חדשה",
@@ -10682,17 +10682,33 @@
     "deviceOnboardingIntroDuration": "כדקה אחת",
     "jumpToLatestMessage": "קפוץ להודעה האחרונה",
     "latest": "האחרון",
-    "flashFirmware": "צריבת קושחה",
-    "pendantRecordingTitle": "מקליט על התליון",
-    "pendantRecordingNote": "התליון שלך מקליט באופן עצמאי. ההקלטות מסתנכרנות לטלפון שלך כשהאפליקציה פתוחה.",
-    "pendantSyncingRecordings": "מסנכרן הקלטות מהתליון שלך…",
-    "pendantMinutesStored": "~{minutes} דקות מאוחסנות",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "חברו את משקפי ה-Meta Glasses שלכם",
+    "pairingDescMetaGlasses": "צמדו את המשקפיים באפליקציית Meta AI ואז הקישו על התחברות ב-Omi. אפשר לקשר יותר מזוג אחד ולבחור איזה פעיל.",
+    "metaGlassesUnavailable": "אפליקציית Meta AI לא נמצאה. התקינו את Meta AI והפעילו מצב מפתחים כדי לחבר את המשקפיים.",
+    "metaGlassesRegistering": "השלימו את החיבור באפליקציית Meta AI וחזרו ל-Omi.",
+    "metaGlassesCameraPermission": "אפשרו גישה למצלמה באפליקציית Meta AI",
+    "metaGlassesCaptureModeLabel": "מצב הקלטה",
+    "metaGlassesModeCameraMic": "מצלמה + מיקרופון",
+    "metaGlassesModeMicOnly": "מיקרופון בלבד",
+    "metaGlassesStartCapture": "התחל הקלטה",
+    "metaGlassesStopCapture": "עצור הקלטה",
+    "metaGlassesGestureHint": "פקדי מחוות עבור משקפי Meta אינם נתמכים בגרסה זו.",
+    "connectAnotherDevice": "חיבור מכשיר נוסף",
+    "myDevices": "המכשירים שלי",
+    "metaGlassesAutoCapture": "הקלטה אוטומטית בעת חיבור",
+    "metaGlassesShowPreview": "תצוגה מקדימה חיה",
+    "metaGlassesPendingPhotos": "{count} תמונות ממתינות לסנכרון",
+    "metaGlassesPairInMetaAI": "הגדירו באפליקציית Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "המשקפיים מתקררים — הצילום הושהה",
+    "metaGlassesFolded": "פתח את המשקפיים כדי להמשיך בצילום",
+    "metaGlassesCaptureFrequency": "תדירות צילום",
+    "metaGlassesEvery10s": "כל 10 שנ'",
+    "metaGlassesEvery30s": "כל 30 שנ'",
+    "metaGlassesEvery1min": "כל דקה",
+    "metaGlassesEvery5min": "כל 5 דק'",
+    "metaGlassesGestures": "מחוות"
 }

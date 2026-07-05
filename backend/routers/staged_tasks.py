@@ -1,6 +1,6 @@
 """Staged tasks — AI-generated tasks awaiting user promotion to action items."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from typing import List
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -71,12 +71,6 @@ def get_staged_tasks(
     return {'items': items, 'has_more': has_more}
 
 
-@router.delete('/v1/staged-tasks', tags=['staged-tasks'])
-def clear_staged_tasks(uid: str = Depends(auth.get_current_user_uid)):
-    count = staged_tasks_db.clear_staged_tasks(uid)
-    return {'status': 'ok', 'deleted_count': count}
-
-
 @router.delete('/v1/staged-tasks/{task_id}', tags=['staged-tasks'])
 def delete_staged_task(
     task_id: str,
@@ -100,14 +94,6 @@ def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
     action_item = staged_tasks_db.promote_staged_task(uid)
     if action_item is None:
         return {'promoted': False, 'reason': 'No staged tasks available', 'promoted_task': None}
-    return {'promoted': True, 'reason': None, 'promoted_task': action_item}
-
-
-@router.post('/v1/staged-tasks/{task_id}/promote', tags=['staged-tasks'])
-def promote_staged_task_by_id(task_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    action_item = staged_tasks_db.promote_staged_task(uid, task_id=task_id)
-    if action_item is None:
-        raise HTTPException(status_code=404, detail='Staged task not found or already promoted')
     return {'promoted': True, 'reason': None, 'promoted_task': action_item}
 
 

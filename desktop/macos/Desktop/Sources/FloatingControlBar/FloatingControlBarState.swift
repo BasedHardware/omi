@@ -91,9 +91,6 @@ struct FloatingBarNotification: Identifiable, Equatable {
 class FloatingControlBarState: NSObject, ObservableObject {
     static let visibleConversationReuseInterval: TimeInterval = 10 * 60
     static var voiceResponseWatchdogDelay: TimeInterval = 30
-    /// Safety cap: the "thinking" indicator self-clears after this long even if
-    /// no explicit response-start/teardown signal arrives, so it can never stick.
-    static var thinkingWatchdogDelay: TimeInterval = 25
 
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
@@ -119,17 +116,15 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var activeAgentChatPillID: UUID? = nil
     @Published var conversationSurface: FloatingConversationSurface = .closed
 
-    /// Subagent switcher visibility state, shared by both display modes.
-    /// On notched displays the menu opens on hover over the notch; on
-    /// non-notched displays it opens pinned via an explicit click on the
-    /// pill's agents affordance. Mirrored from the SwiftUI view so the
-    /// window can account for an expanded switcher when resizing.
+    /// Notch subagent switcher visibility state. Mirrored from the SwiftUI view
+    /// so the window can account for an expanded switcher when resizing.
     @Published var agentSwitcherPinned: Bool = false
     @Published var agentSwitcherHovering: Bool = false
     var isAgentSwitcherExpanded: Bool { agentSwitcherPinned || agentSwitcherHovering }
     @Published private(set) var notchHoverMenuOpen: Bool = false
     var canShowNotchHoverMenu: Bool {
-        !showingAIConversation
+        usesNotchIsland
+            && !showingAIConversation
             && !isVoiceListening
             && !isShowingNotification
             && currentNotification == nil
@@ -163,30 +158,8 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceListening: Bool = false
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
-    /// Transient inline hint shown in the bar (e.g. "Hold longer to record") after a
-    /// too-short PTT tap. Non-empty keeps the bar in its voice-UI size for ~2s.
-    @Published var pttHintText: String = ""
     @Published var isVoiceResponseActive: Bool = false {
-        didSet {
-            if isVoiceResponseActive {
-                isVoiceResponseWaiting = false
-            }
-            updateVoiceResponseWatchdog()
-            // A live voice response supersedes the "thinking" indicator.
-            if isVoiceResponseActive { isThinking = false }
-        }
-    }
-    @Published var isVoiceResponseWaiting: Bool = false {
         didSet { updateVoiceResponseWatchdog() }
-    }
-    /// True while a committed Push-to-Talk query is being processed and no
-    /// response output (voice glow or conversation surface) has surfaced yet.
-    /// Drives the notch/pill "thinking" animation. Auto-clears via a watchdog.
-    @Published var isThinking: Bool = false {
-        didSet { updateThinkingWatchdog() }
-    }
-    var isVoiceResponseGlowActive: Bool {
-        isVoiceResponseActive || isVoiceResponseWaiting
     }
     /// True only when the notch-mode setting is enabled and the current display
     /// exposes a real camera housing safe area. External displays keep old pill UI.
@@ -202,7 +175,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var currentQueryFromVoice: Bool = false
 
     private var voiceResponseWatchdogWorkItem: DispatchWorkItem?
-    private var thinkingWatchdogWorkItem: DispatchWorkItem?
 
     // Model selection
     @Published var selectedModel: String = ModelQoS.Claude.defaultSelection
@@ -237,9 +209,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = surface.isOpen
         showingAIResponse = surface.isResponseLike
         markConversationActivity()
-        // The conversation surface owns its own loading header once it opens, so
-        // hand the "thinking" indicator off to it (avoids showing both).
-        if surface.isOpen { isThinking = false }
     }
 
     func leaveAgentSurface() {
@@ -265,7 +234,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
-        isThinking = false
         isVoiceFollowUp = false
         voiceFollowUpTranscript = ""
         markConversationActivity()
@@ -324,53 +292,24 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
-        isThinking = false
         isVoiceFollowUp = false
         voiceFollowUpTranscript = ""
         currentQueryFromVoice = false
         lastConversationActivityAt = nil
-        pttHintText = ""  // stay self-consistent; don't rely on PTTManager's cancel side effect
-        clearVoiceResponseState()
-    }
-
-    func beginVoiceResponseWaiting() {
-        guard !isVoiceResponseActive else { return }
-        isVoiceResponseWaiting = true
-    }
-
-    func clearVoiceResponseState() {
-        isVoiceResponseWaiting = false
-        isVoiceResponseActive = false
     }
 
     private func updateVoiceResponseWatchdog() {
         voiceResponseWatchdogWorkItem?.cancel()
         voiceResponseWatchdogWorkItem = nil
-        guard isVoiceResponseGlowActive else { return }
+        guard isVoiceResponseActive else { return }
 
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self, self.isVoiceResponseGlowActive else { return }
-            self.clearVoiceResponseState()
+            guard let self, self.isVoiceResponseActive else { return }
+            self.isVoiceResponseActive = false
         }
         voiceResponseWatchdogWorkItem = workItem
         DispatchQueue.main.asyncAfter(
             deadline: .now() + Self.voiceResponseWatchdogDelay,
-            execute: workItem
-        )
-    }
-
-    private func updateThinkingWatchdog() {
-        thinkingWatchdogWorkItem?.cancel()
-        thinkingWatchdogWorkItem = nil
-        guard isThinking else { return }
-
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self, self.isThinking else { return }
-            self.isThinking = false
-        }
-        thinkingWatchdogWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + Self.thinkingWatchdogDelay,
             execute: workItem
         )
     }

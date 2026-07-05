@@ -68,58 +68,46 @@ struct SafeDismissButton: View {
 // MARK: - Dismiss Button (Action-based)
 /// A dismiss button that takes a closure instead of a DismissAction.
 /// Used for overlay-based sheets where the dismiss is controlled externally.
-/// A real Button (not a tap gesture) so accessibility exposes it as a labeled
-/// "Close" control and keyboard users can reach it.
 struct DismissButton: View {
     let action: () -> Void
     var icon: String = "xmark"
     var showBackground: Bool = true
-    var accessibilityLabel: String = "Close"
+
+    @State private var isPressed = false
 
     var body: some View {
-        Button {
-            log("DISMISS_BUTTON: Activated")
+        Image(systemName: icon)
+            .scaledFont(size: 14, weight: .medium)
+            .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
+            .frame(width: 28, height: 28)
+            .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
+            .clipShape(Circle())
+            .contentShape(Circle())
+            .opacity(isPressed ? 0.7 : 1.0)
+            .onTapGesture {
+                guard !isPressed else { return }
+                isPressed = true
 
-            // Commit any in-progress field editing before tearing the sheet down.
-            NSApp.keyWindow?.makeFirstResponder(nil)
+                log("DISMISS_BUTTON: Tap gesture fired")
 
-            withAnimation(.easeOut(duration: 0.2)) {
-                action()
+                // Consume the click by resigning first responder
+                NSApp.keyWindow?.makeFirstResponder(nil)
+
+                // Small delay then dismiss
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                    log("DISMISS_BUTTON: Calling action")
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        action()
+                    }
+                }
             }
-        } label: {
-            Image(systemName: icon)
-                .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
-                .frame(width: 28, height: 28)
-                .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
-                .clipShape(Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(DismissButtonPressStyle())
-        .accessibilityLabel(accessibilityLabel)
     }
-}
-
-private struct DismissButtonPressStyle: ButtonStyle {
-    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
-    }
-}
-
-enum AppsCatalogInitialSection {
-    case imports
-    case exports
 }
 
 struct AppsPage: View {
     @ObservedObject var appProvider: AppProvider
     var appState: AppState? = nil
-    var initialSection: AppsCatalogInitialSection = .imports
-    var onDismiss: (() -> Void)? = nil
-    var onSelectApp: ((OmiApp) -> Void)? = nil
-    var onSelectConnector: ((ImportConnector) -> Void)? = nil
-    var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil
     @StateObject private var connectorStatusStore = ImportConnectorStatusStore()
     @State private var searchText = ""
     @State private var selectedApp: OmiApp?
@@ -147,7 +135,7 @@ struct AppsPage: View {
                 // self-gated and skip when empty.
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
-                        if hasActiveFilters {
+                        if !searchText.isEmpty || hasActiveFilters {
                             // Show filtered/search results in a flat grid
                             if appProvider.isSearching {
                                 // Loading state for category filter
@@ -188,11 +176,11 @@ struct AppsPage: View {
                                     title: filterResultsTitle,
                                     apps: filteredApps,
                                     appProvider: appProvider,
-                                    onSelectApp: selectApp
+                                    onSelectApp: { selectedApp = $0 }
                                 )
 
                                 // Infinite scroll: load more when reaching bottom
-                                if appProvider.hasMoreFilteredApps {
+                                if appProvider.hasMoreCategoryApps {
                                     HStack {
                                         Spacer()
                                         if appProvider.isLoadingMore {
@@ -206,7 +194,7 @@ struct AppsPage: View {
                                                 .frame(height: 1)
                                                 .onAppear {
                                                     Task {
-                                                        await appProvider.loadMoreFilteredApps()
+                                                        await appProvider.loadMoreCategoryApps()
                                                     }
                                                 }
                                         }
@@ -216,23 +204,12 @@ struct AppsPage: View {
                                 }
                             }
                         } else {
-                            switch initialSection {
-                            case .imports:
-                                ImportsSection(statusStore: connectorStatusStore) { connector in
-                                    selectConnector(connector)
-                                }
+                            ImportsSection(statusStore: connectorStatusStore) { connector in
+                                selectedConnector = connector
+                            }
 
-                                ExportsSection(statuses: exportStatuses) { destination in
-                                    selectDestination(destination)
-                                }
-                            case .exports:
-                                ExportsSection(statuses: exportStatuses) { destination in
-                                    selectDestination(destination)
-                                }
-
-                                ImportsSection(statusStore: connectorStatusStore) { connector in
-                                    selectConnector(connector)
-                                }
+                            ExportsSection(statuses: exportStatuses) { destination in
+                                selectedExportDestination = destination
                             }
 
                             // Featured section (apps marked as is_popular in backend)
@@ -241,7 +218,7 @@ struct AppsPage: View {
                                     title: "Other",
                                     apps: Array(appProvider.popularApps.prefix(6)),
                                     appProvider: appProvider,
-                                    onSelectApp: selectApp,
+                                    onSelectApp: { selectedApp = $0 },
                                     showSeeMore: appProvider.popularApps.count > 6,
                                     onSeeMore: { viewAllSection = "featured" }
                                 )
@@ -253,7 +230,7 @@ struct AppsPage: View {
                                     title: "Integrations",
                                     apps: Array(appProvider.integrationApps.prefix(6)),
                                     appProvider: appProvider,
-                                    onSelectApp: selectApp,
+                                    onSelectApp: { selectedApp = $0 },
                                     showSeeMore: appProvider.integrationApps.count > 6,
                                     onSeeMore: { viewAllSection = "integrations" }
                                 )
@@ -265,7 +242,7 @@ struct AppsPage: View {
                                     title: "Realtime Notifications",
                                     apps: Array(appProvider.notificationApps.prefix(6)),
                                     appProvider: appProvider,
-                                    onSelectApp: selectApp,
+                                    onSelectApp: { selectedApp = $0 },
                                     showSeeMore: appProvider.notificationApps.count > 6,
                                     onSeeMore: { viewAllSection = "notifications" }
                                 )
@@ -282,7 +259,9 @@ struct AppsPage: View {
             // Clear filters when searching
             if !newValue.isEmpty {
                 viewAllSection = nil
-                appProvider.clearCategoryFilter()
+                if appProvider.selectedCategory != nil {
+                    appProvider.clearCategoryFilter()
+                }
             }
             Task {
                 // Debounce search
@@ -322,19 +301,17 @@ struct AppsPage: View {
         .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenExportRequested)) { note in
             if let raw = note.userInfo?["destination"] as? String,
                 let dest = MemoryExportDestination(rawValue: raw) {
-                selectDestination(dest)
+                selectedExportDestination = dest
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenImportRequested)) { note in
             if let raw = note.userInfo?["connector"] as? String {
                 if raw == "__more_sources" {
-                    if let connector = ImportConnector.all.first(where: {
+                    selectedConnector = ImportConnector.all.first {
                         !$0.isConnected && $0.id != "chatgpt" && $0.id != "claude"
-                    }) ?? ImportConnector.all.first {
-                        selectConnector(connector)
-                    }
+                    } ?? ImportConnector.all.first
                 } else if let connector = ImportConnector.all.first(where: { $0.id == raw }) {
-                    selectConnector(connector)
+                    selectedConnector = connector
                 }
             }
         }
@@ -354,89 +331,31 @@ struct AppsPage: View {
             await connectorStatusStore.refresh()
             exportStatuses = await MemoryExportService.shared.allStatuses()
         }
-        .onChange(of: selectedExportDestination) { _, newValue in
-            guard newValue == nil else { return }
-            Task {
-                exportStatuses = await MemoryExportService.shared.allStatuses()
-            }
-        }
-    }
-
-    private func selectApp(_ app: OmiApp) {
-        if let onSelectApp {
-            onSelectApp(app)
-        } else {
-            selectedApp = app
-        }
-    }
-
-    private func selectConnector(_ connector: ImportConnector) {
-        if let onSelectConnector {
-            onSelectConnector(connector)
-        } else {
-            selectedConnector = connector
-        }
-    }
-
-    private func selectDestination(_ destination: MemoryExportDestination) {
-        if let onSelectDestination {
-            onSelectDestination(destination)
-        } else {
-            selectedExportDestination = destination
-        }
     }
 
     private var searchBar: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                searchField
-                    .layoutPriority(1)
-                filterControls
-                Spacer(minLength: 8)
-                createAppButton
-                dismissControl
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    searchField
-                    dismissControl
-                }
-
-                HStack(spacing: 10) {
-                    filterControls
-                    Spacer(minLength: 8)
-                    createAppButton
-                }
-            }
-        }
-    }
-
-    private var searchField: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(OmiColors.textTertiary)
-
-            TextField("Search apps...", text: $searchText)
-                .textFieldStyle(.plain)
-                .foregroundColor(OmiColors.textPrimary)
-                .accessibilityLabel("Search apps")
-
-            if !searchText.isEmpty {
-                Button(action: { searchText = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(10)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(10)
-    }
-
-    private var filterControls: some View {
         HStack(spacing: 10) {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(OmiColors.textTertiary)
+
+                TextField("Search apps...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(10)
+            .background(OmiColors.backgroundSecondary)
+            .cornerRadius(10)
+
+            // Filter toggles
             FilterToggle(
                 icon: "arrow.down.circle",
                 label: "Installed",
@@ -447,87 +366,77 @@ struct AppsPage: View {
                 Task { await appProvider.searchApps() }
             }
 
-            categoryMenu
-        }
-    }
-
-    private var categoryMenu: some View {
-        Menu {
-            Button(action: {
-                viewAllSection = nil
-                appProvider.clearCategoryFilter()
-                Task { await appProvider.searchApps() }
-            }) {
-                HStack {
-                    Text("All Categories")
-                    if appProvider.selectedCategory == nil {
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-
-            Divider()
-
-            ForEach(appProvider.categories) { category in
+            // Category dropdown
+            Menu {
                 Button(action: {
                     viewAllSection = nil
-                    appProvider.selectedCategory = category.id
-                    Task { await appProvider.searchApps() }
+                    appProvider.clearCategoryFilter()
                 }) {
                     HStack {
-                        Text(category.title)
-                        if appProvider.selectedCategory == category.id {
+                        Text("All Categories")
+                        if appProvider.selectedCategory == nil {
                             Image(systemName: "checkmark")
                         }
                     }
                 }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .scaledFont(size: 12)
-                Text(selectedCategoryLabel)
-                    .scaledFont(size: 13)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .scaledFont(size: 9, weight: .medium)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(OmiColors.backgroundSecondary)
-            .foregroundColor(OmiColors.textPrimary)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .tint(OmiColors.textPrimary)
-        .fixedSize()
-    }
 
-    private var createAppButton: some View {
-        SmallHeaderButton(
-            icon: "app.badge.fill",
-            label: "Create App",
-            color: OmiColors.textSecondary
-        ) {
-            if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
-                NSWorkspace.shared.open(url)
-            }
-        }
-    }
+                Divider()
 
-    @ViewBuilder
-    private var dismissControl: some View {
-        if let onDismiss {
-            DismissButton(action: onDismiss)
+                ForEach(appProvider.categories) { category in
+                    Button(action: {
+                        viewAllSection = nil
+                        appProvider.selectedCategory = category.id
+                        Task { await appProvider.fetchAppsForCategory(category.id) }
+                    }) {
+                        HStack {
+                            Text(category.title)
+                            if appProvider.selectedCategory == category.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .scaledFont(size: 12)
+                    Text(selectedCategoryLabel)
+                        .scaledFont(size: 13)
+                    Image(systemName: "chevron.down")
+                        .scaledFont(size: 9, weight: .medium)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundSecondary)
+                .foregroundColor(OmiColors.textPrimary)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
+                )
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            Spacer()
+
+            // Create buttons (compact)
+            HStack(spacing: 8) {
+                SmallHeaderButton(
+                    icon: "app.badge.fill",
+                    label: "Create App",
+                    color: OmiColors.textSecondary
+                ) {
+                    if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
         }
     }
 
     private var hasActiveFilters: Bool {
-        appProvider.hasActiveFilters || viewAllSection != nil
+        appProvider.selectedCategory != nil || viewAllSection != nil
     }
 
     private var selectedCategoryLabel: String {
@@ -538,7 +447,7 @@ struct AppsPage: View {
         return "Category"
     }
 
-    /// Apps for the selected filter/search result set or "See more" section.
+    /// Apps for the selected category (from API) or search results or "See more" section
     private var filteredApps: [OmiApp] {
         // "See more" section takes priority
         if let section = viewAllSection {
@@ -549,7 +458,10 @@ struct AppsPage: View {
             default: return []
             }
         }
-        return appProvider.filteredApps ?? []
+        if appProvider.selectedCategory != nil {
+            return appProvider.categoryFilteredApps ?? []
+        }
+        return appProvider.apps
     }
 
     private var filterResultsTitle: String {
@@ -668,10 +580,10 @@ struct ImportConnector: Identifiable {
             subtitle: "This Mac",
             description: "Index documents, code, and working folders.",
             brand: .localFiles,
-            statusText: "Not connected",
-            metricText: nil,
-            actionTitle: "Connect",
-            isConnected: false
+            statusText: "Connected",
+            metricText: "Available on this device",
+            actionTitle: "Connected",
+            isConnected: true
         ),
         ImportConnector(
             id: "apple-notes",
@@ -745,8 +657,8 @@ final class ImportConnectorStatusStore: ObservableObject {
     private let lastSyncedAtKeyPrefix = "appsImportConnectorLastSyncedAt."
     private let lastDeltaCountKeyPrefix = "appsImportConnectorLastDeltaCount."
     private let hasLastDeltaKeyPrefix = "appsImportConnectorHasLastDelta."
-    private let availabilityTextKeyPrefix = "appsImportConnectorAvailabilityText."
     private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
+    private let appleNotesFolderDefaultsKey = "onboardingAppleNotesFolderPath"
     private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
     private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
 
@@ -757,7 +669,11 @@ final class ImportConnectorStatusStore: ObservableObject {
 
     func snapshot(for connector: ImportConnector) -> Snapshot {
         let metrics = metricsByID[connector.id] ?? ConnectorMetrics()
-        let isConnected = isConnected(connector: connector, metrics: metrics)
+        let isConnected =
+            metrics.memoryCount.map { $0 > 0 } ?? false
+            || metrics.sourceCount.map { $0 > 0 } ?? false
+            || metrics.availabilityText != nil
+            || connector.id == "local-files"
         let actionTitle: String
         if manualConnectorIDs.contains(connector.id) {
             actionTitle = isConnected ? "Update" : "Connect"
@@ -801,19 +717,8 @@ final class ImportConnectorStatusStore: ObservableObject {
         }
         if let availabilityText {
             metrics.availabilityText = availabilityText
-            defaults.set(availabilityText, forKey: availabilityTextKeyPrefix + connectorID)
         }
         metricsByID[connectorID] = metrics
-    }
-
-    private func clearStoredMetrics(for connectorID: String) {
-        defaults.removeObject(forKey: sourceCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: memoryCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: lastSyncedAtKeyPrefix + connectorID)
-        defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: hasLastDeltaKeyPrefix + connectorID)
-        defaults.removeObject(forKey: availabilityTextKeyPrefix + connectorID)
-        metricsByID[connectorID] = ConnectorMetrics()
     }
 
     func refresh() async {
@@ -840,15 +745,17 @@ final class ImportConnectorStatusStore: ObservableObject {
             if defaults.bool(forKey: hasLastDeltaKeyPrefix + connector.id) {
                 metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKeyPrefix + connector.id)
             }
-            metrics.availabilityText = defaults.string(forKey: availabilityTextKeyPrefix + connector.id)
 
             metricsByID[connector.id] = metrics
         }
 
         hydrateLegacyManualImports()
 
-        // A remembered path is not enough to call Apple Notes connected. The
-        // status becomes connected only after the reader proves the store is readable.
+        if let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey), !folderPath.isEmpty {
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.availabilityText = "Folder granted"
+            metricsByID["apple-notes"] = metrics
+        }
     }
 
     private func hydrateLegacyManualImports() {
@@ -890,18 +797,8 @@ final class ImportConnectorStatusStore: ObservableObject {
 
             var metrics = metricsByID["local-files"] ?? ConnectorMetrics()
             metrics.sourceCount = result.count
-            defaults.set(result.count, forKey: sourceCountKeyPrefix + "local-files")
-            if metrics.lastSyncedAt == nil, let lastIndexedAt = result.lastIndexedAt {
-                metrics.lastSyncedAt = lastIndexedAt
-                defaults.set(lastIndexedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "local-files")
-            }
-            if metrics.lastSyncedAt != nil || result.count > 0 {
-                metrics.availabilityText = "On-device index"
-                defaults.set("On-device index", forKey: availabilityTextKeyPrefix + "local-files")
-            } else {
-                metrics.availabilityText = nil
-                defaults.removeObject(forKey: availabilityTextKeyPrefix + "local-files")
-            }
+            metrics.lastSyncedAt = result.lastIndexedAt
+            metrics.availabilityText = "On-device index"
             metricsByID["local-files"] = metrics
         } catch {
             log("ImportConnectorStatusStore: Failed to refresh local files metrics: \(error)")
@@ -909,32 +806,21 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     private func refreshAppleNotesMetrics() async {
-        let status = await AppleNotesReaderService.shared.connectionStatus(maxResults: 250)
-        switch status {
-        case .connected(let noteCount, _):
+        do {
+            let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+            guard !notes.isEmpty else { return }
+
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-            metrics.sourceCount = noteCount
-            defaults.set(noteCount, forKey: sourceCountKeyPrefix + "apple-notes")
-            if metrics.lastSyncedAt == nil {
-                let syncedAt = Date()
-                metrics.lastSyncedAt = syncedAt
-                defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "apple-notes")
-            }
+            metrics.sourceCount = notes.count
             metrics.availabilityText = "Private notes accessible"
-            defaults.set("Private notes accessible", forKey: availabilityTextKeyPrefix + "apple-notes")
             metricsByID["apple-notes"] = metrics
-        case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
-            log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
-            clearStoredMetrics(for: "apple-notes")
+        } catch {
+            let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey) ?? ""
+            guard !folderPath.isEmpty else { return }
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.availabilityText = "Folder granted"
+            metricsByID["apple-notes"] = metrics
         }
-    }
-
-    private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
-        if metrics.lastSyncedAt != nil {
-            return true
-        }
-
-        return manualConnectorIDs.contains(connector.id) && (metrics.memoryCount ?? 0) > 0
     }
 
     private func primaryText(
@@ -947,7 +833,7 @@ final class ImportConnectorStatusStore: ObservableObject {
                 return
                     "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount)) • \(memoryCount.formatted()) memories"
             }
-            if isConnected || sourceCount > 0 {
+            if connector.id == "local-files" || sourceCount > 0 {
                 return "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount))"
             }
         }
@@ -1154,27 +1040,6 @@ struct ImportConnectorActionButton: View {
             .scaledFont(size: 12, weight: .medium)
             .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
             .frame(width: isConnected ? 84 : 72, height: 28)
-            .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
-            .cornerRadius(14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(OmiColors.border, lineWidth: 1)
-            )
-    }
-}
-
-struct ConnectionModalActionButton: View {
-    let title: String
-    var isConnected = false
-
-    var body: some View {
-        Text(title)
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
-            .lineLimit(1)
-            .padding(.horizontal, 14)
-            .frame(minWidth: isConnected ? 84 : 72)
-            .frame(height: 28)
             .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
             .cornerRadius(14)
             .overlay(
@@ -1403,9 +1268,9 @@ private final class ImportConnectorSheetModel: ObservableObject {
         do {
             return try await runAppleNotesImport()
         } catch let error as AppleNotesReaderError {
-            guard error.shouldPromptForFolderSelection else {
-                errorMessage = error.localizedDescription
-                return nil
+            switch error {
+            case .storeNotFound, .storeUnavailable:
+                break
             }
             let granted = await selectAppleNotesFolder()
             guard granted else {
@@ -1441,7 +1306,12 @@ private final class ImportConnectorSheetModel: ObservableObject {
         return SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count)
     }
 
-    func rescanLocalFiles() async -> SyncResult? {
+    func rescanLocalFiles(appState: AppState?) async -> SyncResult? {
+        guard let appState else {
+            errorMessage = "App state is unavailable right now."
+            return nil
+        }
+
         beginRun(
             title: "Indexing local files",
             detail: "Scanning your on-device files so Omi can use them in memory search."
@@ -1449,22 +1319,16 @@ private final class ImportConnectorSheetModel: ObservableObject {
         defer { finishRun() }
 
         let previousCount = await currentIndexedFileCount()
-        AnalyticsManager.shared.onboardingChatToolUsed(
-            tool: "scan_files",
-            properties: ["surface": "import_connector_sheet"]
+        ChatToolExecutor.onboardingAppState = appState
+        let result = await ChatToolExecutor.execute(
+            ToolCall(name: "scan_files", arguments: [:], thoughtSignature: nil)
         )
-        let result = await ChatToolExecutor.scanLocalFiles()
 
-        if !result.didCompleteSuccessfully {
-            errorMessage = result.summaryText
-            return nil
-        }
-
-        if !result.hasReadableUserFileTarget {
-            errorMessage = result.summaryText
+        if result.lowercased().hasPrefix("error") {
+            errorMessage = result
             return nil
         } else {
-            statusMessage = result.summaryText
+            statusMessage = result
             let updatedCount = await currentIndexedFileCount()
             let newItems = max(updatedCount - previousCount, 0)
             return SyncResult(sourceCount: updatedCount, memoryCount: nil, newItems: newItems)
@@ -1493,17 +1357,29 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return false
         }
 
-        do {
-            _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: selectedURL.path)
-            errorMessage = nil
-            return true
-        } catch let error as AppleNotesReaderError {
-            errorMessage = error.localizedDescription
-            return false
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
+        let resolvedURL: URL
+        if selectedURL.path == groupContainersURL.path {
+            let inferredURL = groupContainersURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
+            guard fileManager.fileExists(atPath: inferredURL.path) else {
+                errorMessage = "Choose the Apple Notes folder inside Group Containers."
+                return false
+            }
+            resolvedURL = inferredURL
+        } else if selectedURL.lastPathComponent == "group.com.apple.notes" {
+            resolvedURL = selectedURL
+        } else {
+            let nestedURL = selectedURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
+            if fileManager.fileExists(atPath: nestedURL.path) {
+                resolvedURL = nestedURL
+            } else {
+                errorMessage = "Choose the Apple Notes folder named group.com.apple.notes."
+                return false
+            }
         }
+
+        errorMessage = nil
+        await AppleNotesReaderService.shared.rememberSelectedFolder(path: resolvedURL.path)
+        return true
     }
 
     private func currentIndexedFileCount() async -> Int {
@@ -1553,21 +1429,26 @@ struct ImportConnectorSheet: View {
 
                 Spacer()
 
-                DismissButton(action: onDismiss)
-            }
+                VStack(alignment: .trailing, spacing: 8) {
+                    DismissButton(action: onDismiss)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if connector.id == "chatgpt" || connector.id == "claude" {
-                        memoryImportContent
-                    } else {
-                        connectorActionContent
-                    }
-
-                    statusSection
+                    Text("Press Esc or click × to close. Imports keep running in the background.")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 180, alignment: .trailing)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            if connector.id == "chatgpt" || connector.id == "claude" {
+                memoryImportContent
+            } else {
+                connectorActionContent
+            }
+
+            statusSection
+
+            Spacer(minLength: 0)
         }
         .padding(24)
         .background(OmiColors.backgroundPrimary)
@@ -1581,7 +1462,7 @@ struct ImportConnectorSheet: View {
                     .foregroundColor(OmiColors.textTertiary)
             }
 
-            Button {
+            Button(primaryActionTitle) {
                 Task {
                     switch connector.id {
                     case "calendar":
@@ -1623,7 +1504,7 @@ struct ImportConnectorSheet: View {
                             )
                         }
                     case "local-files":
-                        if let result = await model.rescanLocalFiles() {
+                        if let result = await model.rescanLocalFiles(appState: appState) {
                             statusStore.markSynced(
                                 connectorID: connector.id,
                                 sourceCount: result.sourceCount,
@@ -1636,13 +1517,8 @@ struct ImportConnectorSheet: View {
                         break
                     }
                 }
-            } label: {
-                ConnectionModalActionButton(
-                    title: primaryActionTitle,
-                    isConnected: snapshot.isConnected
-                )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
             .disabled(model.isRunning)
 
             if connector.id == "local-files" {
@@ -1659,12 +1535,10 @@ struct ImportConnectorSheet: View {
                 .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textSecondary)
 
-            Button {
+            Button("Open \(connector.title) and Copy Prompt") {
                 model.openAndCopyPrompt(for: memorySource)
-            } label: {
-                ConnectionModalActionButton(title: "Open \(connector.title) and Copy Prompt")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -1690,7 +1564,7 @@ struct ImportConnectorSheet: View {
                     .padding(8)
             }
 
-            Button {
+            Button(model.isRunning ? "Importing…" : "Import \(connector.title)") {
                 Task {
                     if let result = await model.importMemoryLog(source: memorySource) {
                         statusStore.markSynced(
@@ -1702,12 +1576,8 @@ struct ImportConnectorSheet: View {
                         )
                     }
                 }
-            } label: {
-                ConnectionModalActionButton(
-                    title: model.isRunning ? "Importing…" : "Import \(connector.title)"
-                )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
             .disabled(model.isRunning)
         }
     }
@@ -1727,7 +1597,7 @@ struct ImportConnectorSheet: View {
         case "x":
             return model.isRunning ? "Connecting…" : (snapshot.isConnected ? "Sync now" : "Connect X")
         case "local-files":
-            return model.isRunning ? "Reindexing…" : (snapshot.isConnected ? "Reindex Local Files" : "Index Local Files")
+            return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:
             return model.isRunning ? "Working…" : connector.actionTitle
         }
@@ -1754,7 +1624,7 @@ struct ImportConnectorSheet: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        Text("You can close this window now. Omi keeps importing in the background.")
+                        Text("You can close this popup now. The import will keep running in the background.")
                             .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1790,7 +1660,7 @@ struct ImportConnectorSheet: View {
                 }
             }
         } else {
-            Text("Start the import here. Once it starts, you can close this window and Omi keeps importing in the background.")
+            Text("Start the import here. You can close this popup any time with Esc or ×, and once started the import will keep running in the background.")
                 .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
         }
@@ -1864,7 +1734,6 @@ struct FilterToggle: View {
                     .scaledFont(size: 12)
                 Text(label)
                     .scaledFont(size: 13)
-                    .lineLimit(1)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -1875,7 +1744,6 @@ struct FilterToggle: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
             )
-            .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.plain)
     }
@@ -1900,13 +1768,11 @@ struct SmallHeaderButton: View {
                 Text(label)
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
-                    .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
             .cornerRadius(6)
-            .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -2376,7 +2242,7 @@ struct AppFilterSheet: View {
                             .foregroundColor(OmiColors.textPrimary)
 
                         Toggle("Show installed only", isOn: $appProvider.showInstalledOnly)
-                            .toggleStyle(SwitchToggleStyle(tint: OmiColors.success))
+                            .toggleStyle(SwitchToggleStyle(tint: OmiColors.purplePrimary))
                             .foregroundColor(OmiColors.textSecondary)
                             .onChange(of: appProvider.showInstalledOnly) { _, _ in
                                 Task { await appProvider.searchApps() }
@@ -2448,9 +2314,7 @@ struct CategoryAppsSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                DismissButton(
-                    action: dismissSheet, icon: "chevron.left", showBackground: false,
-                    accessibilityLabel: "Back")
+                DismissButton(action: dismissSheet, icon: "chevron.left", showBackground: false)
 
                 Text(category.title)
                     .scaledFont(size: 18, weight: .semibold)
@@ -3381,78 +3245,12 @@ struct FlowLayout: Layout {
 /// A sheet that can be dismissed by clicking outside the content area.
 /// This provides macOS-friendly modal behavior where clicking the dimmed background dismisses the sheet.
 
-/// Maps Esc to a dismiss closure for custom overlay modals. These overlays are
-/// ZStack layers, not NSWindow sheets, so AppKit gives them no cancel handling,
-/// `onExitCommand` needs focus they never receive, and hidden SwiftUI buttons
-/// with a cancel key equivalent get culled from key-equivalent dispatch. A
-/// local key-down monitor scoped to the hosting window delivers Esc
-/// deterministically. Render it only while its overlay is the topmost modal.
-struct OverlayModalEscapeCatcher: NSViewRepresentable {
-    let action: () -> Void
-
-    func makeNSView(context: Context) -> EscapeCatcherView {
-        let view = EscapeCatcherView()
-        view.onEscape = action
-        return view
-    }
-
-    func updateNSView(_ nsView: EscapeCatcherView, context: Context) {
-        nsView.onEscape = action
-    }
-
-    final class EscapeCatcherView: NSView {
-        var onEscape: (() -> Void)?
-        private var monitor: Any?
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if window != nil {
-                installMonitor()
-            } else {
-                removeMonitor()
-            }
-        }
-
-        // Never intercept mouse events — this view exists only for the monitor.
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        private func installMonitor() {
-            guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard
-                    let self,
-                    event.keyCode == 53,  // Esc
-                    let window = self.window,
-                    event.window === window
-                else { return event }
-                self.onEscape?()
-                // Consume the event — while the overlay is up it owns Esc.
-                return nil
-            }
-        }
-
-        private func removeMonitor() {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-                self.monitor = nil
-            }
-        }
-
-        deinit {
-            removeMonitor()
-        }
-    }
-}
-
 struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
     @Binding var isPresented: Bool
     let sheetContent: () -> SheetContent
 
     func body(content: Content) -> some View {
         content
-            // The overlay is modal: while it is up, the content underneath must
-            // not be reachable by VoiceOver / Full Keyboard Access.
-            .accessibilityHidden(isPresented)
             .overlay {
                 ZStack {
                     if isPresented {
@@ -3477,16 +3275,7 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
                             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
-                            .accessibilityAddTraits(.isModal)
                             .zIndex(1)
-
-                        OverlayModalEscapeCatcher {
-                            log("DISMISSABLE_SHEET: Escape pressed, dismissing")
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                isPresented = false
-                            }
-                        }
-                        .zIndex(2)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -3520,9 +3309,6 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
 
     func body(content: Content) -> some View {
         content
-            // The overlay is modal: while it is up, the content underneath must
-            // not be reachable by VoiceOver / Full Keyboard Access.
-            .accessibilityHidden(item != nil)
             .overlay {
                 ZStack {
                     if let presentedItem = item {
@@ -3547,16 +3333,7 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
                             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
-                            .accessibilityAddTraits(.isModal)
                             .zIndex(1)
-
-                        OverlayModalEscapeCatcher {
-                            log("DISMISSABLE_SHEET: Escape pressed, dismissing item")
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                item = nil
-                            }
-                        }
-                        .zIndex(2)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -3617,9 +3394,7 @@ struct CreateAppCard: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     AppsPage(appProvider: AppProvider())
         .frame(width: 900, height: 700)
 }
-#endif

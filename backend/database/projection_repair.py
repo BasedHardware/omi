@@ -8,8 +8,6 @@ projection_repairs_collection = 'projection_repairs'
 PROJECTION_VERSION = 1
 
 DANGEROUS_REASONS = {'retract_fact', 'tombstone_evidence', 'source_tombstoned'}
-TERMINAL_REPAIR_STATUSES = {'repaired', 'dead_letter'}
-PROCESSABLE_REPAIR_STATUSES = ('queued', 'failed')
 
 
 def affected_fact_ids(mutations: List[Dict[str, Any]]) -> List[str]:
@@ -46,12 +44,8 @@ def enqueue_projection_repairs(uid: str, commit: Optional[Dict[str, Any]], *, fi
         reasons = reasons_by_fact.get(fact_id, ['unknown'])
         repair_id = f"{commit.get('commit_id')}:{fact_id}"
         repair_ids.append(repair_id)
-        document_ref = collection_ref.document(repair_id)
-        existing = document_ref.get()
-        if getattr(existing, 'exists', False):
-            continue
         batch.set(
-            document_ref,
+            collection_ref.document(repair_id),
             {
                 'repair_id': repair_id,
                 'fact_id': fact_id,
@@ -74,33 +68,12 @@ def process_projection_repairs(
     fact_loader: Callable[[str], Optional[Dict[str, Any]]],
     repair_func: Callable[[str, Optional[Dict[str, Any]]], str],
     limit: int = 100,
-    firestore_client=None,
-    max_attempts: int = 3,
 ) -> Dict[str, Any]:
-    if limit < 1:
-        raise ValueError('limit must be positive')
-    if max_attempts < 1:
-        raise ValueError('max_attempts must be positive')
-
-    database = firestore_client or db
-    collection_ref = database.collection(users_collection).document(uid).collection(projection_repairs_collection)
+    collection_ref = db.collection(users_collection).document(uid).collection(projection_repairs_collection)
+    queued_docs = collection_ref.where('status', '==', 'queued').limit(limit).stream()
     repaired = []
     failed = []
-    seen_doc_ids = set()
-    docs = []
-    for status in PROCESSABLE_REPAIR_STATUSES:
-        for doc in collection_ref.where('status', '==', status).limit(limit).stream():
-            doc_id = getattr(doc, 'id', None)
-            if doc_id in seen_doc_ids:
-                continue
-            seen_doc_ids.add(doc_id)
-            docs.append(doc)
-            if len(docs) >= limit:
-                break
-        if len(docs) >= limit:
-            break
-
-    for doc in docs:
+    for doc in queued_docs:
         repair = doc.to_dict() or {}
         fact_id = repair.get('fact_id')
         try:
@@ -114,12 +87,9 @@ def process_projection_repairs(
             )
             repaired.append(repair.get('repair_id') or doc.id)
         except Exception as exc:
-            next_attempt_count = int(repair.get('attempt_count') or 0) + 1
-            next_status = 'dead_letter' if next_attempt_count >= max_attempts else 'failed'
             doc.reference.update(
                 {
-                    'status': next_status,
-                    'attempt_count': next_attempt_count,
+                    'status': 'failed',
                     'error': str(exc),
                     'updated_at': datetime.now(timezone.utc),
                 }

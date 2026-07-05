@@ -1,40 +1,37 @@
 import asyncio
 import os
-from pathlib import Path
-from types import ModuleType
+import sys
+import types
 from unittest.mock import MagicMock
 
 import pytest
 
+BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from testing.import_isolation import load_module_fresh, stub_modules
+cloud_tasks_module = types.ModuleType('utils.cloud_tasks')
+cloud_tasks_module.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+storage_module = types.ModuleType('utils.other.storage')
+for name in (
+    'download_audio_chunks_and_merge',
+    'download_legacy_merged_wav',
+    'download_playback_artifact',
+    'enqueue_conversation_audio_merge',
+    'get_merged_audio_signed_url',
+    'get_or_create_merged_audio',
+    'get_playback_artifact_signed_url',
+    'is_playback_unavailable',
+):
+    setattr(storage_module, name, MagicMock())
+storage_module._PRECACHE_FILE_SEM = MagicMock()
+sys.modules.setdefault('utils.cloud_tasks', cloud_tasks_module)
+sys.modules.setdefault('utils.other.storage', storage_module)
 
-BACKEND = Path(__file__).resolve().parents[2]
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _load_playback(request):
-    cloud_tasks_module = ModuleType("utils.cloud_tasks")
-    cloud_tasks_module.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
-    storage_module = ModuleType("utils.other.storage")
-    for name in (
-        "download_audio_chunks_and_merge",
-        "download_legacy_merged_wav",
-        "download_playback_artifact",
-        "enqueue_conversation_audio_merge",
-        "get_merged_audio_signed_url",
-        "get_or_create_merged_audio",
-        "get_playback_artifact_signed_url",
-        "is_playback_unavailable",
-    ):
-        setattr(storage_module, name, MagicMock())
-    storage_module._PRECACHE_FILE_SEM = MagicMock()
-    with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
-        module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
-        request.module.playback = module
-        yield
+from utils.sync import playback
 
 
 class FakeRequest:

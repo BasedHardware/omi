@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/logger.dart';
@@ -112,8 +112,6 @@ class BleBridge implements BleFlutterApi {
 
   @override
   void onBatchRecordingFinalized(String fileName) {
-    debugPrint(
-        'BleBridge: batch recording finalized: $fileName (${_batchRecordingFinalizedListeners.length} listeners)');
     for (final cb in List.of(_batchRecordingFinalizedListeners)) {
       cb(fileName);
     }

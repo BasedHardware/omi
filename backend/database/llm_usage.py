@@ -5,15 +5,12 @@ Stores and queries LLM token usage by feature in Firestore.
 Schema: users/{uid}/llm_usage/{date} -> {feature -> {model -> {input_tokens, output_tokens}}}
 """
 
-import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from google.cloud import firestore
 
 from ._client import db
-
-transactional = getattr(firestore, 'transactional', lambda fn: fn)
 
 
 def record_llm_usage(
@@ -69,70 +66,6 @@ def record_llm_usage(
     }
 
     usage_ref.set(update_data, merge=True)
-
-
-@transactional
-def _record_chat_quota_question_transaction(
-    transaction,
-    usage_ref,
-    event_ref,
-    event_data: dict,
-    doc_id: str,
-) -> bool:
-    event_snapshot = event_ref.get(transaction=transaction)
-    if event_snapshot.exists:
-        return False
-
-    now = datetime.now(timezone.utc)
-    transaction.set(event_ref, event_data)
-    transaction.set(
-        usage_ref,
-        {
-            'backend_chat.quota_questions': firestore.Increment(1),
-            'date': doc_id,
-            'last_updated': now,
-        },
-        merge=True,
-    )
-    return True
-
-
-def record_chat_quota_question(
-    uid: str,
-    idempotency_key: str,
-    source: str,
-    message_id: Optional[str] = None,
-    chat_session_id: Optional[str] = None,
-    platform: Optional[str] = None,
-) -> bool:
-    """Record one accepted visible backend chat question exactly once.
-
-    This is the product-boundary quota counter for mobile/backend chat. It is
-    intentionally separate from ``chat.*.call_count``, which is LLM telemetry
-    and can vary with implementation details.
-    """
-    if not idempotency_key:
-        raise ValueError('idempotency_key is required')
-
-    now = datetime.now(timezone.utc)
-    doc_id = now.strftime('%Y-%m-%d')
-    event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
-
-    user_ref = db.collection('users').document(uid)
-    usage_ref = user_ref.collection('llm_usage').document(doc_id)
-    event_ref = user_ref.collection('chat_quota_events').document(event_id)
-    event_data = {
-        'idempotency_key': idempotency_key,
-        'source': source,
-        'message_id': message_id,
-        'chat_session_id': chat_session_id,
-        'platform': platform,
-        'created_at': now,
-        'date': doc_id,
-    }
-
-    transaction = db.transaction()
-    return _record_chat_quota_question_transaction(transaction, usage_ref, event_ref, event_data, doc_id)
 
 
 def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict:

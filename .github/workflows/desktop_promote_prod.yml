@@ -281,25 +281,6 @@ jobs:
             exit 1
           fi
 
-      - name: Validate desktop Calendar API key secret
-        if: steps.current.outputs.deploy_needed == 'true'
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-        run: |
-          set -euo pipefail
-          gcloud secrets versions access latest \
-            --project="$PROJECT_ID" \
-            --secret=DESKTOP_GOOGLE_CALENDAR_API_KEY > /tmp/desktop-google-calendar-api-key
-          python3 - <<'PY'
-          from pathlib import Path
-
-          value = Path("/tmp/desktop-google-calendar-api-key").read_bytes()
-          if value.endswith(b"\n"):
-              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY must not include a trailing newline")
-          if len(value) != 39 or not value.startswith(b"AIza"):
-              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
-          PY
-
       - name: Build and Push Desktop Backend Image
         if: steps.current.outputs.deploy_needed == 'true'
         uses: docker/build-push-action@v6
@@ -343,26 +324,6 @@ jobs:
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
             RELEASE_SECRET=RELEASE_SECRET:latest
-
-      - name: Route traffic to deployed desktop-backend revision
-        if: steps.current.outputs.deploy_needed == 'true'
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-        run: |
-          set -euo pipefail
-          REVISION="$(gcloud run services describe "$SERVICE" \
-            --project="$PROJECT_ID" \
-            --region="$REGION" \
-            --format='value(status.latestCreatedRevisionName)')"
-          if [ -z "$REVISION" ]; then
-            echo "Could not determine latest desktop-backend revision" >&2
-            exit 1
-          fi
-          gcloud run services update-traffic "$SERVICE" \
-            --project="$PROJECT_ID" \
-            --region="$REGION" \
-            --to-revisions="$REVISION=100" \
-            --quiet
 
       - name: Verify prod backend release identity
         env:

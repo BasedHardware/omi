@@ -125,10 +125,6 @@ function localApiOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailabi
   };
 }
 
-function trustedDirectControlOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
-  return {};
-}
-
 export const swiftToolManifest: OmiToolManifestEntry[] = [
   {
     name: "execute_sql",
@@ -236,15 +232,12 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
         },
         name: { type: "string", description: "Connector name, usually 'Omi Memory'." },
         server_url: { type: "string", description: "Remote MCP server URL to paste into the connector form." },
-        oauth_client_id: {
-          type: "string",
-          description: "OAuth Client ID. Defaults to Omi's public ChatGPT/Claude connector client.",
-        },
-        oauth_client_secret: { type: "string", description: "OAuth Client Secret, only for confidential clients." },
+        oauth_client_id: { type: "string", description: "OAuth Client ID, usually 'omi'." },
+        oauth_client_secret: { type: "string", description: "OAuth Client Secret / Omi MCP key." },
         authentication: { type: "string", description: "Authentication mode, usually 'OAuth'." },
         token_auth_method: {
           type: "string",
-          description: "OAuth token auth method. Use 'none' for Omi's public ChatGPT connector client.",
+          description: "OAuth token auth method, usually 'client_secret_post'.",
         },
         auth_url: { type: "string", description: "OAuth authorization URL when the form asks for it." },
         token_url: { type: "string", description: "OAuth token URL when the form asks for it." },
@@ -253,7 +246,7 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
           description: "Whether to press the visible Add/Connect/Create button after filling required fields.",
         },
       },
-      ["provider", "server_url"],
+      ["provider", "server_url", "oauth_client_secret"],
     ),
     annotations: openWorldWrite,
     timeoutClass: "normal",
@@ -272,11 +265,11 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     name: "spawn_agent",
     label: "Spawn Agent",
     description:
-      "Start canonical Omi background work and show it in the floating-bar pill UI. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
-    promptSnippet: "spawn_agent - Start a canonical background agent with pill UI",
+      "Start a floating background agent pill through the legacy floating-bar UI workflow. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
+    promptSnippet: "spawn_agent - Start a floating background agent pill",
     promptGuidelines: [
       "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
-      "Use delegate_agent instead when the new work must be linked to a known parent run.",
+      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
       "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes' instead of treating that name as a session to inspect.",
       "Return immediately after spawning; the pill keeps working in the background.",
     ],
@@ -780,7 +773,6 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
 ] satisfies OmiToolManifestEntry[];
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
-  const adapters = tool.name === "resolve_desktop_dispatch" ? trustedDirectControlOnly() : piAndStdio();
   return {
     name: tool.name,
     label: tool.label,
@@ -802,7 +794,7 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     executor: { kind: "runtimeControl" },
     intendedForAgents: true,
     runtimePreconditions: tool.runtimePreconditions,
-    adapters,
+    adapters: piAndStdio(),
   };
 }
 

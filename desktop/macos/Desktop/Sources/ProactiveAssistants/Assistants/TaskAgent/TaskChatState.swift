@@ -264,19 +264,11 @@ class TaskChatState: ObservableObject {
             guard let bridge = agentBridge else {
                 throw BridgeError.notRunning
             }
-            let contextPacketSummary = await buildContextPacketSummary(
-                bridge: bridge,
-                taskContext: taskContext,
-                userMessage: trimmedText
-            )
-
+            // If task context is provided (first message), prepend it to the prompt
+            // so the AI gets full task details. The user's displayed message stays clean.
             let fullPrompt: String
-            if let contextPacketSummary {
-                if let taskContext, !taskContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    fullPrompt = "\(contextPacketSummary)\n\n# Task Context\n\n\(taskContext)\n\n---\n\n# User Message\n\n\(trimmedText)"
-                } else {
-                    fullPrompt = "\(contextPacketSummary)\n\n# User Message\n\n\(trimmedText)"
-                }
+            if let ctx = taskContext {
+                fullPrompt = "# Task Context\n\n\(ctx)\n\n---\n\n# User Message\n\n\(trimmedText)"
             } else {
                 fullPrompt = trimmedText
             }
@@ -336,11 +328,9 @@ class TaskChatState: ObservableObject {
                             && (
                                 !messages[currentIndex].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 || !messages[currentIndex].contentBlocks.isEmpty
-                                || !queryResult.artifacts.isEmpty
                             )
                         messages[currentIndex].isStreaming = false
-                        messages[currentIndex].resources = queryResult.artifacts.map(ChatResource.artifact)
-                        completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
+                        completeRemainingToolCalls(messageId: aiMessageId)
                         if shouldPersistPartial {
                             persistMessage(messages[currentIndex])
                         }
@@ -349,7 +339,6 @@ class TaskChatState: ObservableObject {
                     let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                     messages[index].text = messageText
                     messages[index].isStreaming = false
-                    messages[index].resources = queryResult.artifacts.map(ChatResource.artifact)
                     completeRemainingToolCalls(messageId: aiMessageId)
                     persistMessage(messages[index])
                 }
@@ -385,10 +374,7 @@ class TaskChatState: ObservableObject {
                 } else {
                     Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
                     messages[index].isStreaming = false
-                    completeRemainingToolCalls(
-                        messageId: aiMessageId,
-                        terminalStatus: failedByUserStop ? .completed : .failed
-                    )
+                    completeRemainingToolCalls(messageId: aiMessageId)
                     persistMessage(messages[index])
                 }
             }
@@ -410,73 +396,6 @@ class TaskChatState: ObservableObject {
         if let followUp = pendingFollowUpText {
             pendingFollowUpText = nil
             await sendMessage(followUp, isFollowUp: true)
-        }
-    }
-
-    private func buildContextPacketSummary(
-        bridge: AgentBridge,
-        taskContext: String?,
-        userMessage: String
-    ) async -> String? {
-        guard let taskContext, !taskContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        let redactedPreview = String(taskContext.prefix(1_200))
-        let input: [String: Any] = [
-            "surfaceKind": "task_chat",
-            "objective": userMessage,
-            "retentionClass": "ephemeral",
-            "ttlMs": 15 * 60 * 1_000,
-            "packetJson": [
-                "snippets": [
-                    [
-                        "snippetId": "task_context",
-                        "sourceKind": "task_chat",
-                        "operation": "selected_task_context",
-                        "provenance": ["taskId": taskId],
-                        "content": taskContext,
-                        "redactedContent": redactedPreview,
-                        "sensitivityTier": "local_private",
-                    ],
-                    [
-                        "snippetId": "current_user_message",
-                        "sourceKind": "task_chat",
-                        "operation": "current_user_message",
-                        "provenance": ["taskId": taskId],
-                        "content": userMessage,
-                        "redactedContent": userMessage,
-                        "sensitivityTier": "low",
-                    ],
-                ],
-                "selectedToolBundles": ["desktop.context.local_read", "desktop.tasks.readwrite"],
-                "constraints": ["Use the persisted context packet and the model-visible task context; cite task evidence before claiming completion."],
-                "evidenceRequired": ["Cite task state or artifact evidence before claiming completion."],
-                "boundaryPolicy": ["taskMutations": "candidate_or_dispatch"],
-            ],
-        ]
-
-        do {
-            let raw = try await bridge.controlTool(name: "build_desktop_context_packet", input: input)
-            guard let data = raw.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  object["ok"] as? Bool == true,
-                  let packet = object["packet"] as? [String: Any],
-                  let packetId = packet["packetId"] as? String,
-                  let preview = packet["redactedPreviewJson"] as? [String: Any] else {
-                return "# Context Packet\n\nA scoped task-chat context packet was requested but could not be parsed."
-            }
-            let previewData = try? JSONSerialization.data(withJSONObject: preview, options: [.sortedKeys])
-            let previewText = previewData.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-            return """
-            # Context Packet
-
-            Persisted DesktopContextPacket `\(packetId)` audits the scoped task context. The full task context is included below in the prompt. Redacted preview:
-
-            \(previewText)
-            """
-        } catch {
-            logError("TaskChatState[\(taskId)]: failed to build context packet", error: error)
-            return nil
         }
     }
 
@@ -540,7 +459,7 @@ class TaskChatState: ObservableObject {
            messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
             messages[index].isStreaming = false
-            completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)
+            completeRemainingToolCalls(messageId: activeAssistantMessageId)
             if persist {
                 persistMessage(messages[index])
             }
@@ -554,7 +473,7 @@ class TaskChatState: ObservableObject {
         }) {
             Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
             messages[index].isStreaming = false
-            completeRemainingToolCalls(messageId: messages[index].id, terminalStatus: .failed)
+            completeRemainingToolCalls(messageId: messages[index].id)
             if persist {
                 persistMessage(messages[index])
             }
@@ -649,25 +568,62 @@ class TaskChatState: ObservableObject {
         }
     }
 
+    // Mirrors ChatProvider.addToolActivity — kept in lockstep.
+    // TODO: DRY these two implementations into a shared helper.
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolActivity(
-            to: &messages[index].contentBlocks,
-            toolName: toolName,
-            status: status,
-            toolUseId: toolUseId,
-            input: input
-        )
+
+        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
+
+        if status == .running {
+            if let toolUseId = toolUseId, toolInput != nil {
+                for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
+                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
+                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
+                        messages[index].contentBlocks[i] = .toolCall(
+                            id: id, name: name, status: st,
+                            toolUseId: toolUseId, input: toolInput, output: output
+                        )
+                        return
+                    }
+                }
+            }
+            messages[index].contentBlocks.append(
+                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
+                          toolUseId: toolUseId, input: toolInput)
+            )
+        } else {
+            for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
+                if case .toolCall(let id, let name, let st, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
+                   st.isInFlight {
+                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
+                    if matches {
+                        messages[index].contentBlocks[i] = .toolCall(
+                            id: id, name: name, status: .completed,
+                            toolUseId: toolUseId ?? existingTuid,
+                            input: toolInput ?? existingInput,
+                            output: output
+                        )
+                        break
+                    }
+                }
+            }
+        }
     }
 
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolOutput(
-            to: &messages[index].contentBlocks,
-            toolUseId: toolUseId,
-            name: name,
-            output: output
-        )
+
+        for i in messages[index].contentBlocks.indices {
+            if case .toolCall(let id, let blockName, let status, let tuid, let input, _) = messages[index].contentBlocks[i],
+               (tuid == toolUseId || (tuid == nil && blockName == name)) {
+                messages[index].contentBlocks[i] = .toolCall(
+                    id: id, name: blockName, status: status,
+                    toolUseId: toolUseId, input: input, output: output
+                )
+                return
+            }
+        }
     }
 
     private func appendThinking(messageId: String, text: String) {
@@ -686,11 +642,16 @@ class TaskChatState: ObservableObject {
     /// Mirrors ChatProvider.completeRemainingToolCalls — matches any
     /// in-flight state (`.running`, `.slow`, `.stalled`) so detector-
     /// promoted blocks resolve when the turn ends.
-    private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
+    private func completeRemainingToolCalls(messageId: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.completeRemainingToolCalls(
-            in: &messages[index].contentBlocks,
-            terminalStatus: terminalStatus
-        )
+        for i in messages[index].contentBlocks.indices {
+            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = messages[index].contentBlocks[i],
+               status.isInFlight {
+                messages[index].contentBlocks[i] = .toolCall(
+                    id: id, name: name, status: .completed,
+                    toolUseId: toolUseId, input: input, output: output
+                )
+            }
+        }
     }
 }

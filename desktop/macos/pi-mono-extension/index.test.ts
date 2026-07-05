@@ -986,8 +986,8 @@ function normalizeProjectedSchema(schema: any): Record<string, unknown> {
   return normalized;
 }
 
-test("OMI_TOOLS: exact tool count matches canonical pi-mono projection", () => {
-  assert.equal(OMI_TOOLS.length, toolNamesForAdapter("pi-mono").length);
+test("OMI_TOOLS: exactly 27 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 27);
 });
 
 test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
@@ -1078,22 +1078,14 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     semantic_search: ["query"],
     get_daily_recap: [],
     get_task_agent_status: [],
-    fill_cloud_connector_form: ["provider", "server_url"],
+    fill_cloud_connector_form: ["provider", "server_url", "oauth_client_secret"],
     list_agent_sessions: [],
     get_agent_run: ["runId"],
-    build_desktop_awareness_snapshot: [],
-    list_desktop_action_queue: [],
-    get_desktop_open_loops: [],
-    build_desktop_context_packet: ["objective", "packetJson", "retentionClass", "surfaceKind", "ttlMs"],
-    route_desktop_intent: ["surfaceKind", "utterance"],
-    evaluate_desktop_tool_policy: ["selectedBundles"],
-    create_desktop_dispatch: ["decisionPrompt", "kind", "priority", "title"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],
     update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
     send_agent_message: ["sessionId", "prompt"],
-    spawn_background_agent: ["prompt"],
     delegate_agent: ["mode", "parentRunId", "objective"],
     spawn_agent: ["brief"],
     manage_agent_pills: ["action"],
@@ -1153,33 +1145,29 @@ test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfac
   assert.match(delegateAgent?.description ?? "", /does not create or manage floating pill UI/);
   assert.ok(
     delegateAgent?.promptGuidelines?.includes(
-      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
+      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
     ),
   );
 
   const spawnAgent = OMI_TOOLS.find((tool) => tool.name === "spawn_agent");
-  assert.match(spawnAgent?.description ?? "", /canonical Omi background work/);
+  assert.match(spawnAgent?.description ?? "", /legacy floating-bar UI workflow/);
   assert.ok(
     spawnAgent?.promptGuidelines?.includes(
-      "Use delegate_agent instead when the new work must be linked to a known parent run.",
+      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
     ),
   );
 });
 
 test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {
-  const advertisedControlManifest = agentControlCapabilityManifest.filter((manifestTool) =>
-    OMI_TOOLS.some((tool) => tool.name === manifestTool.name)
-  );
   const controlTools = OMI_TOOLS.filter((tool) =>
     agentControlCapabilityManifest.some((manifestTool) => manifestTool.name === tool.name)
   );
   assert.deepEqual(
     controlTools.map((tool) => tool.name),
-    advertisedControlManifest.map((tool) => tool.name),
+    agentControlCapabilityManifest.map((tool) => tool.name),
   );
-  assert.ok(!OMI_TOOLS.some((tool) => tool.name === "resolve_desktop_dispatch"));
 
-  for (const manifestTool of advertisedControlManifest) {
+  for (const manifestTool of agentControlCapabilityManifest) {
     const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
     assert.ok(tool, `${manifestTool.name} missing from OMI_TOOLS`);
     assert.equal(tool!.label, manifestTool.label, `${manifestTool.name} label drifted`);
@@ -1302,8 +1290,7 @@ test("registerOmiTools: snapshot write failure logs and still registers tools", 
 
 test("OMI_TOOLS: agent control timeout classes match canonical manifest", () => {
   for (const manifestTool of agentControlCapabilityManifest) {
-    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
-    if (!tool) continue;
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name)!;
     const timeoutMs = manifestTool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS;
     assert.equal((tool as any).__omiTimeoutMsForTest, timeoutMs, `${tool.name} timeout class drifted`);
   }
@@ -1356,7 +1343,7 @@ test("OMI_TOOLS: cloud connector form filler is registered for pi-mono agents", 
 
   const props = (tool.parameters as any).properties;
   const required = (tool.parameters as any).required ?? [];
-  assert.deepEqual(required.sort(), ["provider", "server_url"].sort());
+  assert.deepEqual(required.sort(), ["provider", "server_url", "oauth_client_secret"].sort());
   assert.deepEqual(props.provider.enum, ["claude", "chatgpt"]);
   assert.equal(props.server_url.type, "string");
   assert.equal(props.oauth_client_secret.type, "string");

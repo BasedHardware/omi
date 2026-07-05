@@ -91,7 +91,6 @@ struct AudioSourceIndicator: View {
 
 // MARK: - Preview
 
-#if canImport(PreviewsMacros)
 #Preview("Audio Source Selector") {
     VStack(spacing: 20) {
         AudioSourceSelector(appState: AppState())
@@ -100,4 +99,3 @@ struct AudioSourceIndicator: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
-#endif

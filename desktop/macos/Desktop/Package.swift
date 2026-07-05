@@ -47,10 +47,6 @@ let package = Package(
         .product(name: "FluidAudio", package: "FluidAudio"),
       ],
       path: "Sources",
-      exclude: [
-        "GoogleService-Info-Dev.plist",
-        "GoogleService-Info-Local.plist",
-      ],
       resources: [
         .process("GoogleService-Info.plist"),
         // Bundles everything under Resources/ (incl. *_logo.png brand marks).

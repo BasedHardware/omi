@@ -140,7 +140,6 @@ actor AppIconCache {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     HStack(spacing: 16) {
         AppIconView(appName: "Safari", size: 32)
@@ -151,4 +150,3 @@ actor AppIconCache {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
-#endif

@@ -704,7 +704,7 @@ struct OnboardingChatView: View {
   }
 
   private func stopAgent() {
-    chatProvider.stopAgent(owner: .mainChat)
+    chatProvider.stopAgent()
   }
 
   private func cancelRecoveredOnboardingFallback() {

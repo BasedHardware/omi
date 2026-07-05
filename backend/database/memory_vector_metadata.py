@@ -84,7 +84,7 @@ def _shared_memory_vector_metadata_fields(
         device_ids = [item.primary_capture_device]
     if device_ids:
         shared["capture_device_ids"] = device_ids
-    return strip_null_metadata_values(shared)
+    return shared
 
 
 def build_memory_vector_metadata(
@@ -102,11 +102,6 @@ def build_memory_vector_metadata(
         "memory_layer": item.tier.value,
         **shared,
     }
-
-
-def strip_null_metadata_values(metadata: Dict[str, Any]) -> Dict[str, Any]:
-    """Return Pinecone-safe metadata without null values."""
-    return {key: value for key, value in metadata.items() if value is not None}
 
 
 def build_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
@@ -248,5 +243,4 @@ __all__ = [
     "deterministic_memory_vector_id",
     "parse_memory_search_vector_hit",
     "parse_search_vector_hit",
-    "strip_null_metadata_values",
 ]

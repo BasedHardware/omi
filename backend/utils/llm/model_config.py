@@ -74,8 +74,6 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-nano', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4-mini', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -126,8 +124,6 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -177,8 +173,6 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -211,7 +205,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
 _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
-    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1').strip() or 'gpt-5.1', 'openai'),
+    'fair_use': ('gpt-5.1', 'openai'),
 }
 
 # Resolve active profile once at startup.

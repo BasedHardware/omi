@@ -502,7 +502,6 @@ class ShortcutSettings: ObservableObject {
             guard selectedVoiceID != oldValue else { return }
             UserDefaults.standard.set(selectedVoiceID, forKey: "shortcut_selectedVoiceID")
             FloatingBarVoicePlaybackService.shared.playVoiceSample(voiceID: selectedVoiceID)
-            FloatingBarVoicePlaybackService.shared.prewarmBackgroundAgentKickoffPhrases()
         }
     }
 
@@ -566,10 +565,6 @@ class ShortcutSettings: ObservableObject {
                 guard let self else { return }
                 self.selectedModel = ModelQoS.Claude.sanitizedSelection(self.selectedModel)
             }
-        }
-
-        Task { @MainActor in
-            FloatingBarVoicePlaybackService.shared.prewarmBackgroundAgentKickoffPhrases()
         }
     }
 

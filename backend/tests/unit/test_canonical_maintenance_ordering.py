@@ -16,7 +16,6 @@ os.environ.setdefault(
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_consolidation import ConsolidationReport
-from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 from utils.memory.memory_system import MemorySystem
 from utils.memory.short_term_promotion import (
     CanonicalShortTermLifecycleReport,
@@ -235,8 +234,7 @@ def test_promotion_defers_items_not_in_consolidation_batch():
         patch("utils.memory.short_term_promotion.list_fast_track_promotable_items", return_value=[]),
         patch("utils.memory.short_term_promotion._read_control_state") as mock_control,
         patch(
-            "utils.memory.short_term_promotion.promote_short_term_item_via_apply",
-            return_value=(items[0], False, CanonicalKgPromotionResult(attempted=True, success=True), True),
+            "utils.memory.short_term_promotion.promote_short_term_item_via_apply", return_value=(items[0], False)
         ) as mock_promote,
         patch("utils.memory.short_term_promotion._persist_control_state"),
         patch("utils.memory.short_term_promotion._audit_promotion_transition", return_value=MagicMock()),
@@ -278,7 +276,7 @@ def test_fast_track_respects_consolidation_batch_gate():
         patch("utils.memory.short_term_promotion._read_control_state") as mock_control,
         patch(
             "utils.memory.short_term_promotion.promote_short_term_item_via_apply",
-            return_value=(batched_item, False, CanonicalKgPromotionResult(attempted=True, success=True), True),
+            return_value=(batched_item, False),
         ) as mock_promote,
         patch("utils.memory.short_term_promotion._persist_control_state"),
         patch("utils.memory.short_term_promotion._audit_promotion_transition", return_value=MagicMock()),

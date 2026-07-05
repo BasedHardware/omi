@@ -1,0 +1,42 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  exclude:
+    # Vendored research material (Meta's official samples + the rodcone
+    # community plugin) used purely as design reference. Not part of this
+    # plugin's source. See `CURSOR.md` for context.
+    - meta-glasses-research/**
+    # Each sample is its own Flutter project with its own pubspec /
+    # analysis_options. They are linted independently via
+    # `cd samples/camera_access && flutter analyze`.
+    - samples/**
+
+# Project-specific overrides for the v0.1.0 development cut.
+# Slice 12 (docs) re-enables `public_member_api_docs` after every public API
+# has been documented. The other suppressions below are stable choices for
+# this codebase.
+linter:
+  rules:
+    # Slice 12: every public API now has dartdoc. Re-enabled.
+    public_member_api_docs: true
+    # Models reference facade symbols (e.g. `[MetaWearablesDat.startStream]`)
+    # for navigability in published dartdoc. Importing the facade in every
+    # model file would create a cycle (the facade also exports them), and
+    # rewriting the references as plain text loses the cross-link in the
+    # rendered docs. Re-evaluated alongside `public_member_api_docs` in
+    # slice 12.
+    comment_references: false
+    # very_good_analysis enforces 80-col by default; we prefer ~100 columns
+    # to keep type-rich Flutter widget trees and platform-channel maps
+    # readable.
+    lines_longer_than_80_chars: false
+    # Stylistic; we prefer fields-then-constructors order for plain data
+    # classes such as `DeviceInfo` / `FrameData`.
+    sort_constructors_first: false
+    # We use `// ignore:` deliberately and contextually; not every ignore
+    # needs an inline justification.
+    document_ignores: false
+    # `dart format` (Dart 3.7+ "tall style") removes trailing commas it doesn't
+    # need to control wrapping, so this lint fights the formatter. The
+    # formatter is the source of truth for trailing commas in this project.
+    require_trailing_commas: false

@@ -27,30 +27,12 @@ from tests.unit.test_ws_i_write_convergence import _FakeDb, _trusted_account_gen
 
 def _control_seed(uid: str) -> dict:
     return {
-        f"users/{uid}/memory_state/apply_control": MemoryControlState(
+        f"users/{uid}/memory_control/state": MemoryControlState(
             uid=uid,
             head_commit_id="head0",
             account_generation=1,
             source_generation=1,
         ).model_dump(mode="json"),
-    }
-
-
-def _rollout_control_doc(uid: str) -> dict:
-    return {
-        "uid": uid,
-        "schema_version": 1,
-        "mode": "write",
-        "mode_epoch": 1,
-        "cutover_epoch": 0,
-        "account_generation": 1,
-        "fallback_projection_ready": False,
-        "persistent_memory_writes_started": True,
-        "decommission_reconciled": False,
-        "writes_blocked": False,
-        "stage_gates": {"shadow": "passed", "write": "passed", "read": "blocked"},
-        "grants": {"omi_chat": {"default_memory": False, "archive": False}},
-        "vector_repair_outbox_enabled": False,
     }
 
 
@@ -100,35 +82,6 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     assert stored["arguments"] == {"location": "San Francisco"}
 
 
-def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkeypatch_trusted_account):
-    uid = "uid-rollout-doc-present"
-    payload = {
-        "id": "mem_rollout_collision",
-        "uid": uid,
-        "content": "Canonical write works with rollout state present",
-        "conversation_id": "conv-rollout-collision",
-        "memory_tier": MemoryTier.short_term.value,
-        "created_at": datetime(2026, 6, 1, tzinfo=timezone.utc),
-        "updated_at": datetime(2026, 6, 1, tzinfo=timezone.utc),
-    }
-    db = _FakeDb({f"users/{uid}/memory_control/state": _rollout_control_doc(uid)})
-    service = MemoryService(db_client=db)
-
-    with (
-        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
-    ):
-        service.write(uid, payload)
-
-    apply_control = db.docs[f"users/{uid}/memory_state/apply_control"]
-    rollout_control = db.docs[f"users/{uid}/memory_control/state"]
-    assert apply_control["head_commit_id"] != "head0"
-    assert apply_control["source_generation"] == 1
-    assert rollout_control["mode"] == "write"
-    assert rollout_control["stage_gates"]["read"] == "blocked"
-    assert f"users/{uid}/memory_items/mem_rollout_collision" in db.docs
-
-
 def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account):
     from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
     from models.product_memory import MemoryItem, ProcessingState
@@ -176,7 +129,7 @@ def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account)
         ) as mock_extract,
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted"),
     ):
-        assert extract_kg_for_promoted_memory("uid-kg", item).success is True
+        assert extract_kg_for_promoted_memory("uid-kg", item) is True
         mock_extract.assert_called_once()
         kg_content = mock_extract.call_args[0][1]
         assert kg_content == f"[{USER_ENTITY_ID}] resides_in (location=San Francisco): lives in San Francisco"

@@ -10,6 +10,7 @@ struct ConnectDestinationSheet: View {
   @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
   let onDismiss: () -> Void
 
+
   /// CLI+cloud pair for an anchor destination (CLI first).
   static func group(for d: MemoryExportDestination) -> [MemoryExportDestination] {
     switch d {
@@ -59,7 +60,6 @@ struct ConnectDestinationSheet: View {
               .background(Circle().fill(OmiColors.backgroundTertiary))
           }
           .buttonStyle(.plain)
-          .accessibilityLabel("Close")
         }
         .padding(24)
 
@@ -89,13 +89,12 @@ private struct ConnectOptionCard: View {
   @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
 
   @State private var isRunning = false
-  @State private var resultMessage: ConnectOptionResultMessage?
+  @State private var resultMessage: String?
   @State private var mcpKey: String?
   @State private var showManual = false
   @State private var permissionRefreshID = 0
 
-  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common)
-    .autoconnect()
+  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
   private var optionLabel: String {
     switch destination {
@@ -108,19 +107,17 @@ private struct ConnectOptionCard: View {
   }
 
   private var primaryLabel: String {
-    let presentation = connectionPresentation
     _ = permissionRefreshID
-    return presentation.primaryActionTitle ?? "Connected"
-  }
-
-  private var connectionPresentation: MemoryExportConnectionPresentation {
-    MemoryExportConnectionPresentation.make(
-      destination: destination,
-      status: statuses[destination],
-      isRunning: isRunning,
-      accessibilityPreflightMissing: MemoryExportExecutor.accessibilityPreflightMissing(
-        for: destination)
-    )
+    switch destination.mcpExecuteKind {
+    case .localAutonomous:
+      return "Do it for me"
+    case .browserAutonomous:
+      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
+        ? "Grant Accessibility"
+        : "Do it for me"
+    case .assisted:
+      return "Open & copy key"
+    }
   }
 
   var body: some View {
@@ -140,24 +137,15 @@ private struct ConnectOptionCard: View {
       }
 
       VStack(alignment: .leading, spacing: 8) {
-        if let completion = connectionPresentation.completion {
-          setupCompleteBlock(completion)
-        } else {
-          // Primary action — the shared app pill (compact, white). Same style the
-          // single-destination sheet uses, so the connect flow is consistent.
-          Button(action: run) {
-            ConnectionModalActionButton(
-              title: isRunning ? "Connecting…" : primaryLabel,
-              isConnected: isConnected
-            )
-          }
-          .buttonStyle(.plain)
-          .disabled(isRunning || isConnected)
-        }
+        // Primary action — the shared app pill (compact, white). Same style the
+        // single-destination sheet uses, so the connect flow is consistent.
+        Button(isRunning ? "Connecting…" : primaryLabel, action: run)
+          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .disabled(isRunning)
 
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
-          ManualInstallationDisclosure(isExpanded: $showManual, fontSize: 12) {
+          DisclosureGroup(isExpanded: $showManual) {
             VStack(alignment: .leading, spacing: 8) {
               ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
                 Text("\(idx + 1). \(step)")
@@ -166,17 +154,24 @@ private struct ConnectOptionCard: View {
                   .fixedSize(horizontal: false, vertical: true)
                   .frame(maxWidth: .infinity, alignment: .leading)
               }
-              manualBlock(manualText(for: setup))
+              manualBlock(
+                setup.copyText
+                  ?? "Server URL: \(setup.serverURL)\nKey: \(mcpKey ?? "YOUR_OMI_KEY")")
             }
             .padding(.top, 8)
+          } label: {
+            Text("Manual installation")
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.textTertiary)
           }
+          .tint(OmiColors.textTertiary)
         }
       }
 
       if let resultMessage {
-        Text(resultMessage.text)
+        Text(resultMessage)
           .scaledFont(size: 11, weight: .medium)
-          .foregroundColor(resultMessage.foregroundColor)
+          .foregroundColor(OmiColors.success)
       }
     }
     .padding(16)
@@ -186,14 +181,16 @@ private struct ConnectOptionCard: View {
         .fill(OmiColors.backgroundSecondary)
     )
     .task {
-      statuses[destination] = await MemoryExportService.shared.status(for: destination)
-      await prepareMCPKeyIfNeeded()
+      if let stored = await MemoryExportService.shared.storedMCPKey() {
+        mcpKey = stored
+      } else {
+        mcpKey = try? await MemoryExportService.shared.ensureMCPKey()
+      }
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
     }
   }
@@ -203,23 +200,6 @@ private struct ConnectOptionCard: View {
     permissionRefreshID += 1
   }
 
-  private var isConnected: Bool {
-    destination.hasLocallyVerifiableLiveSetup && statuses[destination]?.hasConnection == true
-  }
-
-  private func prepareMCPKeyIfNeeded() async {
-    guard destination.requiresHostedMCPKeyForSetup else { return }
-    if let stored = await MemoryExportService.shared.storedMCPKey() {
-      mcpKey = stored
-      return
-    }
-    do {
-      mcpKey = try await MemoryExportService.shared.ensureMCPKey()
-    } catch {
-      resultMessage = .failure("Couldn't prepare your Omi key. Try again.")
-    }
-  }
-
   private func run() {
     isRunning = true
     Task { @MainActor in
@@ -227,82 +207,17 @@ private struct ConnectOptionCard: View {
         let outcome = try await MemoryExportExecutor.run(destination)
         switch outcome.mode {
         case .autonomous:
-          resultMessage = .success("Omi is setting this up — follow along in the floating bar.")
+          resultMessage = "Omi is setting this up — follow along in the floating bar."
         case .assisted:
-          resultMessage = .success(outcome.taskTitle)
-          // Assisted flow: the user pastes values by hand, so open the
-          // step-by-step instructions instead of leaving them collapsed.
-          if destination.assistedOverlayHint != nil {
-            showManual = true
-          }
+          resultMessage = "Opened \(destination.title) and copied your key."
         case .completed:
-          resultMessage = .success(outcome.taskTitle)
+          resultMessage = outcome.taskTitle
         }
-        statuses[destination] = await MemoryExportService.shared.status(for: destination)
       } catch {
-        resultMessage = .failure(setupFailureMessage(for: error))
+        resultMessage = error.localizedDescription
       }
       isRunning = false
     }
-  }
-
-  private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    HStack(alignment: .top, spacing: 10) {
-      Image(systemName: "checkmark.seal.fill")
-        .scaledFont(size: 15, weight: .semibold)
-        .foregroundColor(OmiColors.success)
-        .padding(.top, 1)
-      VStack(alignment: .leading, spacing: 4) {
-        Text(completion.title)
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Text(completion.subtitle)
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-    }
-    .padding(10)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(OmiColors.backgroundTertiary)
-        .overlay(
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
-    )
-  }
-
-  private func setupFailureMessage(for error: Error) -> String {
-    if let executorError = error as? MemoryExportExecutor.ExecutorError {
-      switch executorError {
-      case .browserSetupRequired:
-        return "Grant Accessibility, then try again."
-      case .unsupported:
-        return "\(optionLabel) setup isn't available yet."
-      }
-    }
-
-    if let connectorError = error as? MemoryBankConnector.ConnectError {
-      switch connectorError {
-      case .notInstalled:
-        return "\(optionLabel) isn't installed or available on this Mac."
-      case .invalidConfig:
-        return "Omi couldn't update \(optionLabel). Check its setup, then try again."
-      }
-    }
-
-    return "Omi couldn't finish setup. Try again."
-  }
-
-  private func manualText(for setup: MCPSetup) -> String {
-    if let copyText = setup.copyText {
-      return copyText
-    }
-    if destination.requiresHostedMCPKeyForSetup {
-      return "Server URL: \(setup.serverURL)\nKey: \(mcpKey ?? "YOUR_OMI_KEY")"
-    }
-    return "Server URL: \(setup.serverURL)"
   }
 
   private func manualBlock(_ text: String) -> some View {
@@ -316,7 +231,7 @@ private struct ConnectOptionCard: View {
       Button {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        resultMessage = .success("Copied.")
+        resultMessage = "Copied."
       } label: {
         Text("Copy")
           .scaledFont(size: 11, weight: .semibold)
@@ -331,26 +246,5 @@ private struct ConnectOptionCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OmiColors.backgroundTertiary))
-  }
-}
-
-private enum ConnectOptionResultMessage {
-  case success(String)
-  case failure(String)
-
-  var text: String {
-    switch self {
-    case .success(let text), .failure(let text):
-      return text
-    }
-  }
-
-  var foregroundColor: Color {
-    switch self {
-    case .success:
-      return OmiColors.success
-    case .failure:
-      return OmiColors.warning
-    }
   }
 }

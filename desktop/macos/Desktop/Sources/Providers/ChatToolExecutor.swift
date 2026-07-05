@@ -31,44 +31,6 @@ class ChatToolExecutor {
   private static var fileScanFileCount = 0
   private static var followupContinuation: CheckedContinuation<String, Never>?
 
-  nonisolated static let onboardingPermissionTypes = [
-    "screen_recording",
-    "microphone",
-    "notifications",
-    "accessibility",
-    "automation",
-    "full_disk_access",
-  ]
-
-  nonisolated static var onboardingPermissionTypesDescription: String {
-    onboardingPermissionTypes.joined(separator: ", ")
-  }
-
-  nonisolated static func onboardingPermissionStatusPayload(
-    screenRecording: Bool,
-    microphone: Bool,
-    notifications: Bool,
-    accessibility: Bool,
-    automation: Bool,
-    fullDiskAccess: Bool
-  ) -> [String: String] {
-    [
-      "screen_recording": screenRecording ? "granted" : "not_granted",
-      "microphone": microphone ? "granted" : "not_granted",
-      "notifications": notifications ? "granted" : "not_granted",
-      "accessibility": accessibility ? "granted" : "not_granted",
-      "automation": automation ? "granted" : "not_granted",
-      "full_disk_access": fullDiskAccess ? "granted" : "not_granted",
-    ]
-  }
-
-  struct LocalFileScanOutcome {
-    let hasReadableUserFileTarget: Bool
-    let didCompleteSuccessfully: Bool
-    let indexedFileCount: Int
-    let summaryText: String
-  }
-
   static func resumeFollowup(with reply: String) {
     followupContinuation?.resume(returning: reply)
     followupContinuation = nil
@@ -81,11 +43,6 @@ class ChatToolExecutor {
     originatingClientScope: String? = nil
   ) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
-
-    if case .deny(let message) = localPolicyDecision(toolName: toolCall.name, arguments: toolCall.arguments) {
-      log("Tool \(toolCall.name) denied by local policy")
-      return message
-    }
 
     switch toolCall.name {
     case "get_local_status":
@@ -223,66 +180,6 @@ class ChatToolExecutor {
     }
   }
 
-  // MARK: - Local Tool Policy
-
-  nonisolated enum LocalToolPolicyDecision: Equatable {
-    case allow
-    case deny(String)
-  }
-
-  nonisolated static func localPolicyDecision(toolName: String, arguments: [String: Any]) -> LocalToolPolicyDecision {
-    switch toolName {
-    case "execute_sql":
-      guard let query = arguments["query"] as? String, !query.isEmpty else {
-        return .allow
-      }
-      guard isReadOnlySQLStatement(query) else {
-        return .deny(
-          policyDeniedMessage(
-            toolName: toolName,
-            code: "approval_required",
-            capability: "desktop.context.local_write",
-            message: "SQL writes require explicit approval before Omi can change local data."
-          ))
-      }
-      return .allow
-
-    case "capture_screen", "get_screenshot":
-      return .deny(
-        policyDeniedMessage(
-          toolName: toolName,
-          code: "approval_required",
-          capability: "desktop.context.screenshot_image",
-          message: "Screenshot image access requires explicit approval before Omi can share screen image bytes."
-        ))
-
-    default:
-      return .allow
-    }
-  }
-
-  private nonisolated static func policyDeniedMessage(
-    toolName: String,
-    code: String,
-    capability: String,
-    message: String
-  ) -> String {
-    let payload = [
-      "ok": false,
-      "code": code,
-      "tool": toolName,
-      "capability": capability,
-      "message": message,
-    ] as [String: Any]
-    guard
-      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
-      let json = String(data: data, encoding: .utf8)
-    else {
-      return "POLICY_DENIED: \(message)"
-    }
-    return "POLICY_DENIED: \(json)"
-  }
-
   /// Execute multiple tool calls and return results keyed by tool name
   static func executeAll(_ toolCalls: [ToolCall]) async -> [String: String] {
     var results: [String: String] = [:]
@@ -369,7 +266,7 @@ class ChatToolExecutor {
       }
     } catch {
       logError("Tool execute_sql failed", error: error)
-      return "SQL Error: The local database could not complete that query."
+      return "SQL Error: \(error.localizedDescription)\nFailed query: \(trimmed)"
     }
   }
 
@@ -588,20 +485,13 @@ class ChatToolExecutor {
     }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    guard let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
-      .init(
-        originalUserText: brief,
-        brief: brief,
-        title: (title?.isEmpty == false) ? title : directedProvider?.displayName,
-        spokenAck: nil,
-        directedProvider: directedProvider,
-        validateAgainstOriginalUserText: false
-      ),
+    let pill = AgentPillsManager.shared.spawnFromUserQuery(
+      brief,
       model: model,
-      fromVoice: false
-    ) else {
-      return "Error: Missing self-contained brief. Pass a clear task with enough context for a background agent to execute independently."
-    }
+      fromVoice: false,
+      preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+      bridgeHarnessOverride: directedProvider?.harnessMode
+    )
     return """
     Agent started as a floating agent pill.
     id: \(pill.id.uuidString)
@@ -1133,7 +1023,7 @@ class ChatToolExecutor {
   private static func executeRequestPermission(_ args: [String: Any]) async -> String {
     guard let type = args["type"] as? String else {
       return
-        "Error: 'type' parameter is required (\(onboardingPermissionTypesDescription))"
+        "Error: 'type' parameter is required (screen_recording, microphone, accessibility, automation)"
     }
 
     guard let appState = onboardingAppState else {
@@ -1168,17 +1058,6 @@ class ChatToolExecutor {
         return "granted"
       } else {
         return "pending - user needs to allow microphone access in the system dialog"
-      }
-
-    case "notifications":
-      appState.requestNotificationPermission()
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      appState.checkNotificationPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      if appState.hasNotificationPermission {
-        return "granted"
-      } else {
-        return "pending - user needs to allow notifications in the system dialog or enable omi in System Settings > Notifications"
       }
 
     case "accessibility":
@@ -1222,7 +1101,7 @@ class ChatToolExecutor {
 
     default:
       return
-        "Error: unknown permission type '\(type)'. Valid types: \(onboardingPermissionTypesDescription)"
+        "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, accessibility, automation, full_disk_access"
     }
   }
 
@@ -1235,14 +1114,13 @@ class ChatToolExecutor {
     appState.checkAllPermissions()
     try? await Task.sleep(nanoseconds: 500_000_000)
 
-    let statuses = onboardingPermissionStatusPayload(
-      screenRecording: appState.hasScreenRecordingPermission,
-      microphone: appState.hasMicrophonePermission,
-      notifications: appState.hasNotificationPermission,
-      accessibility: appState.hasAccessibilityPermission,
-      automation: appState.hasAutomationPermission,
-      fullDiskAccess: appState.hasFullDiskAccess
-    )
+    let statuses: [String: String] = [
+      "screen_recording": appState.hasScreenRecordingPermission ? "granted" : "not_granted",
+      "microphone": appState.hasMicrophonePermission ? "granted" : "not_granted",
+      "accessibility": appState.hasAccessibilityPermission ? "granted" : "not_granted",
+      "automation": appState.hasAutomationPermission ? "granted" : "not_granted",
+      "full_disk_access": appState.hasFullDiskAccess ? "granted" : "not_granted",
+    ]
 
     if let data = try? JSONSerialization.data(withJSONObject: statuses, options: .prettyPrinted),
       let json = String(data: data, encoding: .utf8)
@@ -1254,45 +1132,36 @@ class ChatToolExecutor {
   }
 
   /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results
-  private static func executeScanFiles(_: [String: Any]) async -> String {
-    let outcome = await scanLocalFiles()
-    fileScanFileCount = outcome.indexedFileCount
-    onScanFilesCompleted?(outcome.indexedFileCount)
-    return outcome.summaryText
-  }
-
-  static func scanLocalFiles() async -> LocalFileScanOutcome {
+  private static func executeScanFiles(_ args: [String: Any]) async -> String {
     let fm = FileManager.default
     let homeDir = fm.homeDirectoryForCurrentUser
-    let scanTargets: [(label: String, pathForUser: String, url: URL, countsAsUserFileAccess: Bool)] = {
-      var targets: [(String, String, URL, Bool)] = []
+    let scanTargets: [(label: String, pathForUser: String, url: URL)] = {
+      var targets: [(String, String, URL)] = []
 
       let homeFolders = ["Downloads", "Documents", "Desktop", "Developer", "Projects"]
       for folder in homeFolders {
         let url = homeDir.appendingPathComponent(folder)
         if fm.fileExists(atPath: url.path) {
-          targets.append((folder, "~/\(folder)", url, true))
+          targets.append((folder, "~/\(folder)", url))
         }
       }
 
       let applicationsURL = URL(fileURLWithPath: "/Applications")
       if fm.fileExists(atPath: applicationsURL.path) {
-        targets.append(("Applications", "/Applications", applicationsURL, false))
+        targets.append(("Applications", "/Applications", applicationsURL))
       }
 
       // Apple Notes local stores (container + group container)
-      let notesCandidates: [(String, String, URL, Bool)] = [
+      let notesCandidates: [(String, String, URL)] = [
         (
           "Apple Notes (Container)",
           "~/Library/Containers/com.apple.Notes/Data/Library/Notes",
-          homeDir.appendingPathComponent("Library/Containers/com.apple.Notes/Data/Library/Notes"),
-          false
+          homeDir.appendingPathComponent("Library/Containers/com.apple.Notes/Data/Library/Notes")
         ),
         (
           "Apple Notes (Group)",
           "~/Library/Group Containers/group.com.apple.notes",
-          homeDir.appendingPathComponent("Library/Group Containers/group.com.apple.notes"),
-          false
+          homeDir.appendingPathComponent("Library/Group Containers/group.com.apple.notes")
         ),
       ]
       for candidate in notesCandidates where fm.fileExists(atPath: candidate.2.path) {
@@ -1305,7 +1174,6 @@ class ChatToolExecutor {
     // Pre-check folder access — this triggers macOS TCC dialogs
     var deniedFolders: [String] = []
     var accessibleFolders: [URL] = []
-    var readableUserFileTargetCount = 0
     for target in scanTargets {
       do {
         _ = try fm.contentsOfDirectory(
@@ -1314,9 +1182,6 @@ class ChatToolExecutor {
           options: [.skipsHiddenFiles]
         )
         accessibleFolders.append(target.url)
-        if target.countsAsUserFileAccess {
-          readableUserFileTargetCount += 1
-        }
       } catch {
         let nsError = error as NSError
         if nsError.domain == NSCocoaErrorDomain && nsError.code == 257 {
@@ -1331,6 +1196,7 @@ class ChatToolExecutor {
 
     // Actually scan accessible folders (blocking)
     let count = await FileIndexerService.shared.scanFolders(accessibleFolders)
+    fileScanFileCount = count
     log(
       "Onboarding file scan completed: \(count) files indexed, \(deniedFolders.count) folders denied"
     )
@@ -1350,11 +1216,10 @@ class ChatToolExecutor {
         "\nTell the user to click 'Allow' on the macOS dialogs, then call scan_files again to pick up those folders."
     }
 
-    return LocalFileScanOutcome(
-      hasReadableUserFileTarget: readableUserFileTargetCount > 0,
-      didCompleteSuccessfully: !resultsStr.lowercased().hasPrefix("error"),
-      indexedFileCount: count,
-      summaryText: out)
+    // Notify that scan completed — triggers parallel exploration
+    onScanFilesCompleted?(count)
+
+    return out
   }
 
   /// Get file scan results from the database

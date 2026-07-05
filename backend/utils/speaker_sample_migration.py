@@ -19,7 +19,7 @@ from utils.speaker_sample import (
     download_sample_audio,
     verify_and_transcribe_sample,
 )
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
@@ -66,16 +66,16 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
 
     async with lock:
         # Re-check version inside lock (another call may have migrated)
-        fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
+        fresh_person = users_db.get_person(uid, person_id)
         if fresh_person and fresh_person.get('speech_samples_version', 1) >= 2:
             return fresh_person
 
         samples = person.get('speech_samples', [])
         if not samples:
             if person.get('speaker_embedding'):
-                await run_blocking(db_executor, users_db.clear_person_speaker_embedding, uid, person_id)
+                users_db.clear_person_speaker_embedding(uid, person_id)
                 logger.info(f"v1→v2 migration: cleared stale embedding for person with no samples {uid} {person_id}")
-            await run_blocking(db_executor, users_db.update_person_speech_samples_version, uid, person_id, 2)
+            users_db.update_person_speech_samples_version(uid, person_id, 2)
             person['speech_samples_version'] = 2
             person['speech_sample_transcripts'] = []
             person['speaker_embedding'] = None
@@ -137,9 +137,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
             except Exception as e:
                 logger.error(f"Error extracting speaker embedding: {e} {uid} {person_id}")
 
-        await run_blocking(
-            db_executor,
-            users_db.update_person_speech_samples_after_migration,
+        users_db.update_person_speech_samples_after_migration(
             uid,
             person_id,
             samples=valid_samples,
@@ -187,7 +185,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
 
     async with lock:
         # Re-check version inside lock (another call may have migrated)
-        fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
+        fresh_person = users_db.get_person(uid, person_id)
         if fresh_person and fresh_person.get('speech_samples_version', 1) >= 3:
             return fresh_person
 
@@ -197,9 +195,9 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
             # first, then bump version (order matters: avoids race where a concurrent
             # sample add writes a valid embedding that we'd then delete)
             if person.get('speaker_embedding'):
-                await run_blocking(db_executor, users_db.clear_person_speaker_embedding, uid, person_id)
+                users_db.clear_person_speaker_embedding(uid, person_id)
                 logger.info(f"v2→v3 migration: cleared stale embedding for person with no samples {uid} {person_id}")
-            await run_blocking(db_executor, users_db.update_person_speech_samples_version, uid, person_id, 3)
+            users_db.update_person_speech_samples_version(uid, person_id, 3)
             person['speech_samples_version'] = 3
             person['speaker_embedding'] = None
             return person
@@ -222,9 +220,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
             return person
 
         # Update version and embedding
-        await run_blocking(
-            db_executor,
-            users_db.update_person_speech_samples_after_migration,
+        users_db.update_person_speech_samples_after_migration(
             uid,
             person_id,
             samples=person.get('speech_samples', []),

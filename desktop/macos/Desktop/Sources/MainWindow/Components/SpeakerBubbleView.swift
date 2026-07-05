@@ -134,7 +134,6 @@ struct SpeakerBubbleView: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     VStack(spacing: 16) {
         Text("SpeakerBubbleView Preview")
@@ -143,4 +142,3 @@ struct SpeakerBubbleView: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
-#endif

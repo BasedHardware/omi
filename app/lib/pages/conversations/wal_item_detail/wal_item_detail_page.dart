@@ -10,7 +10,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/widgets/omi_confirm_dialog.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';

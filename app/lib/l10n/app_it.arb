@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano.",
     "transcribeLaterTitle": "Trascrivi più tardi",
     "transcribeLaterDescription": "Registra l'audio ora e trascrivilo quando vuoi, invece che in tempo reale. Le registrazioni vengono salvate sul telefono; poi le carichi per creare le conversazioni.",
-    "transcribeLaterNote": "Per ora funziona con i dispositivi Omi e Limitless. L'audio resta sul telefono finché non scegli di caricarlo.",
+    "transcribeLaterNote": "Per ora funziona con i dispositivi Omi. L'audio resta sul telefono finché non scegli di caricarlo.",
     "transcribeLaterStorageFull": "Lo spazio sul telefono sta per esaurirsi, quindi la registrazione è in pausa. Libera spazio o carica le registrazioni e riprenderà automaticamente.",
     "unmute": "Riattiva audio",
     "newRecording": "Nuova registrazione",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "Circa 1 minuto",
     "jumpToLatestMessage": "Vai all'ultimo messaggio",
     "latest": "Più recente",
-    "flashFirmware": "Installa il firmware",
-    "pendantRecordingTitle": "Registrazione sul ciondolo",
-    "pendantRecordingNote": "Il tuo ciondolo registra autonomamente. Le registrazioni si sincronizzano con il telefono mentre l'app è aperta.",
-    "pendantSyncingRecordings": "Sincronizzazione delle registrazioni dal ciondolo…",
-    "pendantMinutesStored": "~{minutes} min memorizzati",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "La memoria del ciondolo è quasi piena — tieni l'app aperta per sincronizzare."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Collega i tuoi Meta Glasses",
+    "pairingDescMetaGlasses": "Associa gli occhiali nell'app Meta AI, poi tocca Connetti in Omi. Puoi collegare più paia e scegliere quale è attivo.",
+    "metaGlassesUnavailable": "App Meta AI non trovata. Installa Meta AI e attiva la modalità sviluppatore per collegare gli occhiali.",
+    "metaGlassesRegistering": "Completa la connessione nell'app Meta AI, poi torna su Omi.",
+    "metaGlassesCameraPermission": "Consenti l'accesso alla fotocamera nell'app Meta AI",
+    "metaGlassesCaptureModeLabel": "Modalità di acquisizione",
+    "metaGlassesModeCameraMic": "Fotocamera + microfono",
+    "metaGlassesModeMicOnly": "Solo microfono",
+    "metaGlassesStartCapture": "Avvia acquisizione",
+    "metaGlassesStopCapture": "Ferma acquisizione",
+    "metaGlassesGestureHint": "I controlli gestuali per gli occhiali Meta non sono supportati in questa build.",
+    "connectAnotherDevice": "Collega un altro dispositivo",
+    "myDevices": "I miei dispositivi",
+    "metaGlassesAutoCapture": "Acquisizione automatica alla connessione",
+    "metaGlassesShowPreview": "Anteprima dal vivo",
+    "metaGlassesPendingPhotos": "{count} foto in attesa di sincronizzazione",
+    "metaGlassesPairInMetaAI": "Configura nell'app Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Gli occhiali si stanno raffreddando — acquisizione in pausa",
+    "metaGlassesFolded": "Apri gli occhiali per continuare l'acquisizione",
+    "metaGlassesCaptureFrequency": "Frequenza di acquisizione",
+    "metaGlassesEvery10s": "Ogni 10 s",
+    "metaGlassesEvery30s": "Ogni 30 s",
+    "metaGlassesEvery1min": "Ogni 1 min",
+    "metaGlassesEvery5min": "Ogni 5 min",
+    "metaGlassesGestures": "Gesti"
 }

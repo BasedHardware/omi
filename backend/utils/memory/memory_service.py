@@ -29,11 +29,10 @@ from utils.memory.canonical_memory_adapter import (
 )
 from utils.memory.required_promotion import required_promotion_payload
 from utils.client_device import DeviceScopeRequest
-from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
+from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_enabled
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import resolve_pinned_memory_system
 from utils.memory.default_read_rollout import guard_legacy_memory_write
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload, memory_write_payload
 from utils.retrieval.hybrid import rrf_rerank
 
 logger = logging.getLogger(__name__)
@@ -59,15 +58,6 @@ def _require_legacy_write_guard(uid: str, db_client, *, consumer: str, operation
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
 
-def _canonical_external_write_enabled_or_fail_closed(uid: str, db_client) -> bool:
-    decision = canonical_write_decision(uid, db_client=db_client)
-    if decision.enabled:
-        return True
-    if decision.fail_closed:
-        raise HTTPException(status_code=503, detail={"reason": decision.reason, "memory_system": "canonical"})
-    return False
-
-
 def resolve_external_memory_write_context(
     uid: str,
     *,
@@ -76,7 +66,7 @@ def resolve_external_memory_write_context(
     consumer: str,
     operation: str,
 ) -> ExternalMemoryWriteContext:
-    if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid, db_client):
+    if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
         return ExternalMemoryWriteContext(memory_system=memory_system)
     write_guard = guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)
     return ExternalMemoryWriteContext(
@@ -108,15 +98,6 @@ def truncate_locked_memory_preview(memory: MemoryDB) -> MemoryDB:
     return memory.model_copy(update={"content": truncated})
 
 
-def _legacy_memorydb(value: MemoryDB | Dict[str, Any]) -> MemoryDB:
-    """Normalize one legacy memory object so direct route serialization stays untiered."""
-    if isinstance(value, MemoryDB):
-        return value.model_copy(update={"memory_tier": None})
-    payload = memory_api_payload(value, MemoryApiExposure.LEGACY)
-    memory = MemoryDB.model_validate(payload)
-    return memory.model_copy(update={"memory_tier": None})
-
-
 def fetch_memory_dict(uid: str, memory_id: str, *, db_client) -> dict:
     """Fetch one memory by id with canonical/legacy routing and locked-memory paywall."""
     if canonical_read_enabled(uid, db_client=db_client):
@@ -132,7 +113,7 @@ def fetch_memory_dict(uid: str, memory_id: str, *, db_client) -> dict:
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
-    return memory_api_payload(memory, MemoryApiExposure.LEGACY)
+    return memory
 
 
 def _reject_legacy_device_scope(device_scope_request: Optional[DeviceScopeRequest]) -> None:
@@ -150,13 +131,12 @@ class MemorySearchMatch:
 def _validate_memory_list(memories: List[dict]) -> List[MemoryDB]:
     valid_memories: List[MemoryDB] = []
     for memory in memories:
-        memory = memory_api_payload(memory, MemoryApiExposure.LEGACY)
         if memory.get("is_locked", False):
             content = memory.get("content", "")
             memory = dict(memory)
             memory["content"] = _truncate_locked_preview_text(content)
         try:
-            valid_memories.append(_legacy_memorydb(memory))
+            valid_memories.append(MemoryDB.model_validate(memory))
         except ValidationError as exc:
             missing_fields = [err["loc"][0] for err in exc.errors() if err.get("loc")]
             logger.warning(
@@ -185,17 +165,13 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
         return []
 
     memories_data = memories_db.get_memories_by_ids(uid, memory_ids)
-    memories_data = [
-        memory_api_payload(memory, MemoryApiExposure.LEGACY)
-        for memory in memories_data
-        if not memory.get("is_locked", False)
-    ]
+    memories_data = [memory for memory in memories_data if not memory.get("is_locked", False)]
 
     results: List[MemorySearchMatch] = []
     for memory_data in memories_data:
         memory_id = memory_data.get("id")
         try:
-            memory_obj = _legacy_memorydb(memory_data)
+            memory_obj = MemoryDB.model_validate(memory_data)
         except ValidationError:
             continue
         results.append(MemorySearchMatch(memory=memory_obj, score=scores_by_id.get(memory_id, 0.0)))
@@ -286,7 +262,7 @@ class LegacyMemoryBackend:
         return _legacy_search_memories(uid, query, limit=limit)
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
-        memories_db.create_memory(uid, memory_write_payload(data, MemoryApiExposure.LEGACY))
+        memories_db.create_memory(uid, data)
         return str(data.get("id") or "")
 
     def review(self, uid: str, memory_id: str, value: bool) -> None:
@@ -307,15 +283,17 @@ class LegacyMemoryBackend:
             update_data["category"] = category
         if update_data:
             memories_db.update_memory_fields(uid, memory_id, update_data)
-        return _legacy_memorydb(memories_db.get_memory(uid, memory_id))
+        memory = memories_db.get_memory(uid, memory_id)
+        return MemoryDB.model_validate(memory)
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
-        memories_db.save_memories(uid, [memory_write_payload(item, MemoryApiExposure.LEGACY) for item in items])
+        memories_db.save_memories(uid, items)
         return [str(item.get("id") or "") for item in items]
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
         memories_db.edit_memory(uid, memory_id, content)
-        return _legacy_memorydb(memories_db.get_memory(uid, memory_id))
+        memory = memories_db.get_memory(uid, memory_id)
+        return MemoryDB.model_validate(memory)
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
         memories_db.change_memory_visibility(uid, memory_id, visibility)
@@ -533,25 +511,18 @@ class MemoryService:
         require_canonical_promotion: bool = False,
     ) -> MemoryDB:
         """Create one external memory on canonical or legacy backend with side effects."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=self._db_client):
             payload = memory_db.model_dump()
             if require_canonical_promotion:
                 payload = required_promotion_payload(payload, source_surface=consumer)
-            committed_id = self._canonical.write(uid, payload)
+            committed_id = self.write(uid, payload)
             item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=self._db_client)
             if item is not None:
                 return memory_item_to_memorydb(item)
-            logger.error(
-                "canonical external memory readback missing uid=%s memory_id=%s",
-                uid,
-                committed_id or memory_db.id,
-            )
-            raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+            return memory_db
 
         _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
-        memories_db.create_memory(uid, memory_write_payload(memory_db, MemoryApiExposure.LEGACY))
+        memories_db.create_memory(uid, memory_db.model_dump())
         if upsert_vector:
             try:
                 upsert_memory_vector(
@@ -567,7 +538,7 @@ class MemoryService:
                     uid,
                     memory_db.id,
                 )
-        return _legacy_memorydb(memory_db)
+        return memory_db
 
     def create_external_memory_batch(
         self,
@@ -581,28 +552,22 @@ class MemoryService:
         require_canonical_promotion: bool = False,
     ) -> List[MemoryDB]:
         """Batch-create external memories with legacy vector upsert when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=self._db_client):
             payloads = [memory.model_dump() for memory in memory_dbs]
             if require_canonical_promotion:
                 payloads = [required_promotion_payload(payload, source_surface=consumer) for payload in payloads]
-            committed_ids = self._canonical.write_batch(uid, payloads)
+            committed_ids = self.write_batch(uid, payloads)
             results: List[MemoryDB] = []
             for memory_id in committed_ids:
                 item = _read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
                 if item is not None:
                     results.append(memory_item_to_memorydb(item))
                 else:
-                    logger.error("canonical external batch readback missing uid=%s memory_id=%s", uid, memory_id)
-                    raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+                    results.append(next(memory for memory in memory_dbs if memory.id == memory_id))
             return results
 
         _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
-        memories_db.save_memories(
-            uid,
-            [memory_write_payload(memory, MemoryApiExposure.LEGACY) for memory in memory_dbs],
-        )
+        memories_db.save_memories(uid, [memory.model_dump() for memory in memory_dbs])
         if upsert_vectors:
             try:
                 upsert_memory_vectors_batch(
@@ -619,7 +584,7 @@ class MemoryService:
                 )
             except Exception:
                 logger.exception("Vector batch upsert failed uid=%s (memories saved, vectors missing)", uid)
-        return [_legacy_memorydb(memory) for memory in memory_dbs]
+        return memory_dbs
 
     def delete_external_memory(
         self,
@@ -632,11 +597,9 @@ class MemoryService:
         delete_vector: bool = True,
     ) -> None:
         """Delete external memory with legacy vector cleanup when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=self._db_client):
             try:
-                self._canonical.delete(uid, memory_id)
+                self.delete(uid, memory_id)
             except ValueError:
                 raise HTTPException(status_code=404, detail="Memory not found")
             return
@@ -666,13 +629,8 @@ class MemoryService:
         upsert_vector: bool = True,
     ) -> MemoryDB:
         """Update external memory content with legacy vector upsert when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
-            try:
-                return self._canonical.update_content(uid, memory_id, content)
-            except ValueError:
-                raise HTTPException(status_code=404, detail="Memory not found")
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=self._db_client):
+            return self.update_content(uid, memory_id, content)
 
         _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
         memory = memories_db.get_memory(uid, memory_id)
@@ -696,4 +654,4 @@ class MemoryService:
                     uid,
                     memory_id,
                 )
-        return _legacy_memorydb(memories_db.get_memory(uid, memory_id))
+        return MemoryDB.model_validate(memories_db.get_memory(uid, memory_id))

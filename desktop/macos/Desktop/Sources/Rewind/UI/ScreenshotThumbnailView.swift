@@ -354,7 +354,6 @@ struct ScreenshotGridView: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     ScreenshotGridView(
         screenshots: [],
@@ -366,4 +365,3 @@ struct ScreenshotGridView: View {
     .frame(width: 800, height: 600)
     .background(OmiColors.backgroundPrimary)
 }
-#endif

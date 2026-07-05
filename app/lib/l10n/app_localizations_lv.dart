@@ -9362,7 +9362,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Pagaidām darbojas ar Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
+      'Pagaidām darbojas ar Omi ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9511,23 +9511,93 @@ class AppLocalizationsLv extends AppLocalizations {
   String get latest => 'Jaunākais';
 
   @override
-  String get flashFirmware => 'Instalēt aparātprogrammatūru';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'Ierakstīšana kulonā';
+  String get pairingTitleMetaGlasses => 'Savienojiet savas Meta Glasses';
 
   @override
-  String get pendantRecordingNote =>
-      'Jūsu kulons ieraksta patstāvīgi. Ieraksti tiek sinhronizēti ar jūsu tālruni, kamēr lietotne ir atvērta.';
+  String get pairingDescMetaGlasses =>
+      'Sapārojiet brilles lietotnē Meta AI, pēc tam Omi pieskarieties Savienot. Varat sasaistīt vairākus pārus un izvēlēties aktīvo.';
 
   @override
-  String get pendantSyncingRecordings => 'Notiek ierakstu sinhronizēšana no jūsu kulona…';
+  String get metaGlassesUnavailable =>
+      'Lietotne Meta AI nav atrasta. Lai savienotu brilles, instalējiet Meta AI un ieslēdziet izstrādātāja režīmu.';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes min saglabāts';
+  String get metaGlassesRegistering => 'Pabeidziet savienošanu lietotnē Meta AI un atgriezieties Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Atļaujiet piekļuvi kamerai lietotnē Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Tveršanas režīms';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofons';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Tikai mikrofons';
+
+  @override
+  String get metaGlassesStartCapture => 'Sākt tveršanu';
+
+  @override
+  String get metaGlassesStopCapture => 'Apturēt tveršanu';
+
+  @override
+  String get metaGlassesGestureHint => 'Žestu vadība Meta brillēm šajā būvējumā netiek atbalstīta.';
+
+  @override
+  String get connectAnotherDevice => 'Savienot citu ierīci';
+
+  @override
+  String get myDevices => 'Manas ierīces';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automātiska tveršana pēc savienošanas';
+
+  @override
+  String get metaGlassesShowPreview => 'Tiešais priekšskatījums';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count fotoattēli gaida sinhronizāciju';
   }
 
   @override
-  String get pendantStorageAlmostFull => 'Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu.';
+  String get metaGlassesPairInMetaAI => 'Iestatiet lietotnē Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Brilles atdziest — tveršana apturēta';
+
+  @override
+  String get metaGlassesFolded => 'Atlokiet brilles, lai turpinātu tveršanu';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Uzņemšanas biežums';
+
+  @override
+  String get metaGlassesEvery10s => 'Ik pēc 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Ik pēc 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Ik pēc 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Ik pēc 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Žesti';
 }

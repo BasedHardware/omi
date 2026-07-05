@@ -9340,7 +9340,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Zatím funguje se zařízeními Omi a Limitless. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.';
+      'Zatím funguje se zařízeními Omi. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9489,24 +9489,93 @@ class AppLocalizationsCs extends AppLocalizations {
   String get latest => 'Nejnovější';
 
   @override
-  String get flashFirmware => 'Nahrát firmware';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'Nahrávání na přívěsku';
+  String get pairingTitleMetaGlasses => 'Připojte své Meta Glasses';
 
   @override
-  String get pendantRecordingNote =>
-      'Váš přívěsek nahrává samostatně. Nahrávky se synchronizují s telefonem, dokud je aplikace otevřená.';
+  String get pairingDescMetaGlasses =>
+      'Spárujte brýle v aplikaci Meta AI a poté klepněte na Připojit v Omi. Můžete propojit více párů a vybrat, který je aktivní.';
 
   @override
-  String get pendantSyncingRecordings => 'Synchronizace nahrávek z přívěsku…';
+  String get metaGlassesUnavailable =>
+      'Aplikace Meta AI nebyla nalezena. Nainstalujte Meta AI a zapněte režim pro vývojáře, abyste brýle připojili.';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes min uloženo';
+  String get metaGlassesRegistering => 'Dokončete připojení v aplikaci Meta AI a vraťte se do Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Povolte přístup ke kameře v aplikaci Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Režim záznamu';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofon';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Pouze mikrofon';
+
+  @override
+  String get metaGlassesStartCapture => 'Spustit záznam';
+
+  @override
+  String get metaGlassesStopCapture => 'Zastavit záznam';
+
+  @override
+  String get metaGlassesGestureHint => 'Ovládání gesty pro brýle Meta není v této verzi podporováno.';
+
+  @override
+  String get connectAnotherDevice => 'Připojit další zařízení';
+
+  @override
+  String get myDevices => 'Moje zařízení';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automatický záznam po připojení';
+
+  @override
+  String get metaGlassesShowPreview => 'Živý náhled';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count fotek čeká na synchronizaci';
   }
 
   @override
-  String get pendantStorageAlmostFull =>
-      'Úložiště přívěsku je téměř plné — nechte aplikaci otevřenou, aby proběhla synchronizace.';
+  String get metaGlassesPairInMetaAI => 'Nastavte v aplikaci Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Brýle se ochlazují — snímání je pozastaveno';
+
+  @override
+  String get metaGlassesFolded => 'Rozložte brýle, aby snímání pokračovalo';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Frekvence snímání';
+
+  @override
+  String get metaGlassesEvery10s => 'Každých 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Každých 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Každou 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Každých 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Gesta';
 }

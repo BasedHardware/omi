@@ -44,10 +44,6 @@ export class AdapterRegistry {
   has(adapterId: string): boolean {
     return this.pools.has(adapterId);
   }
-
-  adapterIds(): string[] {
-    return [...this.pools.keys()].sort();
-  }
 }
 
 function contractCheckedAdapter(adapter: RuntimeAdapter): RuntimeAdapter {

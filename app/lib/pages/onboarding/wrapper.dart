@@ -14,8 +14,10 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
+import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
+import 'package:omi/pages/onboarding/meta_glasses_onboarding_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
@@ -23,7 +25,9 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
+import 'package:omi/pages/meta_wearables/meta_glasses_page.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/meta_wearables_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -64,6 +68,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
   SpeechProfileProvider? _speechProfileProvider;
   Future<void>? _knowledgeGraphPrebuildFuture;
+  bool _showOmiDeviceFinder = false;
+  bool _metaGlassesOnboardingCompleted = false;
 
   @override
   void initState() {
@@ -152,6 +158,27 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     if (_controller!.index < _controller!.length - 1) {
       _controller!.animateTo(_controller!.index + 1);
     }
+  }
+
+  void _completeOmiDeviceOnboarding() {
+    PlatformManager.instance.analytics.onboardingStepCompleted('Device omi');
+    _goNext();
+  }
+
+  void _completeMetaGlassesOnboarding() {
+    if (_metaGlassesOnboardingCompleted || !mounted) return;
+    _metaGlassesOnboardingCompleted = true;
+    PlatformManager.instance.analytics.onboardingStepCompleted('Device meta_glasses');
+    final route = ModalRoute.of(context);
+    if (route?.isCurrent == false && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    _controller!.animateTo(kSpeechProfilePage);
+  }
+
+  void _continueWithoutDevice() {
+    PlatformManager.instance.analytics.onboardingStepCompleted('Device skipped');
+    _controller!.animateTo(kSpeechProfilePage);
   }
 
   Future<void> _prebuildKnowledgeGraph() async {
@@ -330,14 +357,32 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       UserReviewPage(
         goNext: () {
-          // Go directly to Speech Profile (skip device steps - we use phone mic now)
-          _controller!.animateTo(kSpeechProfilePage);
+          _controller!.animateTo(kFindDevicesPage);
           PlatformManager.instance.analytics.onboardingStepCompleted('User Review');
         },
       ),
       // Placeholder pages - not used in new flow but kept for index consistency
       Container(), // WelcomePage placeholder
-      Container(), // FindDevicesPage placeholder
+      _showOmiDeviceFinder
+          ? FindDevicesPage(
+              goNext: _completeOmiDeviceOnboarding,
+              isFromOnboarding: true,
+              onSkip: _continueWithoutDevice,
+            )
+          : OnboardingMetaGlassesStep(
+              onOmiDeviceSelected: () {
+                setState(() => _showOmiDeviceFinder = true);
+              },
+              onMetaGlassesSelected: () async {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MetaGlassesPage()));
+                if (!mounted) return;
+                if (metaGlassesOnboardingComplete(context.read<MetaWearablesProvider>())) {
+                  _completeMetaGlassesOnboarding();
+                }
+              },
+              onMetaGlassesReady: _completeMetaGlassesOnboarding,
+              onContinueWithoutDevice: _continueWithoutDevice,
+            ),
       ChangeNotifierProvider.value(
         value: _speechProfileProvider!,
         child: SpeechProfileWidget(

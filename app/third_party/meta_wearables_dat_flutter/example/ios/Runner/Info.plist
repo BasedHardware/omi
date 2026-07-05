@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Meta Wearables Dat Flutter Example</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>meta_wearables_dat_flutter_example</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+
+	<!-- Begin required section for Meta Wearables Device Access Toolkit. -->
+	<!--
+	  MWDAT configuration for Developer Mode in SDK 0.6.0.
+
+	  Despite what Meta's getting-started guide currently shows, SDK 0.6.0
+	  validates the MWDAT dict for "Partial attestation configuration"
+	  and refuses with `RegistrationError.configurationInvalid` (raw 1)
+	  unless ALL FOUR keys are present and non-empty. The exact error
+	  message embedded in the SDK binary:
+
+	      "[Registration] Partial attestation configuration detected.
+	       ClientToken and/or teamID are missing. All values must be
+	       present. Add missing values to Info.plist under MWDAT
+	       configuration."
+
+	  In Developer Mode (`MetaAppID = "0"`) the *values* of `ClientToken`
+	  and `TeamID` aren't validated against the Wearables Developer
+	  Center, but the keys must still be present. The placeholder
+	  ClientToken below is fine for local testing; for a published app
+	  replace it (and `MetaAppID`) with values from the Wearables
+	  Developer Center: https://developers.meta.com/wearables/
+
+	  `$(DEVELOPMENT_TEAM)` is substituted by Xcode at build time from
+	  the Signing & Capabilities tab; it must resolve to a non-empty
+	  string (your Apple Developer Team ID).
+	-->
+	<key>MWDAT</key>
+	<dict>
+		<key>AppLinkURLScheme</key>
+		<!--
+		  Must match a scheme in CFBundleURLTypes below. The scheme must
+		  be RFC 3986 compliant: only ALPHA / DIGIT / "+" / "-" / ".",
+		  starting with a letter. Underscores are NOT legal in URL
+		  schemes — Meta's redirect-URL builder validates this and will
+		  refuse to call the callback (you'll see "Internal error" in
+		  Meta AI right after tapping Allow, with no incoming URL on
+		  the Flutter side).
+		-->
+		<string>metawearablesdatexample://</string>
+		<key>MetaAppID</key>
+		<string>0</string>
+		<key>ClientToken</key>
+		<string>developer-mode-placeholder</string>
+		<key>TeamID</key>
+		<string>$(DEVELOPMENT_TEAM)</string>
+		<!--
+		  Matches the working rodcone reference setup. Opt out of the
+		  SDK's analytics uploads to api2.ar.meta.com so a partial
+		  telemetry config (e.g. missing client token in Developer Mode)
+		  cannot fail registration with a misleading error.
+		-->
+		<key>Analytics</key>
+		<dict>
+			<key>OptOut</key>
+			<true/>
+		</dict>
+	</dict>
+	<!--
+	  Matches the rodcone reference. `audio` is required by the streaming
+	  session for the on-device microphone capture path; `processing`
+	  (the BGTaskScheduler family) was a leftover Flutter template
+	  default and is not used by Meta's SDK.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>bluetooth-central</string>
+		<string>bluetooth-peripheral</string>
+		<string>external-accessory</string>
+	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Needed to connect to Meta AI Glasses.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Allows your phone to find and connect to your glasses over Wi-Fi.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_bonjour._tcp</string>
+	</array>
+	<key>UISupportedExternalAccessoryProtocols</key>
+	<array>
+		<string>com.meta.ar.wearable</string>
+	</array>
+	<!--
+	  Required so iOS allows `canOpenURL("fb-viewapp://...")`. The DAT
+	  SDK's `startRegistration()` preflights this exact scheme before
+	  opening Meta AI; if the scheme is not in this allowlist iOS
+	  returns false and the SDK throws RegistrationError.configurationInvalid
+	  (raw value 1) without ever switching to Meta AI.
+	-->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fb-viewapp</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>metawearablesdatexample</string>
+			</array>
+		</dict>
+	</array>
+	<!-- End required section for Meta Wearables Device Access Toolkit. -->
+
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>

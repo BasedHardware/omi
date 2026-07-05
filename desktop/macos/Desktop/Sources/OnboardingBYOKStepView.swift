@@ -50,10 +50,10 @@ struct OnboardingBYOKStepView: View {
 
         HStack(spacing: 12) {
           Button("Skip for now") {
-            skipForNow()
+            AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Skipped")
+            onSkip()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-          .keyboardShortcut(.defaultAction)
           .disabled(isActivating)
 
           Button(isActivating ? "Saving…" : "Save keys") {
@@ -75,11 +75,6 @@ struct OnboardingBYOKStepView: View {
     [openaiKey, anthropicKey, geminiKey, deepgramKey].allSatisfy {
       !$0.trimmingCharacters(in: .whitespaces).isEmpty
     }
-  }
-
-  private func skipForNow() {
-    AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Skipped")
-    onSkip()
   }
 
   private func keyField(provider: BYOKProvider, binding: Binding<String>, help: String)
@@ -109,10 +104,6 @@ struct OnboardingBYOKStepView: View {
             )
         )
         .foregroundColor(OmiColors.textPrimary)
-        .onSubmit {
-          guard allKeysProvided, !isActivating else { return }
-          Task { await activate() }
-        }
       if case .failed(let msg) = keyStatuses[provider] ?? .notChecked {
         Text(msg)
           .font(.system(size: 11))

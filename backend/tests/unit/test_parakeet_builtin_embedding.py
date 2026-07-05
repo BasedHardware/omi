@@ -9,7 +9,6 @@ import os
 import struct
 import sys
 import wave
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -35,8 +34,27 @@ def _torch_from_numpy(arr):
 
 
 _torch_mock.from_numpy = _torch_from_numpy
+sys.modules['torch'] = _torch_mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'parakeet'))
+for _mod in [
+    'nemo',
+    'nemo.collections',
+    'nemo.collections.asr',
+    'nemo.collections.asr.models',
+    'pyannote',
+    'pyannote.audio',
+    'pyannote.audio.core',
+    'pyannote.audio.core.model',
+]:
+    if _mod not in sys.modules:
+        sys.modules[_mod] = MagicMock()
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../parakeet'))
+
+if 'transcribe' in sys.modules:
+    _existing = sys.modules['transcribe']
+    if not hasattr(_existing, '__file__') or _existing.__file__ is None:
+        del sys.modules['transcribe']
 
 import transcribe  # noqa: E402
 

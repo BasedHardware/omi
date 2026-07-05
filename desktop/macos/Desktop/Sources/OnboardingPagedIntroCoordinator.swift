@@ -43,20 +43,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   @Published var preferredName: String
   @Published var draftName: String
-  /// Languages the user speaks, ordered — first is the primary. Multi-select in the
-  /// language step; drives the voice assistant's per-turn language identification.
-  @Published var selectedLanguageCodes: [String]
+  @Published var selectedLanguageCode: String
+  @Published var selectedLanguageLabel: String
   @Published var customLanguage: String = ""
-
-  var primaryLanguageCode: String { selectedLanguageCodes.first ?? "en" }
-
-  /// Chip set offered in the language step (the languages Deepgram's multi mode covers,
-  /// i.e. the ones the whole pipeline handles well). Anything else via the custom field.
-  static let commonLanguages: [(code: String, name: String)] = [
-    ("en", "English"), ("es", "Spanish"), ("fr", "French"), ("de", "German"),
-    ("pt", "Portuguese"), ("ru", "Russian"), ("hi", "Hindi"), ("ja", "Japanese"),
-    ("it", "Italian"), ("nl", "Dutch"),
-  ]
   @Published var scanState: ScanState = .idle
   @Published var scanStatusText: String = "Ready to scan your files."
   @Published var scanSnapshot: ScanSnapshot?
@@ -87,12 +76,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var isSyncingAppleNotes = false
 
   private var insightsStarted = false
-  @Published private(set) var gmailInsightsFinished = false
-  @Published private(set) var calendarInsightsFinished = false
-  @Published private(set) var appleNotesInsightsFinished = false
-  @Published private(set) var gmailInsightsFailed = false
-  @Published private(set) var calendarInsightsFailed = false
-  @Published private(set) var appleNotesInsightsFailed = false
+  private var gmailInsightsFinished = false
+  private var calendarInsightsFinished = false
+  private var appleNotesInsightsFinished = false
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
   private var appleNotesTask: Task<Void, Never>?
@@ -112,11 +98,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     preferredName = initialName
     draftName = initialName
 
-    // Fresh installs start EMPTY so the user's first pick genuinely defines the
-    // primary — pre-selecting the "en" fallback would make English primary for everyone.
-    selectedLanguageCodes =
-      AssistantSettings.shared.hasExplicitVoiceLanguages
-      ? AssistantSettings.shared.voiceLanguages : []
+    let languageCode = AssistantSettings.shared.transcriptionLanguage
+    selectedLanguageCode = languageCode
+    selectedLanguageLabel = Self.displayName(forLanguageCode: languageCode)
 
     let defaults = UserDefaults.standard
     chatGPTImportedMemoriesCount = defaults.integer(forKey: chatGPTImportedMemoriesKey)
@@ -281,7 +265,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   func refreshAppleNotesInsights() async {
     lastActionError = nil
-    appleNotesInsightsFailed = false
     isSyncingAppleNotes = true
     defer { isSyncingAppleNotes = false }
 
@@ -320,7 +303,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       }
     } catch {
       lastActionError = error.localizedDescription
-      appleNotesInsightsFailed = true
     }
   }
 
@@ -352,73 +334,53 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     )
   }
 
-  /// Toggle a language chip. Order is selection order; the first selected is the primary.
-  func toggleLanguage(code: String) {
-    lastActionError = nil
-    if let idx = selectedLanguageCodes.firstIndex(of: code) {
-      selectedLanguageCodes.remove(at: idx)
-    } else {
-      selectedLanguageCodes.append(code)
-    }
+  func selectEnglish() async {
+    await setLanguage(code: "en", label: "English")
   }
 
-  /// Resolve the typed language name to a supported ISO code and add it to the selection.
-  /// (The old locale-scan here returned the literal typed word when it missed — that's
-  /// how `language="russian"` ended up saved to the account.)
-  func addCustomLanguage() {
+  func setCustomLanguage() async {
     let trimmed = customLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
       lastActionError = "Add a language first."
       return
     }
-    let code = AssistantSettings.normalizeTranscriptionLanguageCode(trimmed)
-    guard AssistantSettings.supportedLanguages.contains(where: { $0.code == code }) else {
-      lastActionError = "Couldn't recognize \"\(trimmed)\" — try its English name (Spanish, Japanese…)."
-      return
-    }
-    lastActionError = nil
-    customLanguage = ""
-    if !selectedLanguageCodes.contains(code) {
-      selectedLanguageCodes.append(code)
-    }
+
+    let normalizedCode =
+      Locale.availableIdentifiers
+      .compactMap { Locale(identifier: $0) }
+      .first(where: { locale in
+        locale.localizedString(forIdentifier: locale.identifier)?
+          .localizedCaseInsensitiveContains(trimmed) == true
+          || locale.localizedString(
+            forLanguageCode: locale.language.languageCode?.identifier ?? "")?
+            .localizedCaseInsensitiveContains(trimmed) == true
+      })?
+      .language
+      .languageCode?
+      .identifier ?? trimmed.lowercased()
+
+    await setLanguage(code: normalizedCode, label: trimmed.capitalized)
   }
 
-  /// Persist the multi-select: the full ordered list drives the voice assistant's
-  /// language identification; the primary also updates the backend `language` (the
-  /// LLM output language for summaries/notifications). Deliberately does NOT touch the
-  /// ambient transcription settings — picking Russian here must not pin the always-on
-  /// transcriber to a single language (that regression is exactly what this step used
-  /// to cause via set_user_preferences).
-  func confirmLanguages() async {
-    guard !selectedLanguageCodes.isEmpty else {
-      lastActionError = "Pick at least one language."
-      return
-    }
+  private func setLanguage(code: String, label: String) async {
     lastActionError = nil
-    AssistantSettings.shared.voiceLanguages = selectedLanguageCodes
-    let primary = primaryLanguageCode
-    // Await the backend primary-language write and surface failure BEFORE the step
-    // advances — fire-and-forget here silently lost the account language (the LLM
-    // output language) on network failure, regressing the old save-before-continue
-    // contract. The local selection stays saved either way; retrying is safe.
-    do {
-      _ = try await APIClient.shared.updateUserLanguage(primary)
-    } catch {
-      logError("Onboarding: saving primary language '\(primary)' to backend failed", error: error)
-      lastActionError = "Couldn't save your language to your account — check your connection and tap Continue again."
+    let result = await executeTool(name: "set_user_preferences", arguments: ["language": code])
+    if result.lowercased().contains("error") {
+      lastActionError = result
       return
     }
 
-    let nodes: [[String: Any]] = selectedLanguageCodes.map { code in
-      [
-        "id": "language_\(code)", "label": Self.displayName(forLanguageCode: code),
-        "node_type": "concept", "aliases": [code],
+    selectedLanguageCode = code
+    selectedLanguageLabel = label
+
+    await saveGraph(
+      nodes: [
+        ["id": "language_\(code)", "label": label, "node_type": "concept", "aliases": [code]]
+      ],
+      edges: [
+        ["source_id": "user", "target_id": "language_\(code)", "label": "prefers"]
       ]
-    }
-    let edges: [[String: Any]] = selectedLanguageCodes.map { code in
-      ["source_id": "user", "target_id": "language_\(code)", "label": "prefers"]
-    }
-    await saveGraph(nodes: nodes, edges: edges)
+    )
   }
 
   private func openURLInDefaultBrowser(_ url: URL) {
@@ -685,9 +647,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     gmailInsightsFinished = false
     calendarInsightsFinished = false
     appleNotesInsightsFinished = false
-    gmailInsightsFailed = false
-    calendarInsightsFailed = false
-    appleNotesInsightsFailed = false
     webResearchSummary = ""
 
     gmailTask = Task {
@@ -742,7 +701,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         log(
           "OnboardingPagedIntroCoordinator: Gmail insights unavailable: \(error.localizedDescription)"
         )
-        await MainActor.run { self.gmailInsightsFailed = true }
         await self.markInsightFinished(.gmail)
       }
     }
@@ -806,7 +764,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         log(
           "OnboardingPagedIntroCoordinator: Calendar insights unavailable: \(error.localizedDescription)"
         )
-        await MainActor.run { self.calendarInsightsFailed = true }
         await self.markInsightFinished(.calendar)
       }
     }
@@ -878,7 +835,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           self.appleNotesInsightCount = 0
           self.appleNotesSummary = ""
           self.appleNotesMemoriesSaved = 0
-          self.appleNotesInsightsFailed = true
         }
         await self.markInsightFinished(.appleNotes)
       }
@@ -1359,43 +1315,40 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       let drafts = await buildLocalFileMemoryDrafts(from: snapshot)
       guard !drafts.isEmpty else { return 0 }
 
-      // Batch the drafts through the import evidence ingress. The previous
+      // Batch the drafts through POST /v3/memories/batch. The previous
       // implementation fanned out 12 concurrent POST /v3/memories calls
       // per draft; with up to ~2800 drafts, that blew through Cloud
       // Armor's 120 req/min per-Authorization limit in seconds and
       // collaterally 429'd unrelated onboarding calls (goals, sync, chat).
       //
-      // One batch request stores import artifacts only; memory extraction,
-      // promotion, vectors, and KG are backend-owned later stages.
-      let artifacts = drafts.map { draft in
-        ImportEvidenceBatchItem(
-          title: draft.headline,
-          snippet: draft.content,
-          content: draft.content,
-          metadata: [
-            "import_kind": "local_file_profile",
-            "tags": draft.tags.joined(separator: ","),
-            "source": draft.source,
-          ]
-        )
-      }
-      let legacyMemories = drafts.map { draft in
-        MemoryBatchItem(
-          content: draft.content,
-          tags: draft.tags,
-          headline: draft.headline,
-          source: draft.source
-        )
+      // One batch request = one Firestore write + one embeddings call +
+      // one Pinecone upsert on the server, regardless of batch size.
+      let chunkSize = APIClient.memoriesBatchMaxSize
+      var savedCount = 0
+      var index = 0
+      while index < drafts.count {
+        let end = min(index + chunkSize, drafts.count)
+        let chunk = drafts[index..<end].map { draft in
+          MemoryBatchItem(
+            content: draft.content,
+            visibility: "private",
+            tags: draft.tags,
+            headline: draft.headline
+          )
+        }
+        index = end
+
+        do {
+          let response = try await APIClient.shared.createMemoriesBatch(Array(chunk))
+          savedCount += response.createdCount
+        } catch {
+          log(
+            "OnboardingPagedIntroCoordinator: Failed to save local file memory batch "
+              + "(\(chunk.count) items): \(error)")
+        }
       }
 
-      let result = await OnboardingImportEvidenceService.save(
-        artifacts,
-        sourceType: "local_files",
-        logPrefix: "OnboardingPagedIntroCoordinator",
-        legacyMemories: legacyMemories
-      )
-      let savedCount = result.saved
-      log("OnboardingPagedIntroCoordinator: Saved \(savedCount) local file import evidence artifacts")
+      log("OnboardingPagedIntroCoordinator: Saved \(savedCount) local file memories")
       return savedCount
     }
 
@@ -1438,12 +1391,70 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       )
     }
 
-    // Deliberately no per-file drafts here. An earlier version emitted one
-    // memory per indexed file (up to 2800 "The user's local projects include
-    // <path>" entries, plus per-file "recently modified" facts); those
-    // drowned out real memories for every user who ran the scan and were
-    // bulk-purged server-side. Only aggregate facts (count, project names,
-    // technologies) carry durable signal.
+    for fileName in snapshot.recentFiles.prefix(8) {
+      drafts.append(
+        MemoryDraft(
+          content: "A recently modified local file is named \(fileName).",
+          tags: ["local_files", "onboarding", "recent_file"],
+          source: "local_files",
+          headline: fileName
+        )
+      )
+    }
+
+    if let dbQueue = await RewindDatabase.shared.getDatabaseQueue() {
+      do {
+        let projectDrafts = try await dbQueue.read { db -> [MemoryDraft] in
+          let sql = """
+            SELECT path, filename, fileExtension, folder
+            FROM indexed_files
+            WHERE folder IN ('Projects', 'Documents', 'Downloads')
+              AND filename NOT LIKE 'CleanShot %'
+              AND filename NOT LIKE '.DS_Store'
+              AND path NOT LIKE '%/node_modules/%'
+              AND path NOT LIKE '%/.git/%'
+              AND path NOT LIKE '%/.build/%'
+              AND path NOT LIKE '%/build/%'
+              AND path NOT LIKE '%/DerivedData/%'
+              AND path NOT LIKE '%/Pods/%'
+              AND (
+                fileExtension IN ('swift','dart','py','ts','tsx','js','jsx','md','mdx','json',
+                                  'yaml','yml','toml','sh','txt','html','css','scss','sql',
+                                  'go','rs','kt','java','cpp','c','h','hpp','ipynb','pdf')
+                OR fileExtension IS NULL
+              )
+            ORDER BY modifiedAt DESC
+            LIMIT 2800
+            """
+
+          let rows = try Row.fetchAll(db, sql: sql)
+          return rows.compactMap { row in
+            guard let path: String = row["path"], let filename: String = row["filename"] else {
+              return nil
+            }
+
+            let folder: String = row["folder"] ?? "Files"
+            let fileExtension: String = row["fileExtension"] ?? ""
+            let normalizedPath = Self.normalizedLocalFilePath(path)
+            let extensionSuffix = fileExtension.isEmpty ? "" : " (\(fileExtension))"
+
+            return MemoryDraft(
+              content:
+                "The user's local \(folder.lowercased()) include \(normalizedPath)\(extensionSuffix).",
+              tags: [
+                "local_files", "onboarding", folder.lowercased(), Self.sanitizedTag(fileExtension),
+              ],
+              source: "local_files",
+              headline: filename
+            )
+          }
+        }
+        drafts.append(contentsOf: projectDrafts)
+      } catch {
+        log(
+          "OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
+      }
+    }
 
     var seen = Set<MemoryDraft>()
     return drafts.filter { seen.insert($0).inserted }
@@ -1457,6 +1468,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       return "~/" + path.dropFirst(home.count + 1)
     }
     return path
+  }
+
+  nonisolated private static func sanitizedTag(_ tag: String) -> String {
+    let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return trimmed.isEmpty ? "unknown" : trimmed.replacingOccurrences(of: " ", with: "_")
   }
 
   private func heuristicGoalTitle(_ text: String) -> String {

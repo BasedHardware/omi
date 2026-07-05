@@ -93,20 +93,6 @@ class ActionItemResponse(BaseModel):
     indent_level: int = 0
 
 
-def _safe_action_item_responses(items, *, uid: str = '', context: str = '') -> List[ActionItemResponse]:
-    """Build ActionItemResponse objects from raw records, skipping any that fail
-    validation so one malformed or legacy item cannot 500 a whole list endpoint."""
-    responses: List[ActionItemResponse] = []
-    for item in items:
-        try:
-            responses.append(ActionItemResponse(**item))
-        except ValidationError:
-            item_id = item.get('id') if isinstance(item, dict) else None
-            suffix = f', {context}' if context else ''
-            logger.warning('Skipping malformed action item %s (uid=%s%s)', item_id, uid, suffix)
-    return responses
-
-
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
@@ -169,8 +155,8 @@ def get_pending_sync_items(
     pending_export = [item for item in result["pending_export"] if not item.get('is_locked', False)]
     synced_items = [item for item in result["synced_items"] if not item.get('is_locked', False)]
     return {
-        "pending_export": _safe_action_item_responses(pending_export, uid=uid, context='pending_export'),
-        "synced_items": _safe_action_item_responses(synced_items, uid=uid, context='synced_items'),
+        "pending_export": [ActionItemResponse(**item) for item in pending_export],
+        "synced_items": [ActionItemResponse(**item) for item in synced_items],
     }
 
 
@@ -334,7 +320,7 @@ def get_action_items(
             description = item.get('description', '')
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
-    response_items = _safe_action_item_responses(action_items, uid=uid)
+    response_items = [ActionItemResponse(**item) for item in action_items]
 
     has_more = len(action_items) == limit
     if has_more:
@@ -367,18 +353,7 @@ def search_action_items(
 
     action_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
     action_items = [item for item in action_items if not item.get('is_locked', False)]
-    return {"action_items": _safe_action_item_responses(action_items, uid=uid)}
-
-
-@router.get("/v1/action-items/ids", tags=['action-items'])
-def list_action_item_ids(uid: str = Depends(auth.get_current_user_uid)):
-    """Return all of the user's action-item IDs (IDs only, no field reads).
-
-    A lightweight way for a client to reconcile which tasks it has without paging the full
-    list. Declared before /v1/action-items/{action_item_id} so the static path is not
-    captured as an action item id.
-    """
-    return {"ids": action_items_db.get_action_item_ids(uid)}
+    return {"action_items": [ActionItemResponse(**item) for item in action_items]}
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
@@ -557,7 +532,15 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-    response_items = _safe_action_item_responses(action_items, uid=uid, context=f'conversation {conversation_id}')
+    response_items = []
+    for item in action_items:
+        try:
+            response_items.append(ActionItemResponse(**item))
+        except ValidationError:
+            logger.warning(
+                f"Skipping malformed action item {item.get('id')} for conversation {conversation_id}, uid {uid}"
+            )
+            continue
 
     return {"action_items": response_items, "conversation_id": conversation_id}
 

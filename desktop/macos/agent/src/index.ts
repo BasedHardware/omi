@@ -62,7 +62,6 @@ import {
 } from "./runtime/adapter-selection.js";
 import {
   activeControlToolOwnerId,
-  AGENT_CONTROL_TOOL_NAMES,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
@@ -75,10 +74,17 @@ import {
   type ResolvedControlRequestContext,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
-import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
+  "list_agent_sessions",
+  "get_agent_run",
+  "cancel_agent_run",
+  "inspect_agent_artifacts",
+  "update_agent_artifact_lifecycle",
+]);
 
 // Resolve paths to bundled tools
 const playwrightCli = join(
@@ -134,10 +140,6 @@ function logErr(msg: string): void {
 
 function agentStateDir(): string {
   return process.env.OMI_AGENT_STATE_DIR ?? join(homedir(), "Library", "Application Support", "Omi", "agent");
-}
-
-function agentArtifactsDir(): string {
-  return defaultArtifactRoot(process.env);
 }
 
 // --- OMI tools relay via Unix socket ---
@@ -673,7 +675,7 @@ function withControlRunCorrelation(
   input: Record<string, unknown>,
   fallbackClientId: string | undefined
 ): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
-  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "delegate_agent") {
     return { input };
   }
   const requestId = randomUUID();
@@ -690,7 +692,7 @@ function withControlRunCorrelation(
 }
 
 function controlRunAdapterId(name: string, input: Record<string, unknown>, defaultAdapterId: string): string | undefined {
-  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "delegate_agent") {
     return undefined;
   }
   const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
@@ -700,7 +702,7 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
-  return name === "spawn_background_agent" || (name === "delegate_agent" && input.mode === "spawn");
+  return name === "delegate_agent" && input.mode === "spawn";
 }
 
 function controlToolResultOk(result: string): boolean {
@@ -829,9 +831,7 @@ async function main(): Promise<void> {
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
   registry.register("acp", () => acpAdapter, 1);
-  const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
-  logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
-  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
+  const kernel = new AgentRuntimeKernel({ store, registry });
   kernel.subscribe((event) => {
     if (!event.runId) return;
     if (event.type === "run.queued") {
@@ -976,7 +976,7 @@ async function main(): Promise<void> {
   };
 
   // 3. Signal readiness
-  send({ type: "init", sessionId: "", agentControlTools: AGENT_CONTROL_TOOL_NAMES });
+  send({ type: "init", sessionId: "" });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
@@ -1170,7 +1170,6 @@ async function main(): Promise<void> {
                 const toolResult = await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
-                    trustedUserControl: false,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
@@ -1246,7 +1245,7 @@ async function main(): Promise<void> {
           break;
         }
         const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control);
-        if (!isAgentControlToolName(control.name)) {
+        if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -1315,7 +1314,6 @@ async function main(): Promise<void> {
               ? await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
-                    trustedUserControl: true,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () => controlContext.activeOwnerId,
                   },

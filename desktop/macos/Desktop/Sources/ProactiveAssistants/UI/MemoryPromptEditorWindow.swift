@@ -124,9 +124,7 @@ struct MemoryPromptEditorView: View {
     }
 }
 
-#if canImport(PreviewsMacros)
 #Preview {
     MemoryPromptEditorView()
         .frame(width: 700, height: 600)
 }
-#endif

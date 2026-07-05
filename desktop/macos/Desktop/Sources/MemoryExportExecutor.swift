@@ -33,16 +33,12 @@ enum MemoryExportExecutor {
       throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
     }
 
-    let key = try await hostedMCPKey(for: destination)
+    let key = try await MemoryExportService.shared.ensureMCPKey()
 
+    // OpenClaw / Hermes have no setup CLI; the agent doesn't reliably perform the
+    // file write. Do it deterministically ourselves (idempotent local write).
     if MemoryBankConnector.handles(destination) {
-      if canSkipLocalSetupWhenConfigMatches(destination),
-        MemoryExportConnectionDetector.hasExistingConnection(for: destination, matchingKey: key)
-      {
-        return Outcome(taskTitle: "\(destination.title) is already connected.", mode: .completed)
-      }
       let message = try MemoryBankConnector.connect(destination, key: key)
-      await MemoryExportService.shared.markConnected(destination)
       return Outcome(taskTitle: message, mode: .completed)
     }
 
@@ -58,30 +54,12 @@ enum MemoryExportExecutor {
       return try await runBrowserAutonomous(destination, key: key)
 
     case .assisted:
-      guard destination.omiExecutionTask(key: key) != nil else {
+      guard let task = destination.omiExecutionTask(key: key) else {
         throw ExecutorError.unsupported(destination.title)
       }
-      return await runAssisted(destination, key: key)
+      await runAssisted(destination, key: key)
+      return Outcome(taskTitle: task.title, mode: .assisted)
     }
-  }
-
-  private static func canSkipLocalSetupWhenConfigMatches(_ destination: MemoryExportDestination) -> Bool {
-    switch destination {
-    case .claudeCode, .codex:
-      return true
-    case .openclaw, .hermes:
-      return false
-    case .notion, .obsidian, .chatgpt, .claude, .gemini, .agents:
-      return false
-    }
-  }
-
-  private static func hostedMCPKey(for destination: MemoryExportDestination) async throws -> String {
-    guard destination.requiresHostedMCPKeyForSetup else { return "" }
-    if MemoryBankConnector.handles(destination) {
-      return try await MemoryExportService.shared.mcpKeyForLocalConnectorSetup()
-    }
-    return try await MemoryExportService.shared.ensureMCPKey()
   }
 
   static func requiresAccessibilityPreflight(_ destination: MemoryExportDestination) -> Bool {
@@ -96,11 +74,6 @@ enum MemoryExportExecutor {
     AXIsProcessTrusted()
   }
 
-  /// PARKED: no destination currently maps to `.browserAutonomous` — ChatGPT and
-  /// Claude cloud moved to the assisted flow because AX/OCR automation of other
-  /// people's web UIs proved too brittle across browsers and machines. Kept so a
-  /// future DOM-perception rebuild has the routing to slot into. Do not remap a
-  /// destination here without reading docs/cloud-connectors-roadmap.md.
   private static func runBrowserAutonomous(
     _ destination: MemoryExportDestination,
     key: String
@@ -110,7 +83,7 @@ enum MemoryExportExecutor {
     }
 
     if destination == .claude {
-      return try await runClaudeNativeCloudSetup(setup: setup, openURL: openURL)
+      return try await runClaudeNativeCloudSetup(setup: setup, openURL: openURL, key: key)
     }
 
     let browser = BrowserAutomationTargetResolver.defaultTarget(for: openURL)
@@ -120,12 +93,9 @@ enum MemoryExportExecutor {
       throw ExecutorError.unsupported(destination.title)
     }
 
-    let pasteboardText =
-      destination.requiresHostedMCPKeyForSetup
-      ? "Server URL: \(setup.serverURL)\nKey: \(key)"
-      : "Server URL: \(setup.serverURL)"
     NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(pasteboardText, forType: .string)
+    NSPasteboard.general.setString(
+      "Server URL: \(setup.serverURL)\nKey: \(key)", forType: .string)
 
     if let browser {
       BrowserAutomationTargetResolver.open(openURL, in: browser)
@@ -139,7 +109,8 @@ enum MemoryExportExecutor {
 
   private static func runClaudeNativeCloudSetup(
     setup: MCPSetup,
-    openURL: URL
+    openURL: URL,
+    key: String
   ) async throws -> Outcome {
     CloudConnectorFormAutomation.dismissGuidanceOverlay()
 
@@ -147,18 +118,14 @@ enum MemoryExportExecutor {
       "provider": "claude",
       "name": "Omi Memory",
       "server_url": setup.serverURL,
-      "oauth_client_id": MemoryExportDestination.claude.cloudOAuthClientID ?? "",
+      "oauth_client_id": "omi",
+      "oauth_client_secret": key,
       "submit": true,
     ]
 
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(
-      """
-      Name: Omi Memory
-      Remote MCP server URL: \(setup.serverURL)
-      OAuth Client ID: \(MemoryExportDestination.claude.cloudOAuthClientID ?? "")
-      OAuth Client Secret: leave blank
-      """,
+      "Name: Omi Memory\nRemote MCP server URL: \(setup.serverURL)\nOAuth Client ID: omi\nOAuth Client Secret: \(key)",
       forType: .string)
 
     // For cloud setup, use the user's system default browser. Do not reuse the
@@ -171,17 +138,11 @@ enum MemoryExportExecutor {
     for attempt in 1...12 {
       try? await Task.sleep(nanoseconds: attempt == 1 ? 1_500_000_000 : 750_000_000)
       lastResult = await CloudConnectorFormAutomation.fill(args)
-      log(
-        "Claude cloud setup: native automation attempt \(attempt) result=\(cloudFormFillResultSummary(lastResult))"
-      )
+      log("Claude cloud setup: native automation attempt \(attempt) result=\(cloudFormFillResultSummary(lastResult))")
       if cloudFormFillSucceeded(lastResult) {
         CloudConnectorFormAutomation.dismissGuidanceOverlay()
-        if lastResult.contains("Claude connector connected.") {
-          await MemoryExportService.shared.markConnected(.claude)
-        }
         return Outcome(
-          taskTitle:
-            "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
+          taskTitle: "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
           mode: .completed)
       }
       if cloudFormFillRequiresAccessibilityApproval(lastResult) {
@@ -200,8 +161,7 @@ enum MemoryExportExecutor {
           // We could not anchor to Claude. Send the user to grant Screen Recording, but
           // never leave them on a bare settings pane: show an instruction card too.
           requestScreenRecordingApprovalForCloudSetup()
-          await CloudConnectorFormAutomation.showScreenRecordingSettingsInstructionOverlay(
-            actionLabel: "Connect")
+          await CloudConnectorFormAutomation.showScreenRecordingSettingsInstructionOverlay(actionLabel: "Connect")
           throw ExecutorError.browserSetupRequired(cloudSetupScreenRecordingPermissionMessage)
         }
       }
@@ -210,15 +170,12 @@ enum MemoryExportExecutor {
       }
     }
 
-    log(
-      "Claude cloud setup: stopping without agent fallback result=\(cloudFormFillResultSummary(lastResult))"
-    )
+    log("Claude cloud setup: stopping without agent fallback result=\(cloudFormFillResultSummary(lastResult))")
     throw ExecutorError.browserSetupRequired(cloudSetupNativeAutomationBlockedMessage)
   }
 
   nonisolated static func cloudFormFillSucceeded(_ result: String) -> Bool {
-    let cleanResult =
-      !result.contains("Missing:")
+    let cleanResult = !result.contains("Missing:")
       && !result.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Error:")
     return cleanResult
       && (result.contains("Submitted with button: Connect")
@@ -243,8 +200,7 @@ enum MemoryExportExecutor {
   }
 
   private static func cloudFormFillResultSummary(_ result: String) -> String {
-    let sanitized =
-      result
+    let sanitized = result
       .split(separator: "\n")
       .filter { !$0.lowercased().contains("oauth client secret") }
       .joined(separator: " | ")
@@ -302,8 +258,7 @@ enum MemoryExportExecutor {
   }
 
   private static func requestAccessibilityApprovalForCloudSetup() {
-    let options =
-      [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     let trusted = AXIsProcessTrustedWithOptions(options)
     guard !trusted,
       let url = URL(
@@ -319,43 +274,21 @@ enum MemoryExportExecutor {
     // Settings alone left the user with nothing to turn on.
     ScreenCaptureService.requestAllScreenCapturePermissions()
 
-    guard
-      let url = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+    guard let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     else { return }
     NSWorkspace.shared.open(url)
   }
 
-  /// Assisted setup: everything deterministic happens in code (copy the full
-  /// field payload, open the deep link), then an on-screen card tells the user
-  /// the one thing left to do. This is the primary path for ChatGPT/Claude cloud
-  /// connectors — see docs/cloud-connectors-roadmap.md for why autonomous
-  /// browser automation is parked and what replaces it.
-  private static func runAssisted(_ destination: MemoryExportDestination, key: String) async -> Outcome {
+  private static func runAssisted(_ destination: MemoryExportDestination, key: String) async {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(key, forType: .string)
     if let url = destination.mcpSetup(key: key)?.openURL {
       NSWorkspace.shared.open(url)
     }
-
-    if let hint = destination.assistedOverlayHint,
-      let sections = destination.assistedSetupSections(key: key)
-    {
-      CloudConnectorGuidanceOverlay.shared.presentFieldCopyCard(
-        title: hint.title, subtitle: hint.subtitle, sections: sections, near: nil)
-      return Outcome(
-        taskTitle:
-          "Opened \(destination.title) — copy each value from the on-screen card into the form.",
-        mode: .assisted)
-    }
-
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(key, forType: .string)
-
     _ = await TasksStore.shared.createTask(
       description: "Finish connecting \(destination.title) to Omi (page opened, key copied)",
       dueAt: Date(), priority: "medium", tags: ["mcp-setup"])
-    return Outcome(
-      taskTitle: "Opened \(destination.title) and copied your key — finish with the steps below.",
-      mode: .assisted)
   }
 
   private static func spawnSetupAgent(task: (title: String, body: String)) async {

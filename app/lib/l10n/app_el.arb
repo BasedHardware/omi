@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Χρησιμοποιείτε δικό σας πάροχο μεταγραφής. Ο συγχρονισμός αυτών των ηχογραφήσεων τις μεταγράφει στους διακομιστές του Omi και προσμετρώνται στο όριο μεταγραφής του προγράμματός σας.",
     "transcribeLaterTitle": "Μεταγραφή αργότερα",
     "transcribeLaterDescription": "Ηχογραφήστε τώρα και κάντε τη μεταγραφή αργότερα, όποτε θέλετε, αντί σε πραγματικό χρόνο. Οι ηχογραφήσεις αποθηκεύονται στο τηλέφωνό σας και τις ανεβάζετε για να δημιουργηθούν συνομιλίες.",
-    "transcribeLaterNote": "Προς το παρόν λειτουργεί με συσκευές Omi και Limitless. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.",
+    "transcribeLaterNote": "Προς το παρόν λειτουργεί με συσκευές Omi. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.",
     "transcribeLaterStorageFull": "Ο αποθηκευτικός χώρος του τηλεφώνου σας τελειώνει, γι' αυτό η ηχογράφηση είναι σε παύση. Ελευθερώστε χώρο ή ανεβάστε τις ηχογραφήσεις σας και θα συνεχιστεί αυτόματα.",
     "unmute": "Άρση σίγασης",
     "newRecording": "Νέα εγγραφή",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "Περίπου 1 λεπτό",
     "jumpToLatestMessage": "Μετάβαση στο πιο πρόσφατο μήνυμα",
     "latest": "Πρόσφατο",
-    "flashFirmware": "Εγκατάσταση firmware",
-    "pendantRecordingTitle": "Εγγραφή στο μενταγιόν",
-    "pendantRecordingNote": "Το μενταγιόν σας ηχογραφεί μόνο του. Οι εγγραφές συγχρονίζονται με το τηλέφωνό σας όσο η εφαρμογή είναι ανοιχτή.",
-    "pendantSyncingRecordings": "Συγχρονισμός εγγραφών από το μενταγιόν σας…",
-    "pendantMinutesStored": "~{minutes} λεπτά αποθηκευμένα",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Ο αποθηκευτικός χώρος του μενταγιόν είναι σχεδόν πλήρης — κρατήστε την εφαρμογή ανοιχτή για συγχρονισμό."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Συνδέστε τα Meta Glasses σας",
+    "pairingDescMetaGlasses": "Συζεύξτε τα γυαλιά σας στην εφαρμογή Meta AI και μετά πατήστε Σύνδεση στο Omi. Μπορείτε να συνδέσετε περισσότερα από ένα ζευγάρια και να επιλέξετε ποιο είναι ενεργό.",
+    "metaGlassesUnavailable": "Δεν βρέθηκε η εφαρμογή Meta AI. Εγκαταστήστε το Meta AI και ενεργοποιήστε τη λειτουργία προγραμματιστή για να συνδέσετε τα γυαλιά σας.",
+    "metaGlassesRegistering": "Ολοκληρώστε τη σύνδεση στην εφαρμογή Meta AI και επιστρέψτε στο Omi.",
+    "metaGlassesCameraPermission": "Επιτρέψτε την πρόσβαση στην κάμερα στην εφαρμογή Meta AI",
+    "metaGlassesCaptureModeLabel": "Λειτουργία εγγραφής",
+    "metaGlassesModeCameraMic": "Κάμερα + μικρόφωνο",
+    "metaGlassesModeMicOnly": "Μόνο μικρόφωνο",
+    "metaGlassesStartCapture": "Έναρξη εγγραφής",
+    "metaGlassesStopCapture": "Διακοπή εγγραφής",
+    "metaGlassesGestureHint": "Τα χειριστήρια χειρονομιών για τα γυαλιά Meta δεν υποστηρίζονται σε αυτήν την έκδοση.",
+    "connectAnotherDevice": "Σύνδεση άλλης συσκευής",
+    "myDevices": "Οι συσκευές μου",
+    "metaGlassesAutoCapture": "Αυτόματη εγγραφή κατά τη σύνδεση",
+    "metaGlassesShowPreview": "Ζωντανή προεπισκόπηση",
+    "metaGlassesPendingPhotos": "{count} φωτογραφίες σε αναμονή συγχρονισμού",
+    "metaGlassesPairInMetaAI": "Ρυθμίστε στην εφαρμογή Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Τα γυαλιά κρυώνουν — η λήψη τέθηκε σε παύση",
+    "metaGlassesFolded": "Ξεδίπλωσε τα γυαλιά για να συνεχιστεί η λήψη",
+    "metaGlassesCaptureFrequency": "Συχνότητα λήψης",
+    "metaGlassesEvery10s": "Κάθε 10 δλ",
+    "metaGlassesEvery30s": "Κάθε 30 δλ",
+    "metaGlassesEvery1min": "Κάθε 1 λεπ",
+    "metaGlassesEvery5min": "Κάθε 5 λεπ",
+    "metaGlassesGestures": "Χειρονομίες"
 }

@@ -88,7 +88,9 @@ def test_developer_route_wires_adapter_before_legacy_memory_reads():
 
 
 def test_developer_vector_route_wires_app_key_scope_grant_before_memory_vector_reads():
-    route_source = _function_source_for_route('/v1/dev/user/memories/vector/search', 'get')
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    contents = developer_py.read_text(encoding='utf-8')
+    route = '@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])'
     auth_context_dependency = (
         'auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context)'
     )
@@ -98,17 +100,23 @@ def test_developer_vector_route_wires_app_key_scope_grant_before_memory_vector_r
     rollout_call = "read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')"
     vector_adapter_call = 'search_memory_default_developer_memories_vector('
     vector_side_effect = 'fetch_default_vector_memory_search('
-    assert auth_context_dependency in route_source
-    assert app_key_grant_call in route_source
-    assert vector_adapter_call in route_source
-    assert vector_side_effect not in route_source[: route_source.index(vector_adapter_call)]
+    assert route in contents
+    assert auth_context_dependency in contents
+    assert app_key_grant_call in contents
+    assert vector_adapter_call in contents
     assert (
-        route_source.index(auth_context_dependency)
-        < route_source.index(uid_from_context)
-        < route_source.index(app_key_grant_call)
-        < route_source.index(app_key_deny_check)
-        < route_source.index(rollout_call)
-        < route_source.index(vector_adapter_call)
+        vector_side_effect
+        not in contents[contents.index(route) : contents.index(vector_adapter_call, contents.index(route))]
+    )
+    route_index = contents.index(route)
+    assert (
+        route_index
+        < contents.index(auth_context_dependency, route_index)
+        < contents.index(uid_from_context, route_index)
+        < contents.index(app_key_grant_call, route_index)
+        < contents.index(app_key_deny_check, route_index)
+        < contents.index(rollout_call, route_index)
+        < contents.index(vector_adapter_call, route_index)
     )
 
 
@@ -133,7 +141,7 @@ def test_developer_batch_create_route_checks_split_brain_guard_before_categoriza
     categorization = 'identify_category_for_memory(mem_req.content.strip())'
     external_batch = '.create_external_memory_batch('
     guard_call = 'guard_legacy_memory_write('
-    legacy_write = 'memory_write_payload(memory, MemoryApiExposure.LEGACY)'
+    legacy_write = 'memories_db.save_memories(uid, [memory.model_dump() for memory in memory_dbs])'
     vector_write = 'upsert_memory_vectors_batch('
     assert pin_call in route_source
     assert categorization in route_source
@@ -192,8 +200,9 @@ def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision(
     assert legacy_safe_check in contents
     assert legacy_call in contents
     assert contents.index(denied_check) < contents.index(legacy_safe_check) < contents.index(legacy_call)
-    vector_route_source = _function_source_for_route('/v1/dev/user/memories/vector/search', 'get')
-    assert vector_route_source.index(denied_check) < vector_route_source.index(legacy_safe_check)
+    route = '@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])'
+    route_index = contents.index(route)
+    assert contents.index(denied_check, route_index) < contents.index(legacy_safe_check, route_index)
 
 
 def test_developer_category_filters_do_not_force_legacy_when_memory_can_decide_safely():

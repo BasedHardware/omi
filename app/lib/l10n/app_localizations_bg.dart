@@ -9375,7 +9375,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Засега работи с устройства Omi и Limitless. Аудиото остава на телефона ви, докато не решите да го качите.';
+      'Засега работи с устройства Omi. Аудиото остава на телефона ви, докато не решите да го качите.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9524,24 +9524,93 @@ class AppLocalizationsBg extends AppLocalizations {
   String get latest => 'Последно';
 
   @override
-  String get flashFirmware => 'Инсталирай фърмуера';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'Запис на висулката';
+  String get pairingTitleMetaGlasses => 'Свържете вашите Meta Glasses';
 
   @override
-  String get pendantRecordingNote =>
-      'Висулката ви записва самостоятелно. Записите се синхронизират с телефона ви, докато приложението е отворено.';
+  String get pairingDescMetaGlasses =>
+      'Сдвоете очилата си в приложението Meta AI, след което натиснете „Свързване“ в Omi. Можете да свържете повече от един чифт и да изберете кой е активен.';
 
   @override
-  String get pendantSyncingRecordings => 'Синхронизиране на записите от висулката ви…';
+  String get metaGlassesUnavailable =>
+      'Приложението Meta AI не е открито. Инсталирайте Meta AI и активирайте режим за разработчици, за да свържете очилата си.';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes мин съхранени';
+  String get metaGlassesRegistering => 'Завършете свързването в приложението Meta AI и се върнете в Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Разрешете достъп до камерата в приложението Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Режим на запис';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Камера + микрофон';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Само микрофон';
+
+  @override
+  String get metaGlassesStartCapture => 'Старт на записа';
+
+  @override
+  String get metaGlassesStopCapture => 'Стоп на записа';
+
+  @override
+  String get metaGlassesGestureHint => 'Управлението с жестове за очила Meta не се поддържа в тази версия.';
+
+  @override
+  String get connectAnotherDevice => 'Свързване на друго устройство';
+
+  @override
+  String get myDevices => 'Моите устройства';
+
+  @override
+  String get metaGlassesAutoCapture => 'Автоматичен запис при свързване';
+
+  @override
+  String get metaGlassesShowPreview => 'Преглед на живо';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count снимки чакат синхронизация';
   }
 
   @override
-  String get pendantStorageAlmostFull =>
-      'Паметта на висулката е почти пълна — дръжте приложението отворено, за да се синхронизира.';
+  String get metaGlassesPairInMetaAI => 'Настройте в приложението Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Очилата се охлаждат — заснемането е поставено на пауза';
+
+  @override
+  String get metaGlassesFolded => 'Разгънете очилата, за да продължите заснемането';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Честота на заснемане';
+
+  @override
+  String get metaGlassesEvery10s => 'На всеки 10 с';
+
+  @override
+  String get metaGlassesEvery30s => 'На всеки 30 с';
+
+  @override
+  String get metaGlassesEvery1min => 'На всяка минута';
+
+  @override
+  String get metaGlassesEvery5min => 'На всеки 5 мин';
+
+  @override
+  String get metaGlassesGestures => 'Жестове';
 }

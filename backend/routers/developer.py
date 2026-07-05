@@ -37,14 +37,9 @@ from utils.conversations.render import populate_speaker_names, populate_folder_n
 from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
-    ApiKeyAuth,
-    check_conversation_transcript_read_limit,
     get_current_user_id,
-    get_auth_with_conversation_detail_read,
-    get_auth_with_conversations_read,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
-    get_developer_memory_default_memory_batch_write_context,
     get_developer_memory_default_memory_read_context,
     get_developer_memory_default_memory_write_context,
     get_uid_with_action_items_read,
@@ -53,8 +48,7 @@ from dependencies import (
     get_uid_with_goals_write,
 )
 from utils.apps import update_personas_async
-from utils.log_sanitizer import sanitize
-from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.endpoints import with_rate_limit, with_rate_limit_context, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
@@ -90,46 +84,6 @@ router = APIRouter()
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
-
-
-def _developer_request_ip(request: Request) -> Optional[str]:
-    client = getattr(request, 'client', None)
-    if not client:
-        return None
-    return client.host
-
-
-def _audit_developer_read(
-    *,
-    request: Optional[Request],
-    auth: ApiKeyAuth,
-    operation: str,
-    status: int,
-    limit: Optional[int] = None,
-    offset: Optional[int] = None,
-    include_transcript: Optional[bool] = None,
-    returned_count: Optional[int] = None,
-    resource_id: Optional[str] = None,
-):
-    if request is None or not hasattr(request, 'url') or not hasattr(request, 'headers'):
-        return
-    logger.info(
-        "developer_api_read operation=%s path=%s status=%s uid=%s app_id=%s key_id=%s remote_ip=%s "
-        "user_agent=%s limit=%s offset=%s include_transcript=%s returned_count=%s resource_id=%s",
-        operation,
-        request.url.path,
-        status,
-        auth.uid,
-        auth.app_id or 'unknown_app',
-        auth.key_id or 'unknown_key',
-        _developer_request_ip(request),
-        sanitize(request.headers.get('user-agent')),
-        limit,
-        offset,
-        include_transcript,
-        returned_count,
-        sanitize(resource_id) if resource_id else None,
-    )
 
 
 # ******************************************************
@@ -543,7 +497,9 @@ def search_memories_vector(
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
-    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+    auth_context: ProductAuthorizationContext = Depends(
+        with_rate_limit_context(get_developer_memory_default_memory_write_context, "dev:memories")
+    ),
 ):
     """
     Create a new memory for the authenticated user.
@@ -640,7 +596,9 @@ def create_memory(
 )
 def create_memories_batch(
     request: BatchMemoriesRequest,
-    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_batch_write_context),
+    auth_context: ProductAuthorizationContext = Depends(
+        with_rate_limit_context(get_developer_memory_default_memory_write_context, "dev:memories_batch")
+    ),
 ):
     """
     Create multiple memories in a batch.
@@ -894,7 +852,7 @@ class BatchActionItemsResponse(BaseModel):
     operation_id="listActionItems",
 )
 def get_action_items(
-    uid: str = Depends(with_rate_limit(get_uid_with_action_items_read, "dev:action_items_read")),
+    uid: str = Depends(get_uid_with_action_items_read),
     conversation_id: Optional[str] = None,
     completed: Optional[bool] = None,
     start_date: Optional[datetime] = None,
@@ -1305,7 +1263,7 @@ class DeveloperFolder(BaseModel):
 
 
 @router.get("/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders")
-def get_user_folders(uid: str = Depends(with_rate_limit(get_uid_with_conversations_read, "dev:conversations_read"))):
+def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     """
     Get all folders for the authenticated user.
 
@@ -1344,8 +1302,7 @@ def get_conversations(
     include_transcript: bool = False,
     folder_id: Optional[str] = Query(default=None, min_length=1),
     starred: Optional[bool] = None,
-    uid: ApiKeyAuth = Depends(get_auth_with_conversations_read),
-    request: Request = None,
+    uid: str = Depends(get_uid_with_conversations_read),
 ):
     """
     Get conversations with optional transcript inclusion.
@@ -1354,83 +1311,57 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
-    auth = uid
-    uid = auth.uid
-    status = 500
-    returned_count = None
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     try:
-        if include_transcript:
-            check_conversation_transcript_read_limit(auth, request=request)
+        category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-        # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
-        # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-        offset = max(0, offset)
-        limit = max(1, min(limit, 25 if include_transcript else 100))
-        try:
-            category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
-        except ValueError as e:
-            status = 400
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+    conversations = conversations_db.get_conversations(
+        uid,
+        limit,
+        offset,
+        include_discarded=False,
+        statuses=["completed"],
+        start_date=start_date,
+        end_date=end_date,
+        categories=[c.value for c in category_list],
+        folder_id=folder_id,
+        starred=starred,
+    )
 
-        conversations = conversations_db.get_conversations(
-            uid,
-            limit,
-            offset,
-            include_discarded=False,
-            statuses=["completed"],
-            start_date=start_date,
-            end_date=end_date,
-            categories=[c.value for c in category_list],
-            folder_id=folder_id,
-            starred=starred,
-        )
+    # Filter out locked conversations completely
+    unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
-        # Filter out locked conversations completely
-        unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
-
-        # Remove transcript_segments if not requested
-        if not include_transcript:
-            for conv in unlocked_conversations:
-                conv.pop('transcript_segments', None)
-        else:
-            populate_speaker_names(uid, unlocked_conversations)
-
-        populate_folder_names(uid, unlocked_conversations)
-
-        # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
-        # with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
-        valid_conversations = []
+    # Remove transcript_segments if not requested
+    if not include_transcript:
         for conv in unlocked_conversations:
-            if not isinstance(conv, dict) or not conv.get('id'):
-                logger.warning('Skipping malformed conversation in Developer API conversation list')
-                continue
-            try:
-                valid_conversations.append(Conversation.model_validate(conv))
-            except ValidationError as e:
-                invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-                logger.warning(
-                    f"Skipping invalid conversation doc {conv.get('id', 'unknown')} for uid {uid}: "
-                    f"missing/invalid fields {invalid_fields}"
-                )
-                continue
-        status = 200
-        returned_count = len(valid_conversations)
-        return valid_conversations
-    except HTTPException as e:
-        status = e.status_code
-        returned_count = 0 if returned_count is None else returned_count
-        raise
-    finally:
-        _audit_developer_read(
-            request=request,
-            auth=auth,
-            operation='list_conversations',
-            status=status,
-            limit=limit,
-            offset=offset,
-            include_transcript=include_transcript,
-            returned_count=returned_count,
-        )
+            conv.pop('transcript_segments', None)
+    else:
+        populate_speaker_names(uid, unlocked_conversations)
+
+    populate_folder_names(uid, unlocked_conversations)
+
+    # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
+    # with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
+    valid_conversations = []
+    for conv in unlocked_conversations:
+        if not isinstance(conv, dict) or not conv.get('id'):
+            logger.warning('Skipping malformed conversation in Developer API conversation list')
+            continue
+        try:
+            valid_conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid conversation doc {conv.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_conversations
 
 
 @router.post(
@@ -1441,7 +1372,7 @@ def get_conversations(
 )
 def create_conversation(
     request: CreateConversationRequest,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
     Create a new conversation from text for the authenticated user.
@@ -1525,8 +1456,7 @@ def create_conversation(
 def get_conversation_endpoint(
     conversation_id: str,
     include_transcript: bool = False,
-    uid: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
-    request: Request = None,
+    uid: str = Depends(get_uid_with_conversations_read),
 ):
     """
     Get a single conversation by ID.
@@ -1534,51 +1464,23 @@ def get_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to retrieve
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
-    auth = uid
-    uid = auth.uid
-    status = 500
-    returned_count = None
-    try:
-        if include_transcript:
-            check_conversation_transcript_read_limit(auth, request=request)
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-        conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation:
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation not found")
+    # Filter out locked conversations
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Filter out locked conversations
-        if conversation.get('is_locked', False):
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation not found")
+    # Remove transcript_segments if not requested
+    if not include_transcript:
+        conversation.pop('transcript_segments', None)
+    else:
+        populate_speaker_names(uid, [conversation])
 
-        # Remove transcript_segments if not requested
-        if not include_transcript:
-            conversation.pop('transcript_segments', None)
-        else:
-            populate_speaker_names(uid, [conversation])
+    populate_folder_names(uid, [conversation])
 
-        populate_folder_names(uid, [conversation])
-
-        status = 200
-        returned_count = 1
-        return conversation
-    except HTTPException as e:
-        status = e.status_code
-        returned_count = 0 if returned_count is None else returned_count
-        raise
-    finally:
-        _audit_developer_read(
-            request=request,
-            auth=auth,
-            operation='get_conversation',
-            status=status,
-            include_transcript=include_transcript,
-            returned_count=returned_count,
-            resource_id=conversation_id,
-        )
+    return conversation
 
 
 def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
@@ -1805,7 +1707,7 @@ def create_conversation_from_segments_user(
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
     Create a new conversation from structured transcript segments.
@@ -1992,7 +1894,7 @@ def _serialize_goal_datetimes(goal: dict) -> dict:
 
 @router.get("/v1/dev/user/goals", tags=["Goals"], response_model=List[GoalResponse], operation_id="listGoals")
 def get_goals(
-    uid: str = Depends(with_rate_limit(get_uid_with_goals_read, "dev:goals_read")),
+    uid: str = Depends(get_uid_with_goals_read),
     limit: int = 10,
     include_inactive: bool = False,
 ):
@@ -2013,7 +1915,7 @@ def get_goals(
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
 def get_goal(
     goal_id: str,
-    uid: str = Depends(with_rate_limit(get_uid_with_goals_read, "dev:goals_read")),
+    uid: str = Depends(get_uid_with_goals_read),
 ):
     """
     Get a single goal by ID.
@@ -2125,7 +2027,7 @@ def update_goal_progress(
 def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
-    uid: str = Depends(with_rate_limit(get_uid_with_goals_read, "dev:goals_read")),
+    uid: str = Depends(get_uid_with_goals_read),
 ) -> List[dict]:
     """
     Get progress history for a goal.

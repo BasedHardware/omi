@@ -15,7 +15,6 @@ import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
-from utils.executors import run_blocking, db_executor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -480,7 +479,7 @@ async def handle_oauth_callback(
 
             # Store in Firebase
             try:
-                await run_blocking(db_executor, users_db.set_integration, uid, app_key, integration_data)
+                users_db.set_integration(uid, app_key, integration_data)
             except Exception as e:
                 logger.error(f'{app_key}: Error storing tokens in Firebase: {e}')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')

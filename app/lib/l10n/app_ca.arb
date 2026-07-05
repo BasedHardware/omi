@@ -3023,7 +3023,7 @@
     "syncCustomSttWarningMessage": "Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d'Omi i compten per al límit de transcripció del teu pla.",
     "transcribeLaterTitle": "Transcriure més tard",
     "transcribeLaterDescription": "Grava l'àudio ara i transcriu-lo quan vulguis en comptes de fer-ho en directe. Les gravacions es desen al telèfon i, després, les puges per crear converses.",
-    "transcribeLaterNote": "De moment, funciona amb dispositius Omi i Limitless. L'àudio es queda al teu telèfon fins que decideixis pujar-lo.",
+    "transcribeLaterNote": "De moment, funciona amb dispositius Omi. L'àudio es queda al teu telèfon fins que decideixis pujar-lo.",
     "transcribeLaterStorageFull": "El telèfon té poc espai d'emmagatzematge i la gravació s'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament.",
     "unmute": "Activar so",
     "newRecording": "Nou enregistrament",
@@ -3073,17 +3073,33 @@
     "deviceOnboardingIntroDuration": "Aproximadament 1 minut",
     "jumpToLatestMessage": "Vés a l'últim missatge",
     "latest": "Últim",
-    "flashFirmware": "Grava el microprogramari",
-    "pendantRecordingTitle": "Gravant al penjoll",
-    "pendantRecordingNote": "El teu penjoll grava pel seu compte. Les gravacions se sincronitzen amb el teu telèfon mentre l'aplicació és oberta.",
-    "pendantSyncingRecordings": "S'estan sincronitzant les gravacions del teu penjoll…",
-    "pendantMinutesStored": "~{minutes} min emmagatzemats",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "L'emmagatzematge del penjoll és gairebé ple: mantén l'aplicació oberta per sincronitzar."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Connecta les teves Meta Glasses",
+    "pairingDescMetaGlasses": "Vincula les ulleres a l'aplicació Meta AI i després toca Connecta a Omi. Pots enllaçar més d'un parell i triar quin és actiu.",
+    "metaGlassesUnavailable": "No s'ha detectat l'aplicació Meta AI. Instal·la Meta AI i activa el mode de desenvolupador per connectar les ulleres.",
+    "metaGlassesRegistering": "Acaba la connexió a l'aplicació Meta AI i torna a Omi.",
+    "metaGlassesCameraPermission": "Permet l'accés a la càmera a l'aplicació Meta AI",
+    "metaGlassesCaptureModeLabel": "Mode de captura",
+    "metaGlassesModeCameraMic": "Càmera + micròfon",
+    "metaGlassesModeMicOnly": "Només micròfon",
+    "metaGlassesStartCapture": "Inicia la captura",
+    "metaGlassesStopCapture": "Atura la captura",
+    "metaGlassesGestureHint": "Els controls de gestos per a les ulleres Meta no són compatibles en aquesta versió.",
+    "connectAnotherDevice": "Connecta un altre dispositiu",
+    "myDevices": "Els meus dispositius",
+    "metaGlassesAutoCapture": "Captura automàtica en connectar",
+    "metaGlassesShowPreview": "Previsualització en directe",
+    "metaGlassesPendingPhotos": "{count} fotos pendents de sincronitzar",
+    "metaGlassesPairInMetaAI": "Configura-ho a l'aplicació Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Les ulleres s'estan refredant — captura en pausa",
+    "metaGlassesFolded": "Desplega les ulleres per continuar capturant",
+    "metaGlassesCaptureFrequency": "Freqüència de captura",
+    "metaGlassesEvery10s": "Cada 10 s",
+    "metaGlassesEvery30s": "Cada 30 s",
+    "metaGlassesEvery1min": "Cada 1 min",
+    "metaGlassesEvery5min": "Cada 5 min",
+    "metaGlassesGestures": "Gestos"
 }

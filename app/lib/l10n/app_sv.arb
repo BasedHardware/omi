@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Du använder din egen transkriberingsleverantör. Att synkronisera dessa inspelningar transkriberar dem på Omis servrar i stället, och de räknas mot din plans transkriberingsgräns.",
     "transcribeLaterTitle": "Transkribera senare",
     "transcribeLaterDescription": "Spela in ljud nu och transkribera det när du vill i stället för direkt. Inspelningarna sparas på din telefon, och sedan laddar du upp dem för att skapa konversationer.",
-    "transcribeLaterNote": "Fungerar med Omi- och Limitless-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.",
+    "transcribeLaterNote": "Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.",
     "transcribeLaterStorageFull": "Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.",
     "unmute": "Slå på ljud",
     "newRecording": "Ny inspelning",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
     "jumpToLatestMessage": "Hoppa till senaste meddelandet",
     "latest": "Senaste",
-    "flashFirmware": "Installera firmware",
-    "pendantRecordingTitle": "Spelar in på hänget",
-    "pendantRecordingNote": "Ditt hänge spelar in på egen hand. Inspelningar synkroniseras till din telefon medan appen är öppen.",
-    "pendantSyncingRecordings": "Synkroniserar inspelningar från ditt hänge…",
-    "pendantMinutesStored": "~{minutes} min lagrat",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Anslut dina Meta Glasses",
+    "pairingDescMetaGlasses": "Parkoppla dina glasögon i Meta AI-appen och tryck sedan på Anslut i Omi. Du kan länka flera par och välja vilket som är aktivt.",
+    "metaGlassesUnavailable": "Meta AI-appen hittades inte. Installera Meta AI och aktivera utvecklarläget för att ansluta dina glasögon.",
+    "metaGlassesRegistering": "Slutför anslutningen i Meta AI-appen och återgå till Omi.",
+    "metaGlassesCameraPermission": "Tillåt kameraåtkomst i Meta AI-appen",
+    "metaGlassesCaptureModeLabel": "Inspelningsläge",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Endast mikrofon",
+    "metaGlassesStartCapture": "Starta inspelning",
+    "metaGlassesStopCapture": "Stoppa inspelning",
+    "metaGlassesGestureHint": "Geststyrning för Meta-glasögon stöds inte i den här versionen.",
+    "connectAnotherDevice": "Anslut en annan enhet",
+    "myDevices": "Mina enheter",
+    "metaGlassesAutoCapture": "Automatisk inspelning vid anslutning",
+    "metaGlassesShowPreview": "Live-förhandsvisning",
+    "metaGlassesPendingPhotos": "{count} foton väntar på synkronisering",
+    "metaGlassesPairInMetaAI": "Konfigurera i Meta AI-appen",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Glasögonen svalnar — inspelning pausad",
+    "metaGlassesFolded": "Fäll upp glasögonen för att fortsätta spela in",
+    "metaGlassesCaptureFrequency": "Tagningsfrekvens",
+    "metaGlassesEvery10s": "Var 10:e s",
+    "metaGlassesEvery30s": "Var 30:e s",
+    "metaGlassesEvery1min": "Varje 1 min",
+    "metaGlassesEvery5min": "Var 5:e min",
+    "metaGlassesGestures": "Gester"
 }

@@ -12,25 +12,10 @@ environments:
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
-          OMI_ENV_STAGE:
-            value: dev
-            category: runtime_identity
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: "true"
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: "1.0"
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-            value: "true"
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-            value: "1.0"
-            category: rollout
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-            value: "true"
-            category: rollout
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: "1.0"
             category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
@@ -38,22 +23,19 @@ environments:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_MODE:
-            value: read
+            value: write
             category: memory_rollout
           MEMORY_ENABLED_USERS:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: memory_rollout
           MEMORY_V3_GET_ENABLED:
-            value: "true"
+            value: "false"
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
             value: "false"
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
             value: "false"
-            category: memory_rollout
-          MEMORY_TYPESENSE_COLLECTION:
-            value: canonical_memory_atoms
             category: memory_rollout
     cloud_run:
       workflow_files:
@@ -69,9 +51,6 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            OMI_ENV_STAGE:
-              value: dev
-              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -81,38 +60,20 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "true"
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: "1.0"
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "true"
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: "1.0"
-              category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
             MEMORY_MODE:
-              value: read
+              value: write
               category: memory_rollout
             MEMORY_ENABLED_USERS:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "true"
+              value: "false"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
               value: "false"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
               category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
@@ -121,25 +82,13 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-sync:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            OMI_ENV_STAGE:
-              value: dev
-              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -149,38 +98,20 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "true"
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: "1.0"
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "true"
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: "1.0"
-              category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
             MEMORY_MODE:
-              value: read
+              value: write
               category: memory_rollout
             MEMORY_ENABLED_USERS:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "true"
+              value: "false"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
               value: "false"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
               category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
@@ -189,25 +120,13 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-integration:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            OMI_ENV_STAGE:
-              value: dev
-              category: runtime_identity
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -217,38 +136,20 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "true"
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: "1.0"
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "true"
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: "1.0"
-              category: rollout
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
             MEMORY_MODE:
-              value: read
+              value: write
               category: memory_rollout
             MEMORY_ENABLED_USERS:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "true"
+              value: "false"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
               value: "false"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
-              category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
               category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
@@ -257,17 +158,8 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
               version: latest
 
   prod:
@@ -278,9 +170,13 @@ environments:
       backend-listen:
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
         env:
-          OMI_ENV_STAGE:
-            value: prod
-            category: runtime_identity
+          OMI_LLM_GATEWAY_URL:
+            value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
+            category: service_discovery
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret:
+              name: prod-omi-backend-secrets
+              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           SERVICE_ACCOUNT_JSON:
             secret:
               name: prod-omi-backend-secrets
@@ -300,9 +196,6 @@ environments:
           MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
             value: "false"
             category: memory_rollout
-          MEMORY_TYPESENSE_COLLECTION:
-            value: canonical_memory_atoms
-            category: memory_rollout
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend.yml
@@ -316,12 +209,10 @@ environments:
       services:
         backend:
           env:
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              category: service_discovery
+              provisional: true
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -337,9 +228,6 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -347,23 +235,15 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
         backend-sync:
           env:
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              category: service_discovery
+              provisional: true
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -379,9 +259,6 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -389,23 +266,15 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
         backend-integration:
           env:
-            OMI_ENV_STAGE:
-              value: prod
-              category: runtime_identity
-            POSTHOG_HOST:
-              value: https://app.posthog.com
-              category: telemetry
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              category: service_discovery
+              provisional: true
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -421,9 +290,6 @@ environments:
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: "false"
               category: memory_rollout
-            MEMORY_TYPESENSE_COLLECTION:
-              value: canonical_memory_atoms
-              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -431,12 +297,6 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
-            GOOGLE_CLIENT_SECRET:
-              secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest

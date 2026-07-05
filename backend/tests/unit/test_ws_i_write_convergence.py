@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -129,9 +128,6 @@ class _DocRef:
         return _Snapshot(self._db.docs[self.path], exists=True)
 
     def set(self, data, merge=False):
-        if merge and self.path in self._db.docs:
-            self._db.docs[self.path] = self._db.docs[self.path] | data
-            return
         self._db.docs[self.path] = data
 
 
@@ -204,7 +200,7 @@ def _stored_item(item: MemoryItem) -> dict:
 
 
 def _fresh_short_term_item(*, uid: str, memory_id: str, conversation_id: str, content: str) -> MemoryItem:
-    now = datetime.now(timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     evidence = MemoryEvidence(
         evidence_id="ev1",
         source_type="conversation",
@@ -272,7 +268,7 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
     evidence_id = payload["evidence"][0]["evidence_id"]
     db = _FakeDb(
         {
-            f"users/{uid}/memory_state/apply_control": MemoryControlState(
+            f"users/{uid}/memory_control/state": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
         }
@@ -370,10 +366,7 @@ def test_legacy_extract_path_unchanged_for_non_canonical():
     legacy_fn_idx = source.index("def _extract_memories_legacy")
     assert canonical_fn_idx < legacy_fn_idx
     assert "deletion_result = memories_db.delete_memories_for_conversation" in source
-    assert (
-        "memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) "
-        "for fact in parsed_memories])"
-    ) in source
+    assert "memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])" in source
 
 
 def test_canonical_extract_uses_memory_service_not_legacy_save():
@@ -398,7 +391,7 @@ def test_reprocess_retract_then_rewrite_restores_active_memory(monkeypatch):
     memory_id = payload["id"]
     db = _FakeDb(
         {
-            f"users/{uid}/memory_state/apply_control": MemoryControlState(
+            f"users/{uid}/memory_control/state": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
         }
@@ -588,13 +581,7 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
         x_device_id_hash=None,
     )
 
-    body = json.loads(result.body)
-    assert body[0]["id"] == "mem-legacy"
-    assert body[0]["content"] == "legacy"
-    assert "memory_tier" not in body[0]
-    assert "layer" not in body[0]
-    assert "tier" not in body[0]
-    assert result.headers["x-omi-memory-device-scope-supported"] == "false"
+    assert result == legacy_memories
     legacy_get.assert_called_once_with("uid-legacy", 10, 0)
     service_read.assert_not_called()
 
@@ -633,7 +620,7 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
     }
     db = _FakeDb(
         {
-            f"users/{uid}/memory_state/apply_control": MemoryControlState(
+            f"users/{uid}/memory_control/state": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
         }
@@ -783,10 +770,10 @@ def test_offline_rag_script_excluded_from_live_writer_guard():
 
 def test_memories_router_routes_canonical_create_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
-    assert "_canonical_write_enabled_or_fail_closed(uid, db_client=db_client)" in source
+    assert "canonical_write_enabled(uid, db_client=db_client)" in source
     assert "run_blocking(db_executor, memory_service.write, uid, payload)" in source
     create_section = source.split("async def create_memory", 1)[1].split("@router.post", 1)[0]
-    canonical_pos = create_section.find("_canonical_write_enabled_or_fail_closed")
+    canonical_pos = create_section.find("canonical_write_enabled")
     legacy_pos = create_section.find("memories_db.create_memory")
     assert canonical_pos != -1 and legacy_pos != -1
     assert canonical_pos < legacy_pos
@@ -795,9 +782,9 @@ def test_memories_router_routes_canonical_create_through_memory_service():
 def test_review_memory_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
     section = source.split("def review_memory", 1)[1].split("@router.patch", 1)[0]
-    assert "_canonical_write_enabled_or_fail_closed(uid, db_client=db_client)" in section
+    assert "canonical_write_enabled(uid, db_client=db_client)" in section
     assert ".review(uid, memory_id, value)" in section
-    canonical_pos = section.find("_canonical_write_enabled_or_fail_closed")
+    canonical_pos = section.find("canonical_write_enabled")
     legacy_pos = section.find("memories_db.review_memory")
     assert canonical_pos != -1 and legacy_pos != -1
     assert canonical_pos < legacy_pos

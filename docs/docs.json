@@ -28,7 +28,6 @@
               "doc/developer/AppSetup",
               "doc/developer/Cursor",
               "doc/developer/agent-control-plane",
-              "doc/developer/agent-control-plane-invariants",
               {
                 "group": "Backend",
                 "pages": [

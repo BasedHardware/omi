@@ -24,11 +24,6 @@ type ResponseHandler = {
   reject: (err: Error) => void;
 };
 
-type PendingToolActivity = {
-  id: string;
-  name: string;
-};
-
 /**
  * Minimal environment allowlist for user-installed external adapter
  * subprocesses. Only OS-level essentials needed for a CLI tool to function
@@ -416,22 +411,15 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   ): Promise<AdapterAttemptResult> {
     const adapterSessionId = context.binding.adapterNativeSessionId;
     let fullText = "";
-    const pendingTools: PendingToolActivity[] = [];
-    let syntheticToolIdCounter = 0;
+    const pendingTools: string[] = [];
     const previousHandler = this.notificationHandler;
     let lastProgressAt = Date.now();
     this.notificationHandler = (method, params) => {
       previousHandler?.(method, params);
       if (signal.aborted || method !== "session/update") return;
-      const didProgress = this.translateSessionUpdate(
-        params as Record<string, unknown>,
-        pendingTools,
-        () => `acp-tool-${++syntheticToolIdCounter}`,
-        sink,
-        (text) => {
-          fullText += text;
-        }
-      );
+      const didProgress = this.translateSessionUpdate(params as Record<string, unknown>, pendingTools, sink, (text) => {
+        fullText += text;
+      });
       if (didProgress) {
         lastProgressAt = Date.now();
       }
@@ -644,8 +632,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   private translateSessionUpdate(
     params: Record<string, unknown>,
-    pendingTools: PendingToolActivity[],
-    nextSyntheticToolId: () => string,
+    pendingTools: string[],
     sink: AdapterEventSink,
     onText: (text: string) => void
   ): boolean {
@@ -661,8 +648,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         const content = update.content as { type: string; text?: string } | undefined;
         const text = content?.text ?? "";
         if (!text) return false;
-        for (const tool of pendingTools.splice(0)) {
-          sink({ type: "tool_activity", name: tool.name, status: "completed", toolUseId: tool.id });
+        for (const name of pendingTools.splice(0)) {
+          sink({ type: "tool_activity", name, status: "completed" });
         }
         onText(text);
         sink({ type: "text_delta", text });
@@ -680,13 +667,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       }
 
       case "tool_call": {
-        const toolCallId = this.resolveToolCallStartId(update, nextSyntheticToolId);
+        const toolCallId = (update.toolCallId as string) ?? "";
         const title = this.toolTitle(update);
         const status = (update.status as string) ?? "pending";
         if (status === "pending" || status === "in_progress") {
-          if (!pendingTools.some((tool) => tool.id === toolCallId)) {
-            pendingTools.push({ id: toolCallId, name: title });
-          }
+          pendingTools.push(title);
           const rawInput = update.rawInput as Record<string, unknown> | undefined;
           sink({
             type: "tool_activity",
@@ -701,18 +686,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       }
 
       case "tool_call_update": {
+        const toolCallId = (update.toolCallId as string) ?? "";
         const status = (update.status as string) ?? "";
         const title = this.toolTitle(update);
         if (status !== "completed" && status !== "failed" && status !== "cancelled") {
           return false;
         }
-        const toolCallId = this.resolveToolCallUpdateId(update, pendingTools, nextSyntheticToolId);
-        const idx = pendingTools.findIndex((tool) => tool.id === toolCallId);
+        const idx = pendingTools.indexOf(title);
         if (idx >= 0) pendingTools.splice(idx, 1);
         sink({
           type: "tool_activity",
           name: title,
-          status: status === "completed" ? "completed" : "failed",
+          status: "completed",
           toolUseId: toolCallId,
         });
 
@@ -750,29 +735,6 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         this.log(`Unknown session update type: ${sessionUpdate}`);
         return false;
     }
-  }
-
-  private resolveToolCallStartId(
-    update: Record<string, unknown>,
-    nextSyntheticToolId: () => string
-  ): string {
-    const explicitId = typeof update.toolCallId === "string" ? update.toolCallId.trim() : "";
-    if (explicitId) return explicitId;
-    return nextSyntheticToolId();
-  }
-
-  private resolveToolCallUpdateId(
-    update: Record<string, unknown>,
-    pendingTools: PendingToolActivity[],
-    nextSyntheticToolId: () => string
-  ): string {
-    const explicitId = typeof update.toolCallId === "string" ? update.toolCallId.trim() : "";
-    if (explicitId) return explicitId;
-
-    const title = this.toolTitle(update);
-    const existing = pendingTools.find((tool) => tool.name === title);
-    if (existing) return existing.id;
-    return nextSyntheticToolId();
   }
 
   private toolTitle(update: Record<string, unknown>): string {

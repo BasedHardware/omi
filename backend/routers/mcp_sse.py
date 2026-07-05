@@ -41,22 +41,23 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.canonical_memory_adapter import (
+    _read_canonical_memory_item,
+    memory_item_to_memorydb,
+)
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
+    guard_legacy_memory_write,
     read_default_read_rollout,
 )
-from utils.memory.memory_service import (
-    MemoryService,
-    raise_if_legacy_write_blocked,
-    resolve_external_memory_write_context,
-)
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
+from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.surface_routing import pin_memory_system
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
@@ -731,16 +732,6 @@ class ToolExecutionError(Exception):
         super().__init__(self.message)
 
 
-def _raise_tool_error_from_http(exc: HTTPException) -> None:
-    if exc.status_code == 404:
-        raise ToolExecutionError("Memory not found", code=-32001) from exc
-    if exc.status_code == 402:
-        raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002) from exc
-    if exc.status_code in {403, 409, 503}:
-        raise ToolExecutionError(str(exc.detail), code=-32009) from exc
-    raise ToolExecutionError(str(exc.detail)) from exc
-
-
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
     """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
     if not value:
@@ -873,40 +864,31 @@ def execute_tool(
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
-        try:
-            write_context = resolve_external_memory_write_context(
-                user_id,
-                db_client=db,
-                memory_system=memory_system,
-                consumer='mcp',
-                operation="mcp_tool_memory_create",
-            )
-            raise_if_legacy_write_blocked(write_context)
-        except HTTPException as exc:
-            _raise_tool_error_from_http(exc)
 
+        if memory_system == MemorySystem.CANONICAL:
+            category = identify_category_for_memory(content)
+            memory = Memory(content=content, category=category)
+            memory_db = MemoryDB.from_memory(memory, user_id, None, True)
+            committed_id = MemoryService(db_client=db).write(
+                user_id,
+                required_promotion_payload(memory_db.model_dump(), source_surface="mcp"),
+            )
+            item = _read_canonical_memory_item(user_id, committed_id or memory_db.id, db_client=db)
+            if item is not None:
+                memory_db = memory_item_to_memorydb(item)
+            return {"success": True, "memory": memory_db.model_dump()}
+
+        memory_write_guard = guard_legacy_memory_write(user_id, db, consumer='mcp', operation="mcp_tool_memory_create")
+        if not memory_write_guard.allowed:
+            raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
+
+        # Auto-categorize memories from MCP clients
         category = identify_category_for_memory(content)
         memory = Memory(content=content, category=category)
         memory_db = MemoryDB.from_memory(memory, user_id, None, True)
-        try:
-            memory_db = MemoryService(db_client=db).create_external_memory(
-                user_id,
-                memory_db,
-                memory_system=write_context.memory_system,
-                consumer='mcp',
-                operation="mcp_tool_memory_create",
-                upsert_vector=False,
-                require_canonical_promotion=True,
-            )
-        except HTTPException as exc:
-            _raise_tool_error_from_http(exc)
+        memories_db.create_memory(user_id, memory_db.model_dump())
 
-        exposure = (
-            MemoryApiExposure.CANONICAL
-            if write_context.memory_system == MemorySystem.CANONICAL
-            else MemoryApiExposure.LEGACY
-        )
-        return {"success": True, "memory": memory_api_payload(memory_db, exposure)}
+        return {"success": True, "memory": memory_db.model_dump()}
 
     elif tool_name == "delete_memory":
         memory_id = arguments.get("memory_id")
@@ -919,17 +901,24 @@ def execute_tool(
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
-        try:
-            MemoryService(db_client=db).delete_external_memory(
-                user_id,
-                memory_id,
-                memory_system=memory_system,
-                consumer='mcp',
-                operation="mcp_tool_memory_delete",
-                delete_vector=False,
-            )
-        except HTTPException as exc:
-            _raise_tool_error_from_http(exc)
+        if memory_system == MemorySystem.CANONICAL:
+            try:
+                MemoryService(db_client=db).delete(user_id, memory_id)
+            except ValueError:
+                raise ToolExecutionError("Memory not found", code=-32001)
+            return {"success": True}
+
+        memory_write_guard = guard_legacy_memory_write(user_id, db, consumer='mcp', operation="mcp_tool_memory_delete")
+        if not memory_write_guard.allowed:
+            raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
+
+        memory = memories_db.get_memory(user_id, memory_id)
+        if not memory:
+            raise ToolExecutionError("Memory not found", code=-32001)
+        if memory.get('is_locked', False):
+            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+
+        memories_db.delete_memory(user_id, memory_id)
         return {"success": True}
 
     elif tool_name == "edit_memory":
@@ -944,20 +933,26 @@ def execute_tool(
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
-        if not content.strip():
-            raise ToolExecutionError("content must not be empty", code=-32602)
-        try:
-            MemoryService(db_client=db).update_external_memory_content(
-                user_id,
-                memory_id,
-                content,
-                memory_system=memory_system,
-                consumer='mcp',
-                operation="mcp_tool_memory_edit",
-                upsert_vector=False,
-            )
-        except HTTPException as exc:
-            _raise_tool_error_from_http(exc)
+        if memory_system == MemorySystem.CANONICAL:
+            canonical_item = _read_canonical_memory_item(user_id, memory_id, db_client=db)
+            if canonical_item is None:
+                raise ToolExecutionError("Memory not found", code=-32001)
+            if not content.strip():
+                raise ToolExecutionError("content must not be empty", code=-32602)
+            MemoryService(db_client=db).update_content(user_id, memory_id, content)
+            return {"success": True}
+
+        memory_write_guard = guard_legacy_memory_write(user_id, db, consumer='mcp', operation="mcp_tool_memory_edit")
+        if not memory_write_guard.allowed:
+            raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
+
+        memory = memories_db.get_memory(user_id, memory_id)
+        if not memory:
+            raise ToolExecutionError("Memory not found", code=-32001)
+        if memory.get('is_locked', False):
+            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+
+        memories_db.edit_memory(user_id, memory_id, content)
         return {"success": True}
 
     elif tool_name == "get_conversations":

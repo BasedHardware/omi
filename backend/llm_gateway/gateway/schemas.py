@@ -161,7 +161,6 @@ class RouteArtifact(StrictBaseModel):
     surface: Surface
     primary: ProviderRef
     fallbacks: list[ProviderRef] = Field(default_factory=list)
-    provider_options: dict[str, Any] = Field(default_factory=dict)
     timeouts: TimeoutPolicy
     retry: RetryPolicy
     capabilities: Capabilities
@@ -195,12 +194,7 @@ class FeatureBundle(StrictBaseModel):
 
 def compute_route_artifact_digest(artifact: RouteArtifact | dict[str, Any]) -> str:
     if isinstance(artifact, RouteArtifact):
-        payload = artifact.model_dump(
-            mode='json',
-            exclude={'artifact_digest', 'content_digest'},
-            exclude_none=True,
-            exclude_defaults=True,
-        )
+        payload = artifact.model_dump(mode='json', exclude={'artifact_digest', 'content_digest'}, exclude_none=True)
     else:
         payload = dict(artifact)
         payload.pop('artifact_digest', None)

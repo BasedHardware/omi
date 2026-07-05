@@ -112,38 +112,6 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertTrue(matches, "9.99s offset should match")
     }
 
-    func testTimestampReconciliationQueriesInProgressProcessingAndCompleted() {
-        XCTAssertEqual(
-            DesktopConversationMatchPolicy.cloudReconciliationStatuses,
-            [.inProgress, .processing, .completed]
-        )
-    }
-
-    func testTimestampMatchedInProgressConversationUsesSpecificFinalizeBeforeCompletion() {
-        XCTAssertTrue(
-            DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: .inProgress)
-        )
-        XCTAssertFalse(
-            DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
-                status: .inProgress,
-                source: .desktop
-            ),
-            "Timestamp matches must not complete locally until exact-id finalize returns a non-in-progress status"
-        )
-    }
-
-    func testTimestampMatchedProcessingConversationCanCompleteWithoutFinalize() {
-        XCTAssertFalse(
-            DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: .processing)
-        )
-        XCTAssertTrue(
-            DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
-                status: .processing,
-                source: .desktop
-            )
-        )
-    }
-
     func testNegativeTimeOffset() {
         let sessionStartTime = Date()
         // Backend conversation started 3s BEFORE local session start (clock skew)

@@ -65,7 +65,6 @@ for _name in [
     "utils",
     "utils.executors",
     "utils.http_client",
-    "utils.integration_telemetry",
     "utils.log_sanitizer",
     "utils.retrieval",
     "utils.retrieval.tools",

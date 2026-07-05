@@ -13,7 +13,7 @@ os.environ.setdefault(
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult, extract_kg_for_promoted_memory
+from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.canonical_memory_adapter import invalidate_kg_for_memory_retraction
 from utils.memory.memory_system import MemorySystem
 
@@ -62,9 +62,7 @@ def test_extract_kg_skips_when_already_extracted():
         patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,
     ):
-        result = extract_kg_for_promoted_memory("uid-canonical", item)
-        assert result.success is False
-        assert result.skipped_reason == "already_extracted"
+        assert extract_kg_for_promoted_memory("uid-canonical", item) is False
         mock_extract.assert_not_called()
 
 
@@ -76,47 +74,11 @@ def test_extract_kg_on_promotion():
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
-        ) as mock_extract,
+        ),
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_flag,
     ):
-        result = extract_kg_for_promoted_memory("uid-canonical", item, db_client=db)
-        assert result.success is True
-        assert result.node_count == 1
+        assert extract_kg_for_promoted_memory("uid-canonical", item, db_client=db) is True
         mock_flag.assert_called_once_with("uid-canonical", "mem_lt", db_client=db)
-        mock_extract.assert_called_once_with(
-            "uid-canonical",
-            "User works at Omi",
-            "mem_lt",
-            user_name="User",
-            db_client=db,
-            strict_parse=True,
-        )
-
-
-def test_extract_kg_can_preserve_item_updated_at():
-    item = _long_term_item()
-    db = MagicMock()
-    with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch(
-            "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
-            return_value={"nodes": [], "edges": []},
-        ),
-        patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_touching_flag,
-        patch(
-            "utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted_without_touching_updated_at"
-        ) as mock_preserving_flag,
-    ):
-        result = extract_kg_for_promoted_memory(
-            "uid-canonical",
-            item,
-            db_client=db,
-            preserve_item_updated_at=True,
-        )
-
-    assert result.success is True
-    mock_touching_flag.assert_not_called()
-    mock_preserving_flag.assert_called_once_with("uid-canonical", "mem_lt", db_client=db)
 
 
 def test_extract_kg_failure_leaves_kg_extracted_false():
@@ -130,9 +92,7 @@ def test_extract_kg_failure_leaves_kg_extracted_false():
         ),
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_flag,
     ):
-        result = extract_kg_for_promoted_memory("uid-canonical", item, db_client=db)
-        assert result.success is False
-        assert result.skipped_reason == "exception"
+        assert extract_kg_for_promoted_memory("uid-canonical", item, db_client=db) is False
         mock_flag.assert_not_called()
     assert item.kg_extracted is False
 
@@ -144,9 +104,7 @@ def test_extract_kg_none_result_leaves_kg_extracted_false():
         patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory", return_value=None),
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_flag,
     ):
-        result = extract_kg_for_promoted_memory("uid-canonical", item)
-        assert result.success is False
-        assert result.skipped_reason == "extractor_failed"
+        assert extract_kg_for_promoted_memory("uid-canonical", item) is False
         mock_flag.assert_not_called()
 
 
@@ -164,7 +122,7 @@ def test_extract_kg_uses_subject_predicate_prefix():
         ) as mock_extract,
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted"),
     ):
-        assert extract_kg_for_promoted_memory("uid-canonical", item).success is True
+        assert extract_kg_for_promoted_memory("uid-canonical", item) is True
         kg_content = mock_extract.call_args[0][1]
         assert kg_content == "[ent_father] has_condition: has diabetes"
 
@@ -183,7 +141,7 @@ def test_extract_kg_includes_arguments_and_predicate_only_prefix():
         ) as mock_extract,
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted"),
     ):
-        assert extract_kg_for_promoted_memory("uid-canonical", item).success is True
+        assert extract_kg_for_promoted_memory("uid-canonical", item) is True
         kg_content = mock_extract.call_args[0][1]
         assert kg_content == "works_at (company=Omi): builds memory products"
 
@@ -197,10 +155,7 @@ def test_update_canonical_memory_content_refreshes_kg_for_long_term():
     with (
         patch("utils.memory.canonical_memory_adapter.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch("utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction") as mock_prune,
-        patch(
-            "utils.memory.canonical_kg_promotion.extract_kg_for_promoted_memory",
-            return_value=CanonicalKgPromotionResult(attempted=True, success=True),
-        ) as mock_extract,
+        patch("utils.memory.canonical_kg_promotion.extract_kg_for_promoted_memory", return_value=True) as mock_extract,
         patch("utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item"),
         patch("utils.memory.canonical_memory_adapter.sync_canonical_memory_vector"),
     ):
@@ -223,6 +178,4 @@ def test_invalidate_kg_prunes_citations(monkeypatch):
         mock_prune,
     )
     invalidate_kg_for_memory_retraction("uid-canonical", ["mem_a", "mem_b"])
-    mock_prune.assert_called_once()
-    assert mock_prune.call_args.args == ("uid-canonical", ["mem_a", "mem_b"])
-    assert "db_client" in mock_prune.call_args.kwargs
+    mock_prune.assert_called_once_with("uid-canonical", ["mem_a", "mem_b"])

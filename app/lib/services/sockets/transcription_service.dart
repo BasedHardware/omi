@@ -429,7 +429,7 @@ class TranscriptSocketServiceFactory {
       if (Platform.isIOS) {
         return PurePollingSocket(
           config: AudioPollingConfig(
-            bufferDuration: const Duration(seconds: 5),
+            bufferDuration: const Duration(milliseconds: 500),
             minBufferSizeBytes: sampleRate * 2,
             serviceId: config.provider.name,
             transcoder: transcoder,

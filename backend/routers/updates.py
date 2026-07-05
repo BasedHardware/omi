@@ -6,7 +6,6 @@ from xml.sax.saxutils import escape as xml_escape
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
 
-from database.desktop_update_policy import get_desktop_update_policy
 from database.redis_db import delete_generic_cache
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 
@@ -462,21 +461,6 @@ async def download_beta_desktop_release(
     Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
     """
     return await download_latest_desktop_release(platform=platform, channel="beta")
-
-
-@router.get("/v2/desktop/update-policy")
-def get_desktop_update_policy_endpoint(
-    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
-    current_build: Optional[int] = Query(default=None, ge=0),
-):
-    """
-    Server-controlled desktop update banner policy.
-
-    Defaults to inactive when the Firestore document is missing. Configure
-    ``desktop_update_policy/current`` to show a dismissible banner or a required
-    manual-update prompt to future desktop clients.
-    """
-    return get_desktop_update_policy(current_build=current_build, platform=platform)
 
 
 @router.post("/v2/desktop/clear-cache")

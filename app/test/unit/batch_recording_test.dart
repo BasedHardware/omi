@@ -22,17 +22,6 @@ void main() {
       expect(info.timerStart, 1735689600);
     });
 
-    test('parses the limitless flash-drain marker (omibatchlimitless)', () {
-      final info = BatchRecordingInfo.fromFileName(
-          'audio_${limitlessBatchRecordingDevice}_opus_fs320_16000_1_fs320_1735689600.bin');
-      expect(info, isNotNull);
-      expect(info!.codec, BleAudioCodec.opusFS320);
-      expect(info.frameSize, 320);
-      expect(info.sampleRate, 16000);
-      expect(info.timerStart, 1735689600);
-      expect('audio_${limitlessBatchRecordingDevice}_'.startsWith('audio_$batchRecordingDevice'), isTrue);
-    });
-
     test('parses pcm16', () {
       final info = BatchRecordingInfo.fromFileName('audio_omi_pcm16_16000_1_fs160_1735689600.bin');
       expect(info!.codec, BleAudioCodec.pcm16);

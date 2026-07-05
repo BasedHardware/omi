@@ -13,47 +13,13 @@ struct ExportsSection: View {
       case .claudeCode, .codex:
         return nil
       case .claude:
-        return (
-          .claude, "Claude / Claude Code", "Claude Code (CLI) or Claude cloud — choose in setup."
-        )
+        return (.claude, "Claude / Claude Code", "Claude Code (CLI) or Claude cloud — choose in setup.")
       case .chatgpt:
         return (.chatgpt, "ChatGPT / Codex", "Codex (CLI) or ChatGPT cloud — choose in setup.")
       default:
         return (d, nil, nil)
       }
     }
-  }
-
-  private func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
-    let fallback = MemoryExportStatus(
-      exportedCount: 0,
-      lastExportedAt: nil,
-      detailText: nil,
-      isConfigured: false,
-      hasConnection: false)
-
-    switch destination {
-    case .claude:
-      return aggregateStatus(for: [.claude, .claudeCode], fallback: fallback)
-    case .chatgpt:
-      return aggregateStatus(for: [.chatgpt, .codex], fallback: fallback)
-    default:
-      return statuses[destination] ?? fallback
-    }
-  }
-
-  private func aggregateStatus(
-    for destinations: [MemoryExportDestination],
-    fallback: MemoryExportStatus
-  ) -> MemoryExportStatus {
-    let values = destinations.map { statuses[$0] ?? fallback }
-    return MemoryExportStatus(
-      exportedCount: values.map(\.exportedCount).max() ?? 0,
-      lastExportedAt: values.compactMap(\.lastExportedAt).max(),
-      detailText: values.compactMap(\.detailText).first,
-      isConfigured: values.contains(where: \.hasConnection),
-      hasConnection: values.contains(where: \.hasConnection)
-    )
   }
 
   var body: some View {
@@ -72,7 +38,9 @@ struct ExportsSection: View {
             destination: entry.destination,
             titleOverride: entry.title,
             subtitleOverride: entry.subtitle,
-            status: status(for: entry.destination)
+            status: statuses[entry.destination]
+              ?? MemoryExportStatus(
+                exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
           ) {
             onSelectDestination(entry.destination)
           }
@@ -124,10 +92,10 @@ private struct MemoryExportRow: View {
 
   private var actionTitle: String {
     if destination.supportsAgentSetup {
-      return showsConnectedState ? "Connected" : "Connect"
+      return status.isConfigured ? "Manage" : "Connect"
     }
     if destination.supportsMCP {
-      return showsConnectedState ? "Connected" : "Connect"
+      return status.isConfigured ? "Manage" : "Connect"
     }
     switch destination {
     case .obsidian:
@@ -135,11 +103,6 @@ private struct MemoryExportRow: View {
     case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return "Open"
     }
-  }
-
-  private var showsConnectedState: Bool {
-    guard destination.supportsMCP || destination.supportsAgentSetup else { return false }
-    return status.hasConnection
   }
 
   var body: some View {
@@ -163,7 +126,7 @@ private struct MemoryExportRow: View {
         Spacer(minLength: 12)
 
         ImportConnectorActionButton(
-          title: actionTitle, isConnected: showsConnectedState)
+          title: actionTitle, isConnected: status.isConfigured || status.exportedCount > 0)
       }
       .padding(.horizontal, 14)
       .padding(.vertical, 11)
@@ -290,9 +253,10 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       case .autonomous:
         statusMessage = "Omi is setting this up — follow along in the floating bar."
       case .assisted:
-        statusMessage = outcome.taskTitle
+        statusMessage =
+          "Opened \(destination.title) and copied your key — finish with the steps below."
       case .completed:
-        // Deterministic local write — show the result directly.
+        // Deterministic local write (OpenClaw/Hermes) — show the result directly.
         statusMessage = outcome.taskTitle
       }
     } catch {
@@ -438,8 +402,7 @@ struct MemoryExportDestinationSheet: View {
   @State private var showManualSetup = false
   @State private var permissionRefreshID = 0
 
-  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common)
-    .autoconnect()
+  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -491,16 +454,14 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
-      statuses[destination] = await MemoryExportService.shared.status(for: destination)
-      if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
+      if destination == .claude && model.mcpKey == nil {
         await model.generateMCPKey()
       }
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
     }
   }
@@ -537,7 +498,7 @@ struct MemoryExportDestinationSheet: View {
 
   @ViewBuilder
   private var manualSetupDisclosure: some View {
-    ManualInstallationDisclosure(isExpanded: $showManualSetup, fontSize: 13) {
+    DisclosureGroup(isExpanded: $showManualSetup) {
       VStack(alignment: .leading, spacing: 18) {
         methodHeader(
           icon: "bolt.fill",
@@ -564,7 +525,12 @@ struct MemoryExportDestinationSheet: View {
         }
       }
       .padding(.top, 10)
+    } label: {
+      Text("Manual installation")
+        .scaledFont(size: 13, weight: .medium)
+        .foregroundColor(OmiColors.textTertiary)
     }
+    .tint(OmiColors.textTertiary)
   }
 
   private var agentSetupSection: some View {
@@ -626,10 +592,10 @@ struct MemoryExportDestinationSheet: View {
           .foregroundColor(OmiColors.textPrimary)
         Text("MCP + CLI")
           .scaledFont(size: 9, weight: .bold)
-          .foregroundColor(OmiColors.success)
+          .foregroundColor(OmiColors.purplePrimary)
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
-          .background(Capsule().fill(OmiColors.success.opacity(0.15)))
+          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
       }
       Text(
         "Copy one setup prompt for your agent. It connects Omi memories through MCP, turns on local Desktop access through the Omi CLI, and includes a short Omi guide the agent can keep."
@@ -644,7 +610,7 @@ struct MemoryExportDestinationSheet: View {
     HStack(alignment: .top, spacing: 8) {
       Image(systemName: "checkmark.circle.fill")
         .scaledFont(size: 12)
-        .foregroundColor(OmiColors.success)
+        .foregroundColor(OmiColors.purplePrimary)
         .padding(.top, 1)
       Text(text)
         .scaledFont(size: 12)
@@ -654,19 +620,17 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var executeButtonTitle: String {
-    let presentation = executePresentation
     _ = permissionRefreshID
-    return presentation.primaryActionTitle ?? "Connected"
-  }
-
-  private var executePresentation: MemoryExportConnectionPresentation {
-    MemoryExportConnectionPresentation.make(
-      destination: destination,
-      status: statuses[destination],
-      isRunning: model.isExecuting,
-      accessibilityPreflightMissing: MemoryExportExecutor.accessibilityPreflightMissing(
-        for: destination)
-    )
+    switch destination.mcpExecuteKind {
+    case .localAutonomous:
+      return "Do it for me"
+    case .browserAutonomous:
+      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
+        ? "Grant Accessibility"
+        : "Do it for me"
+    case .assisted:
+      return "Open & copy key"
+    }
   }
 
   private var executeBlockSubtitle: String {
@@ -683,10 +647,6 @@ struct MemoryExportDestinationSheet: View {
           "Omi uses your signed-in browser to set up \(destination.title). If sign-in or permissions block it, Omi will tell you exactly where it stopped."
       }
     case .assisted:
-      if destination.assistedOverlayHint != nil {
-        return
-          "Omi opens \(destination.title) and shows an on-screen card — copy each value with one click and paste it into the form."
-      }
       return
         "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."
     }
@@ -695,80 +655,31 @@ struct MemoryExportDestinationSheet: View {
   /// "Execute" — hands the whole setup to Omi to run as a task.
   private var executeBlock: some View {
     VStack(alignment: .leading, spacing: 8) {
-      if let completion = executePresentation.completion {
-        setupCompleteBlock(completion)
-      } else {
-        HStack(spacing: 8) {
-          Image(systemName: "sparkles")
-            .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
-          Text("Let Omi do it")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text("FASTEST")
-            .scaledFont(size: 9, weight: .bold)
-            .foregroundColor(OmiColors.success)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(OmiColors.success.opacity(0.15)))
-        }
-        Text(executeBlockSubtitle)
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
-
-        Button {
-          Task {
-            await model.executeWithOmi(destination: destination)
-            statuses[destination] = await MemoryExportService.shared.status(for: destination)
-            // Assisted flow: the user pastes values by hand, so surface the
-            // field-by-field steps instead of leaving them collapsed.
-            if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
-              showManualSetup = true
-            }
-          }
-        } label: {
-          ConnectionModalActionButton(
-            title: model.isExecuting ? "Starting Omi…" : executeButtonTitle,
-            isConnected: isConnected
-          )
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isExecuting || isConnected)
-      }
-    }
-  }
-
-  private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    HStack(alignment: .top, spacing: 10) {
-      Image(systemName: "checkmark.seal.fill")
-        .scaledFont(size: 16, weight: .semibold)
-        .foregroundColor(OmiColors.success)
-        .padding(.top, 1)
-      VStack(alignment: .leading, spacing: 4) {
-        Text(completion.title)
+      HStack(spacing: 8) {
+        Image(systemName: "sparkles")
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.purplePrimary)
+        Text("Let Omi do it")
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text(completion.subtitle)
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
+        Text("FASTEST")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
       }
-    }
-    .padding(12)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
-    )
-  }
+      Text(executeBlockSubtitle)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
 
-  private var isConnected: Bool {
-    guard destination.hasLocallyVerifiableLiveSetup else { return false }
-    return statuses[destination]?.hasConnection == true
+      Button(model.isExecuting ? "Starting Omi…" : executeButtonTitle) {
+        Task { await model.executeWithOmi(destination: destination) }
+      }
+      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .disabled(model.isExecuting)
+    }
   }
 
   /// Labeled header that makes the automatic (MCP) vs manual (pack) choice obvious.
@@ -811,9 +722,7 @@ struct MemoryExportDestinationSheet: View {
         mcpCodeRow(
           label: "Server URL", value: MemoryExportDestination.mcpServerURL, copyLabel: "Server URL")
 
-        if destination.requiresHostedMCPKeyForSetup {
-          mcpKeyRow
-        }
+        mcpKeyRow
       }
 
       if let setup, let copyText = setup.copyText, let copyTitle = setup.copyTitle {
@@ -867,15 +776,49 @@ struct MemoryExportDestinationSheet: View {
         .foregroundColor(OmiColors.textSecondary)
         .padding(.top, 2)
 
-      mcpCodeRow(
-        label: "OAuth Client ID",
-        value: destination.cloudOAuthClientID ?? "",
-        copyLabel: "OAuth Client ID")
+      mcpCodeRow(label: "OAuth Client ID", value: "omi", copyLabel: "OAuth Client ID")
 
-      Text("Leave OAuth Client Secret blank.")
-        .scaledFont(size: 12)
-        .foregroundColor(OmiColors.textTertiary)
-        .fixedSize(horizontal: false, vertical: true)
+      if let key = model.mcpKey {
+        mcpCodeRow(
+          label: "OAuth Client Secret",
+          value: key,
+          copyLabel: "OAuth Client Secret",
+          secure: true
+        )
+      } else {
+        claudeConnectorPendingSecretRow
+      }
+    }
+  }
+
+  private var claudeConnectorPendingSecretRow: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text("OAuth Client Secret")
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+      HStack(spacing: 8) {
+        Text(model.isLoadingMCPKey ? "Generating connection key..." : "Connection key unavailable")
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Button("Retry") {
+          Task { await model.generateMCPKey() }
+        }
+        .buttonStyle(.plain)
+        .scaledFont(size: 11, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+        .disabled(model.isLoadingMCPKey)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .background(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(OmiColors.backgroundSecondary)
+          .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .stroke(Color.white.opacity(0.08), lineWidth: 1))
+      )
     }
   }
 

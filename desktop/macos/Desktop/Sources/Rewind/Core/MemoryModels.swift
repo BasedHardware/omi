@@ -309,18 +309,10 @@ extension MemoryRecord {
     }
 
     /// Merge server-authoritative tier fields without overwriting newer local edits.
-    /// Legacy/untiered server rows clear any previously cached canonical tier so
-    /// stale rollout metadata cannot keep Short-term/Long-term UI visible.
+    /// Legacy/untiered server rows (`tierIsExplicit == false`) are left unchanged.
     @discardableResult
     mutating func mergeAuthoritativeTierFrom(_ memory: ServerMemory) -> Bool {
-        guard memory.tierIsExplicit else {
-            let changed = tierIsExplicit || tier != MemoryLayer.longTerm.rawValue
-            if changed {
-                tier = MemoryLayer.longTerm.rawValue
-                tierIsExplicit = false
-            }
-            return changed
-        }
+        guard memory.tierIsExplicit else { return false }
 
         let authoritativeTier = memory.tier.rawValue
         let changed = tier != authoritativeTier || !tierIsExplicit
@@ -382,45 +374,6 @@ extension MemoryRecord {
 // MARK: - ServerMemory Initializer Extension
 
 extension ServerMemory {
-    /// Return a display copy that hides canonical lifecycle state for legacy or
-    /// not-yet-confirmed users. The persisted cache may briefly contain stale
-    /// explicit tiers from earlier builds; UI must not render those until the
-    /// current server response confirms canonical lifecycle support.
-    func hidingLifecycleExposure() -> ServerMemory {
-        guard tierIsExplicit || tier != .longTerm else { return self }
-        return ServerMemory(
-            id: id,
-            content: content,
-            category: category,
-            tier: .longTerm,
-            tierIsExplicit: false,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            capturedAt: capturedAt,
-            expiresAt: expiresAt,
-            conversationId: conversationId,
-            reviewed: reviewed,
-            userReview: userReview,
-            visibility: visibility,
-            manuallyAdded: manuallyAdded,
-            scoring: scoring,
-            source: source,
-            confidence: confidence,
-            sourceApp: sourceApp,
-            contextSummary: contextSummary,
-            isRead: isRead,
-            isDismissed: isDismissed,
-            tags: tags,
-            reasoning: reasoning,
-            currentActivity: currentActivity,
-            inputDeviceName: inputDeviceName,
-            windowTitle: windowTitle,
-            headline: headline,
-            primaryCaptureDevice: primaryCaptureDevice,
-            captureDeviceIds: captureDeviceIds
-        )
-    }
-
     /// Initialize from individual fields (for creating from MemoryRecord)
     init(
         id: String,

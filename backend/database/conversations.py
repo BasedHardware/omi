@@ -255,13 +255,10 @@ def get_conversations_count(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
-    sources: Optional[List[str]] = None,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
-    if sources:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
