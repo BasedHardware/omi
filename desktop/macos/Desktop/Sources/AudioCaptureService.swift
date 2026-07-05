@@ -934,11 +934,15 @@ class AudioCaptureService: @unchecked Sendable {
         if isCapturing {
             removePropertyListeners()
             if let procID = ioProcID, deviceID != kAudioObjectUnknown {
-                // Use sync in deinit to ensure cleanup completes before deallocation
-                audioQueue.sync {
-                    AudioDeviceStop(deviceID, procID)
-                    AudioDeviceDestroyIOProcID(deviceID, procID)
-                }
+                // Call the HAL teardown directly — do NOT `audioQueue.sync` here.
+                // deinit can run *on* audioQueue (e.g. the last reference is released
+                // inside an audioQueue block), and dispatching sync to the current
+                // queue deadlocks. The object has no remaining references, so no
+                // concurrent audioQueue work can touch it; these HAL calls are
+                // thread-safe, so a direct call completes cleanup before deallocation
+                // (which `audioQueue.async` could not guarantee).
+                AudioDeviceStop(deviceID, procID)
+                AudioDeviceDestroyIOProcID(deviceID, procID)
             }
         }
     }
