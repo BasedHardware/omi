@@ -5,7 +5,10 @@ import logging
 import json
 from concurrent.futures import as_completed
 
-from utils.executors import db_executor, llm_executor  # pyright: ignore[reportUnusedImport]  # db_executor required by test_clean_sweep_migrations source-code pattern check
+from utils.executors import (
+    db_executor,
+    llm_executor,
+)  # pyright: ignore[reportUnusedImport]  # db_executor required by test_clean_sweep_migrations source-code pattern check
 
 logger = logging.getLogger(__name__)
 
