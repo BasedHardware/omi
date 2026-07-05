@@ -560,7 +560,7 @@ actor AgentRuntimeProcess {
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     // Seed auto-discovered commands for every local adapter so the shared Node
-    // process can route to Hermes or OpenClaw even when it was launched for a
+    // process can route to Hermes, OpenClaw, or Codex even when it was launched for a
     // different adapter. registerClient returns early once isRunning, so the
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
@@ -576,16 +576,17 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
     ]
-    let adapterSearchDirs = adapterPathDirs + [
+    let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+    let existingPathDirs = existingPath.split(separator: ":").map(String.init)
+    let adapterSearchDirs = uniqueDirectories(adapterPathDirs + existingPathDirs + [
       "\(home)/.local/bin",
       "/opt/homebrew/bin",
       "/usr/local/bin",
-    ]
+    ])
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
     ]
-    let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
     for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
       if !pathElements.contains(path) {
@@ -604,6 +605,12 @@ actor AgentRuntimeProcess {
       let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
+    }
+
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let codex = firstExecutable(named: "codex", in: adapterSearchDirs)
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codex)
     }
   }
 
@@ -628,6 +635,16 @@ actor AgentRuntimeProcess {
       }
     }
     return nil
+  }
+
+  private func uniqueDirectories(_ directories: [String]) -> [String] {
+    var seen = Set<String>()
+    var result: [String] = []
+    for directory in directories where !directory.isEmpty && !seen.contains(directory) {
+      seen.insert(directory)
+      result.append(directory)
+    }
+    return result
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {

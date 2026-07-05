@@ -56,6 +56,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "hermes"), "hermes")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openclaw"), "openclaw")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openClaw"), "openclaw")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "codex"), "codex")
     XCTAssertNil(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"))
   }
 
@@ -162,6 +163,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+    XCTAssertTrue(source.contains(#"env["OMI_CODEX_ADAPTER_COMMAND"]"#))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {

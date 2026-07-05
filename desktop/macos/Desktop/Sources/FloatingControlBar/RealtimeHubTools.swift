@@ -70,19 +70,18 @@ enum HubTool: String {
 
 enum RealtimeHubTools {
   private static func localAgentProviderInstruction() -> String {
-    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes]
+    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
     let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
     let available = availability.filter(\.isAvailable).map(\.provider)
     let unavailable = availability.filter { !$0.isAvailable }
 
     if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \"openclaw\" or \"hermes\". Treat those as available local providers, not as sessions to inspect."
+      return "If the user asks to use/ask \(providerDisplayList(providers)), call spawn_agent with provider set to \(providerRawList(providers)). Treat those as available local providers, not as sessions to inspect."
     }
 
     var parts: [String] = []
     if !available.isEmpty {
-      let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
-      parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+      parts.append("If the user asks to use/ask \(providerDisplayList(available)), call spawn_agent with provider set to \(providerRawList(available)).")
     }
     let missingText = unavailable
       .map { "\($0.provider.displayName): \($0.setupPrompt)" }
@@ -92,9 +91,30 @@ enum RealtimeHubTools {
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
-    [AgentPillsManager.DirectedProvider.openclaw, .hermes]
+    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
       .filter { LocalAgentProviderDetector.isAvailable($0) }
       .map(\.rawValue)
+  }
+
+  private static func providerDisplayList(_ providers: [AgentPillsManager.DirectedProvider]) -> String {
+    naturalList(providers.map(\.displayName))
+  }
+
+  private static func providerRawList(_ providers: [AgentPillsManager.DirectedProvider]) -> String {
+    naturalList(providers.map { "\"\($0.rawValue)\"" })
+  }
+
+  private static func naturalList(_ values: [String]) -> String {
+    switch values.count {
+    case 0:
+      return ""
+    case 1:
+      return values[0]
+    case 2:
+      return values.joined(separator: " or ")
+    default:
+      return values.dropLast().joined(separator: ", ") + ", or " + values.last!
+    }
   }
 
   private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {

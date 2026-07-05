@@ -5,6 +5,7 @@ enum AgentHarnessMode: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 extension Optional where Wrapped == AgentHarnessMode {
@@ -19,6 +20,7 @@ enum AgentAdapterId: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 enum AgentRuntimeRouting {
@@ -45,6 +47,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case AgentHarnessMode.openclaw.rawValue, "openClaw":
             return .openclaw
+        case AgentHarnessMode.codex.rawValue:
+            return .codex
         default:
             return nil
         }
@@ -60,6 +64,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case .openclaw:
             return .openclaw
+        case .codex:
+            return .codex
         }
     }
 }
@@ -84,6 +90,8 @@ struct LocalAgentProviderAvailability: Equatable {
             return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
         case .openclaw:
             return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+        case .codex:
+            return "I don't see Codex installed. Install the Codex CLI, sign in, then try again."
         }
     }
 
@@ -105,6 +113,7 @@ enum LocalAgentProviderDetector {
 
         if let path = firstExecutable(
             named: provider.executableName,
+            environment: environment,
             fileManager: fileManager,
             homeDirectory: homeDirectory
         ) {
@@ -134,10 +143,11 @@ enum LocalAgentProviderDetector {
 
     private static func firstExecutable(
         named name: String,
+        environment: [String: String],
         fileManager: FileManager,
         homeDirectory: String
     ) -> String? {
-        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
+        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory, environment: environment) {
             let path = (dir as NSString).appendingPathComponent(name)
             if fileManager.isExecutableFile(atPath: path) {
                 return path
@@ -146,14 +156,28 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
-        [
+    private static func adapterActivationSearchDirectories(
+        homeDirectory: String,
+        environment: [String: String]
+    ) -> [String] {
+        uniqueDirectories(
+            (environment["PATH"] ?? "").split(separator: ":").map(String.init) + [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
             "\(homeDirectory)/.local/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
-        ]
+        ])
+    }
+
+    private static func uniqueDirectories(_ directories: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for directory in directories where !directory.isEmpty && !seen.contains(directory) {
+            seen.insert(directory)
+            result.append(directory)
+        }
+        return result
     }
 }

@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
 import { AcpRuntimeAdapter } from "../src/adapters/acp.js";
+import { CodexRuntimeAdapter } from "../src/adapters/codex.js";
 import {
   PiMonoAdapter,
   PiMonoRuntimeAdapter,
@@ -330,6 +331,75 @@ describe("AcpRuntimeAdapter process spawning", () => {
   });
 });
 
+describe("CodexRuntimeAdapter", () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockReset();
+  });
+
+  it("runs codex exec JSONL through stdin and projects the final message", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    let stdin = "";
+    proc.stdin.on("data", (data: Buffer) => {
+      stdin += data.toString();
+    });
+    const adapter = new CodexRuntimeAdapter({ command: "codex" });
+    const binding = await adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/repo path",
+      systemPrompt: "Follow Omi instructions.",
+    });
+    const sink = vi.fn();
+
+    const resultPromise = adapter.executeAttempt({
+      sessionId: "omi-session",
+      ownerId: "owner",
+      requestId: "request",
+      clientId: "client",
+      runId: "run",
+      attemptId: "attempt",
+      binding,
+      prompt: [{ type: "text", text: "Summarize this repo." }],
+      mode: "act",
+    }, sink, new AbortController().signal);
+
+    proc.stdout.write(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }) + "\n");
+    proc.stdout.write(JSON.stringify({
+      type: "item.completed",
+      item: { id: "item-1", type: "agent_message", text: "Repo summary." },
+    }) + "\n");
+    proc.stdout.write(JSON.stringify({
+      type: "turn.completed",
+      usage: { input_tokens: 10, cached_input_tokens: 4, output_tokens: 5 },
+    }) + "\n");
+    proc.emit("exit", 0);
+
+    const result = await resultPromise;
+
+    expect(vi.mocked(spawn).mock.calls[0]).toMatchObject([
+      "codex exec --json --color never --skip-git-repo-check --cd '/repo path' -",
+      expect.objectContaining({
+        shell: true,
+        cwd: "/repo path",
+        detached: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+    ]);
+    expect(stdin).toContain("Omi system instructions:");
+    expect(stdin).toContain("Follow Omi instructions.");
+    expect(stdin).toContain("Summarize this repo.");
+    expect(sink).toHaveBeenCalledWith({ type: "text_delta", text: "Repo summary." });
+    expect(result).toMatchObject({
+      text: "Repo summary.",
+      adapterSessionId: "codex:omi-session",
+      terminalStatus: "succeeded",
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: 4,
+    });
+  });
+});
+
 describe("AcpRuntimeAdapter bindings", () => {
   beforeEach(() => {
     vi.mocked(spawn).mockReset();
@@ -478,7 +548,7 @@ describe("adapter capability matrix", () => {
     expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual(
       [...PRODUCTION_ADAPTER_IDS, ...PLACEHOLDER_ADAPTER_IDS].sort()
     );
-    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw"]);
+    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw", "codex"]);
     expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["a2a"]);
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
@@ -515,6 +585,16 @@ describe("adapter capability matrix", () => {
       nativeResume: { status: "required" },
       cancellationDispatch: { status: "required" },
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
+      pinnedWorker: { status: "unsupported" },
+      modelSwitching: { status: "unsupported" },
+      artifactEmission: { status: "unsupported" },
+      toolSupport: { status: "unsupported" },
+      restartOrphanSemantics: { status: "required" },
+    });
+    expect(ADAPTER_CAPABILITY_MATRIX.codex.expectations).toMatchObject({
+      nativeResume: { status: "unsupported" },
+      cancellationDispatch: { status: "required" },
+      cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-codex-adapter-follow-up" },
       pinnedWorker: { status: "unsupported" },
       modelSwitching: { status: "unsupported" },
       artifactEmission: { status: "unsupported" },
@@ -613,6 +693,17 @@ describe("adapter capability matrix", () => {
       supportsArtifactEmission: false,
       supportsTools: false,
       restartBehavior: "native_bindings_survive",
+    });
+    expect(adapterCapabilitiesFor("codex")).toEqual({
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: false,
+      supportsModelSwitching: false,
+      supportsArtifactEmission: false,
+      supportsTools: false,
+      restartBehavior: "attempts_orphaned",
     });
   });
 });
